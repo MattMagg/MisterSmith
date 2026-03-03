@@ -19,8 +19,8 @@ on:
     - cron: '0 4 * * *'
   push:
     paths:
-      - 'ms-framework-docs/transport/*.md'
-      - 'ms-framework-docs/data-management/*message*.md'
+      - 'spec/transport/*.md'
+      - 'spec/data-management/*message*.md'
 
 jobs:
   improve-transport-docs:
@@ -55,11 +55,11 @@ jobs:
             "messages": [
               {
                 "role": "system",
-                "content": "You are improving the MisterSmith framework NATS transport documentation. Only work with files in ms-framework-docs directory."
+                "content": "You are improving the MisterSmith framework NATS transport documentation. Only work with files in spec directory."
               },
               {
                 "role": "user",
-                "content": "Improve ms-framework-docs/transport/nats-transport.md by:\n\n1. Use Context7 to get REAL async-nats v0.37.0 code:\n   - Search for 'jetstream publish subscribe'\n   - Search for 'nats kv get put'\n   - Search for 'object store'\n   - Search for 'service api'\n   - Get actual NATS client usage examples\n\n2. Take the REAL NATS code and adapt it:\n   - Convert actual JetStream setup code to pseudocode\n   - Use real consumer patterns from the library\n   - Base KV operations on actual async-nats examples\n   - Keep real error handling patterns\n\n3. Ensure consistency with:\n   - message-schemas.md (message formats)\n   - agent-communication.md (communication patterns)\n   - connection-management.md\n\n4. Use REAL reconnection code from async-nats\n5. Base performance tips on actual library docs\n\nIMPORTANT: Use Context7's actual async-nats code examples, then convert to pseudocode while preserving real NATS patterns."
+                "content": "Improve spec/transport/nats-transport.md by:\n\n1. Use Context7 to get REAL async-nats v0.37.0 code:\n   - Search for 'jetstream publish subscribe'\n   - Search for 'nats kv get put'\n   - Search for 'object store'\n   - Search for 'service api'\n   - Get actual NATS client usage examples\n\n2. Take the REAL NATS code and adapt it:\n   - Convert actual JetStream setup code to pseudocode\n   - Use real consumer patterns from the library\n   - Base KV operations on actual async-nats examples\n   - Keep real error handling patterns\n\n3. Ensure consistency with:\n   - message-schemas.md (message formats)\n   - agent-communication.md (communication patterns)\n   - connection-management.md\n\n4. Use REAL reconnection code from async-nats\n5. Base performance tips on actual library docs\n\nIMPORTANT: Use Context7's actual async-nats code examples, then convert to pseudocode while preserving real NATS patterns."
               }
             ],
             "max_completion_tokens": 4000
@@ -96,7 +96,7 @@ jobs:
             - tonic v0.11 (/hyperium/tonic) - gRPC framework
             - Features: ["full"]
             
-            TASK: Improve ms-framework-docs/transport/grpc-transport.md by:
+            TASK: Improve spec/transport/grpc-transport.md by:
             
             1. Use Context7 to get REAL Tonic v0.11 code:
                - Search for "tonic server example"
@@ -133,11 +133,11 @@ jobs:
             "messages": [
               {
                 "role": "system",
-                "content": "You are improving the MisterSmith framework HTTP transport documentation. Only work with files in ms-framework-docs directory."
+                "content": "You are improving the MisterSmith framework HTTP transport documentation. Only work with files in spec directory."
               },
               {
                 "role": "user",
-                "content": "Improve ms-framework-docs/transport/http-transport.md by:\n\n1. Use Context7 to get REAL Axum v0.8 code:\n   - Search for 'axum router'\n   - Search for 'axum middleware'\n   - Search for 'axum websocket'\n   - Search for 'axum state'\n   - Search for 'axum extractors'\n\n2. Take the REAL Axum code and adapt:\n   - Convert actual router setup to pseudocode\n   - Use real middleware chains from examples\n   - Base WebSocket on actual upgrade handlers\n   - Keep real extractor patterns\n   - Use actual error handling from Axum\n\n3. Ensure consistency with:\n   - security-framework.md (auth middleware)\n   - observability-monitoring-framework.md (metrics/tracing)\n\n4. Use REAL REST patterns from Axum examples\n\nIMPORTANT: Use Context7's actual Axum examples, convert to pseudocode preserving real HTTP patterns."
+                "content": "Improve spec/transport/http-transport.md by:\n\n1. Use Context7 to get REAL Axum v0.8 code:\n   - Search for 'axum router'\n   - Search for 'axum middleware'\n   - Search for 'axum websocket'\n   - Search for 'axum state'\n   - Search for 'axum extractors'\n\n2. Take the REAL Axum code and adapt:\n   - Convert actual router setup to pseudocode\n   - Use real middleware chains from examples\n   - Base WebSocket on actual upgrade handlers\n   - Keep real extractor patterns\n   - Use actual error handling from Axum\n\n3. Ensure consistency with:\n   - security-framework.md (auth middleware)\n   - observability-monitoring-framework.md (metrics/tracing)\n\n4. Use REAL REST patterns from Axum examples\n\nIMPORTANT: Use Context7's actual Axum examples, convert to pseudocode preserving real HTTP patterns."
               }
             ],
             "max_completion_tokens": 4000
@@ -167,7 +167,7 @@ jobs:
             - serde v1.0.214 (/serde-rs/serde) - Serialization
             - serde_json v1.0.132 - JSON support
             
-            TASK: Improve ms-framework-docs/data-management/message-schemas.md by:
+            TASK: Improve spec/data-management/message-schemas.md by:
             
             1. Use Context7 to get REAL Serde v1.0.214 code:
                - Search for "serde derive serialize"
@@ -201,14 +201,14 @@ jobs:
           # Apply NATS improvements if available
           if [ -f nats_improvements.md ]; then
             echo "Applying NATS Transport improvements"
-            cp nats_improvements.md ms-framework-docs/transport/nats-transport.md
+            cp nats_improvements.md spec/transport/nats-transport.md
             rm nats_improvements.md
           fi
           
           # Apply Axum improvements if available
           if [ -f axum_improvements.md ]; then
             echo "Applying HTTP/Axum improvements"
-            cp axum_improvements.md ms-framework-docs/transport/http-transport.md
+            cp axum_improvements.md spec/transport/http-transport.md
             rm axum_improvements.md
           fi
           

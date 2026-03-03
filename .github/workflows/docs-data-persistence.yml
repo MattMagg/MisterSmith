@@ -19,11 +19,11 @@ on:
     - cron: '0 5 * * *'
   push:
     paths:
-      - 'ms-framework-docs/data-management/*persistence*.md'
-      - 'ms-framework-docs/data-management/*database*.md'
-      - 'ms-framework-docs/data-management/*storage*.md'
-      - 'ms-framework-docs/data-management/postgresql-implementation.md'
-      - 'ms-framework-docs/data-management/jetstream-kv.md'
+      - 'spec/data-management/*persistence*.md'
+      - 'spec/data-management/*database*.md'
+      - 'spec/data-management/*storage*.md'
+      - 'spec/data-management/postgresql-implementation.md'
+      - 'spec/data-management/jetstream-kv.md'
 
 jobs:
   improve-data-docs:
@@ -59,7 +59,7 @@ jobs:
             - sqlx v0.8.2 (/launchbadge/sqlx) - SQL toolkit
             - Features: ["runtime-tokio-rustls", "postgres", "sqlite", "any"]
             
-            TASK: Improve ms-framework-docs/data-management/postgresql-implementation.md by:
+            TASK: Improve spec/data-management/postgresql-implementation.md by:
             
             1. Use Context7 to get REAL SQLx v0.8.2 code:
                - Search for "sqlx pool postgres"
@@ -101,11 +101,11 @@ jobs:
             "messages": [
               {
                 "role": "system",
-                "content": "You are improving the MisterSmith framework Redis documentation. Only work with files in ms-framework-docs directory."
+                "content": "You are improving the MisterSmith framework Redis documentation. Only work with files in spec directory."
               },
               {
                 "role": "user",
-                "content": "Create/improve Redis caching documentation by:\n\n1. Use Context7 to get REAL redis v0.27.5 code:\n   - Search for 'redis connection manager'\n   - Search for 'redis pubsub'\n   - Search for 'redis pipeline'\n   - Search for 'redis lua script'\n   - Get actual Redis client usage\n\n2. If file doesn't exist, create ms-framework-docs/data-management/redis-caching.md\n3. Take the REAL Redis code and adapt:\n   - Convert actual connection code to pseudocode\n   - Use real pub/sub patterns from examples\n   - Base locking on actual Redis implementations\n   - Keep real caching patterns\n   - Use actual Lua script examples\n\n4. Cross-reference with:\n   - agent-communication.md (pub/sub)\n   - storage-patterns.md\n   - connection-management.md\n\n5. Use REAL cache invalidation from Redis examples\n\nIMPORTANT: Use Context7's actual redis-rs examples, convert to pseudocode preserving real patterns."
+                "content": "Create/improve Redis caching documentation by:\n\n1. Use Context7 to get REAL redis v0.27.5 code:\n   - Search for 'redis connection manager'\n   - Search for 'redis pubsub'\n   - Search for 'redis pipeline'\n   - Search for 'redis lua script'\n   - Get actual Redis client usage\n\n2. If file doesn't exist, create spec/data-management/redis-caching.md\n3. Take the REAL Redis code and adapt:\n   - Convert actual connection code to pseudocode\n   - Use real pub/sub patterns from examples\n   - Base locking on actual Redis implementations\n   - Keep real caching patterns\n   - Use actual Lua script examples\n\n4. Cross-reference with:\n   - agent-communication.md (pub/sub)\n   - storage-patterns.md\n   - connection-management.md\n\n5. Use REAL cache invalidation from Redis examples\n\nIMPORTANT: Use Context7's actual redis-rs examples, convert to pseudocode preserving real patterns."
               }
             ],
             "max_completion_tokens": 4000
@@ -129,9 +129,9 @@ jobs:
           content=$(echo "$response" | jq -r '.choices[0].message.content')
           
           # Check if redis-caching.md exists
-          if [ ! -f "ms-framework-docs/data-management/redis-caching.md" ]; then
+          if [ ! -f "spec/data-management/redis-caching.md" ]; then
             echo "Creating redis-caching.md"
-            echo "$content" > ms-framework-docs/data-management/redis-caching.md
+            echo "$content" > spec/data-management/redis-caching.md
           else
             echo "$content" > redis_improvements.md
           fi
@@ -150,11 +150,11 @@ jobs:
             "messages": [
               {
                 "role": "system",
-                "content": "You are improving the MisterSmith framework persistence operations documentation. Only work with files in ms-framework-docs directory."
+                "content": "You are improving the MisterSmith framework persistence operations documentation. Only work with files in spec directory."
               },
               {
                 "role": "user",
-                "content": "Improve ms-framework-docs/data-management/persistence-operations.md by:\n\n1. Search for REAL database operations code:\n   - Use Context7 to find SQLx/Redis operational patterns\n   - Search web for actual Rust database pooling libraries\n   - Look for real production database code\n\n2. Adapt REAL operational code:\n   - Use actual connection pool configs\n   - Base routing on real read replica code\n   - Take batching from actual implementations\n   - Use real backup scripts as reference\n\n3. Include REAL operation workflows:\n   - Health checks from actual monitoring code\n   - Failover from real HA implementations\n   - Performance tuning from actual configs\n   - Index management from real DBAs\n\n4. Cross-reference with:\n   - postgresql-implementation.md\n   - storage-patterns.md\n   - observability-monitoring-framework.md\n\nIMPORTANT: Use real production patterns, convert to documentation preserving actual practices."
+                "content": "Improve spec/data-management/persistence-operations.md by:\n\n1. Search for REAL database operations code:\n   - Use Context7 to find SQLx/Redis operational patterns\n   - Search web for actual Rust database pooling libraries\n   - Look for real production database code\n\n2. Adapt REAL operational code:\n   - Use actual connection pool configs\n   - Base routing on real read replica code\n   - Take batching from actual implementations\n   - Use real backup scripts as reference\n\n3. Include REAL operation workflows:\n   - Health checks from actual monitoring code\n   - Failover from real HA implementations\n   - Performance tuning from actual configs\n   - Index management from real DBAs\n\n4. Cross-reference with:\n   - postgresql-implementation.md\n   - storage-patterns.md\n   - observability-monitoring-framework.md\n\nIMPORTANT: Use real production patterns, convert to documentation preserving actual practices."
               }
             ],
             "max_completion_tokens": 4000
@@ -182,7 +182,7 @@ jobs:
             
             CONTEXT: NATS JetStream KV as distributed state store
             
-            TASK: Improve ms-framework-docs/data-management/jetstream-kv.md by:
+            TASK: Improve spec/data-management/jetstream-kv.md by:
             
             1. Get REAL JetStream KV code:
                - Use Context7 async-nats to search "kv bucket"
@@ -218,8 +218,8 @@ jobs:
           # Apply Redis improvements if available
           if [ -f redis_improvements.md ]; then
             echo "Applying Redis caching improvements"
-            if [ -f ms-framework-docs/data-management/redis-caching.md ]; then
-              cp redis_improvements.md ms-framework-docs/data-management/redis-caching.md
+            if [ -f spec/data-management/redis-caching.md ]; then
+              cp redis_improvements.md spec/data-management/redis-caching.md
             fi
             rm redis_improvements.md
           fi
@@ -227,7 +227,7 @@ jobs:
           # Apply persistence operations improvements
           if [ -f persistence_ops_improvements.md ]; then
             echo "Applying persistence operations improvements"
-            cp persistence_ops_improvements.md ms-framework-docs/data-management/persistence-operations.md
+            cp persistence_ops_improvements.md spec/data-management/persistence-operations.md
             rm persistence_ops_improvements.md
           fi
           

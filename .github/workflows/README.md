@@ -44,7 +44,7 @@ You need to configure the following secrets in your GitHub repository settings:
 
 ## Important Notes
 
-- All workflows are restricted to only work with files in the `ms-framework-docs` directory
+- All workflows are restricted to only work with files in the `spec` directory
 - Both models use Context7 to retrieve real code examples before converting to pseudocode
 - OpenAI integration uses direct API calls since there's no GitHub Action for OpenAI yet
 - Temperature is set to 0.3 for consistent, focused improvements

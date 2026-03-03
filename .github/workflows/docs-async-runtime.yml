@@ -19,11 +19,11 @@ on:
     - cron: '0 3 * * *'
   push:
     paths:
-      - 'ms-framework-docs/core-architecture/async-patterns.md'
-      - 'ms-framework-docs/core-architecture/tokio-runtime.md'
-      - 'ms-framework-docs/core-architecture/supervision-trees.md'
-      - 'ms-framework-docs/data-management/agent-lifecycle.md'
-      - 'ms-framework-docs/data-management/agent-operations.md'
+      - 'spec/core-architecture/async-patterns.md'
+      - 'spec/core-architecture/tokio-runtime.md'
+      - 'spec/core-architecture/supervision-trees.md'
+      - 'spec/data-management/agent-lifecycle.md'
+      - 'spec/data-management/agent-operations.md'
 
 jobs:
   improve-async-docs:
@@ -61,7 +61,7 @@ jobs:
             - async-trait v0.1.83 (/dtolnay/async-trait) - Async trait support
             - crossbeam-channel v0.5.13 (/crossbeam-rs/crossbeam) - Lock-free channels
             
-            TASK: Improve ms-framework-docs/core-architecture/tokio-runtime.md by:
+            TASK: Improve spec/core-architecture/tokio-runtime.md by:
             
             1. Use Context7 to get REAL Tokio v1.45.0 code examples:
                - Search for "runtime configuration" 
@@ -77,8 +77,8 @@ jobs:
                - Add explanatory comments about what each pattern does
             
             3. Ensure consistency with:
-               - ms-framework-docs/core-architecture/async-patterns.md
-               - ms-framework-docs/core-architecture/dependency-specifications.md (Tokio 1.45.0)
+               - spec/core-architecture/async-patterns.md
+               - spec/core-architecture/dependency-specifications.md (Tokio 1.45.0)
             
             4. Format according to project standards:
                - Use ```rust blocks for pseudocode
@@ -90,7 +90,7 @@ jobs:
             
             IMPORTANT: This is documentation phase - convert Context7's REAL code examples
             into pseudocode while preserving the actual patterns and best practices.
-            Follow all guidelines in ms-framework-docs/CLAUDE.md
+            Follow all guidelines in spec/CLAUDE.md
       
       - name: Improve Async Patterns Documentation (OpenAI)
         if: github.event.inputs.focus_area == 'all' || github.event.inputs.focus_area == 'async-patterns'
@@ -104,7 +104,7 @@ jobs:
             "messages": [
               {
                 "role": "system",
-                "content": "You are improving the MisterSmith framework documentation. Only work with files in the ms-framework-docs directory. Convert real code examples to pseudocode for documentation."
+                "content": "You are improving the MisterSmith framework documentation. Only work with files in the spec directory. Convert real code examples to pseudocode for documentation."
               },
               {
                 "role": "user",
@@ -115,7 +115,7 @@ jobs:
             - futures v0.3.31 (/rust-lang/futures-rs) - Stream, Future combinators
             - async-trait v0.1.83 (/dtolnay/async-trait) - Async traits
             
-            TASK: Improve ms-framework-docs/core-architecture/async-patterns.md by:
+            TASK: Improve spec/core-architecture/async-patterns.md by:
             
             1. Use Context7 to get REAL futures v0.3.31 code examples:
                - Search for "stream map filter"
@@ -154,7 +154,7 @@ jobs:
           # Apply improvements to the file
           if [ -s improvements.md ]; then
             # Apply the improvements to the actual file
-            cp improvements.md ms-framework-docs/core-architecture/async-patterns.md
+            cp improvements.md spec/core-architecture/async-patterns.md
             rm improvements.md
           fi
           
@@ -172,7 +172,7 @@ jobs:
             
             CONTEXT: Erlang-style supervision trees implemented with Tokio
             
-            TASK: Improve ms-framework-docs/core-architecture/supervision-trees.md by:
+            TASK: Improve spec/core-architecture/supervision-trees.md by:
             
             1. Use Context7 and web search to find REAL supervision implementations:
                - Search Context7 for "tokio task supervision"
@@ -208,7 +208,7 @@ jobs:
             "messages": [
               {
                 "role": "system",
-                "content": "You are improving the MisterSmith framework documentation. Only work with files in the ms-framework-docs directory. Convert real code examples to pseudocode for documentation."
+                "content": "You are improving the MisterSmith framework documentation. Only work with files in the spec directory. Convert real code examples to pseudocode for documentation."
               },
               {
                 "role": "user",
@@ -218,7 +218,7 @@ jobs:
             CONTEXT7 REFERENCES:
             - crossbeam-channel v0.5.13 (/crossbeam-rs/crossbeam) - Actor communication
             
-            TASK: Improve ms-framework-docs/data-management/agent-lifecycle.md by:
+            TASK: Improve spec/data-management/agent-lifecycle.md by:
             
             1. Use Context7 to get REAL crossbeam v0.5.13 code:
                - Search for "crossbeam channel send recv"
@@ -261,7 +261,7 @@ jobs:
           
           if [ -s lifecycle_improvements.md ]; then
             # Apply the improvements to the actual file
-            cp lifecycle_improvements.md ms-framework-docs/data-management/agent-lifecycle.md
+            cp lifecycle_improvements.md spec/data-management/agent-lifecycle.md
             rm lifecycle_improvements.md
           fi
           

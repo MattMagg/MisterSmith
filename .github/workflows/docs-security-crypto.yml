@@ -19,7 +19,7 @@ on:
     - cron: '0 6 * * *'
   push:
     paths:
-      - 'ms-framework-docs/security/*.md'
+      - 'spec/security/*.md'
 
 jobs:
   improve-security-docs:
@@ -54,11 +54,11 @@ jobs:
             "messages": [
               {
                 "role": "system",
-                "content": "You are improving the MisterSmith framework authentication documentation. Only work with files in ms-framework-docs directory."
+                "content": "You are improving the MisterSmith framework authentication documentation. Only work with files in spec directory."
               },
               {
                 "role": "user",
-                "content": "Improve ms-framework-docs/security/authentication-implementation.md by:\n\n1. Use Context7 to get REAL jwt-simple v0.12.10 code:\n   - Search for 'jwt encode decode'\n   - Search for 'jwt claims'\n   - Search for 'jwt rsa ecdsa'\n   - Get actual JWT implementation examples\n\n2. Take the REAL JWT code and adapt:\n   - Convert actual token generation to pseudocode\n   - Use real key management from examples\n   - Base refresh on actual JWT patterns\n   - Keep real validation logic\n\n3. Search web for actual JWT libraries and security guides\n\n4. Ensure consistency with:\n   - authorization-implementation.md\n   - security-framework.md\n   - All transport layers (HTTP headers, gRPC metadata)\n\n5. Use REAL security patterns from production code\n\nIMPORTANT: Use Context7's actual jwt-simple examples, convert to pseudocode preserving real security patterns."
+                "content": "Improve spec/security/authentication-implementation.md by:\n\n1. Use Context7 to get REAL jwt-simple v0.12.10 code:\n   - Search for 'jwt encode decode'\n   - Search for 'jwt claims'\n   - Search for 'jwt rsa ecdsa'\n   - Get actual JWT implementation examples\n\n2. Take the REAL JWT code and adapt:\n   - Convert actual token generation to pseudocode\n   - Use real key management from examples\n   - Base refresh on actual JWT patterns\n   - Keep real validation logic\n\n3. Search web for actual JWT libraries and security guides\n\n4. Ensure consistency with:\n   - authorization-implementation.md\n   - security-framework.md\n   - All transport layers (HTTP headers, gRPC metadata)\n\n5. Use REAL security patterns from production code\n\nIMPORTANT: Use Context7's actual jwt-simple examples, convert to pseudocode preserving real security patterns."
               }
             ],
             "max_completion_tokens": 4000
@@ -91,7 +91,7 @@ jobs:
           direct_prompt: |
             You are improving the MisterSmith framework authorization documentation.
             
-            TASK: Improve ms-framework-docs/security/authorization-implementation.md and authorization-specifications.md by:
+            TASK: Improve spec/security/authorization-implementation.md and authorization-specifications.md by:
             
             1. Find REAL authorization code:
                - Search web for actual RBAC/ABAC Rust libraries
@@ -131,11 +131,11 @@ jobs:
             "messages": [
               {
                 "role": "system",
-                "content": "You are improving the MisterSmith framework encryption documentation. Only work with files in ms-framework-docs directory."
+                "content": "You are improving the MisterSmith framework encryption documentation. Only work with files in spec directory."
               },
               {
                 "role": "user",
-                "content": "Create/improve encryption documentation by:\n\n1. Use Context7 to get REAL ring v0.17.8 code:\n   - Search for 'ring aead'\n   - Search for 'ring pbkdf2'\n   - Search for 'ring rand'\n   - Get actual crypto examples\n\n2. If needed, create ms-framework-docs/security/encryption-patterns.md\n3. Take the REAL crypto code and adapt:\n   - Convert actual AES-GCM usage to pseudocode\n   - Use real KDF implementations\n   - Base key rotation on actual patterns\n   - Keep real random generation\n   - Use actual TLS configs\n\n4. Search web for actual key management systems\n\n5. Cross-reference with:\n   - All transport layers (TLS config)\n   - Database encryption\n   - Message encryption patterns\n\nIMPORTANT: Use Context7's actual ring examples, convert to safe pseudocode patterns."
+                "content": "Create/improve encryption documentation by:\n\n1. Use Context7 to get REAL ring v0.17.8 code:\n   - Search for 'ring aead'\n   - Search for 'ring pbkdf2'\n   - Search for 'ring rand'\n   - Get actual crypto examples\n\n2. If needed, create spec/security/encryption-patterns.md\n3. Take the REAL crypto code and adapt:\n   - Convert actual AES-GCM usage to pseudocode\n   - Use real KDF implementations\n   - Base key rotation on actual patterns\n   - Keep real random generation\n   - Use actual TLS configs\n\n4. Search web for actual key management systems\n\n5. Cross-reference with:\n   - All transport layers (TLS config)\n   - Database encryption\n   - Message encryption patterns\n\nIMPORTANT: Use Context7's actual ring examples, convert to safe pseudocode patterns."
               }
             ],
             "max_completion_tokens": 4000
@@ -152,9 +152,9 @@ jobs:
           content=$(echo "$response" | jq -r '.choices[0].message.content')
           
           # Check if encryption-patterns.md exists
-          if [ ! -f "ms-framework-docs/security/encryption-patterns.md" ]; then
+          if [ ! -f "spec/security/encryption-patterns.md" ]; then
             echo "Creating encryption-patterns.md"
-            echo "$content" > ms-framework-docs/security/encryption-patterns.md
+            echo "$content" > spec/security/encryption-patterns.md
           else
             echo "$content" > encryption_improvements.md
           fi
@@ -170,7 +170,7 @@ jobs:
           direct_prompt: |
             You are improving the MisterSmith security patterns documentation.
             
-            TASK: Improve ms-framework-docs/security/security-patterns.md by:
+            TASK: Improve spec/security/security-patterns.md by:
             
             1. Find REAL security implementations:
                - Search for actual zero trust Rust code
@@ -209,15 +209,15 @@ jobs:
           # Apply authentication improvements
           if [ -f auth_improvements.md ]; then
             echo "Applying authentication improvements"
-            cp auth_improvements.md ms-framework-docs/security/authentication-implementation.md
+            cp auth_improvements.md spec/security/authentication-implementation.md
             rm auth_improvements.md
           fi
           
           # Apply encryption improvements
           if [ -f encryption_improvements.md ]; then
             echo "Applying encryption improvements"
-            if [ -f ms-framework-docs/security/encryption-patterns.md ]; then
-              cp encryption_improvements.md ms-framework-docs/security/encryption-patterns.md
+            if [ -f spec/security/encryption-patterns.md ]; then
+              cp encryption_improvements.md spec/security/encryption-patterns.md
             fi
             rm encryption_improvements.md
           fi

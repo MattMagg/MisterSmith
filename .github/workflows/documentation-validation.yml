@@ -3,13 +3,13 @@ name: Documentation Validation
 on:
   pull_request:
     paths:
-      - 'ms-framework-docs/**/*.md'
+      - 'spec/**/*.md'
       - '*.md'
       - 'internal-operations/**/*.md'
   push:
     branches: [main, develop]
     paths:
-      - 'ms-framework-docs/**/*.md'
+      - 'spec/**/*.md'
       - '*.md'
       - 'internal-operations/**/*.md'
   workflow_dispatch:
@@ -100,13 +100,13 @@ jobs:
           
           # Required directories
           REQUIRED_DIRS=(
-            "ms-framework-docs/core-architecture"
-            "ms-framework-docs/data-management"
-            "ms-framework-docs/transport"
-            "ms-framework-docs/security"
-            "ms-framework-docs/operations"
-            "ms-framework-docs/testing"
-            "ms-framework-docs/agent-domains"
+            "spec/core-architecture"
+            "spec/data-management"
+            "spec/transport"
+            "spec/security"
+            "spec/operations"
+            "spec/testing"
+            "spec/agent-domains"
           )
           
           for dir in "${REQUIRED_DIRS[@]}"; do
@@ -124,13 +124,13 @@ jobs:
           
           # Key files that must exist
           REQUIRED_FILES=(
-            "ms-framework-docs/core-architecture/system-architecture.md"
-            "ms-framework-docs/core-architecture/dependency-specifications.md"
-            "ms-framework-docs/core-architecture/async-patterns.md"
-            "ms-framework-docs/core-architecture/tokio-runtime.md"
-            "ms-framework-docs/data-management/message-schemas.md"
-            "ms-framework-docs/security/security-framework.md"
-            "ms-framework-docs/transport/nats-transport.md"
+            "spec/core-architecture/system-architecture.md"
+            "spec/core-architecture/dependency-specifications.md"
+            "spec/core-architecture/async-patterns.md"
+            "spec/core-architecture/tokio-runtime.md"
+            "spec/data-management/message-schemas.md"
+            "spec/security/security-framework.md"
+            "spec/transport/nats-transport.md"
           )
           
           MISSING_FILES=0
@@ -154,7 +154,7 @@ jobs:
           echo "Generated: $(date -u)" >> doc-inventory.md
           echo "" >> doc-inventory.md
           
-          for domain in ms-framework-docs/*/; do
+          for domain in spec/*/; do
             if [ -d "$domain" ]; then
               domain_name=$(basename "$domain")
               echo "## $domain_name" >> doc-inventory.md
@@ -191,7 +191,7 @@ jobs:
           BROKEN_LINKS=0
           
           # Find all markdown files
-          find ms-framework-docs -name "*.md" | while read file; do
+          find spec -name "*.md" | while read file; do
             echo "Checking: $file"
             
             # Extract markdown links
@@ -231,7 +231,7 @@ jobs:
           echo "=== Validating Anchor Links ==="
           
           # Check for links with anchors
-          find ms-framework-docs -name "*.md" | while read file; do
+          find spec -name "*.md" | while read file; do
             grep -oE '\[([^]]+)\]\([^)]+#[^)]+\)' "$file" | while read -r link; do
               # Extract file and anchor
               link_target=$(echo "$link" | sed -E 's/.*\(([^)]+)\).*/\1/')
@@ -258,7 +258,7 @@ jobs:
           echo "=== Checking Version Consistency ==="
           
           # Extract versions from dependency specifications
-          cd ms-framework-docs/core-architecture
+          cd spec/core-architecture
           
           # Define expected versions
           declare -A VERSIONS=(
@@ -278,7 +278,7 @@ jobs:
             echo "Checking $lib version (expected: $expected)..."
             
             # Find all version references
-            grep -r "$lib.*[0-9]\+\.[0-9]\+" ms-framework-docs/ | grep -v "$expected" | while read -r line; do
+            grep -r "$lib.*[0-9]\+\.[0-9]\+" spec/ | grep -v "$expected" | while read -r line; do
               echo "  INCONSISTENT: $line"
             done
           done
@@ -288,7 +288,7 @@ jobs:
           echo "=== Checking Rust Version ==="
           
           RUST_VERSION="1.75"
-          FOUND_VERSIONS=$(grep -r "rust.*1\.[0-9]\+" ms-framework-docs/ | grep -oE "1\.[0-9]+" | sort -u)
+          FOUND_VERSIONS=$(grep -r "rust.*1\.[0-9]\+" spec/ | grep -oE "1\.[0-9]+" | sort -u)
           
           echo "Expected Rust version: $RUST_VERSION"
           echo "Found versions: $FOUND_VERSIONS"
@@ -309,9 +309,9 @@ jobs:
           echo "=== Technical Debt Analysis ==="
           
           # Count TODOs by type
-          TODO_COUNT=$(grep -r "TODO" ms-framework-docs/ | grep -v "todo!()" | wc -l)
-          TBD_COUNT=$(grep -r "TBD" ms-framework-docs/ | wc -l)
-          FIXME_COUNT=$(grep -r "FIXME" ms-framework-docs/ | wc -l)
+          TODO_COUNT=$(grep -r "TODO" spec/ | grep -v "todo!()" | wc -l)
+          TBD_COUNT=$(grep -r "TBD" spec/ | wc -l)
+          FIXME_COUNT=$(grep -r "FIXME" spec/ | wc -l)
           
           echo "TODO items: $TODO_COUNT"
           echo "TBD items: $TBD_COUNT"
@@ -336,7 +336,7 @@ jobs:
           EOF
           
           # List items by domain
-          for domain in ms-framework-docs/*/; do
+          for domain in spec/*/; do
             if [ -d "$domain" ]; then
               domain_name=$(basename "$domain")
               domain_todos=$(grep -r "TODO\|TBD\|FIXME" "$domain" 2>/dev/null | wc -l)
@@ -400,7 +400,7 @@ jobs:
           EOF
           
           # Add file counts
-          for domain in ms-framework-docs/*/; do
+          for domain in spec/*/; do
             if [ -d "$domain" ]; then
               domain_name=$(basename "$domain")
               file_count=$(find "$domain" -name "*.md" | wc -l)

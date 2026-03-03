@@ -41,17 +41,17 @@ jobs:
       - name: Check for TODOs and TBDs
         run: |
           echo "=== Checking for incomplete documentation ==="
-          TODO_COUNT=$(grep -r "TODO\|TBD\|FIXME" ms-framework-docs/ | grep -v "todo!()" | wc -l)
+          TODO_COUNT=$(grep -r "TODO\|TBD\|FIXME" spec/ | grep -v "todo!()" | wc -l)
           if [ "$TODO_COUNT" -gt 1 ]; then
             echo "WARNING: Found $TODO_COUNT TODO/TBD markers"
-            grep -r "TODO\|TBD\|FIXME" ms-framework-docs/ | grep -v "todo!()" | head -20
+            grep -r "TODO\|TBD\|FIXME" spec/ | grep -v "todo!()" | head -20
           fi
       
       - name: Validate markdown formatting
         uses: DavidAnson/markdownlint-cli2-action@v16
         with:
           globs: |
-            ms-framework-docs/**/*.md
+            spec/**/*.md
             *.md
             !.augment-guidelines.md
             !CLAUDE.md
@@ -85,7 +85,7 @@ jobs:
       - name: Validate dependency specifications
         run: |
           echo "=== Validating dependency versions ==="
-          cd ms-framework-docs/core-architecture
+          cd spec/core-architecture
           
           # Extract and validate Tokio version
           TOKIO_VERSION=$(grep -E "tokio.*version.*=" dependency-specifications.md | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
@@ -129,7 +129,7 @@ jobs:
           name: dependency-analysis
           path: |
             dependency-tree.txt
-            ms-framework-docs/core-architecture/dependency-specifications.md
+            spec/core-architecture/dependency-specifications.md
 
   # Phase 3: Security Audit
   security:
@@ -206,7 +206,7 @@ jobs:
       - name: Validate ${{ matrix.domain }} consistency
         run: |
           echo "=== Validating ${{ matrix.domain }} documentation ==="
-          cd ms-framework-docs/${{ matrix.domain }}
+          cd spec/${{ matrix.domain }}
           
           # Check cross-references
           echo "Checking cross-references..."
@@ -249,15 +249,15 @@ jobs:
           case ${{ matrix.agent }} in
             agent1)
               echo "Agent 1: Working on async patterns"
-              echo "## Agent 1 Updates" >> ms-framework-docs/core-architecture/async-patterns.md
+              echo "## Agent 1 Updates" >> spec/core-architecture/async-patterns.md
               ;;
             agent2)
               echo "Agent 2: Working on transport layer"
-              echo "## Agent 2 Updates" >> ms-framework-docs/transport/nats-transport.md
+              echo "## Agent 2 Updates" >> spec/transport/nats-transport.md
               ;;
             agent3)
               echo "Agent 3: Working on security"
-              echo "## Agent 3 Updates" >> ms-framework-docs/security/security-framework.md
+              echo "## Agent 3 Updates" >> spec/security/security-framework.md
               ;;
           esac
           

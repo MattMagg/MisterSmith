@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       target_directory:
-        description: 'Target directory to fix (default: ms-framework-docs)'
+        description: 'Target directory to fix (default: spec)'
         required: false
-        default: 'ms-framework-docs'
+        default: 'spec'
         type: string
       create_pr:
         description: 'Create PR for fixes'
@@ -22,7 +22,7 @@ on:
   # Trigger on push to specific markdown files
   push:
     paths:
-      - 'ms-framework-docs/**/*.md'
+      - 'spec/**/*.md'
       - '.markdownlint.json'
       - '.markdownlintignore'
 
@@ -60,7 +60,7 @@ jobs:
         id: lint-check
         run: |
           echo "=== Current Markdown Linting Status ==="
-          TARGET_DIR="${{ github.event.inputs.target_directory || 'ms-framework-docs' }}"
+          TARGET_DIR="${{ github.event.inputs.target_directory || 'spec' }}"
           
           # Count current errors
           ERROR_COUNT=$(markdownlint-cli2 "$TARGET_DIR/**/*.md" --config .markdownlint.json 2>&1 | grep -c "MD[0-9]" || echo "0")
