@@ -1,179 +1,26 @@
-# Mister Smith - AI Agent Framework
-# Ignore internal operations and development files
+# macOS
+.DS_Store
 
-# Internal operations directory
-# internal-operations/
+# Rust build output
+target/
 
-# Jekyll site directory (private development)
-# jekyll-site/
-
-# Claude configuration and cache
-# .claude/
-
-# CLAUDE.md files (agent documentation)
-# CLAUDE.md
-# **/CLAUDE.md
-
-# Usage documentation
-# superclaude-usage.md
-
-# IMPLEMENTATION CODE - Keep private
-# Rust source code
-# src/
-# lib/
-# core/
-# target/
-# Cargo.toml
-# Cargo.lock
-
-# Python implementation
-# *.py
-# __pycache__/
-# *.pyc
-# venv/
-# .venv/
-# requirements.txt
-# poetry.lock
-
-# Configuration files with sensitive details
-# config/
-# secrets/
-# .env*
-# *.key
-# *.pem
-# *.toml
-# *.ini
-
-# Database and data files
-# *.db
-# *.sqlite
-# *.sql
-# data/
-# database/
-
-# Build and deployment artifacts
-# build/
-# dist/
-# release/
-# deployment/
-
-# Private documentation and notes
-# private/
-# internal/
-# dev-notes/
-# implementation-notes/
-
-# Workspace configuration files
-# *.code-workspace
-
-# External dependencies - agenterra MCP generator (10k+ commits)
+# External dependencies
 agenterra/
-agenterra/*
-agenterra/**/*
-
-# macOS system files
-# .DS_Store
-# .DS_Store?
-# ._*
-# .Spotlight-V100
-# .Trashes
-# ehthumbs.db
-# Thumbs.db
-
-# Node.js dependencies and cache
-# node_modules/
-# npm-debug.log*
-# yarn-debug.log*
-# yarn-error.log*
-# .npm
-# .yarn-integrity
-
-# Package lock files (optional - uncomment if you want to ignore them)
-# package-lock.json
-# yarn.lock
 
 # Logs
-# logs
-# *.log
+*.log
 
-# Runtime data
-# pids
-# *.pid
-# *.seed
-# *.pid.lock
+# Environment and secrets
+.env*
+*.key
+*.pem
 
-# Coverage directory used by tools like istanbul
-# coverage/
-# *.lcov
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
 
-# nyc test coverage
-# .nyc_output
-
-# Dependency directories
-# jspm_packages/
-
-# Optional npm cache directory
-# .npm
-
-# Optional eslint cache
-# .eslintcache
-
-# Microbundle cache
-# .rpt2_cache/
-# .rts2_cache_cjs/
-# .rts2_cache_es/
-# .rts2_cache_umd/
-
-# Optional REPL history
-# .node_repl_history
-
-# Output of 'npm pack'
-# *.tgz
-
-# Yarn Integrity file
-# .yarn-integrity
-
-# dotenv environment variables file
-# .env
-# .env.test
-# .env.local
-# .env.production
-
-# parcel-bundler cache (https://parceljs.org/)
-# .cache
-# .parcel-cache
-
-# Next.js build output
-# .next
-
-# Nuxt.js build / generate output
-# .nuxt
-# dist
-
-# Gatsby files
-# .cache/
-# public
-
-# Storybook build outputs
-# .out
-# .storybook-out
-
-# Temporary folders
-# tmp/
-# temp/
-
-# Editor directories and files
-# .vscode/
-# .idea/
-# *.swp
-# *.swo
-# *~
-
-# OS generated files
-# .DS_Store
-# .DS_Store?
-# ._*
-# .Spotlight-V100
-# .Trashes
-# ehthumbs.db
-# Thumbs.db
+# Claude Code
+.claude/
+.mcp.json
