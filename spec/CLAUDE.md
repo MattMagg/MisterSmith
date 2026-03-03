@@ -1,220 +1,53 @@
-# ms-framework-docs Folder Instructions
+# Specifications
 
-## FOLDER CONTEXT
+Framework specifications for Mister Smith. These documents define the contract for implementation — agent types, message formats, architecture patterns, and integration points.
 
-You are now in the MisterSmith framework documentation folder. This folder contains the technical specifications
-for the future implementation. Remember: These are SPECIFICATIONS ONLY - no implementation exists yet.
+## Structure
 
-## DOCUMENTATION STRUCTURE
-
-```text
-ms-framework-docs/
-├── core-architecture/      # Foundational system design
-├── agent-domains/         # Specialized agent specifications
-├── data-management/       # Storage and messaging patterns  
-├── transport/            # Communication layer specs
-├── security/             # Authentication/authorization
-├── operations/           # Deployment and monitoring
-├── testing/              # Test specifications
-└── research/             # Investigation and planning docs
+```
+spec/
+├── core-architecture/   # System design, async patterns, supervision trees, types (21 files)
+├── data-management/     # Agent orchestration, message schemas, persistence (19 files)
+├── transport/           # NATS, gRPC, HTTP transport layers (5 files)
+├── security/            # Authentication, authorization, TLS, patterns (7 files)
+├── operations/          # Deployment, monitoring, configuration, build scripts (7 + scripts/)
+├── agent-domains/       # Consolidated agent type analysis (1 file)
+├── testing/             # Test framework and schemas (2 files)
+└── research/            # Claude CLI integration analysis (3 files)
 ```
 
-## WORKING WITH SPECIFICATIONS
+## Document Interconnections
 
-### Before Modifying Any Document
+**High-impact files** — changes to these cascade across the spec:
 
-```bash
-# 1. Understand dependencies
-grep -r "filename_without_extension" . | grep -v "filename.md"
+- `core-architecture/system-architecture.md` — foundation for all specs
+- `core-architecture/type-definitions.md` — core types referenced everywhere
+- `data-management/message-schemas.md` — message formats used across system
+- `agent-domains/SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md` — agent type definitions
 
-# 2. Check for related specifications  
-find . -name "*.md" -exec grep -l "ComponentName" {} \;
+**Cross-reference patterns** — when modifying:
 
-# 3. Verify terminology consistency
-grep -r "specific_term" . | cut -d: -f1 | sort | uniq
-```
+- Agent-related changes → check `agent-domains/` and `data-management/agent-*.md`
+- Message changes → update `message-schemas.md`, `core-message-schemas.md`, `workflow-message-schemas.md`
+- Architecture changes → verify impact on `integration-*.md` files
+- Security changes → cross-reference with `transport/` specifications
 
-### Document Interconnections
+## Quality Standards
 
-**High-Impact Files** (changes affect many others):
+- **Technical accuracy**: Specifications must be implementable with stated technologies
+- **Consistency**: Terms, patterns, agent names, and version numbers uniform across files
+- **Completeness**: Minimize TODO/TBD sections
+- **Feasibility**: Patterns must follow Rust best practices for the stated dependency versions
 
-- `core-architecture/system-architecture.md` - Foundation for all specs
-- `core-architecture/type-definitions.md` - Core types used everywhere
-- `data-management/message-schemas.md` - Message formats across system
-- `agent-domains/SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md` - Agent type definitions
+### Terminology Consistency
 
-**Always Check These When Modifying**:
-
-- Agent-related changes → Check all files in `agent-domains/` and `data-management/agent-*.md`
-- Message changes → Update `message-schemas.md`, `core-message-schemas.md`, `workflow-message-schemas.md`
-- Architecture changes → Verify impact on `integration-*.md` files
-- Security changes → Cross-reference with `transport/` specifications
-
-## DOCUMENTATION PHASE SPECIFIC RULES
-
-### Allowed Actions in This Folder
-
-✅ Improve specification clarity
-✅ Fix inconsistencies between documents
-✅ Add missing technical details
-✅ Remove over-engineered complexity
-✅ Validate technical feasibility
-✅ Ensure proper cross-references
-
-### Forbidden Actions
-
-❌ Adding implementation code examples beyond pseudocode
-❌ Creating actual Rust code files
-❌ Adding build scripts or configuration files
-❌ Claiming specifications are "implemented" or "tested"
-❌ Removing complexity that's necessary for the design
-
-## SPECIFICATION QUALITY STANDARDS
-
-### Technical Accuracy
-
-- Specifications must be implementable with stated technologies
-- Version numbers must be consistent (e.g., Tokio 1.38)
-- Dependencies must be compatible
-- Patterns must follow Rust best practices
-
-### Consistency Requirements
-
-When mentioning:
-
-- **Agent Types**: Use exact names from `SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md`
+- **Agent types**: Use exact names from `SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md`
 - **Messages**: Match schemas in `message-schemas.md`
-- **Errors**: Follow patterns in security and transport specs
-- **Async Patterns**: Align with `async-patterns.md` and `tokio-runtime.md`
+- **Async patterns**: Align with `async-patterns.md` and `tokio-runtime.md`
+- **Versions**: Tokio 1.38, async-nats 0.34, Axum 0.8, Tonic 0.11
 
-### Cross-Reference Validation
+## Navigation
 
-```bash
-# Example: After modifying agent lifecycle
-files_to_check=(
-    "agent-lifecycle.md"
-    "agent-operations.md" 
-    "agent-orchestration.md"
-    "supervision-trees.md"
-    "process-management-specifications.md"
-)
+Start with `core-architecture/system-architecture.md` for the architecture overview, then `component-architecture.md` for structure, then `integration-patterns.md` for connections between components.
 
-for file in "${files_to_check[@]}"; do
-    echo "Checking $file for consistency..."
-    grep -n "lifecycle\|spawn\|terminate" "$file"
-done
-```
-
-## COMMON DOCUMENTATION PATTERNS
-
-### Component Specification Pattern
-
-```markdown
-## Component Name
-
-### Purpose
-[Clear, single responsibility]
-
-### Interface
-[Public API/Message contracts]
-
-### Dependencies
-- Internal: [Other components]
-- External: [Libraries with versions]
-
-### Behavior
-[State transitions, error handling]
-
-### Integration Points
-[How it connects to other components]
-```
-
-### Message Definition Pattern
-
-```rust
-// Pseudocode only - NOT implementation
-struct MessageName {
-    field: Type,  // Purpose
-    field2: Type, // Constraints
-}
-```
-
-## VALIDATION CHECKLISTS
-
-### Before Committing Changes
-
-- [ ] All modified terms are consistent across documents
-- [ ] Cross-references still valid
-- [ ] No implementation code added
-- [ ] Examples remain pseudocode only
-- [ ] Version numbers unchanged unless intentional
-- [ ] No new TODOs or TBDs introduced
-
-### Weekly Documentation Health Check
-
-```bash
-# Run these checks periodically
-echo "=== Checking for TODOs ==="
-grep -r "TODO\|TBD\|FIXME" . | wc -l
-
-echo "=== Checking for inconsistent agent names ==="
-grep -r "Agent\|agent" . | grep -v "Agent::" | head -20
-
-echo "=== Checking for implementation claims ==="
-grep -r "implemented\|working\|tested\|production" . | grep -v "to be implemented"
-```
-
-## NAVIGATION TIPS
-
-### Quick Access to Key Specifications
-
-```bash
-# View all agent specifications
-ls -la agent-domains/
-ls -la data-management/agent-*.md
-
-# Find message schemas
-find . -name "*message*.md" -o -name "*schema*.md"
-
-# Locate integration patterns
-ls -la core-architecture/integration-*.md
-```
-
-### Understanding Component Relationships
-
-1. Start with `system-architecture.md` for overview
-2. Follow to `component-architecture.md` for structure
-3. Check `integration-patterns.md` for connections
-4. Verify in specific component files
-
-## DOCUMENTATION MAINTENANCE
-
-### Identifying Inconsistencies
-
-Common inconsistency patterns:
-
-- Different versions of the same component description
-- Mismatched message field names
-- Varying agent capability descriptions
-- Conflicting architectural decisions
-
-### Resolving Conflicts
-
-When specifications conflict:
-
-1. Check which is more recently updated
-2. Determine which aligns with core architecture
-3. Validate technical feasibility
-4. Update all affected documents
-5. Document the decision in commit message
-
-## REMEMBER IN THIS FOLDER
-
-You are crafting the blueprint for a complex system. Every specification should be:
-
-- **Clear**: Unambiguous to future implementers
-- **Consistent**: Aligned with all related specs
-- **Complete**: No critical details missing
-- **Feasible**: Actually implementable
-
-The documentation in this folder is the CONTRACT for future implementation. Make it solid.
+For agent specifications, start with `agent-domains/SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md`, then read the lifecycle and orchestration files in `data-management/`.
