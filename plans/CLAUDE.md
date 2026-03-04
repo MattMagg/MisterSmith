@@ -6,7 +6,7 @@ Phased implementation plans for building Mister Smith from the specifications in
 
 | Batch | Domain | Agents | Status |
 |-------|--------|--------|--------|
-| 1 | Core Architecture | 8 (01-08) | Complete |
+| 1 | Core Architecture | 7 (01-02, 04-08) | Complete (agent03 consolidated into async-patterns) |
 | 2 | Data Management | 1 (16) | Partial — 1 of ~8 agents |
 | 3-5 | Security, Transport, Operations | — | Not started |
 

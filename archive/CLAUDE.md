@@ -6,7 +6,7 @@ Completed and historical work preserved for reference. This content informed the
 
 | Directory | What It Contains |
 |-----------|-----------------|
-| `validation-report.md` | Final 60-agent validation assessment (82/100 readiness, 97/100 doc quality) |
+| `validation-report.md` | Original 60-agent validation assessment (82/100 readiness). See root `VALIDATION_REPORT.md` for latest (95/100) |
 | `validation-swarm/` | 30-agent domain validation — batched by architecture, data, security, ops, specialized |
 | `validation-bridge/` | 30-agent cross-validation — organized by team (alpha through omega) |
 | `operations/` | Working prompts, deployment plans, SuperClaude orchestration, optimization reports |

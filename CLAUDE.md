@@ -1,13 +1,16 @@
 # Mister Smith
 
-Multi-agent orchestration framework — Rust + NATS + supervision trees. Currently in specification form; no implementation code exists yet.
+Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-agnostic (works with any LLM). Currently in specification form; no implementation code exists yet.
 
 ## Repository Structure
 
 | Directory | Contents |
 |-----------|----------|
+| `ROADMAP.md` | 8-phase build roadmap — dependency-aware implementation order |
+| `VALIDATION_REPORT.md` | Latest validation assessment (95/100 readiness) |
+| `VERSION_REFERENCE.md` | Crate version matrix — pinned versions for all dependencies |
 | `spec/` | Framework specifications — 65+ files across 8 domains |
-| `plans/` | Implementation plans — batch 1 (core architecture) complete, batch 2 partial |
+| `plans/` | Implementation plans — batch 1 (core architecture) 7 of 8 agents complete, batch 2 partial |
 | `archive/` | Completed validation work, historical operations, and research |
 | `nats.rs/` | Official NATS Rust client (cloned from nats-io/nats.rs) — reference for async-nats API |
 | `.github/workflows/` | CI/CD pipelines for documentation validation |
@@ -17,11 +20,12 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Current
 
 Start here when reading the framework:
 
-1. **Architecture overview**: `spec/core-architecture/system-architecture.md`
-2. **Component design**: `spec/core-architecture/component-architecture.md`
-3. **Agent types and orchestration**: `spec/data-management/agent-orchestration.md`
-4. **Message contracts**: `spec/data-management/message-schemas.md`
-5. **Type system**: `spec/core-architecture/type-definitions.md`
+1. **Build roadmap**: `ROADMAP.md` — 8-phase implementation order with gate criteria
+2. **Architecture overview**: `spec/core-architecture/system-architecture.md`
+3. **Component design**: `spec/core-architecture/component-architecture.md`
+4. **Agent types and orchestration**: `spec/data-management/agent-orchestration.md`
+5. **Message contracts**: `spec/data-management/message-schemas.md`
+6. **Type system**: `spec/core-architecture/type-definitions.md`
 
 ## Spec Domains
 
@@ -47,17 +51,18 @@ Changes to these files cascade across the spec:
 
 ## Technology Stack
 
-| Component | Spec Version | Current Version | Notes |
-|-----------|-------------|-----------------|-------|
-| Runtime | Tokio 1.38 | — | Check crates.io before implementation |
-| Messaging | async-nats 0.34 | **0.46.0** | Major version gap — API changes likely |
-| HTTP | Axum 0.8 | — | |
-| gRPC | Tonic 0.11 | — | |
-| Storage | PostgreSQL + Redis | — | |
-| Security | JWT, TLS 1.3, mTLS | — | |
-| Orchestration | Kubernetes | — | |
+| Component | Spec Version | Notes |
+|-----------|-------------|-------|
+| MSRV | **1.88.0** | Driven by async-nats 0.46.0 requirement |
+| Runtime | Tokio 1.49.0 | Full feature set (rt-multi-thread, io, net, time, sync, fs, process, signal) |
+| Messaging | async-nats 0.46.0 | jetstream, kv, object-store, service features |
+| HTTP | Axum 0.8 | |
+| gRPC | Tonic 0.14 | With prost 0.14 for protobuf |
+| Storage | PostgreSQL + Redis | sqlx with runtime-tokio-rustls |
+| Security | JWT, TLS 1.3, mTLS | ring 0.17, jsonwebtoken 10, aes-gcm 0.10 |
+| Orchestration | Kubernetes | |
 
-> **Version drift**: Specs were written against async-nats 0.34. The current release is 0.46.0 (Rust edition 2021, min rustc 1.88.0). API surface has changed — review `nats.rs/async-nats/` before implementing transport layer specs.
+> See `VERSION_REFERENCE.md` for the full dependency matrix. Review `nats.rs/async-nats/` for API reference before implementing transport layer.
 
 ## Local Development Environment
 
@@ -70,10 +75,9 @@ Changes to these files cascade across the spec:
 
 ## Validation Summary
 
-A 60-agent validation operation assessed the framework (see `archive/validation-report.md`):
+A multi-agent validation operation assessed the framework (see `VALIDATION_REPORT.md`):
 
-- **Overall readiness**: 82/100
+- **Overall readiness**: 95/100
 - **Documentation quality**: 97/100
-- **Production readiness**: NOT APPROVED — 6 critical gaps remain
-- **Critical gaps**: Supervision trees (pseudocode only), agent orchestration (47% readiness)
-- **Estimated implementation effort**: 184 developer-weeks, 20-24 week timeline
+- **Critical gaps resolved**: Version alignment, type reconciliation, terminology generalization
+- **Remaining risk**: Supervision trees (pseudocode → production Rust is the hardest phase)
