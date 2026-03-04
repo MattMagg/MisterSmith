@@ -754,6 +754,7 @@ metrics = "0.24.3"
 > **MSRV**: 1.88.0 (driven by async-nats 0.46.0). See [dependency-specifications.md](dependency-specifications.md) for full version matrix.
 
 **Version notes:**
+
 - **tokio**: 1.49.0 is latest stable (as of 2026-03). Includes `JoinSet::join_all()` and improved cancellation.
 - **tokio-util**: Provides `CancellationToken` for cooperative, hierarchical shutdown (preferred over `AtomicBool`).
 - **thiserror**: Staying on 1.x per spec decision. Version 2.0 is available with `#[no_std]` support but is a semver-major bump.

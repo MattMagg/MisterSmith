@@ -306,6 +306,7 @@ impl HookSubjectMapper {
     }
 }
 ```
+
 ```
 
 ### 3. Parallel Execution Integration

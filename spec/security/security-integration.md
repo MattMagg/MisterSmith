@@ -20,6 +20,7 @@ tags:
 **Status**: Updated for current ecosystem
 
 > **Key version changes applied in this validation**:
+>
 > - **async-nats**: Updated from old sync `nats` crate (`nats::asynk`) to async-nats 0.46.0 API -- `ConnectOptions::new()`, `add_client_certificate(PathBuf, PathBuf)`, `async_nats::jetstream::new()`, `Subscriber` replaces `Subscription`
 > - **JetStream**: Consumer configuration uses `async_nats::jetstream::consumer::pull::Config` instead of custom `ConsumerConfig` struct
 > - **rustls**: 0.23.37 — referenced indirectly via async-nats TLS configuration

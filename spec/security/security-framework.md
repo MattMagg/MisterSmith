@@ -18,6 +18,7 @@ tags:
 **Status**: Updated for current ecosystem
 
 > **Key version changes applied in this validation**:
+>
 > - **rustls**: Updated to 0.23.37 API -- `Certificate`/`PrivateKey` replaced by `CertificateDer<'static>`/`PrivateKeyDer<'static>`, `AllowAnyAuthenticatedClient` replaced by `WebPkiClientVerifier`, `ServerConfig::builder_with_provider()` takes explicit `CryptoProvider`
 > - **async-nats**: Updated from old sync `nats` crate to async-nats 0.46.0 API -- `ConnectOptions::new()`, `add_client_certificate()`, JetStream context via `async_nats::jetstream::new()`
 > - **jwt-simple**: 0.12.10 -- no breaking changes, API stable

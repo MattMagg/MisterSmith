@@ -18,6 +18,7 @@ tags:
 **Status**: Updated for current ecosystem
 
 > **Key version changes applied in this validation**:
+>
 > - **TLS patterns**: Updated minimum version references from TLS 1.2 to TLS 1.3 for consistency with framework-wide enforcement
 > - **async-nats**: `.with_capacity()` method does not exist on `Subscriber` in 0.46.0; subscription backpressure is handled by channel capacity at creation time
 > - **Architectural patterns**: Pseudocode patterns are version-independent; concrete implementations in referenced files have been updated
