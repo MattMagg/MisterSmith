@@ -1,87 +1,50 @@
-# Mister Smith Constitution
+# [PROJECT_NAME] Constitution
+<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
 
 ## Core Principles
 
-### I. Code Quality Is a Delivery Requirement
+### [PRINCIPLE_1_NAME]
+<!-- Example: I. Library-First -->
+[PRINCIPLE_1_DESCRIPTION]
+<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
 
-Every change must improve or preserve long-term maintainability.
+### [PRINCIPLE_2_NAME]
+<!-- Example: II. CLI Interface -->
+[PRINCIPLE_2_DESCRIPTION]
+<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
 
-- Code and specs must be clear, locally understandable, and aligned with established repository patterns.
-- Duplication must be removed or intentionally justified when constraints require it.
-- Public contracts (APIs, schemas, message formats, interfaces) must be explicit, versioned, and documented.
-- Error handling must be explicit; silent failure paths and hidden fallbacks are not acceptable.
+### [PRINCIPLE_3_NAME]
+<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
+[PRINCIPLE_3_DESCRIPTION]
+<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
 
-### II. Testing Is the Source of Truth
+### [PRINCIPLE_4_NAME]
+<!-- Example: IV. Integration Testing -->
+[PRINCIPLE_4_DESCRIPTION]
+<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
 
-Behavior is only accepted when validated by tests at the right level.
+### [PRINCIPLE_5_NAME]
+<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
+[PRINCIPLE_5_DESCRIPTION]
+<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
 
-- New behavior requires tests that prove expected outcomes and edge cases.
-- Bug fixes require regression tests that fail before the fix and pass after it.
-- Contract, integration, and unit tests must be chosen based on risk surface, not convenience.
-- CI must remain green for all touched domains before merge.
+## [SECTION_2_NAME]
+<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
 
-### III. User Experience Must Be Consistent
+[SECTION_2_CONTENT]
+<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
 
-User-facing behavior must be predictable across interfaces and releases.
+## [SECTION_3_NAME]
+<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
 
-- Similar workflows must use consistent terminology, response shapes, and error semantics.
-- Changes to user-visible behavior require clear migration notes and updated documentation.
-- Defaults must be safe, sensible, and aligned with prior user expectations.
-- Accessibility, readability, and task clarity are required for user-facing documentation and UI surfaces.
-
-### IV. Performance Is a Non-Negotiable Constraint
-
-Performance and resource efficiency are first-class requirements, not afterthoughts.
-
-- Features must define measurable performance goals before implementation (latency, throughput, memory, startup time, or equivalent).
-- Changes that affect hot paths require benchmark evidence or production-like profiling.
-- Regressions beyond agreed budgets require explicit approval and a mitigation plan.
-- Backpressure, bounded resource usage, and graceful degradation are required for distributed workloads.
-
-### V. Governance Through Enforceable Quality Gates
-
-Principles are binding only when enforced in workflow and review.
-
-- Pull requests must include evidence for quality, test coverage, UX impact, and performance impact.
-- Reviewers must block merges that violate any core principle without an approved exception.
-- Exceptions must be time-boxed, documented, and tracked to closure.
-- Planning artifacts must include constitution checks before implementation begins.
-
-## Standards and Quality Gates
-
-### Required Evidence Per Change
-
-- **Code Quality**: Lint/format checks pass; architectural consistency with existing modules is demonstrated.
-- **Testing**: Appropriate unit/integration/contract coverage is added or updated for changed behavior.
-- **UX Consistency**: User-visible impacts are documented, and consistency with existing patterns is verified.
-- **Performance**: Performance-sensitive changes include benchmark/profiling evidence against defined budgets.
-
-### Merge Blocking Conditions
-
-- Failing tests, broken builds, or unresolved lint/format violations.
-- Unexplained user-facing behavior changes or inconsistent interface semantics.
-- Missing performance evidence for performance-sensitive changes.
-- Missing migration guidance when contracts or user workflows are changed.
-
-## Development Workflow and Review Process
-
-- Plan work with explicit constitution checks before implementation.
-- Implement using existing repository patterns and reuse existing abstractions before introducing new ones.
-- Validate with automated checks relevant to touched areas.
-- Document trade-offs and residual risk in the change description.
-- Merge only after principle compliance is confirmed in review.
+[SECTION_3_CONTENT]
+<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
 
 ## Governance
+<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-This constitution supersedes conflicting local practices for planning, implementation, and review.
+[GOVERNANCE_RULES]
+<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
 
-Amendments require:
-
-- A written proposal describing the change and rationale.
-- Explicit impact analysis on existing specs, plans, and workflows.
-- Approval from repository maintainers.
-- A migration/update plan for any affected documentation or templates.
-
-Compliance is verified during planning, code review, and release readiness checks.
-
-**Version**: 1.0.0 | **Ratified**: 2026-03-04 | **Last Amended**: 2026-03-04
+**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
+<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->

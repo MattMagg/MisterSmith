@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "enableAllProjectMcpServers": true,
+  "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+  "hooks": {
+  }
+}
