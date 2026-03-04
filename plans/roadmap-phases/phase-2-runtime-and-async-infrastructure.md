@@ -55,6 +55,7 @@ metrics plumbing, in-process event bus, reusable async primitives, and resource 
 
 - Phase 3 actor spawning and supervision eventing
 - Phase 4 transport connection handling and telemetry
+- Phase 5 security audit logging and certificate health monitoring
 - Phase 6 persistence pools and health checks
 - Phase 8 observability and process lifecycle orchestration
 
@@ -68,16 +69,24 @@ metrics plumbing, in-process event bus, reusable async primitives, and resource 
 - Async guidance matches current Tokio/tracing idioms in repo specs
 - Resource management guidance is reusable across transport and persistence
 
-### Validation Approach
+### How to validate
 
-- Confirm monitoring/event integration references match Phase 3 and Phase 8 consumers
-- Verify no stale API references conflict with validated `async-patterns.md`
-- Ensure resource abstractions in core and data-management docs stay aligned
+- `rg -n "pub async fn start_system|pub async fn graceful_shutdown|DEFAULT_SHUTDOWN_TIMEOUT" spec/core-architecture/tokio-runtime.md`
+- `rg -n "pub struct HealthMonitor|pub trait HealthCheck|pub struct MetricsCollector" spec/core-architecture/monitoring-and-health.md`
+- `rg -n "HealthMonitor|MetricsCollector|HealthCheck" spec/operations/observability-monitoring-framework.md` (cross-domain alignment)
+- `rg -n "pub enum SystemEventType|pub async fn publish|subscribe_broadcast" spec/core-architecture/supervision-and-events.md`
+- `rg -n "Started|Stopping|Stopped|HealthCheckPassed|HealthCheckFailed" spec/core-architecture/supervision-and-events.md` (lifecycle transition coverage)
+- `rg -n "#\\[async_trait\\]|tracing::|#\\[instrument\\]" spec/core-architecture/tokio-runtime.md spec/core-architecture/async-patterns.md` (current idioms)
+- `rg -n "spawned_tasks_count|injection_queue_depth" spec/core-architecture/tokio-runtime.md spec/core-architecture/async-patterns.md` (expect zero — no deprecated APIs)
+- `rg -n "ConnectionPool<R:" spec/core-architecture/component-architecture.md` (generic resource pool)
+- `rg -n "calculate_optimal_pool_size|PoolSizeRecommendation" spec/data-management/connection-management.md` (pool sizing)
 
 ### Validation Evidence
 
-- Shared terminology across runtime, monitoring, and events specs
-- Explicit references from later-phase specs back to Phase 2 foundations
+- `RuntimeManager` struct referenced in both `tokio-runtime.md` and `component-architecture.md`
+- `EventBus` and `HealthMonitor` wired together via `MonitoringSystem` in `monitoring-and-health.md`
+- `SystemEventType` variants (Started, Stopping, Stopped) match Phase 3 consumption patterns in ROADMAP.md 3.1–3.2
+- Generic `ConnectionPool<R: Resource>` in `component-architecture.md` is parameterized (not hardcoded to a specific backend)
 
 ## Official-Doc Best Practices
 
@@ -92,17 +101,20 @@ metrics plumbing, in-process event bus, reusable async primitives, and resource 
 - Runtime shutdown semantics can diverge from process-management expectations
 - Metrics and event taxonomies can drift between core and operations docs
 - Async utility patterns can become inconsistent across specifications
+- `connection-management.md` uses CLASS/FUNCTION pseudocode while all other Phase 2 specs use concrete Rust — the generic `ConnectionPool<R: Resource>` contract is actually in `component-architecture.md`
 
 ### Required Follow-ups
 
 - Keep shutdown semantics synchronized with `process-management-specifications.md`
 - Revalidate tracing/metrics assumptions whenever dependency specs are updated
+- When implementing resource management, use `component-architecture.md` for the Rust trait/struct contracts and `connection-management.md` for the domain-specific pool sizing algorithms
 
 ## Authoritative Spec Files
 
-- `spec/core-architecture/tokio-runtime.md`
-- `spec/core-architecture/monitoring-and-health.md`
-- `spec/core-architecture/supervision-and-events.md`
-- `spec/core-architecture/async-patterns.md`
-- `spec/data-management/connection-management.md`
-- `spec/operations/observability-monitoring-framework.md`
+- `spec/core-architecture/tokio-runtime.md` — RuntimeManager, shutdown, task spawning
+- `spec/core-architecture/monitoring-and-health.md` — HealthMonitor, MetricsCollector, health checks
+- `spec/core-architecture/supervision-and-events.md` — EventBus, SystemEvent, event handlers
+- `spec/core-architecture/async-patterns.md` — TaskExecutor, TaskGuard, circuit breaker, backpressure
+- `spec/core-architecture/component-architecture.md` — generic `ConnectionPool<R: Resource>` (canonical resource pool contract)
+- `spec/data-management/connection-management.md` — pool sizing, transaction management (pseudocode; Rust contract is in `component-architecture.md`)
+- `spec/operations/observability-monitoring-framework.md` — OpenTelemetry, Prometheus, OTLP
