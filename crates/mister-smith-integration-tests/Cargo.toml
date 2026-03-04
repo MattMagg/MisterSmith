@@ -1,0 +1,21 @@
+[package]
+name = "mister-smith-integration-tests"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Cross-crate integration tests for Phase 2"
+publish = false
+
+[dependencies]
+mister-smith-core = { workspace = true }
+mister-smith-config = { workspace = true }
+mister-smith-runtime = { workspace = true }
+mister-smith-monitoring = { workspace = true }
+mister-smith-events = { workspace = true }
+mister-smith-async = { workspace = true }
+mister-smith-resources = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }

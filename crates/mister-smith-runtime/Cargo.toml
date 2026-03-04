@@ -1,0 +1,26 @@
+[package]
+name = "mister-smith-runtime"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Tokio runtime lifecycle, configuration presets, shutdown coordination, and performance monitoring"
+
+[dependencies]
+mister-smith-core = { workspace = true }
+mister-smith-config = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+num_cpus = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+metrics = { workspace = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tokio_unstable)'] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

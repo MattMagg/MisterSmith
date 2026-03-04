@@ -1,0 +1,19 @@
+[package]
+name = "mister-smith-resources"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Generic connection pooling, pool sizing, health checks, and resource lifecycle management"
+
+[dependencies]
+mister-smith-core = { workspace = true }
+mister-smith-config = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

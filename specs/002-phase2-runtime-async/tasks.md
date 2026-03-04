@@ -51,26 +51,26 @@
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Map FR-001, FR-002, and FR-008 in
+- [x] T010 [US1] Map FR-001, FR-002, and FR-008 in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md` (`## Requirements`, `### User Story 1`)
   and record checklist evidence in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/checklists/requirements.md`
   (CHK001, CHK008, CHK012)
-- [ ] T011 [P] [US1] Validate runtime lifecycle references with `rg` on
+- [x] T011 [P] [US1] Validate runtime lifecycle references with `rg` on
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/tokio-runtime.md`
   (`### 1.2 Runtime Lifecycle Management`) and
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/runtime-and-errors.md`
   (`### Runtime Lifecycle Management`)
-- [ ] T012 [P] [US1] Validate graceful-shutdown terminology across
+- [x] T012 [P] [US1] Validate graceful-shutdown terminology across
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/tokio-runtime.md`
   (`### 1.2 Runtime Lifecycle Management`) and
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/{spec.md,contracts/phase2-runtime-async-contracts.md}`
   (`## 1. Runtime Lifecycle Contracts`)
-- [ ] T013 [US1] Confirm implementation-free runtime boundaries in
+- [x] T013 [US1] Confirm implementation-free runtime boundaries in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md` (`## Scope`, `## Clarifications`) and
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/plan.md` (`## Technical Context`)
   and record CHK005
-- [ ] T014 [US1] Confirm US1 acceptance scenarios map to validation commands in
+- [x] T014 [US1] Confirm US1 acceptance scenarios map to validation commands in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md`
   (`## User Scenarios & Testing`, `### Validation Command Set`) and record CHK011, CHK012
 
@@ -86,25 +86,25 @@
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Map FR-003, FR-004, and FR-005 in
+- [x] T015 [US2] Map FR-003, FR-004, and FR-005 in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md` (`## Requirements`, `### User Story 2`)
   and record checklist evidence in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/checklists/requirements.md`
   (CHK002, CHK009, CHK012)
-- [ ] T016 [P] [US2] Validate health and metrics references with `rg` on
+- [x] T016 [P] [US2] Validate health and metrics references with `rg` on
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/monitoring-and-health.md`
   (`## Health Check System`, `## Metrics Collection`) and
   `/Users/matthewmaggio/Mister-Smith/spec/operations/observability-monitoring-framework.md`
   (`### 4. Metrics Collection Patterns`, `### 15.4 Health Check Endpoints`)
-- [ ] T017 [P] [US2] Validate event-bus references with `rg` on
+- [x] T017 [P] [US2] Validate event-bus references with `rg` on
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/supervision-and-events.md`
   (`## Event System Implementation`, `### Event Bus Architecture`) and
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/monitoring-and-health.md`
-- [ ] T018 [US2] Confirm active-vs-legacy terminology policy in
+- [x] T018 [US2] Confirm active-vs-legacy terminology policy in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md` (`## Clarifications`, FR-005) and
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/contracts/phase2-runtime-async-contracts.md`
   (`## 2. Monitoring and Event Contracts`) and record CHK010
-- [ ] T019 [US2] Confirm US2 acceptance scenarios map to validation commands in
+- [x] T019 [US2] Confirm US2 acceptance scenarios map to validation commands in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md`
   (`## User Scenarios & Testing`, `### Validation Command Set`) and record CHK011, CHK012
 
@@ -120,26 +120,26 @@
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Map FR-006, FR-007, and FR-010 in
+- [x] T020 [US3] Map FR-006, FR-007, and FR-010 in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md` (`## Requirements`, `### User Story 3`)
   and record checklist evidence in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/checklists/requirements.md`
   (CHK003, CHK004, CHK012)
-- [ ] T021 [P] [US3] Validate async utility references with `rg` on
+- [x] T021 [P] [US3] Validate async utility references with `rg` on
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/async-patterns.md` (`## Task Management Framework`) and
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/module-organization-type-system.md`
   (`## 2. Core Trait Hierarchy and Type System`)
-- [ ] T022 [P] [US3] Validate resource lifecycle references with `rg` on
+- [x] T022 [P] [US3] Validate resource lifecycle references with `rg` on
   `/Users/matthewmaggio/Mister-Smith/spec/data-management/connection-management.md`
   (`### 5.1 Enterprise Connection Pool Architecture`, `### 5.4 Distributed Transaction Coordination`) and
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/component-architecture.md`
   (`## Resource Management`)
-- [ ] T023 [US3] Confirm bounded-resource and backpressure semantics in
+- [x] T023 [US3] Confirm bounded-resource and backpressure semantics in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md`
   (`### Constitution Alignment Requirements`, `### Edge Cases`) and
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/contracts/phase2-runtime-async-contracts.md`
   (`## 3. Async Utility Contracts`, `## 4. Resource Lifecycle Contracts`) and record CHK006, CHK016
-- [ ] T024 [US3] Confirm overload/degradation/resource-exhaustion edge cases in
+- [x] T024 [US3] Confirm overload/degradation/resource-exhaustion edge cases in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md` (`### Edge Cases`)
   and record CHK013, CHK014, CHK015
 
@@ -151,14 +151,14 @@
 
 **Purpose**: Final traceability, consistency, and quality checks.
 
-- [ ] T025 [P] Validate spec markdown quality with `npx markdownlint-cli2 "specs/002-phase2-runtime-async/*.md" --config /Users/matthewmaggio/Mister-Smith/.markdownlint.json`
-- [ ] T026 [P] Validate contract and checklist markdown quality with
+- [x] T025 [P] Validate spec markdown quality with `npx markdownlint-cli2 "specs/002-phase2-runtime-async/*.md" --config /Users/matthewmaggio/Mister-Smith/.markdownlint.json`
+- [x] T026 [P] Validate contract and checklist markdown quality with
   `npx markdownlint-cli2 "specs/002-phase2-runtime-async/contracts/*.md" "specs/002-phase2-runtime-async/checklists/*.md" --config /Users/matthewmaggio/Mister-Smith/.markdownlint.json`
-- [ ] T027 Consolidate FR-to-scenario-to-command traceability for FR-001..FR-012 in
+- [x] T027 Consolidate FR-to-scenario-to-command traceability for FR-001..FR-012 in
   `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/spec.md`
   (`## Requirements`, `## User Scenarios & Testing`, `### Validation Command Set`, `## Success Criteria`)
   and confirm checklist coverage CHK001-CHK017
-- [ ] T028 Validate feature readiness with `./.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
+- [x] T028 Validate feature readiness with `./.specify/scripts/bash/check-prerequisites.sh --json --include-tasks`
 
 ---
 

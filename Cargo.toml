@@ -3,6 +3,12 @@ resolver = "2"
 members = [
     "crates/mister-smith-core",
     "crates/mister-smith-config",
+    "crates/mister-smith-runtime",
+    "crates/mister-smith-monitoring",
+    "crates/mister-smith-events",
+    "crates/mister-smith-async",
+    "crates/mister-smith-resources",
+    "crates/mister-smith-integration-tests",
 ]
 
 [workspace.package]
@@ -12,10 +18,44 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/matthewmaggio/mister-smith"
 
 [workspace.dependencies]
+# Serialization
 thiserror = "1.0.69"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+
+# Identity
 uuid = { version = "1.11.0", features = ["v4", "serde"] }
+
+# Async
 async-trait = "0.1.83"
+tokio = { version = "1.49.0", features = ["full"] }
+futures = "0.3.32"
+
+# Versioning
 semver = "1.0"
+
+# Config
 toml = "0.8"
+
+# Logging / Metrics
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "json"] }
+metrics = "0.24.3"
+metrics-exporter-prometheus = "0.18.1"
+
+# Concurrency
+crossbeam = "0.8"
+parking_lot = "0.12.3"
+dashmap = "6.1.0"
+
+# System
+num_cpus = "1.16"
+
+# Internal crates
+mister-smith-core = { path = "crates/mister-smith-core" }
+mister-smith-config = { path = "crates/mister-smith-config" }
+mister-smith-runtime = { path = "crates/mister-smith-runtime" }
+mister-smith-monitoring = { path = "crates/mister-smith-monitoring" }
+mister-smith-events = { path = "crates/mister-smith-events" }
+mister-smith-async = { path = "crates/mister-smith-async" }
+mister-smith-resources = { path = "crates/mister-smith-resources" }
