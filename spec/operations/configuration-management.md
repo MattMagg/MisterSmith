@@ -347,21 +347,15 @@ service_version = "0.1.0"
 environment = "${ENVIRONMENT_TIER}"
 sample_rate = 1.0           # 0.0 to 1.0
 
-[tracing.jaeger]
-enabled = false
-agent_endpoint = "http://localhost:14268"
-collector_endpoint = "http://localhost:14268/api/traces"
-max_packet_size = 65000
-queue_size = 100
-
-[tracing.zipkin]
-enabled = false
-endpoint = "http://localhost:9411/api/v2/spans"
-timeout = 5                 # seconds
+# NOTE: The standalone opentelemetry-jaeger and opentelemetry-zipkin crates
+# are DEPRECATED. Use OTLP exclusively. Jaeger natively accepts OTLP on
+# port 4317 since v1.35; Tempo accepts OTLP natively.
 
 [tracing.otlp]
 enabled = false
-endpoint = "http://localhost:4317"
+endpoint = "http://localhost:4317"     # OTLP gRPC endpoint (collector, Jaeger, or Tempo)
+http_endpoint = "http://localhost:4318" # OTLP HTTP endpoint (alternative)
+protocol = "grpc"          # grpc, http/protobuf, http/json
 timeout = 10               # seconds
 compression = "gzip"       # gzip, none
 headers = {}
@@ -504,8 +498,8 @@ MISTER_SMITH_METRICS_STATSD_ADDRESS=localhost:8125 # StatsD address
 MISTER_SMITH_TRACING_SERVICE_NAME=mister-smith-agent # Service name
 MISTER_SMITH_TRACING_SERVICE_VERSION=0.1.0    # Service version
 MISTER_SMITH_TRACING_SAMPLE_RATE=1.0          # Sampling rate
-MISTER_SMITH_TRACING_JAEGER_ENABLED=false     # Enable Jaeger
-MISTER_SMITH_TRACING_JAEGER_ENDPOINT=http://localhost:14268 # Jaeger endpoint
+MISTER_SMITH_TRACING_OTLP_ENABLED=false      # Enable OTLP export
+MISTER_SMITH_TRACING_OTLP_ENDPOINT=http://localhost:4317 # OTLP gRPC endpoint
 ```
 
 ### 3.2 Environment Variable Type System
@@ -1576,8 +1570,8 @@ export MISTER_SMITH_METRICS_ENABLED=true
 export MISTER_SMITH_METRICS_PROMETHEUS_ENABLED=true
 export MISTER_SMITH_METRICS_PROMETHEUS_PORT=9090
 export MISTER_SMITH_TRACING_ENABLED=true
-export MISTER_SMITH_TRACING_JAEGER_ENABLED=true
-export MISTER_SMITH_TRACING_JAEGER_ENDPOINT="http://jaeger:14268"
+export MISTER_SMITH_TRACING_OTLP_ENABLED=true
+export MISTER_SMITH_TRACING_OTLP_ENDPOINT="http://otel-collector:4317"
 
 # Claude CLI Integration
 export MISTER_SMITH_CLAUDE_PARALLEL_DEFAULT=8

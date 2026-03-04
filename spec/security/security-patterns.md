@@ -11,6 +11,17 @@ tags:
 
 ## Security Patterns
 
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 3B - Security
+**Status**: Updated for current ecosystem
+
+> **Key version changes applied in this validation**:
+> - **TLS patterns**: Updated minimum version references from TLS 1.2 to TLS 1.3 for consistency with framework-wide enforcement
+> - **async-nats**: `.with_capacity()` method does not exist on `Subscriber` in 0.46.0; subscription backpressure is handled by channel capacity at creation time
+> - **Architectural patterns**: Pseudocode patterns are version-independent; concrete implementations in referenced files have been updated
+
 ## Overview
 
 This document provides essential security patterns, guidelines, and configurations for agent implementation. It covers authentication, authorization, TLS configuration, secrets management, and secure communication patterns.
@@ -171,15 +182,15 @@ authorization:
 **Pseudocode Pattern:**
 
 ```rust
-// TLS Server Setup
+// TLS Server Setup (TLS 1.3 enforced framework-wide)
 function create_tls_server(cert_path, key_path):
     tls_config = {
         certificate: load_certificate(cert_path),
         private_key: load_private_key(key_path),
-        min_version: "TLS_1_2",
-        cipher_suites: ["TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"]
+        min_version: "TLS_1_3",
+        cipher_suites: ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"]
     }
-    
+
     return create_server_with_tls(tls_config)
 
 // TLS Client Configuration
@@ -187,9 +198,9 @@ function create_tls_client(ca_cert_path):
     tls_config = {
         ca_certificate: load_certificate(ca_cert_path),
         verify_hostname: true,
-        min_version: "TLS_1_2"
+        min_version: "TLS_1_3"
     }
-    
+
     return create_client_with_tls(tls_config)
 ```
 
@@ -200,7 +211,7 @@ tls:
   server:
     cert_path: /certs/server.crt
     key_path: /certs/server.key
-    min_version: TLS1.2
+    min_version: TLS1.3
   client:
     ca_cert_path: /certs/ca.crt
     verify_hostname: true
@@ -782,13 +793,15 @@ impl TenantSecureNatsClient {
     pub async fn subscribe_secure(&self, subject: &str) -> Result<async_nats::Subscriber> {
         // Enforce tenant isolation in subscription
         let tenant_subject = format!("tenant.{}.{}", self.tenant_id, subject);
-        
-        // Create subscriber with resource limits
+
+        // async-nats 0.46: subscribe() returns a Subscriber that implements Stream.
+        // Backpressure is handled internally by the client's subscription buffer.
+        // The default subscription capacity is configured at the ConnectOptions level
+        // via .subscription_capacity(1000) if needed.
         let subscriber = self.client
             .subscribe(tenant_subject)
-            .await?
-            .with_capacity(1000); // Bounded buffer
-        
+            .await?;
+
         Ok(subscriber)
     }
 }

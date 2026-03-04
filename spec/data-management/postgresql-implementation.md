@@ -2773,7 +2773,7 @@ Before production deployment, ensure:
 ### Implementation Dependencies
 
 - PostgreSQL 15+
-- SQLx 0.7+ (Rust)
+- SQLx 0.8.6 (Rust)
 - NATS JetStream 2.9+ (for cross-system coordination)
 - AWS S3 (for backup storage)
 - Vector extension (for embedding search)

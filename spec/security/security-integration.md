@@ -13,6 +13,17 @@ tags:
 
 ## Security Integration - NATS and Hook Security
 
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 3B - Security
+**Status**: Updated for current ecosystem
+
+> **Key version changes applied in this validation**:
+> - **async-nats**: Updated from old sync `nats` crate (`nats::asynk`) to async-nats 0.46.0 API -- `ConnectOptions::new()`, `add_client_certificate(PathBuf, PathBuf)`, `async_nats::jetstream::new()`, `Subscriber` replaces `Subscription`
+> - **JetStream**: Consumer configuration uses `async_nats::jetstream::consumer::pull::Config` instead of custom `ConsumerConfig` struct
+> - **rustls**: 0.23.37 — referenced indirectly via async-nats TLS configuration
+
 ## Critical Security Integration Gap Analysis
 
 **Security Integration Implementation Status**:
@@ -369,70 +380,68 @@ authorization {
 
 ```rust
 // nats_client.rs
-use nats::asynk::{Connection, Options};
+// async-nats 0.46.0 API — replaces the old synchronous nats crate (nats::asynk)
+use async_nats::{Client, ConnectOptions};
 use anyhow::{Result, Context};
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use tracing::{info, warn, error};
+use std::path::PathBuf;
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NatsSecureClient {
-    connection: Option<Connection>,
+    client: Option<Client>,
     tenant_id: Uuid,
-    client_cert_path: String,
-    client_key_path: String,
-    ca_cert_path: String,
-    nats_urls: Vec<String>,
+    client_cert_path: PathBuf,
+    client_key_path: PathBuf,
+    ca_cert_path: PathBuf,
+    nats_url: String,
 }
 
 impl NatsSecureClient {
     pub fn new(tenant_id: Uuid) -> Self {
         Self {
-            connection: None,
+            client: None,
             tenant_id,
-            client_cert_path: "/etc/mister-smith/certs/client/client-cert.pem".to_string(),
-            client_key_path: "/etc/mister-smith/certs/client/client-key.pem".to_string(),
-            ca_cert_path: "/etc/mister-smith/certs/ca/ca-cert.pem".to_string(),
-            nats_urls: vec![
-                "tls://nats-1.mister-smith.local:4222".to_string(),
-                "tls://nats-2.mister-smith.local:4222".to_string(),
-                "tls://nats-3.mister-smith.local:4222".to_string(),
-            ],
+            client_cert_path: PathBuf::from("/etc/mister-smith/certs/client/client-cert.pem"),
+            client_key_path: PathBuf::from("/etc/mister-smith/certs/client/client-key.pem"),
+            ca_cert_path: PathBuf::from("/etc/mister-smith/certs/ca/ca-cert.pem"),
+            nats_url: "tls://nats-1.mister-smith.local:4222".to_string(),
         }
     }
 
-    /// Connect to NATS with mTLS
+    /// Connect to NATS with mTLS (async-nats 0.46.0 API)
     pub async fn connect(&mut self, username: &str, password: &str) -> Result<()> {
-        let options = Options::new()
-            .with_name(&format!("mister-smith-client-{}", self.tenant_id))
-            .with_user_and_password(username, password)
-            .with_client_cert(&self.client_cert_path, &self.client_key_path)
-            .with_context(|| "Failed to load client certificate")?
-            .with_root_certificates(&self.ca_cert_path)
-            .with_context(|| "Failed to load CA certificate")?
+        let options = ConnectOptions::new()
+            .name(&format!("mister-smith-client-{}", self.tenant_id))
+            .user_and_password(username.to_string(), password.to_string())
+            .add_client_certificate(
+                self.client_cert_path.clone(),
+                self.client_key_path.clone(),
+            )
+            .add_root_certificates(self.ca_cert_path.clone())
             .require_tls(true)
-            .with_connection_timeout(Duration::from_secs(10))
-            .with_reconnect_buffer_size(8 * 1024 * 1024) // 8MB
-            .with_max_reconnects(5)
-            .with_ping_interval(Duration::from_secs(30));
+            .connection_timeout(Duration::from_secs(10))
+            .reconnect_buffer_size(8 * 1024 * 1024) // 8MB
+            .ping_interval(Duration::from_secs(30));
 
-        let connection = options
-            .connect(&self.nats_urls)
+        let client = options
+            .connect(&self.nats_url)
             .await
             .with_context(|| "Failed to connect to NATS server")?;
 
-        self.connection = Some(connection);
+        self.client = Some(client);
         info!("Connected to NATS with mTLS for tenant: {}", self.tenant_id);
         Ok(())
     }
 
     /// Publish message to tenant-scoped subject
     pub async fn publish<T: Serialize>(&self, subject: &str, message: &T) -> Result<()> {
-        let connection = self.connection.as_ref()
+        let client = self.client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Not connected to NATS"))?;
 
-        let tenant_subject = format!("tenant{}.{}", self.tenant_id, subject);
+        let tenant_subject = format!("tenant.{}.{}", self.tenant_id, subject);
         let payload = serde_json::to_vec(message)
             .with_context(|| "Failed to serialize message")?;
 
@@ -441,7 +450,8 @@ impl NatsSecureClient {
             anyhow::bail!("Message payload exceeds 1MB limit");
         }
 
-        connection.publish(&tenant_subject, payload)
+        // async-nats 0.46: publish() takes (subject, Bytes)
+        client.publish(tenant_subject.clone(), payload.into())
             .await
             .with_context(|| format!("Failed to publish to subject: {}", tenant_subject))?;
 
@@ -450,41 +460,47 @@ impl NatsSecureClient {
     }
 
     /// Subscribe to tenant-scoped subject
-    pub async fn subscribe(&self, subject: &str) -> Result<nats::asynk::Subscription> {
-        let connection = self.connection.as_ref()
+    pub async fn subscribe(&self, subject: &str) -> Result<async_nats::Subscriber> {
+        let client = self.client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Not connected to NATS"))?;
 
-        let tenant_subject = format!("tenant{}.{}", self.tenant_id, subject);
-        
-        let subscription = connection.subscribe(&tenant_subject)
+        let tenant_subject = format!("tenant.{}.{}", self.tenant_id, subject);
+
+        // async-nats 0.46: subscribe() returns Subscriber (implements Stream)
+        let subscriber = client.subscribe(tenant_subject.clone())
             .await
             .with_context(|| format!("Failed to subscribe to subject: {}", tenant_subject))?;
 
         info!("Subscribed to subject: {}", tenant_subject);
-        Ok(subscription)
+        Ok(subscriber)
     }
 
     /// Create JetStream consumer with security constraints
-    pub async fn create_consumer(&self, stream_name: &str, consumer_config: ConsumerConfig) -> Result<()> {
-        let connection = self.connection.as_ref()
+    pub async fn create_consumer(
+        &self,
+        stream_name: &str,
+        consumer_name: &str,
+    ) -> Result<()> {
+        let client = self.client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Not connected to NATS"))?;
 
-        let js = nats::jetstream::new(connection.clone());
-        let tenant_stream = format!("tenant{}.{}", self.tenant_id, stream_name);
+        // async-nats 0.46: JetStream context from client
+        let jetstream = async_nats::jetstream::new(client.clone());
+        let tenant_stream = format!("tenant_{}", self.tenant_id);
 
-        // Enforce security constraints
-        let secure_config = ConsumerConfig {
-            deliver_subject: consumer_config.deliver_subject.map(|s| 
-                format!("tenant{}.{}", self.tenant_id, s)
-            ),
-            max_deliver: Some(consumer_config.max_deliver.unwrap_or(5)),
-            max_ack_pending: Some(consumer_config.max_ack_pending.unwrap_or(1000)),
-            ..consumer_config
-        };
-
-        js.add_consumer(&tenant_stream, &secure_config)
+        let stream = jetstream.get_stream(&tenant_stream)
             .await
-            .with_context(|| format!("Failed to create consumer for stream: {}", tenant_stream))?;
+            .with_context(|| format!("Failed to get stream: {}", tenant_stream))?;
+
+        let _consumer = stream.create_consumer(async_nats::jetstream::consumer::pull::Config {
+            durable_name: Some(consumer_name.to_string()),
+            filter_subject: format!("tenant.{}.{}", self.tenant_id, stream_name),
+            max_deliver: 5,
+            max_ack_pending: 1000,
+            ..Default::default()
+        })
+        .await
+        .with_context(|| format!("Failed to create consumer for stream: {}", tenant_stream))?;
 
         info!("Created consumer for stream: {}", tenant_stream);
         Ok(())
@@ -492,40 +508,19 @@ impl NatsSecureClient {
 
     /// Health check for connection
     pub async fn health_check(&self) -> Result<()> {
-        let connection = self.connection.as_ref()
+        let client = self.client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Not connected to NATS"))?;
 
-        // Send a ping and wait for pong
-        connection.flush().await
+        client.flush().await
             .with_context(|| "Health check failed")?;
 
         Ok(())
     }
-
-    /// Disconnect from NATS
-    pub async fn disconnect(&mut self) -> Result<()> {
-        if let Some(connection) = self.connection.take() {
-            connection.close().await;
-            info!("Disconnected from NATS for tenant: {}", self.tenant_id);
-        }
-        Ok(())
-    }
 }
 
-// JetStream configuration types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConsumerConfig {
-    pub durable_name: Option<String>,
-    pub deliver_subject: Option<String>,
-    pub deliver_policy: Option<String>,
-    pub opt_start_seq: Option<u64>,
-    pub opt_start_time: Option<String>,
-    pub ack_policy: Option<String>,
-    pub ack_wait: Option<Duration>,
-    pub max_deliver: Option<i32>,
-    pub max_ack_pending: Option<i32>,
-    pub replay_policy: Option<String>,
-}
+// NOTE: JetStream consumer configuration is now provided by
+// async_nats::jetstream::consumer::pull::Config (or push::Config)
+// in async-nats 0.46. Custom ConsumerConfig structs are no longer needed.
 
 /// NATS connection pool for high-performance applications
 pub struct NatsConnectionPool {

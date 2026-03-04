@@ -16,10 +16,12 @@ The type system shows sophisticated design patterns including zero-cost abstract
 
 ## 🔍 VALIDATION STATUS
 
-**Last Validated**: 2025-07-05  
-**Validator**: Agent 6 - Type System Specialist  
-**Validation Score**: 96.5% Implementation Readiness  
-**Status**: Production Ready with Minor Enhancements  
+**Last Validated**: 2025-07-05 (ecosystem versions re-validated 2026-03-03)
+**Validator**: Agent 6 - Type System Specialist / Agent 1B - Integration & Types
+**Validation Score**: 96.5% Implementation Readiness
+**Status**: Production Ready with Minor Enhancements
+
+> **MSRV**: 1.88.0 (driven by async-nats 0.46.0). Native async fn in traits is available since Rust 1.75, but the `async_trait` crate is still required for any trait that must support `dyn Trait` dispatch (object safety). All `#[async_trait]` usage in this file is for traits intended to be used as trait objects.  
 
 ### Implementation Status
 
@@ -255,9 +257,7 @@ impl UniversalAgent for DataAnalysisAgent {
     }
     
     async fn state(&self) -> Result<Self::State, Self::Error> {
-        self.state.read().await
-            .clone()
-            .map_err(|e| AnalysisError::StateAccess(e.to_string()))
+        Ok(self.state.read().await.clone())
     }
     
     // Additional implementation details...
@@ -582,7 +582,7 @@ impl UniversalTask for DataProcessingTask {
     }
     
     async fn progress(&self) -> Option<Self::Progress> {
-        self.progress_tracker.read().await.ok().cloned()
+        Some(self.progress_tracker.read().await.clone())
     }
 }
 
@@ -618,8 +618,12 @@ pub struct ExecutionRequirements {
 
 /// Const generic array for compile-time bounds (addressing validation gap)
 /// Example of enhanced const generics usage
-pub struct FixedCapacityQueue<T, const N: usize> 
-where T: Send + Sync + 'static 
+///
+/// NOTE: The `[const { None }; N]` syntax for inline const expressions in
+/// array repeat requires Rust 1.79+ (stabilized in rust-lang/rust#104087).
+/// This is compatible with MSRV 1.88.0.
+pub struct FixedCapacityQueue<T, const N: usize>
+where T: Send + Sync + 'static
 {
     items: [Option<T>; N],
     head: usize,
@@ -637,7 +641,7 @@ where T: Send + Sync + 'static
             tail: 0,
         }
     }
-    
+
     /// Get capacity at compile time
     pub const fn capacity(&self) -> usize {
         N
@@ -1069,6 +1073,12 @@ pub enum ConsistencyLevel {
 
 ```rust
 /// Universal configuration interface
+///
+/// NOTE: This trait contains async methods (`save`, `reload`) alongside sync methods.
+/// Since it is used as a trait object (`dyn UniversalConfiguration`), it requires
+/// `#[async_trait]` for object safety. If only used with concrete types, native
+/// async fn in traits (Rust 1.75+) would suffice.
+#[async_trait]
 pub trait UniversalConfiguration: Send + Sync + 'static {
     /// Get configuration value by key
     fn get<T>(&self, key: &str) -> Result<Option<T>, ConfigError>
@@ -1407,9 +1417,18 @@ impl MessageTranslator {
 
 ```rust
 /// Version compatibility management
+///
+/// NOTE: The framework targets tokio 1.49+ (MSRV 1.88.0 driven by async-nats 0.46.0).
+/// The tokio API is SemVer-stable across 1.x, so version-specific branching is unnecessary.
+/// This layer exists primarily for feature flag management and future-proofing.
+///
+/// At MSRV 1.88.0, the following Rust features are available and used throughout:
+/// - Native async fn in traits (1.75+) — but `async_trait` still needed for dyn dispatch
+/// - Inline const expressions in array repeat `[const { EXPR }; N]` (1.79+)
+/// - `impl Trait` in return position in traits (RPITIT) (1.75+)
+/// - `async fn` in traits (1.75+)
+/// - Let-else patterns (1.65+)
 pub struct CompatibilityLayer {
-    tokio_version: TokioVersion,
-    async_trait_version: AsyncTraitVersion,
     serde_config: SerdeConfiguration,
     feature_flags: FeatureFlags,
 }
@@ -1419,24 +1438,12 @@ impl CompatibilityLayer {
     pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
     where F: Future + Send + 'static, F::Output: Send + 'static
     {
-        match self.tokio_version {
-            TokioVersion::V1_38 => {
-                // Use tokio 1.38 compatible spawn
-                tokio::spawn(future)
-            },
-            TokioVersion::V1_40 => {
-                // Use tokio 1.40 compatible spawn
-                tokio::spawn(future)
-            },
-        }
+        tokio::spawn(future)
     }
-    
+
     /// Create version-compatible timer
     pub fn sleep(&self, duration: Duration) -> Sleep {
-        match self.tokio_version {
-            TokioVersion::V1_38 => tokio::time::sleep(duration),
-            TokioVersion::V1_40 => tokio::time::sleep(duration),
-        }
+        tokio::time::sleep(duration)
     }
 }
 

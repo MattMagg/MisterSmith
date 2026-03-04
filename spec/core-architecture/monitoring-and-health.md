@@ -12,12 +12,12 @@
 
 ---
 
-## 🔍 VALIDATION STATUS
+## VALIDATION STATUS
 
-**Last Validated**: 2025-07-07  
-**Validator**: Agent 1 - Team Alpha  
-**Component**: Health Monitoring and Metrics  
-**Status**: Basic Implementation  
+**Last Validated**: 2026-03-03
+**Validator**: Agent 1C - Supervision & Implementation
+**Component**: Health Monitoring and Metrics
+**Status**: Basic Implementation — updated with Rust idiom and serialization corrections  
 
 ### Implementation Status
 
@@ -53,18 +53,21 @@ use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use tokio::sync::RwLock;
 use std::collections::HashMap;
 use async_trait::async_trait;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use serde::{Serialize, Deserialize};
 use crate::events::{EventBus, EventBuilder, EventType, SystemEventType};
 use crate::runtime::RuntimeManager;
 use crate::metrics::MetricsCollector;
 use tracing::error;
 
+// NOTE: Uses SystemTime instead of Instant because Instant is a monotonic clock
+// that cannot be serialized with serde. SystemTime provides wall-clock timestamps
+// suitable for persistence, cross-process comparison, and API responses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthStatus {
     pub component_id: ComponentId,
     pub status: Status,
-    pub last_check: Instant,
+    pub last_check: std::time::SystemTime,
     pub message: Option<String>,
     pub metadata: HashMap<String, serde_json::Value>,
 }
@@ -152,7 +155,7 @@ impl HealthMonitor {
                     let status = HealthStatus {
                         component_id: component_id.clone(),
                         status: Status::Unknown,
-                        last_check: Instant::now(),
+                        last_check: std::time::SystemTime::now(),
                         message: Some(format!("Check failed: {}", e)),
                         metadata: HashMap::new(),
                     };
@@ -220,14 +223,14 @@ impl HealthCheck for RuntimeHealthCheck {
             Ok(_) => Ok(HealthStatus {
                 component_id: self.component_id.clone(),
                 status: Status::Healthy,
-                last_check: Instant::now(),
+                last_check: std::time::SystemTime::now(),
                 message: None,
                 metadata: HashMap::new(),
             }),
             Err(_) => Ok(HealthStatus {
                 component_id: self.component_id.clone(),
                 status: Status::Unhealthy,
-                last_check: Instant::now(),
+                last_check: std::time::SystemTime::now(),
                 message: Some("Runtime unresponsive".to_string()),
                 metadata: HashMap::new(),
             }),
@@ -286,7 +289,7 @@ impl HealthCheck for DatabaseHealthCheck {
                             } else {
                                 Status::Healthy
                             },
-                            last_check: Instant::now(),
+                            last_check: std::time::SystemTime::now(),
                             message: None,
                             metadata,
                         })
@@ -294,7 +297,7 @@ impl HealthCheck for DatabaseHealthCheck {
                     Err(e) => Ok(HealthStatus {
                         component_id: self.component_id.clone(),
                         status: Status::Unhealthy,
-                        last_check: Instant::now(),
+                        last_check: std::time::SystemTime::now(),
                         message: Some(format!("Query failed: {}", e)),
                         metadata: HashMap::new(),
                     }),
@@ -303,7 +306,7 @@ impl HealthCheck for DatabaseHealthCheck {
             Err(e) => Ok(HealthStatus {
                 component_id: self.component_id.clone(),
                 status: Status::Unhealthy,
-                last_check: Instant::now(),
+                last_check: std::time::SystemTime::now(),
                 message: Some(format!("Connection failed: {}", e)),
                 metadata: HashMap::new(),
             }),
@@ -353,21 +356,21 @@ impl HealthCheck for AgentSystemHealthCheck {
             Ok(Ok(_)) => Ok(HealthStatus {
                 component_id: self.component_id.clone(),
                 status: Status::Healthy,
-                last_check: Instant::now(),
+                last_check: std::time::SystemTime::now(),
                 message: None,
                 metadata,
             }),
             Ok(Err(e)) => Ok(HealthStatus {
                 component_id: self.component_id.clone(),
                 status: Status::Degraded,
-                last_check: Instant::now(),
+                last_check: std::time::SystemTime::now(),
                 message: Some(format!("Spawn test failed: {}", e)),
                 metadata,
             }),
             Err(_) => Ok(HealthStatus {
                 component_id: self.component_id.clone(),
                 status: Status::Unhealthy,
-                last_check: Instant::now(),
+                last_check: std::time::SystemTime::now(),
                 message: Some("Actor system unresponsive".to_string()),
                 metadata,
             }),
@@ -395,7 +398,7 @@ impl HealthCheck for AgentSystemHealthCheck {
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use tokio::sync::RwLock;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use serde::{Serialize, Deserialize};
 use crate::events::{EventType, EventError};
 use tracing::info;
@@ -404,7 +407,7 @@ use tracing::info;
 pub struct Metric {
     pub name: String,
     pub value: MetricValue,
-    pub timestamp: Instant,
+    pub timestamp: std::time::SystemTime,
     pub tags: HashMap<String, String>,
 }
 
@@ -433,7 +436,7 @@ impl MetricsCollector {
         let metric = Metric {
             name: "event.published".to_string(),
             value: MetricValue::Counter(1),
-            timestamp: Instant::now(),
+            timestamp: std::time::SystemTime::now(),
             tags: HashMap::from([
                 ("event_type".to_string(), format!("{:?}", event_type))
             ]),
@@ -482,7 +485,7 @@ impl MetricsCollector {
         let metric = Metric {
             name: name.to_string(),
             value: MetricValue::Counter(1),
-            timestamp: Instant::now(),
+            timestamp: std::time::SystemTime::now(),
             tags,
         };
         
@@ -497,7 +500,7 @@ impl MetricsCollector {
         let metric = Metric {
             name: name.to_string(),
             value: MetricValue::Gauge(value),
-            timestamp: Instant::now(),
+            timestamp: std::time::SystemTime::now(),
             tags,
         };
         
@@ -512,7 +515,7 @@ impl MetricsCollector {
         let metric = Metric {
             name: name.to_string(),
             value: MetricValue::Histogram(vec![value]),
-            timestamp: Instant::now(),
+            timestamp: std::time::SystemTime::now(),
             tags,
         };
         
@@ -527,7 +530,7 @@ impl MetricsCollector {
         let metric = Metric {
             name: name.to_string(),
             value: MetricValue::Summary { sum: value, count: 1 },
-            timestamp: Instant::now(),
+            timestamp: std::time::SystemTime::now(),
             tags,
         };
         
@@ -539,8 +542,10 @@ impl MetricsCollector {
 }
 
 // Production backend integration
+// NOTE: Uses #[async_trait] for dyn dispatch compatibility
+#[async_trait]
 pub trait MetricsBackend: Send + Sync {
-    async fn send_metrics(&self, metrics: Vec<Metric>) -> Result<(), Box<dyn std::error::Error>>;
+    async fn send_metrics(&self, metrics: Vec<Metric>) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
 // Example Prometheus integration
@@ -560,7 +565,7 @@ impl PrometheusBackend {
 
 #[async_trait]
 impl MetricsBackend for PrometheusBackend {
-    async fn send_metrics(&self, metrics: Vec<Metric>) -> Result<(), Box<dyn std::error::Error>> {
+    async fn send_metrics(&self, metrics: Vec<Metric>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Convert metrics to Prometheus format
         let prometheus_metrics = self.convert_to_prometheus_format(metrics);
         

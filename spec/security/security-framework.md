@@ -11,6 +11,18 @@ tags:
 
 ## Security Framework
 
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 3B - Security
+**Status**: Updated for current ecosystem
+
+> **Key version changes applied in this validation**:
+> - **rustls**: Updated to 0.23.37 API -- `Certificate`/`PrivateKey` replaced by `CertificateDer<'static>`/`PrivateKeyDer<'static>`, `AllowAnyAuthenticatedClient` replaced by `WebPkiClientVerifier`, `ServerConfig::builder_with_provider()` takes explicit `CryptoProvider`
+> - **async-nats**: Updated from old sync `nats` crate to async-nats 0.46.0 API -- `ConnectOptions::new()`, `add_client_certificate()`, JetStream context via `async_nats::jetstream::new()`
+> - **jwt-simple**: 0.12.10 -- no breaking changes, API stable
+> - **tokio**: Duration::from_hours() does not exist; replaced with Duration::from_secs()
+
 ## Framework Authority
 
 This document implements specifications from the canonical tech-framework.md located at /Users/mac-main/Mister-Smith/Mister-Smith/tech-framework.md
@@ -918,11 +930,19 @@ fi
 
 ```rust
 // certificate_manager.rs
-use rustls::{Certificate, PrivateKey, ServerConfig, ClientConfig};
-use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
+//
+// rustls 0.23.37 / tokio-rustls 0.26.4 API
+// Key changes from pre-0.23:
+//   - Certificate/PrivateKey replaced by CertificateDer<'static>/PrivateKeyDer<'static>
+//   - PEM parsing uses rustls::pki_types::pem::PemObject trait
+//   - ServerConfig::builder_with_provider() takes Arc<CryptoProvider>
+//   - AllowAnyAuthenticatedClient removed; use WebPkiClientVerifier::builder()
+//
+use rustls::{ClientConfig, ServerConfig, RootCertStore};
+use rustls::server::WebPkiClientVerifier;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::pem::PemObject;
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use std::sync::Arc;
 use tokio::time::{Duration, interval};
 use tracing::{info, warn, error};
@@ -948,17 +968,12 @@ impl CertificateManager {
         }
     }
 
-    /// Load certificates from PEM files
-    pub fn load_certificates(&self, path: &str) -> Result<Vec<Certificate>> {
-        let file = File::open(path)
-            .with_context(|| format!("Failed to open certificate file: {}", path))?;
-        let mut reader = BufReader::new(file);
-        
-        let certs = certs(&mut reader)
-            .with_context(|| "Failed to parse certificates")?
-            .into_iter()
-            .map(Certificate)
-            .collect();
+    /// Load certificates from PEM files (rustls 0.23 API)
+    pub fn load_certificates(&self, path: &str) -> Result<Vec<CertificateDer<'static>>> {
+        let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(path)
+            .with_context(|| format!("Failed to open certificate file: {}", path))?
+            .collect::<Result<Vec<_>, _>>()
+            .with_context(|| format!("Failed to parse certificates from: {}", path))?;
 
         if certs.is_empty() {
             anyhow::bail!("No certificates found in file: {}", path);
@@ -968,117 +983,85 @@ impl CertificateManager {
         Ok(certs)
     }
 
-    /// Load private key from PEM file
-    pub fn load_private_key(&self, path: &str) -> Result<PrivateKey> {
-        let file = File::open(path)
-            .with_context(|| format!("Failed to open private key file: {}", path))?;
-        let mut reader = BufReader::new(file);
+    /// Load private key from PEM file (rustls 0.23 API)
+    pub fn load_private_key(&self, path: &str) -> Result<PrivateKeyDer<'static>> {
+        let key = PrivateKeyDer::from_pem_file(path)
+            .with_context(|| format!("Failed to load private key from: {}", path))?;
 
-        // Try PKCS8 format first
-        if let Ok(mut keys) = pkcs8_private_keys(&mut reader) {
-            if !keys.is_empty() {
-                info!("Loaded PKCS8 private key from {}", path);
-                return Ok(PrivateKey(keys.remove(0)));
-            }
-        }
-
-        // Reset reader and try RSA format
-        let file = File::open(path)?;
-        let mut reader = BufReader::new(file);
-        
-        let mut keys = rsa_private_keys(&mut reader)
-            .with_context(|| "Failed to parse RSA private key")?;
-
-        if keys.is_empty() {
-            anyhow::bail!("No private keys found in file: {}", path);
-        }
-
-        info!("Loaded RSA private key from {}", path);
-        Ok(PrivateKey(keys.remove(0)))
+        info!("Loaded private key from {}", path);
+        Ok(key)
     }
 
-    /// Create TLS server configuration with mTLS
+    /// Create TLS server configuration with mTLS (rustls 0.23 API)
     pub fn create_server_config(&self) -> Result<Arc<ServerConfig>> {
         let certs = self.load_certificates(&self.server_cert_path)?;
         let key = self.load_private_key(&self.server_key_path)?;
         let ca_certs = self.load_certificates(&self.ca_cert_path)?;
 
-        let mut root_store = rustls::RootCertStore::empty();
+        let mut client_auth_roots = RootCertStore::empty();
         for cert in ca_certs {
-            root_store.add(&cert)
+            client_auth_roots.add(cert)
                 .with_context(|| "Failed to add CA certificate to root store")?;
         }
 
-        let client_cert_verifier = rustls::server::AllowAnyAuthenticatedClient::new(root_store);
+        // WebPkiClientVerifier replaces AllowAnyAuthenticatedClient
+        let client_verifier = WebPkiClientVerifier::builder_with_provider(
+            Arc::new(client_auth_roots),
+            Arc::new(DEFAULT_PROVIDER),
+        )
+        .build()
+        .with_context(|| "Failed to build client certificate verifier")?;
 
-        let config = ServerConfig::builder()
-            .with_cipher_suites(&[
-                rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
-                rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-                rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
-            ])
-            .with_kx_groups(&[
-                &rustls::kx_group::X25519,
-                &rustls::kx_group::SECP384R1,
-                &rustls::kx_group::SECP256R1,
-            ])
+        // Cipher suites and KX groups are determined by the CryptoProvider.
+        // We restrict to TLS 1.3 only via with_protocol_versions().
+        let config = ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
             .with_protocol_versions(&[&rustls::version::TLS13])
-            .with_context(|| "Failed to configure TLS parameters")?
-            .with_client_cert_verifier(client_cert_verifier)
+            .with_context(|| "Failed to configure TLS protocol versions")?
+            .with_client_cert_verifier(client_verifier)
             .with_single_cert(certs, key)
             .with_context(|| "Failed to configure server certificate")?;
 
-        info!("Created TLS server configuration with mTLS");
+        info!("Created TLS server configuration with mTLS (rustls 0.23)");
         Ok(Arc::new(config))
     }
 
-    /// Create TLS client configuration
+    /// Create TLS client configuration (rustls 0.23 API)
     pub fn create_client_config(&self) -> Result<Arc<ClientConfig>> {
         let certs = self.load_certificates(&self.client_cert_path)?;
         let key = self.load_private_key(&self.client_key_path)?;
         let ca_certs = self.load_certificates(&self.ca_cert_path)?;
 
-        let mut root_store = rustls::RootCertStore::empty();
+        let mut root_store = RootCertStore::empty();
         for cert in ca_certs {
-            root_store.add(&cert)
+            root_store.add(cert)
                 .with_context(|| "Failed to add CA certificate to root store")?;
         }
 
-        let config = ClientConfig::builder()
-            .with_cipher_suites(&[
-                rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
-                rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-                rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
-            ])
-            .with_kx_groups(&[
-                &rustls::kx_group::X25519,
-                &rustls::kx_group::SECP384R1,
-                &rustls::kx_group::SECP256R1,
-            ])
+        let config = ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
             .with_protocol_versions(&[&rustls::version::TLS13])
-            .with_context(|| "Failed to configure TLS parameters")?
+            .with_context(|| "Failed to configure TLS protocol versions")?
             .with_root_certificates(root_store)
-            .with_single_cert(certs, key)
+            .with_client_auth_cert(certs, key)
             .with_context(|| "Failed to configure client certificate")?;
 
-        info!("Created TLS client configuration");
+        info!("Created TLS client configuration (rustls 0.23)");
         Ok(Arc::new(config))
     }
 
     /// Check certificate expiration
     pub fn check_certificate_expiration(&self, cert_path: &str) -> Result<Duration> {
         use x509_parser::prelude::*;
-        
+
         let cert_data = std::fs::read(cert_path)
             .with_context(|| format!("Failed to read certificate: {}", cert_path))?;
-            
+
         let pem = pem::parse(&cert_data)
             .with_context(|| "Failed to parse PEM certificate")?;
-            
-        let x509 = X509Certificate::from_der(&pem.contents)
+
+        let (_, x509) = X509Certificate::from_der(&pem.contents)
             .with_context(|| "Failed to parse X509 certificate")?;
 
-        let expiry_time = x509.1.validity().not_after.timestamp() as u64;
+        let expiry_time = x509.validity().not_after.timestamp() as u64;
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -1089,9 +1072,9 @@ impl CertificateManager {
         }
 
         let remaining = Duration::from_secs(expiry_time - current_time);
-        
+
         if remaining.as_secs() < 30 * 24 * 60 * 60 { // 30 days
-            warn!("Certificate expires in {} days: {}", 
+            warn!("Certificate expires in {} days: {}",
                 remaining.as_secs() / (24 * 60 * 60), cert_path);
         }
 
@@ -1102,23 +1085,23 @@ impl CertificateManager {
     pub async fn start_monitoring(&self) {
         let manager = self.clone();
         tokio::spawn(async move {
-            let mut interval = interval(Duration::from_hours(24));
-            
+            let mut interval = interval(Duration::from_secs(24 * 60 * 60));
+
             loop {
                 interval.tick().await;
-                
+
                 // Check server certificate expiration
                 if let Err(e) = manager.check_certificate_expiration(&manager.server_cert_path) {
                     error!("Server certificate check failed: {}", e);
                 }
-                
+
                 // Check client certificate expiration
                 if let Err(e) = manager.check_certificate_expiration(&manager.client_cert_path) {
                     error!("Client certificate check failed: {}", e);
                 }
             }
         });
-        
+
         info!("Started certificate monitoring task");
     }
 }
@@ -2611,70 +2594,77 @@ authorization {
 
 ```rust
 // nats_client.rs
-use nats::asynk::{Connection, Options};
+// async-nats 0.46.0 API — replaces the old synchronous nats crate
+use async_nats::{Client, ConnectOptions};
 use anyhow::{Result, Context};
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use tracing::{info, warn, error};
+use std::path::PathBuf;
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NatsSecureClient {
-    connection: Option<Connection>,
+    client: Option<Client>,
     tenant_id: Uuid,
-    client_cert_path: String,
-    client_key_path: String,
-    ca_cert_path: String,
-    nats_urls: Vec<String>,
+    client_cert_path: PathBuf,
+    client_key_path: PathBuf,
+    ca_cert_path: PathBuf,
+    nats_url: String,
 }
 
 impl NatsSecureClient {
     pub fn new(tenant_id: Uuid) -> Self {
         Self {
-            connection: None,
+            client: None,
             tenant_id,
-            client_cert_path: "/etc/mister-smith/certs/client/client-cert.pem".to_string(),
-            client_key_path: "/etc/mister-smith/certs/client/client-key.pem".to_string(),
-            ca_cert_path: "/etc/mister-smith/certs/ca/ca-cert.pem".to_string(),
-            nats_urls: vec![
-                "tls://nats-1.mister-smith.local:4222".to_string(),
-                "tls://nats-2.mister-smith.local:4222".to_string(),
-                "tls://nats-3.mister-smith.local:4222".to_string(),
-            ],
+            client_cert_path: PathBuf::from("/etc/mister-smith/certs/client/client-cert.pem"),
+            client_key_path: PathBuf::from("/etc/mister-smith/certs/client/client-key.pem"),
+            ca_cert_path: PathBuf::from("/etc/mister-smith/certs/ca/ca-cert.pem"),
+            nats_url: "tls://nats-1.mister-smith.local:4222".to_string(),
         }
     }
 
-    /// Connect to NATS with mTLS
+    /// Connect to NATS with mTLS (async-nats 0.46.0 API)
     pub async fn connect(&mut self, username: &str, password: &str) -> Result<()> {
-        let options = Options::new()
-            .with_name(&format!("mister-smith-client-{}", self.tenant_id))
-            .with_user_and_password(username, password)
-            .with_client_cert(&self.client_cert_path, &self.client_key_path)
-            .with_context(|| "Failed to load client certificate")?
-            .with_root_certificates(&self.ca_cert_path)
-            .with_context(|| "Failed to load CA certificate")?
+        // async-nats 0.46.0:
+        //   - ConnectOptions::new() replaces Options::new()
+        //   - add_client_certificate(PathBuf, PathBuf) for file-based mTLS
+        //   - add_root_certificates(PathBuf) for CA cert
+        //   - name() replaces with_name()
+        //   - user_and_password() replaces with_user_and_password()
+        //   - connection_timeout() replaces with_connection_timeout()
+        //   - reconnect_buffer_size() replaces with_reconnect_buffer_size()
+        //   - ping_interval() replaces with_ping_interval()
+        let options = ConnectOptions::new()
+            .name(&format!("mister-smith-client-{}", self.tenant_id))
+            .user_and_password(username.to_string(), password.to_string())
+            .add_client_certificate(
+                self.client_cert_path.clone(),
+                self.client_key_path.clone(),
+            )
+            .add_root_certificates(self.ca_cert_path.clone())
             .require_tls(true)
-            .with_connection_timeout(Duration::from_secs(10))
-            .with_reconnect_buffer_size(8 * 1024 * 1024) // 8MB
-            .with_max_reconnects(5)
-            .with_ping_interval(Duration::from_secs(30));
+            .connection_timeout(Duration::from_secs(10))
+            .reconnect_buffer_size(8 * 1024 * 1024) // 8MB
+            .ping_interval(Duration::from_secs(30));
 
-        let connection = options
-            .connect(&self.nats_urls)
+        let client = options
+            .connect(&self.nats_url)
             .await
             .with_context(|| "Failed to connect to NATS server")?;
 
-        self.connection = Some(connection);
+        self.client = Some(client);
         info!("Connected to NATS with mTLS for tenant: {}", self.tenant_id);
         Ok(())
     }
 
     /// Publish message to tenant-scoped subject
     pub async fn publish<T: Serialize>(&self, subject: &str, message: &T) -> Result<()> {
-        let connection = self.connection.as_ref()
+        let client = self.client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Not connected to NATS"))?;
 
-        let tenant_subject = format!("tenant{}.{}", self.tenant_id, subject);
+        let tenant_subject = format!("tenant.{}.{}", self.tenant_id, subject);
         let payload = serde_json::to_vec(message)
             .with_context(|| "Failed to serialize message")?;
 
@@ -2683,7 +2673,8 @@ impl NatsSecureClient {
             anyhow::bail!("Message payload exceeds 1MB limit");
         }
 
-        connection.publish(&tenant_subject, payload)
+        // async-nats 0.46: publish() takes (subject, Bytes)
+        client.publish(tenant_subject.clone(), payload.into())
             .await
             .with_context(|| format!("Failed to publish to subject: {}", tenant_subject))?;
 
@@ -2692,41 +2683,48 @@ impl NatsSecureClient {
     }
 
     /// Subscribe to tenant-scoped subject
-    pub async fn subscribe(&self, subject: &str) -> Result<nats::asynk::Subscription> {
-        let connection = self.connection.as_ref()
+    pub async fn subscribe(&self, subject: &str) -> Result<async_nats::Subscriber> {
+        let client = self.client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Not connected to NATS"))?;
 
-        let tenant_subject = format!("tenant{}.{}", self.tenant_id, subject);
-        
-        let subscription = connection.subscribe(&tenant_subject)
+        let tenant_subject = format!("tenant.{}.{}", self.tenant_id, subject);
+
+        // async-nats 0.46: subscribe() returns Subscriber (implements Stream)
+        let subscriber = client.subscribe(tenant_subject.clone())
             .await
             .with_context(|| format!("Failed to subscribe to subject: {}", tenant_subject))?;
 
         info!("Subscribed to subject: {}", tenant_subject);
-        Ok(subscription)
+        Ok(subscriber)
     }
 
     /// Create JetStream consumer with security constraints
-    pub async fn create_consumer(&self, stream_name: &str, consumer_config: ConsumerConfig) -> Result<()> {
-        let connection = self.connection.as_ref()
+    pub async fn create_consumer(
+        &self,
+        stream_name: &str,
+        consumer_name: &str,
+    ) -> Result<()> {
+        let client = self.client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Not connected to NATS"))?;
 
-        let js = nats::jetstream::new(connection.clone());
-        let tenant_stream = format!("tenant{}.{}", self.tenant_id, stream_name);
+        // async-nats 0.46: JetStream context from client
+        let jetstream = async_nats::jetstream::new(client.clone());
+        let tenant_stream = format!("tenant_{}", self.tenant_id);
 
-        // Enforce security constraints
-        let secure_config = ConsumerConfig {
-            deliver_subject: consumer_config.deliver_subject.map(|s| 
-                format!("tenant{}.{}", self.tenant_id, s)
-            ),
-            max_deliver: Some(consumer_config.max_deliver.unwrap_or(5)),
-            max_ack_pending: Some(consumer_config.max_ack_pending.unwrap_or(1000)),
-            ..consumer_config
-        };
-
-        js.add_consumer(&tenant_stream, &secure_config)
+        // Get or create stream, then add consumer
+        let stream = jetstream.get_stream(&tenant_stream)
             .await
-            .with_context(|| format!("Failed to create consumer for stream: {}", tenant_stream))?;
+            .with_context(|| format!("Failed to get stream: {}", tenant_stream))?;
+
+        let _consumer = stream.create_consumer(async_nats::jetstream::consumer::pull::Config {
+            durable_name: Some(consumer_name.to_string()),
+            filter_subject: format!("tenant.{}.{}", self.tenant_id, stream_name),
+            max_deliver: 5,
+            max_ack_pending: 1000,
+            ..Default::default()
+        })
+        .await
+        .with_context(|| format!("Failed to create consumer for stream: {}", tenant_stream))?;
 
         info!("Created consumer for stream: {}", tenant_stream);
         Ok(())
@@ -2734,40 +2732,20 @@ impl NatsSecureClient {
 
     /// Health check for connection
     pub async fn health_check(&self) -> Result<()> {
-        let connection = self.connection.as_ref()
+        let client = self.client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Not connected to NATS"))?;
 
-        // Send a ping and wait for pong
-        connection.flush().await
+        // async-nats 0.46: flush() sends pending data and waits for server ack
+        client.flush().await
             .with_context(|| "Health check failed")?;
 
         Ok(())
     }
-
-    /// Disconnect from NATS
-    pub async fn disconnect(&mut self) -> Result<()> {
-        if let Some(connection) = self.connection.take() {
-            connection.close().await;
-            info!("Disconnected from NATS for tenant: {}", self.tenant_id);
-        }
-        Ok(())
-    }
 }
 
-// JetStream configuration types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConsumerConfig {
-    pub durable_name: Option<String>,
-    pub deliver_subject: Option<String>,
-    pub deliver_policy: Option<String>,
-    pub opt_start_seq: Option<u64>,
-    pub opt_start_time: Option<String>,
-    pub ack_policy: Option<String>,
-    pub ack_wait: Option<Duration>,
-    pub max_deliver: Option<i32>,
-    pub max_ack_pending: Option<i32>,
-    pub replay_policy: Option<String>,
-}
+// NOTE: JetStream consumer configuration is now provided by
+// async_nats::jetstream::consumer::pull::Config (or push::Config)
+// in async-nats 0.46. Custom ConsumerConfig structs are no longer needed.
 
 /// NATS connection pool for high-performance applications
 pub struct NatsConnectionPool {

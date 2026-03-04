@@ -22,15 +22,17 @@ Mister Smith coordinates distributed AI agents through three core subsystems:
 
 ## Technology Stack
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
+| Component | Spec Version | Purpose |
+|-----------|-------------|---------|
 | Runtime | Tokio 1.38 | Async foundation |
-| Messaging | async-nats 0.34 | Agent communication |
+| Messaging | async-nats 0.34* | Agent communication |
 | HTTP | Axum 0.8 | External API |
 | gRPC | Tonic 0.11 | Internal RPC |
 | Storage | PostgreSQL + Redis | Persistence + caching |
 | Security | JWT, TLS 1.3, mTLS | Authentication + encryption |
 | Deployment | Kubernetes | Orchestration |
+
+*async-nats is now at 0.46.0 — specs need version reconciliation before implementation.
 
 ## Known Critical Gaps
 

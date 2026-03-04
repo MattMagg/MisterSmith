@@ -47,8 +47,8 @@ setup_rust_toolchain() {
     log_info "Setting up Rust toolchain..."
     
     # Install specific Rust version
-    rustup toolchain install 1.75.0
-    rustup default 1.75.0
+    rustup toolchain install 1.88.0
+    rustup default 1.88.0
     
     # Add required components
     rustup component add rustfmt

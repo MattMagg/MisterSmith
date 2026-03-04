@@ -130,21 +130,25 @@ Comprehensive monitoring capabilities:
 
 ## Technology Stack
 
+<!-- Last verified: 2026-03-03 against VERSION_REFERENCE.md -->
 ```toml
 [dependencies]
-tokio = { version = "1.45.1", features = ["full"] }
-futures = "0.3"
-async-trait = "0.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "1.0"
-uuid = { version = "1.0", features = ["v4", "serde"] }
-dashmap = "6.0"
+tokio = { version = "1.49.0", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }  # CancellationToken for graceful shutdown
+futures = "0.3.32"
+async-trait = "0.1.83"                                 # Still needed for dyn Trait + Send bounds
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+thiserror = "1.0.69"                                   # Staying on 1.x per spec decision (2.0 available)
+uuid = { version = "1.11.0", features = ["v4", "serde"] }
+dashmap = "6.1.0"
 num_cpus = "1.0"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-metrics = "0.23"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.22"
+metrics = "0.24.3"
 ```
+
+> **MSRV**: 1.88.0 (driven by async-nats 0.46.0). See [dependency-specifications.md](dependency-specifications.md) for full version matrix.
 
 ## Implementation Status
 

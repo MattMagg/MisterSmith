@@ -8,9 +8,15 @@ tags:
 
 ## Agent Lifecycle & Supervision Architecture
 
+<!-- Last validated: 2026-03-03 by Agent 2A against VERSION_REFERENCE.md and type-definitions.md -->
+
 ## Foundation Patterns Guide
 
-> **Canonical Reference**: See `tech-framework.md` for authoritative technology stack specifications
+> **Canonical Reference**: See [dependency-specifications.md](../core-architecture/dependency-specifications.md) and [VERSION_REFERENCE.md](../../VERSION_REFERENCE.md) for authoritative technology stack specifications
+
+> **Dependency versions**: tokio 1.49+, async-nats 0.46.0, MSRV 1.88.0. See [VERSION_REFERENCE.md](../../VERSION_REFERENCE.md) for full matrix.
+
+> **SupervisionStrategy alignment**: This file's `SupervisionStrategy` struct and `RestartPolicy` enum are aligned with the canonical definitions in [type-definitions.md](../core-architecture/type-definitions.md). The `RestartPolicy` enum uses `OneForOne`, `OneForAll`, `RestForOne` (matching the canonical definition), plus `SimpleOneForOne` as a lifecycle-specific extension.
 
 ## Executive Summary
 
@@ -945,7 +951,7 @@ impl AgentLifecycle {
         
         for observer in observers {
             if let Err(e) = observer.on_state_change(transition).await {
-                log::warn!("State observer error: {}", e);
+                tracing::warn!("State observer error: {}", e);
             }
         }
     }
@@ -1193,22 +1199,35 @@ impl RoutingStrategy for RoundRobinStrategy {
 ### 2.3 Basic Supervision Tree
 
 ```rust
-/// Supervision strategy enumeration
+/// Restart policy — aligned with type-definitions.md canonical definition.
+/// Note: type-definitions.md uses `RestartPolicy` (not `RestartStrategy`),
+/// and `OneForAll` (not `AllForOne`). `SimpleOneForOne` is not in the
+/// canonical definition but is retained here as a lifecycle-specific extension.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RestartStrategy {
-    OneForOne,      // Restart only failed agent
-    AllForOne,      // Restart all agents
-    RestForOne,     // Restart failed and subsequent agents
-    SimpleOneForOne, // Dynamic supervisor for similar agents
+pub enum RestartPolicy {
+    OneForOne,       // Restart only failed agent
+    OneForAll,       // Restart all children when one fails
+    RestForOne,      // Restart failed agent and all started after it
+    SimpleOneForOne, // Dynamic supervisor for similar agents (lifecycle extension)
 }
 
-/// Supervision strategy configuration
+/// Supervision strategy configuration — aligned with type-definitions.md canonical definition.
+/// Canonical fields: restart_policy, max_failures, failure_window, escalation_policy, backoff_strategy.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupervisionStrategy {
-    pub restart_strategy: RestartStrategy,
-    pub max_restarts: u32,
-    pub time_window: Duration,
+    pub restart_policy: RestartPolicy,
+    pub max_failures: u32,
+    pub failure_window: Duration,
+    pub escalation_policy: EscalationPolicy,
     pub backoff_strategy: BackoffStrategy,
+}
+
+/// Escalation policy for when max_failures is exceeded
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EscalationPolicy {
+    Terminate,   // Terminate the supervisor
+    Restart,     // Restart the supervisor
+    Escalate,    // Propagate to parent supervisor
 }
 
 /// Backoff strategy for restart delays
@@ -1316,18 +1335,18 @@ impl SupervisorNode {
             return Ok(RecoveryAction::Escalate);
         }
 
-        // Apply supervision strategy
-        match self.strategy.restart_strategy {
-            RestartStrategy::OneForOne => {
+        // Apply supervision strategy (field name aligned with type-definitions.md)
+        match self.strategy.restart_policy {
+            RestartPolicy::OneForOne => {
                 self.restart_child(agent_id, error).await
             },
-            RestartStrategy::AllForOne => {
+            RestartPolicy::OneForAll => {
                 self.restart_all_children(error).await
             },
-            RestartStrategy::RestForOne => {
+            RestartPolicy::RestForOne => {
                 self.restart_child_and_subsequent(agent_id, error).await
             },
-            RestartStrategy::SimpleOneForOne => {
+            RestartPolicy::SimpleOneForOne => {
                 self.restart_child(agent_id, error).await
             },
         }
@@ -1338,13 +1357,14 @@ impl SupervisorNode {
         
         if let Some(history) = restart_counts.get(agent_id) {
             // Check if within restart limits
+            // Field names aligned with type-definitions.md SupervisionStrategy
             let recent_restarts = history.restarts.iter()
                 .filter(|event| {
-                    event.timestamp.elapsed().unwrap_or_default() <= self.strategy.time_window
+                    event.timestamp.elapsed().unwrap_or_default() <= self.strategy.failure_window
                 })
                 .count() as u32;
-            
-            Ok(recent_restarts < self.strategy.max_restarts)
+
+            Ok(recent_restarts < self.strategy.max_failures)
         } else {
             Ok(true) // No history, allow restart
         }
@@ -1405,7 +1425,7 @@ impl SupervisorNode {
 
         for agent_id in children_ids {
             if let Err(e) = self.restart_child(agent_id, error.clone()).await {
-                log::error!("Failed to restart child {}: {}", agent_id, e);
+                tracing::error!("Failed to restart child {}: {}", agent_id, e);
             }
         }
 
@@ -1443,7 +1463,7 @@ impl SupervisorNode {
         if let Some(child) = children.get_mut(&agent_id) {
             // Stop the current agent
             if let Err(e) = child.agent.stop().await {
-                log::warn!("Error stopping agent during restart: {}", e);
+                tracing::warn!("Error stopping agent during restart: {}", e);
             }
             
             // Start the agent again
@@ -1504,12 +1524,12 @@ impl SupervisorNode {
                 match health_monitor.check_health().await {
                     Ok(health_status) => {
                         if let HealthLevel::Critical(_) = health_status.health {
-                            log::error!("Critical health detected for agent {}", agent_id);
+                            tracing::error!("Critical health detected for agent {}", agent_id);
                             // Could trigger failure handling here
                         }
                     },
                     Err(e) => {
-                        log::error!("Health check failed for agent {}: {}", agent_id, e);
+                        tracing::error!("Health check failed for agent {}: {}", agent_id, e);
                     }
                 }
             }
@@ -2157,7 +2177,7 @@ impl StateRecovery {
                     return Ok(state);
                 },
                 Err(e) => {
-                    log::warn!("Failed to recover from snapshot {}: {}", snapshot.id, e);
+                    tracing::warn!("Failed to recover from snapshot {}: {}", snapshot.id, e);
                     continue;
                 }
             }
@@ -2467,7 +2487,7 @@ impl ErrorRecoveryEngine {
             match self.execute_recovery_action(action, &error, agent).await {
                 Ok(outcome) => return Ok(outcome),
                 Err(e) => {
-                    log::warn!("Recovery action {} failed: {}", idx, e);
+                    tracing::warn!("Recovery action {} failed: {}", idx, e);
                     continue;
                 }
             }

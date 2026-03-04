@@ -9,6 +9,7 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Current
 | `spec/` | Framework specifications — 65+ files across 8 domains |
 | `plans/` | Implementation plans — batch 1 (core architecture) complete, batch 2 partial |
 | `archive/` | Completed validation work, historical operations, and research |
+| `nats.rs/` | Official NATS Rust client (cloned from nats-io/nats.rs) — reference for async-nats API |
 | `.github/workflows/` | CI/CD pipelines for documentation validation |
 | `logs/` | Session logs |
 
@@ -46,15 +47,26 @@ Changes to these files cascade across the spec:
 
 ## Technology Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Runtime | Tokio 1.38 |
-| Messaging | async-nats 0.34 (NATS + JetStream) |
-| HTTP | Axum 0.8 |
-| gRPC | Tonic 0.11 |
-| Storage | PostgreSQL + Redis |
-| Security | JWT, TLS 1.3, mTLS |
-| Orchestration | Kubernetes |
+| Component | Spec Version | Current Version | Notes |
+|-----------|-------------|-----------------|-------|
+| Runtime | Tokio 1.38 | — | Check crates.io before implementation |
+| Messaging | async-nats 0.34 | **0.46.0** | Major version gap — API changes likely |
+| HTTP | Axum 0.8 | — | |
+| gRPC | Tonic 0.11 | — | |
+| Storage | PostgreSQL + Redis | — | |
+| Security | JWT, TLS 1.3, mTLS | — | |
+| Orchestration | Kubernetes | — | |
+
+> **Version drift**: Specs were written against async-nats 0.34. The current release is 0.46.0 (Rust edition 2021, min rustc 1.88.0). API surface has changed — review `nats.rs/async-nats/` before implementing transport layer specs.
+
+## Local Development Environment
+
+**NATS server**: Docker container `NATS` running nats-server v2.12.4
+- Ports: 4222 (client), 6222 (cluster), 8222 (monitoring) — container-internal only, not published to host
+- Start: `docker start NATS`
+- To publish ports: `docker run -d --name NATS -p 4222:4222 -p 8222:8222 nats:latest`
+
+**NATS Rust client**: `nats.rs/` — cloned from `nats-io/nats.rs`, contains async-nats 0.46.0 source for API reference
 
 ## Validation Summary
 

@@ -1829,7 +1829,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Mutex};
 use tokio::time::interval;
-use sysinfo::{System, SystemExt, ProcessExt, CpuExt, DiskExt, NetworkExt};
+use sysinfo::System;  // sysinfo 0.32+: traits removed, methods directly on System
 
 #[derive(Debug, Clone)]
 pub struct ResourceMetrics {
@@ -1911,7 +1911,7 @@ impl Default for ResourceThresholds {
 
 impl ResourceMonitor {
     pub fn new(monitoring_interval: Duration) -> Self {
-        let mut system = System::new_all();
+        let mut system = System::new();
         system.refresh_all();
 
         Self {
@@ -1968,9 +1968,9 @@ impl ResourceMonitor {
         let available_memory = sys.available_memory();
         let used_memory = total_memory - available_memory;
         
-        let cpu_usage = sys.processors().iter()
+        let cpu_usage = sys.cpus().iter()
             .map(|cpu| cpu.cpu_usage())
-            .sum::<f32>() / sys.processors().len() as f32;
+            .sum::<f32>() / sys.cpus().len() as f32;
 
         let (disk_read, disk_write) = sys.disks().iter()
             .fold((0u64, 0u64), |(read, write), disk| {

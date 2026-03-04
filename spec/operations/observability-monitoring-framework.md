@@ -24,7 +24,7 @@ This document provides implementation patterns and technical specifications for 
 
 - **Telemetry**: OpenTelemetry (traces, metrics, logs)
 - **Metrics Storage**: Prometheus with custom exporters
-- **Trace Storage**: Jaeger for distributed tracing
+- **Trace Storage**: Tempo or Jaeger (via OTLP) for distributed tracing
 - **Log Aggregation**: ELK Stack (Elasticsearch, Logstash, Kibana)
 - **Visualization**: Grafana dashboards and alerts
 - **Transport**: OTLP (OpenTelemetry Protocol) over gRPC/HTTP
@@ -100,59 +100,128 @@ PATTERN AgentInstrumentation:
 #### 2.2 OpenTelemetry SDK Initialization
 
 ```rust
-// Rust implementation example
-use opentelemetry::{global, sdk::{
-    export::trace::stdout,
+// Rust implementation example — opentelemetry 0.31 / opentelemetry_sdk 0.31 / opentelemetry-otlp 0.31
+use opentelemetry::{global, KeyValue, InstrumentationScope};
+use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
-    resource::{EnvResourceDetector, SdkProvidedResourceDetector},
-    trace::{self, RandomIdGenerator, Sampler},
+    trace::SdkTracerProvider,
+    metrics::SdkMeterProvider,
+    logs::SdkLoggerProvider,
     Resource,
-}};
-use opentelemetry_otlp::{Protocol, WithExportConfig};
+};
+use opentelemetry_otlp::{SpanExporter, MetricExporter, LogExporter, Protocol};
+use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
+use std::sync::OnceLock;
 
 PATTERN OTLPInitialization:
-    pub fn init_telemetry() -> Result<(), Box<dyn std::error::Error>> {
-        // Set global propagator
+    // Shared resource definition using builder pattern (0.28+ API)
+    fn get_resource() -> Resource {
+        static RESOURCE: OnceLock<Resource> = OnceLock::new();
+        RESOURCE
+            .get_or_init(|| {
+                Resource::builder()
+                    .with_service_name("mister-smith-agent")
+                    .with_service_namespace("mister-smith")
+                    .with_service_instance_id(
+                        std::env::var("AGENT_ID").unwrap_or_else(|_| "unknown".into()),
+                    )
+                    .with_attributes([
+                        KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+                        KeyValue::new(
+                            "deployment.environment",
+                            std::env::var("ENVIRONMENT").unwrap_or_else(|_| "development".into()),
+                        ),
+                    ])
+                    .build()
+            })
+            .clone()
+    }
+
+    // Initialize tracing (distributed traces)
+    fn init_traces() -> SdkTracerProvider {
+        let exporter = SpanExporter::builder()
+            .with_tonic()   // gRPC via tonic — connects to OTLP endpoint (default localhost:4317)
+            .build()
+            .expect("Failed to create span exporter");
+
+        let provider = SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_resource(get_resource())
+            .build();
+
+        global::set_tracer_provider(provider.clone());
+        provider
+    }
+
+    // Initialize metrics
+    fn init_metrics() -> SdkMeterProvider {
+        let exporter = MetricExporter::builder()
+            .with_tonic()
+            .build()
+            .expect("Failed to create metric exporter");
+
+        let provider = SdkMeterProvider::builder()
+            .with_periodic_exporter(exporter)  // Auto-exports every 60s
+            .with_resource(get_resource())
+            .build();
+
+        global::set_meter_provider(provider.clone());
+        provider
+    }
+
+    // Initialize logs bridge
+    fn init_logs() -> SdkLoggerProvider {
+        let exporter = LogExporter::builder()
+            .with_tonic()
+            .build()
+            .expect("Failed to create log exporter");
+
+        let provider = SdkLoggerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_resource(get_resource())
+            .build();
+
+        provider
+    }
+
+    pub fn init_telemetry() -> Result<
+        (SdkTracerProvider, SdkMeterProvider, SdkLoggerProvider),
+        Box<dyn std::error::Error>,
+    > {
+        // Set global W3C TraceContext propagator
         global::set_text_map_propagator(TraceContextPropagator::new());
-        
-        // Configure resource
-        let resource = Resource::from_detectors(
-            std::time::Duration::from_secs(3),
-            vec![
-                Box::new(EnvResourceDetector::new()),
-                Box::new(SdkProvidedResourceDetector),
-            ],
-        )
-        .merge(&Resource::new(vec![
-            KeyValue::new("service.name", "mister-smith-agent"),
-            KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-            KeyValue::new("deployment.environment", std::env::var("ENVIRONMENT").unwrap_or("development".into())),
-        ]));
-        
-        // Configure OTLP exporter
-        let otlp_exporter = opentelemetry_otlp::new_exporter()
-            .tonic()
-            .with_endpoint("http://localhost:4317")
-            .with_protocol(Protocol::Grpc)
-            .with_timeout(std::time::Duration::from_secs(3));
-            
-        // Build trace provider
-        let trace_provider = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(otlp_exporter)
-            .with_trace_config(
-                trace::config()
-                    .with_sampler(Sampler::AlwaysOn)
-                    .with_id_generator(RandomIdGenerator::default())
-                    .with_max_events_per_span(64)
-                    .with_max_attributes_per_span(32)
-                    .with_max_links_per_span(16)
-                    .with_resource(resource),
-            )
-            .install_batch(opentelemetry::runtime::Tokio)?;
-            
-        global::set_tracer_provider(trace_provider);
-        Ok(())
+
+        // Initialize all three signal providers
+        let logger_provider = init_logs();
+        let tracer_provider = init_traces();
+        let meter_provider = init_metrics();
+
+        // Wire OpenTelemetry logs into the `tracing` subscriber
+        let otel_log_layer = OpenTelemetryTracingBridge::new(&logger_provider);
+        tracing_subscriber::registry()
+            .with(otel_log_layer)
+            .with(tracing_subscriber::fmt::layer())
+            .with(tracing_subscriber::EnvFilter::from_default_env())
+            .init();
+
+        Ok((tracer_provider, meter_provider, logger_provider))
+    }
+
+    // Graceful shutdown — call before process exit
+    pub fn shutdown_telemetry(
+        tracer_provider: SdkTracerProvider,
+        meter_provider: SdkMeterProvider,
+        logger_provider: SdkLoggerProvider,
+    ) {
+        if let Err(e) = tracer_provider.shutdown() {
+            eprintln!("Tracer provider shutdown error: {e}");
+        }
+        if let Err(e) = meter_provider.shutdown() {
+            eprintln!("Meter provider shutdown error: {e}");
+        }
+        if let Err(e) = logger_provider.shutdown() {
+            eprintln!("Logger provider shutdown error: {e}");
+        }
     }
 ```
 
@@ -160,116 +229,119 @@ PATTERN OTLPInitialization:
 
 ```rust
 PATTERN CustomMetricsImplementation:
+    // opentelemetry 0.31 metrics API — uses .build() instead of .init(),
+    // string-based units instead of Unit::new()
     use opentelemetry::{
-        metrics::{Counter, Histogram, ObservableGauge, Unit},
+        metrics::{Counter, Histogram, ObservableGauge},
         KeyValue,
     };
     use std::sync::Arc;
-    
+    use std::sync::atomic::{AtomicI64, Ordering};
+
     pub struct AgentMetrics {
         // Counters
         pub task_completions: Counter<u64>,
         pub task_errors: Counter<u64>,
         pub messages_sent: Counter<u64>,
         pub messages_received: Counter<u64>,
-        
+
         // Histograms
         pub task_duration: Histogram<f64>,
         pub message_latency: Histogram<f64>,
         pub processing_time: Histogram<f64>,
-        
-        // Gauges
+
+        // Gauges (atomic backing stores for observable gauges)
         pub active_agents: Arc<AtomicI64>,
         pub queue_depth: Arc<AtomicI64>,
         pub memory_usage: Arc<AtomicI64>,
     }
-    
+
     impl AgentMetrics {
         pub fn new(meter: &opentelemetry::metrics::Meter) -> Self {
             let active_agents = Arc::new(AtomicI64::new(0));
             let queue_depth = Arc::new(AtomicI64::new(0));
             let memory_usage = Arc::new(AtomicI64::new(0));
-            
-            // Register observable gauges
+
+            // Register observable gauges — note .build() replaces .init()
             let active_agents_clone = active_agents.clone();
             meter
                 .i64_observable_gauge("agent_active_count")
                 .with_description("Current number of active agents")
-                .with_unit(Unit::new("{agents}"))
+                .with_unit("{agents}")
                 .with_callback(move |observer| {
                     observer.observe(
                         active_agents_clone.load(Ordering::Relaxed),
                         &[KeyValue::new("state", "active")],
                     );
                 })
-                .init();
-                
+                .build();
+
             Self {
                 task_completions: meter
                     .u64_counter("task_completions_total")
                     .with_description("Total number of completed tasks")
-                    .with_unit(Unit::new("{tasks}"))
-                    .init(),
-                    
+                    .with_unit("{tasks}")
+                    .build(),
+
                 task_errors: meter
                     .u64_counter("task_errors_total")
                     .with_description("Total number of failed tasks")
-                    .with_unit(Unit::new("{errors}"))
-                    .init(),
-                    
+                    .with_unit("{errors}")
+                    .build(),
+
                 task_duration: meter
                     .f64_histogram("task_duration_seconds")
                     .with_description("Task execution duration distribution")
-                    .with_unit(Unit::new("s"))
-                    .init(),
-                    
+                    .with_unit("s")
+                    .build(),
+
                 message_latency: meter
                     .f64_histogram("message_latency_seconds")
                     .with_description("Message delivery latency")
-                    .with_unit(Unit::new("s"))
-                    .init(),
-                    
+                    .with_unit("s")
+                    .build(),
+
                 messages_sent: meter
                     .u64_counter("messages_sent_total")
                     .with_description("Total messages sent")
-                    .init(),
-                    
+                    .build(),
+
                 messages_received: meter
                     .u64_counter("messages_received_total")
                     .with_description("Total messages received")
-                    .init(),
-                    
+                    .build(),
+
                 processing_time: meter
                     .f64_histogram("processing_time_seconds")
                     .with_description("Processing time per operation")
-                    .with_unit(Unit::new("s"))
-                    .init(),
-                    
+                    .with_unit("s")
+                    .build(),
+
                 active_agents,
                 queue_depth,
                 memory_usage,
             }
         }
-        
+
         // Helper methods for metric updates
         pub fn record_task_completion(&self, task_type: &str, duration: f64, success: bool) {
             let labels = &[KeyValue::new("task_type", task_type.to_string())];
-            
+
             if success {
                 self.task_completions.add(1, labels);
             } else {
                 self.task_errors.add(1, labels);
             }
-            
+
             self.task_duration.record(duration, labels);
         }
-        
+
         pub fn record_message_sent(&self, msg_type: &str, latency: f64) {
             let labels = &[
                 KeyValue::new("message_type", msg_type.to_string()),
                 KeyValue::new("direction", "outbound"),
             ];
-            
+
             self.messages_sent.add(1, labels);
             self.message_latency.record(latency, labels);
         }
@@ -1231,8 +1303,8 @@ PATTERN PerformanceProfilingIntegration:
                 .with_callback(move |observer| {
                     observer.observe(runtime_metrics.num_workers() as u64, &[]);
                 })
-                .init();
-                
+                .build();
+
             // Task metrics
             meter
                 .u64_observable_gauge("tokio_active_tasks_count")
@@ -1240,8 +1312,8 @@ PATTERN PerformanceProfilingIntegration:
                 .with_callback(move |observer| {
                     observer.observe(runtime_metrics.active_tasks_count() as u64, &[]);
                 })
-                .init();
-                
+                .build();
+
             // Queue metrics
             meter
                 .u64_observable_gauge("tokio_injection_queue_depth")
@@ -1249,7 +1321,7 @@ PATTERN PerformanceProfilingIntegration:
                 .with_callback(move |observer| {
                     observer.observe(runtime_metrics.injection_queue_depth() as u64, &[]);
                 })
-                .init();
+                .build();
         }
     }
     
@@ -1543,13 +1615,13 @@ claude_cli_hook_duration_seconds_count{hook_type="pre_task",hook_name="setup"} 8
     "component": "mister-smith-agent",
     "span.kind": "internal"
   },
-  "process": {
-    "serviceName": "mister-smith-framework",
-    "tags": {
-      "hostname": "agent-node-01",
-      "process.pid": "12345",
-      "jaeger.version": "1.29.0"
-    }
+  "resource": {
+    "service.name": "mister-smith-framework",
+    "host.name": "agent-node-01",
+    "process.pid": "12345",
+    "telemetry.sdk.name": "opentelemetry",
+    "telemetry.sdk.version": "0.31.0",
+    "telemetry.sdk.language": "rust"
   },
   "logs": [
     {
@@ -2446,87 +2518,64 @@ system_baselines:
 
 ```rust
 PATTERN PrometheusExporterImplementation:
-    use prometheus::{{
-        Encoder, TextEncoder, Registry,
-        core::{Collector, Desc, Opts},
-        proto::MetricFamily,
-    }};
-    use hyper::{Body, Request, Response, Server, StatusCode};
+    // Updated for axum 0.8+ (replaces deprecated hyper::Server / hyper::Body API)
+    use prometheus::{Encoder, TextEncoder, Registry, proto::MetricFamily};
+    use prometheus::core::{Collector, Desc};
+    use axum::{Router, routing::get, response::IntoResponse, extract::State};
     use std::sync::Arc;
-    
+
     pub struct MetricsExporter {
         registry: Registry,
         agent_collector: AgentMetricsCollector,
         system_collector: SystemMetricsCollector,
     }
-    
+
     impl MetricsExporter {
         pub fn new() -> Result<Self, Box<dyn Error>> {
             let registry = Registry::new();
-            
+
             // Register custom collectors
             let agent_collector = AgentMetricsCollector::new()?;
             let system_collector = SystemMetricsCollector::new()?;
-            
+
             registry.register(Box::new(agent_collector.clone()))?;
             registry.register(Box::new(system_collector.clone()))?;
-            
+
             Ok(Self {
                 registry,
                 agent_collector,
                 system_collector,
             })
         }
-        
-        // HTTP endpoint handler
+
+        // HTTP endpoint handler using axum
         pub async fn serve_metrics(self: Arc<Self>) -> Result<(), Box<dyn Error>> {
-            let addr = ([0, 0, 0, 0], 9090).into();
-            
-            let make_service = hyper::service::make_service_fn(move |_| {
-                let exporter = self.clone();
-                async move {
-                    Ok::<_, hyper::Error>(hyper::service::service_fn(move |req| {
-                        let exporter = exporter.clone();
-                        async move { exporter.handle_request(req).await }
-                    }))
-                }
-            });
-            
-            let server = Server::bind(&addr).serve(make_service);
-            info!("Prometheus metrics available at http://{}/metrics", addr);
-            
-            server.await?;
+            let app = Router::new()
+                .route("/metrics", get(Self::handle_metrics))
+                .route("/health", get(|| async { "{\"status\":\"healthy\"}\n" }))
+                .with_state(self.clone());
+
+            let listener = tokio::net::TcpListener::bind("0.0.0.0:9090").await?;
+            info!("Prometheus metrics available at http://0.0.0.0:9090/metrics");
+
+            axum::serve(listener, app).await?;
             Ok(())
         }
         
-        async fn handle_request(&self, req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-            match req.uri().path() {
-                "/metrics" => {
-                    let encoder = TextEncoder::new();
-                    let metric_families = self.registry.gather();
-                    let mut buffer = Vec::new();
-                    
-                    encoder.encode(&metric_families, &mut buffer).unwrap();
-                    
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header("Content-Type", encoder.format_type())
-                        .body(Body::from(buffer))
-                        .unwrap())
-                }
-                "/health" => {
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .body(Body::from("{\"status\":\"healthy\"}\n"))
-                        .unwrap())
-                }
-                _ => {
-                    Ok(Response::builder()
-                        .status(StatusCode::NOT_FOUND)
-                        .body(Body::from("404 Not Found\n"))
-                        .unwrap())
-                }
-            }
+        // Axum handler for /metrics
+        async fn handle_metrics(
+            State(exporter): State<Arc<MetricsExporter>>,
+        ) -> impl IntoResponse {
+            let encoder = TextEncoder::new();
+            let metric_families = exporter.registry.gather();
+            let mut buffer = Vec::new();
+
+            encoder.encode(&metric_families, &mut buffer).unwrap();
+
+            (
+                [(axum::http::header::CONTENT_TYPE, encoder.format_type())],
+                buffer,
+            )
         }
     }
     
@@ -2605,34 +2654,45 @@ processors:
         action: upsert
 
 exporters:
+  # Prometheus exporter for metrics scraping
   prometheus:
     endpoint: "0.0.0.0:8889"
     namespace: mister_smith
-  
-  jaeger:
-    endpoint: jaeger:14250
+
+  # OTLP exporter for traces — sends to Tempo, Jaeger, or any OTLP-compatible backend
+  # NOTE: The standalone opentelemetry-jaeger and opentelemetry-zipkin exporters are
+  # DEPRECATED as of 2024. Use OTLP endpoints instead. Jaeger natively accepts OTLP
+  # on port 4317 since v1.35. Tempo accepts OTLP natively.
+  otlp/traces:
+    endpoint: tempo:4317    # or jaeger:4317 — both accept OTLP natively
     tls:
       insecure: true
-  
-  logging:
-    loglevel: debug
+
+  # OTLP exporter for logs — sends to Loki (via Loki OTLP endpoint) or similar
+  otlp/logs:
+    endpoint: loki:4317
+    tls:
+      insecure: true
+
+  debug:
+    verbosity: basic
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [jaeger, logging]
-    
+      exporters: [otlp/traces, debug]
+
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch, resource]
-      exporters: [prometheus, logging]
-    
+      exporters: [prometheus, debug]
+
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [logging]
+      exporters: [otlp/logs, debug]
 ```
 
 ### 16. Agent-Specific Instrumentation Patterns
@@ -3051,7 +3111,7 @@ PATTERN ObservabilityStack:
     services:
       # OpenTelemetry Collector
       otel-collector:
-        image: otel/opentelemetry-collector-contrib:0.89.0
+        image: otel/opentelemetry-collector-contrib:0.115.0
         container_name: ms-framework-otel-collector
         command: ["--config=/etc/otel-collector-config.yaml"]
         volumes:
@@ -3066,14 +3126,14 @@ PATTERN ObservabilityStack:
           - elasticsearch
         environment:
           - PROMETHEUS_ENDPOINT=prometheus:9090
-          - JAEGER_ENDPOINT=jaeger:14250
+          - JAEGER_ENDPOINT=jaeger:4317
           - ELASTICSEARCH_ENDPOINT=elasticsearch:9200
         networks:
           - ms-framework
           
       # Prometheus for metrics storage
       prometheus:
-        image: prom/prometheus:v2.47.0
+        image: prom/prometheus:v2.54.0
         container_name: ms-framework-prometheus
         command:
           - '--config.file=/etc/prometheus/prometheus.yml'
@@ -3093,7 +3153,7 @@ PATTERN ObservabilityStack:
           
       # Grafana for visualization
       grafana:
-        image: grafana/grafana:10.2.0
+        image: grafana/grafana:11.3.0
         container_name: ms-framework-grafana
         environment:
           - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -3107,15 +3167,17 @@ PATTERN ObservabilityStack:
         networks:
           - ms-framework
           
-      # Jaeger for distributed tracing
+      # Jaeger for distributed tracing — accepts OTLP natively since v1.35
+      # NOTE: The standalone opentelemetry-jaeger Rust crate is DEPRECATED.
+      # Use opentelemetry-otlp to export traces; Jaeger receives them via OTLP on port 4317.
       jaeger:
-        image: jaegertracing/all-in-one:1.50
+        image: jaegertracing/all-in-one:1.62
         container_name: ms-framework-jaeger
         environment:
           - COLLECTOR_OTLP_ENABLED=true
         ports:
           - "16686:16686"  # Jaeger UI
-          - "14250:14250"  # OTLP gRPC
+          - "4317"         # OTLP gRPC (received via otel-collector)
         networks:
           - ms-framework
           
@@ -3149,7 +3211,7 @@ PATTERN ObservabilityStack:
           
       # AlertManager for alert handling
       alertmanager:
-        image: prom/alertmanager:v0.26.0
+        image: prom/alertmanager:v0.28.0
         container_name: ms-framework-alertmanager
         volumes:
           - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml

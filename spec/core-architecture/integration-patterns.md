@@ -313,6 +313,10 @@ pub enum BackoffStrategy {
     Fixed { interval: Duration },
     Linear { initial: Duration, increment: Duration },
     Exponential { initial: Duration, factor: f64, max: Duration },
+    /// NOTE: The `fn` pointer here is intentional for simplicity. This variant
+    /// cannot derive Serialize/Deserialize. If serialization is needed, use a
+    /// named strategy enum instead. For configuration-driven backoff, prefer
+    /// the Fixed/Linear/Exponential variants.
     Custom { calculator: fn(attempt: u32) -> Duration },
 }
 
@@ -485,6 +489,7 @@ pub trait ErrorMapping: Send + Sync {
     fn map(&self, error: Box<dyn std::error::Error>) -> SystemError;
 }
 
+#[async_trait]
 pub trait ErrorHandler: Send + Sync {
     async fn handle(&self, error: &SystemError) -> Result<RecoveryResult, SystemError>;
 }
@@ -2736,7 +2741,8 @@ The following patterns integrate data flow validation across all framework compo
 
 ```rust
 // Transformation validation pattern integrated
-pub trait TransformationValidator {
+#[async_trait]
+pub trait TransformationValidator: Send + Sync {
     async fn validate_transformation<T, U>(
         &self,
         input: &T,

@@ -14,10 +14,12 @@ It enables autonomous developers to understand exact project structure, type rel
 
 ## 🔍 VALIDATION STATUS
 
-**Last Validated**: 2025-07-05  
-**Validator**: Framework Documentation Team  
-**Validation Score**: Pending full validation  
-**Status**: Active Development  
+**Last Validated**: 2025-07-05 (ecosystem versions re-validated 2026-03-03)
+**Validator**: Framework Documentation Team / Agent 1B - Integration & Types
+**Validation Score**: Pending full validation
+**Status**: Active Development
+
+> **Note on `#[async_trait]`**: With MSRV 1.88.0, native async fn in traits is available (stabilized in Rust 1.75). However, `#[async_trait]` is still required for any trait that must be used as a trait object (`dyn Trait`). The traits in this document use `#[async_trait]` because they are designed for dynamic dispatch via `Box<dyn Trait>` or `Arc<dyn Trait>`.  
 
 ### Implementation Status
 
@@ -294,7 +296,7 @@ pub use crate::{
 /// Common external dependency re-exports for convenience
 pub use tokio;
 pub use serde::{Deserialize, Serialize};
-pub use async_trait::async_trait;
+pub use async_trait::async_trait;  // Still needed for dyn-compatible async traits
 pub use uuid::Uuid;
 
 /// Type aliases for common patterns
@@ -1232,7 +1234,7 @@ use crate::{
 };
 use tokio::sync::RwLock;
 use ring::{digest, hmac};
-use jwt::{Token, Claims};
+use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
 ```
 
 ---
@@ -1378,7 +1380,7 @@ impl ToolContainer {
 name = "mister-smith-framework"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.88"
 authors = ["Mister Smith AI Framework Team"]
 description = "AI Agent Framework with Tokio-based async architecture, supervision trees, and tool integration"
 license = "MIT OR Apache-2.0"
@@ -1424,7 +1426,7 @@ dev = ["testing", "dep:criterion", "dep:cargo-fuzz"]
 
 [dependencies]
 # Core async runtime
-tokio = { version = "1.45", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 futures = "0.3"
 async-trait = { version = "0.1", optional = true }
 pin-project = "1.1"
@@ -1445,7 +1447,7 @@ tracing-subscriber = { version = "0.3", optional = true }
 # Collections and utilities
 indexmap = "2.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
-once_cell = "1.19"
+once_cell = "1.20"
 parking_lot = "0.12"
 smallvec = "1.11"
 
@@ -1453,7 +1455,7 @@ smallvec = "1.11"
 crossbeam-channel = { version = "0.5", optional = true }
 crossbeam-utils = "0.8"
 atomic_float = "1.0"
-dashmap = "5.5"
+dashmap = "6.1"
 
 # Time and scheduling
 chrono = { version = "0.4", features = ["serde"] }
@@ -1465,13 +1467,13 @@ notify = "6.0"
 dirs = "5.0"
 
 # HTTP client for tools
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.13", features = ["json", "stream", "query"] }
 url = "2.4"
 
 # Metrics and monitoring (optional)
-metrics = { version = "0.23", optional = true }
-prometheus = { version = "0.13", optional = true }
-metrics-exporter-prometheus = { version = "0.15", optional = true }
+metrics = { version = "0.24", optional = true }
+prometheus = { version = "0.14", optional = true }
+metrics-exporter-prometheus = { version = "0.18", optional = true }
 
 # Security dependencies (optional)
 ring = { version = "0.17", optional = true }
@@ -1480,13 +1482,13 @@ aes-gcm = { version = "0.10", optional = true }
 chacha20poly1305 = { version = "0.10", optional = true }
 
 # Database and persistence (optional)
-sqlx = { version = "0.7", optional = true, features = ["runtime-tokio-rustls"] }
-redis = { version = "0.24", optional = true, features = ["tokio-comp"] }
+sqlx = { version = "0.8", optional = true, features = ["runtime-tokio-rustls"] }
+redis = { version = "1.0", optional = true, features = ["tokio-comp"] }
 sled = { version = "0.34", optional = true }
 
 # Clustering and messaging (optional)
 raft = { version = "0.7", optional = true }
-async-nats = { version = "0.33", optional = true }
+async-nats = { version = "0.46", optional = true, features = ["jetstream", "kv", "ring"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -1499,7 +1501,7 @@ wiremock = "0.6"
 tempfile = "3.8"
 
 [build-dependencies]
-prost-build = "0.12"
+prost-build = "0.14"
 
 # Benchmarks
 [[bench]]

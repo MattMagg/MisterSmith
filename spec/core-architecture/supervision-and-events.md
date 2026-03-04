@@ -12,12 +12,12 @@
 
 ---
 
-## 🔍 VALIDATION STATUS
+## VALIDATION STATUS
 
-**Last Validated**: 2025-07-07  
-**Validator**: Agent 1 - Team Alpha  
-**Component**: Supervision Trees and Event System  
-**Status**: Mixed Implementation  
+**Last Validated**: 2026-03-03
+**Validator**: Agent 1C - Supervision & Implementation
+**Component**: Supervision Trees and Event System
+**Status**: Mixed Implementation — updated with Rust idiom corrections  
 
 ### Implementation Status
 
@@ -53,7 +53,7 @@ use tokio::sync::RwLock;
 use std::collections::HashMap;
 use uuid::Uuid;
 use async_trait::async_trait;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use tracing::{info, warn, error};
 use crate::errors::{SupervisionError, SupervisionStrategy};
 use crate::metrics::MetricsCollector;
@@ -63,7 +63,8 @@ pub struct SupervisionTree {
     root_supervisor: Arc<RootSupervisor>,
     node_registry: Arc<RwLock<HashMap<NodeId, SupervisorNode>>>,
     failure_detector: Arc<FailureDetector>,
-    restart_policies: HashMap<NodeType, RestartPolicy>,
+    // NOTE: Wrapped in RwLock to allow mutation via &self in async contexts
+    restart_policies: Arc<RwLock<HashMap<NodeType, RestartPolicy>>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -116,10 +117,10 @@ impl SupervisionTree {
             root_supervisor,
             node_registry: Arc::new(RwLock::new(HashMap::new())),
             failure_detector: Arc::new(FailureDetector::new()),
-            restart_policies: Self::default_policies(),
+            restart_policies: Arc::new(RwLock::new(Self::default_policies())),
         }
     }
-    
+
     fn default_policies() -> HashMap<NodeType, RestartPolicy> {
         let mut policies = HashMap::new();
         
@@ -187,7 +188,7 @@ impl SupervisionTree {
         
         // Set custom restart policy if provided
         if let Some(policy) = restart_policy {
-            self.restart_policies.insert(node_type, policy);
+            self.restart_policies.write().await.insert(node_type, policy);
         }
         
         Ok(node_id)
@@ -195,9 +196,10 @@ impl SupervisionTree {
     
     pub async fn handle_failure(&self, node_id: NodeId) -> Result<(), SupervisionError> {
         let registry = self.node_registry.read().await;
-        
+        let policies = self.restart_policies.read().await;
+
         if let Some(node) = registry.get(&node_id) {
-            let policy = self.restart_policies
+            let policy = policies
                 .get(&node.node_type)
                 .ok_or_else(|| SupervisionError::StrategyFailed("No restart policy found".into()))?;
                 
@@ -235,7 +237,8 @@ impl SupervisionTree {
             }
             
             // Calculate backoff delay
-            let delay = policy.restart_delay * policy.backoff_multiplier.powi(node.restart_count as i32) as u32;
+            let multiplier = policy.backoff_multiplier.powi(node.restart_count as i32);
+            let delay = policy.restart_delay.mul_f64(multiplier);
             
             node.status = NodeStatus::Restarting;
             node.restart_count += 1;
@@ -341,7 +344,9 @@ impl RootSupervisor {
 
 ### Failure Detection and Recovery
 
-⚠️ **NOTE**: The following section contains pseudocode patterns that need to be implemented:
+**NOTE**: The following section contains pseudocode patterns that need to be implemented.
+
+> **Terminology note**: The pseudocode below uses Erlang/OTP strategy names (`OneForOne`, `OneForAll`, `RestForOne`, `Escalate`) for the tree-level restart coordination strategy. The Rust implementation above uses child-level restart semantics (`RestartPermanent`, `RestartTransient`, `RestartTemporary`, `EscalateToParent`) for per-node restart decisions. Both concepts are needed: the tree-level strategy determines *which siblings* restart on failure, while the child-level policy determines *whether* a specific child should restart at all. During implementation, unify these into a two-tier `SupervisionStrategy` enum.
 
 ```
 TRAIT Supervisor {
@@ -500,13 +505,16 @@ use std::any::{Any, TypeId};
 use async_trait::async_trait;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 // Core event types
+// NOTE: Uses SystemTime instead of Instant because Instant is monotonic and
+// not serializable with serde. SystemTime provides wall-clock time suitable
+// for persistence and cross-process event correlation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemEvent {
     pub id: Uuid,
-    pub timestamp: Instant,
+    pub timestamp: std::time::SystemTime,
     pub source: ComponentId,
     pub event_type: EventType,
     pub payload: serde_json::Value,
@@ -700,8 +708,8 @@ impl EventBus {
     
     pub async fn replay_events(
         &self,
-        from: Instant,
-        to: Option<Instant>,
+        from: std::time::SystemTime,
+        to: Option<std::time::SystemTime>,
         filter: Option<EventFilter>,
     ) -> Result<Vec<SystemEvent>, EventError> {
         if let Some(store) = &self.event_store {
@@ -728,10 +736,10 @@ impl EventBus {
 // Event store trait for persistence
 #[async_trait]
 pub trait EventStore: Send + Sync {
-    async fn append(&self, event: SystemEvent) -> Result<(), Box<dyn std::error::Error>>;
-    async fn query(&self, from: Instant, to: Option<Instant>) -> Result<Vec<SystemEvent>, Box<dyn std::error::Error>>;
-    async fn get_by_id(&self, id: Uuid) -> Result<Option<SystemEvent>, Box<dyn std::error::Error>>;
-    async fn get_by_correlation(&self, correlation_id: Uuid) -> Result<Vec<SystemEvent>, Box<dyn std::error::Error>>;
+    async fn append(&self, event: SystemEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn query(&self, from: std::time::SystemTime, to: Option<std::time::SystemTime>) -> Result<Vec<SystemEvent>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_by_id(&self, id: Uuid) -> Result<Option<SystemEvent>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_by_correlation(&self, correlation_id: Uuid) -> Result<Vec<SystemEvent>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 // Simple in-memory event store for testing
@@ -749,28 +757,28 @@ impl InMemoryEventStore {
 
 #[async_trait]
 impl EventStore for InMemoryEventStore {
-    async fn append(&self, event: SystemEvent) -> Result<(), Box<dyn std::error::Error>> {
+    async fn append(&self, event: SystemEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut events = self.events.write().await;
         events.push(event);
         Ok(())
     }
-    
-    async fn query(&self, from: Instant, to: Option<Instant>) -> Result<Vec<SystemEvent>, Box<dyn std::error::Error>> {
+
+    async fn query(&self, from: std::time::SystemTime, to: Option<std::time::SystemTime>) -> Result<Vec<SystemEvent>, Box<dyn std::error::Error + Send + Sync>> {
         let events = self.events.read().await;
-        let to = to.unwrap_or_else(Instant::now);
-        
+        let to = to.unwrap_or_else(std::time::SystemTime::now);
+
         Ok(events.iter()
             .filter(|e| e.timestamp >= from && e.timestamp <= to)
             .cloned()
             .collect())
     }
-    
-    async fn get_by_id(&self, id: Uuid) -> Result<Option<SystemEvent>, Box<dyn std::error::Error>> {
+
+    async fn get_by_id(&self, id: Uuid) -> Result<Option<SystemEvent>, Box<dyn std::error::Error + Send + Sync>> {
         let events = self.events.read().await;
         Ok(events.iter().find(|e| e.id == id).cloned())
     }
-    
-    async fn get_by_correlation(&self, correlation_id: Uuid) -> Result<Vec<SystemEvent>, Box<dyn std::error::Error>> {
+
+    async fn get_by_correlation(&self, correlation_id: Uuid) -> Result<Vec<SystemEvent>, Box<dyn std::error::Error + Send + Sync>> {
         let events = self.events.read().await;
         Ok(events.iter()
             .filter(|e| e.correlation_id == Some(correlation_id))
@@ -789,7 +797,7 @@ impl EventBuilder {
         Self {
             event: SystemEvent {
                 id: Uuid::new_v4(),
-                timestamp: Instant::now(),
+                timestamp: std::time::SystemTime::now(),
                 source,
                 event_type,
                 payload: serde_json::Value::Null,

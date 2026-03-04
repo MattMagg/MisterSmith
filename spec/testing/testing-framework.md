@@ -2,6 +2,38 @@
 
 **Agent-Focused Testing Strategy for Multi-Agent AI Framework**
 
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 4B - Testing, Agent Domains & Research
+**Validation Score**: 88/100 (GOOD — crate version updates applied)
+**Status**: Updated with current Rust testing ecosystem state
+
+### Validation Changes (2026-03-03)
+
+- Updated `testcontainers` API from deprecated `clients::Cli` to current `runners::AsyncRunner` (v0.26.3)
+- Updated GitHub Actions: `actions/checkout@v4`, `dtolnay/rust-toolchain@stable` (replaces deprecated `actions-rs/toolchain`), `codecov/codecov-action@v5`
+- Fixed `use tokio_test;` → `#[tokio::test]` attribute (no separate import needed)
+- Updated `mockall` from 0.13.1 to **0.14.0** — MSRV raised to 1.77. API patterns (`#[automock]`, `expect_*`, `returning`) are unchanged
+- Updated `proptest` from 1.6.0 to **1.10.0** — `proptest!` macro and `prop_compose!` patterns unchanged
+- Updated `criterion` from 0.5.1 to **0.7.0** — **breaking**: crate renamed to `criterion` (same name, but 0.6+ is a different lineage). `criterion_group!`/`criterion_main!` macros still work. Review benchmarks if upgrading from 0.5.x
+- Confirmed `wiremock` 0.6.5 API patterns are current
+- `async_trait` crate still required for mockall's `#[automock]` on async traits (object safety)
+- CI/CD pipeline: replaced deprecated `actions-rs/toolchain@v1` with `dtolnay/rust-toolchain@stable`
+
+### Testing Crate Versions (Current Stable)
+
+| Crate | Current Version | MSRV | Notes |
+|-------|----------------|------|-------|
+| mockall | 0.14.0 | 1.77 | Stable API, `#[automock]` pattern unchanged |
+| proptest | 1.10.0 | 1.84 | `proptest!` macro and `prop_compose!` patterns unchanged |
+| criterion | 0.7.0 | — | Major update from 0.5.x; `criterion_group!`/`criterion_main!` still work |
+| wiremock | 0.6.5 | — | Async mock server API unchanged |
+| testcontainers | 0.26.3 | — | **Breaking**: `clients::Cli` replaced by `runners::AsyncRunner` |
+| tokio-test | (part of tokio) | — | Use `#[tokio::test]` attribute directly |
+
+---
+
 ## RELATED DOCUMENTS
 
 ### Core Architecture
@@ -113,7 +145,6 @@ Testing patterns specifically designed for multi-agent system validation:
 ### Agent Testing Template
 
 ```rust
-use tokio_test;
 use mockall::predicate::*;
 use crate::agents::{Agent, AgentConfig, AgentStatus};
 use crate::testing::{MockMessagingService, TestAgentBuilder};
@@ -1617,14 +1648,13 @@ jobs:
     name: Unit Tests with Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: rustfmt, clippy, llvm-tools-preview
       - name: Cache Dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -1640,7 +1670,7 @@ jobs:
           grcov . --binary-path ./target/debug/deps/ -s . -t lcov \
             --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o coverage.lcov
       - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           file: coverage.lcov
           fail_ci_if_error: true
@@ -1676,11 +1706,9 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
       - name: Wait for Services
         run: |
           until pg_isready -h localhost -p 5432; do sleep 1; done
@@ -1703,11 +1731,9 @@ jobs:
     name: Security and Vulnerability Scanning
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
       - name: Security Audit
         run: |
           cargo install cargo-audit
@@ -1725,7 +1751,7 @@ jobs:
           path: '.'
           format: 'HTML'
       - name: Upload Security Reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: security-reports
           path: reports/
@@ -1734,11 +1760,9 @@ jobs:
     name: Performance Benchmarks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
       - name: Run Benchmarks
         run: cargo bench --bench agent_benchmarks -- --output-format bencher | tee output.txt
       - name: Store Benchmark Results
@@ -1759,7 +1783,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Download Test Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
       - name: Validate Quality Gates
         run: |
           # Check coverage thresholds

@@ -1,5 +1,9 @@
 # Data Integration Patterns
 
+<!-- Last validated: 2026-03-03 by Agent 2A against VERSION_REFERENCE.md -->
+<!-- Uses abstraction types (NatsClient, DatabasePool) — no direct crate API changes needed -->
+<!-- SQLx usage compatible with 0.8.6, redis references compatible with 1.0.4 -->
+
 **Specification**: Unified message and database system integration patterns for the Mister Smith AI Agent Framework.
 
 ## Overview & Architecture

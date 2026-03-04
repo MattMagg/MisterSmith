@@ -8,21 +8,22 @@ This document specifies the core architecture for integrating Claude Code CLI ca
 
 ---
 
-## 🔍 VALIDATION STATUS
+## VALIDATION STATUS
 
-**Last Validated**: 2025-07-07  
-**Validator**: Team Alpha Agent 10 - Claude Integration Specialist  
-**Validation Score**: 95/100 (PRODUCTION READY)  
-**Status**: Approved
+**Last Validated**: 2026-03-03
+**Validator**: Agent 1C - Supervision & Implementation
+**Validation Score**: 80/100 (NEEDS UPDATE — hook types and CLI capabilities outdated)
+**Status**: Updated with current Claude Code CLI state
 
 ### Implementation Status
 
 - ✅ Claude CLI controller architecture defined
-- ✅ Hook bridge patterns established (direct NATS mapping)
+- ⚠️ Hook bridge patterns need update — Claude Code now has 14+ lifecycle events (was 5 when originally written)
 - ✅ Session management framework complete
 - ✅ Integration patterns documented
 - ✅ Resource management validated for 25-30 agents
-- ✅ Framework compatibility verified
+- ⚠️ Claude Agent SDK (Python/TypeScript) now available — consider SDK-based integration as alternative to raw CLI subprocess management
+- ⚠️ Model references need update (claude-opus-4-6 is current frontier model)
 
 ---
 
@@ -320,14 +321,17 @@ impl AgentPool {
     }
     
     pub async fn register(&self, session: ClaudeSession) -> Result<AgentId, PoolError> {
-        // Acquire spawn permit
-        let _permit = self.spawn_semaphore.acquire().await?;
-        
+        // Acquire owned permit (does not borrow the semaphore)
+        let permit = Arc::clone(&self.spawn_semaphore)
+            .acquire_owned()
+            .await
+            .map_err(|_| PoolError::SemaphoreClosed)?;
+
         let agent_id = session.agent_id.clone();
         let entry = AgentPoolEntry {
             session,
             registered_at: Instant::now(),
-            _permit: _permit,
+            _permit: permit,
         };
         
         // Register in pool
@@ -365,7 +369,10 @@ impl AgentPool {
 struct AgentPoolEntry {
     session: ClaudeSession,
     registered_at: Instant,
-    _permit: SemaphorePermit<'static>,
+    // NOTE: OwnedSemaphorePermit (not SemaphorePermit<'static>) is the correct type
+    // for storing permits in a struct. OwnedSemaphorePermit takes ownership of an
+    // Arc<Semaphore> reference, avoiding lifetime issues.
+    _permit: tokio::sync::OwnedSemaphorePermit,
 }
 ```
 
@@ -432,19 +439,39 @@ impl SupervisionTree {
 
 ```rust
 // Hook bridge publishes to existing NATS subjects
+// NOTE: Claude Code hook events as of 2026-03 include 14+ lifecycle events.
+// The mapping below covers the most framework-relevant events.
+// Full list: SessionStart, SessionEnd, UserPromptSubmit, PreToolUse,
+// PostToolUse, PostToolUseFailure, PermissionRequest, Notification,
+// SubagentStart, SubagentStop, Stop, TeammateIdle, TaskCompleted,
+// ConfigChange, PreCompact, WorktreeCreate, WorktreeRemove
 impl HookBridge {
     async fn publish_hook_event(&self, event: HookEvent) -> Result<(), NatsError> {
         let subject = match event.hook_type {
-            HookType::Startup => "control.startup",
-            HookType::PreTask => &format!("agent.{}.pre", event.agent_id),
-            HookType::PostTask => &format!("agent.{}.post", event.agent_id),
-            HookType::OnError => &format!("agent.{}.error", event.agent_id),
-            HookType::OnFileChange => &format!("ctx.{}.file_change", event.context_id),
+            // Session lifecycle
+            HookType::SessionStart => "control.startup".to_string(),
+            HookType::SessionEnd => "control.shutdown".to_string(),
+            // Tool execution lifecycle (maps from PreToolUse/PostToolUse)
+            HookType::PreToolUse => format!("agent.{}.pre", event.agent_id),
+            HookType::PostToolUse => format!("agent.{}.post", event.agent_id),
+            HookType::PostToolUseFailure => format!("agent.{}.error", event.agent_id),
+            // Subagent lifecycle (maps from SubagentStart/SubagentStop)
+            HookType::SubagentStart => format!("agent.{}.subagent.start", event.agent_id),
+            HookType::SubagentStop => format!("agent.{}.subagent.stop", event.agent_id),
+            // Task completion
+            HookType::TaskCompleted => format!("agent.{}.task_completed", event.agent_id),
+            // Response lifecycle
+            HookType::Stop => format!("agent.{}.stop", event.agent_id),
+            // Catch-all for other events
+            _ => format!("agent.{}.event.{}", event.agent_id, event.hook_type.as_str()),
         };
-        
-        self.nats_client.publish(subject, event.to_json()).await
+
+        self.nats_client.publish(subject, event.to_json().into()).await
     }
 }
+```
+
+> **Migration note**: The original spec mapped 5 hook types (`startup`, `pre_task`, `post_task`, `on_error`, `on_file_change`). Claude Code has since expanded to 14+ hook events with different naming. The `HookType` enum must be updated to reflect the current Claude Code hook event names listed above. Additionally, Claude Code hooks now support three handler types: `command`, `prompt`, and `agent` (not just `command`).
 ```
 
 ### 2. Resource Management
@@ -462,3 +489,22 @@ impl HookBridge {
 - Process health monitoring and restart policies
 
 This architecture provides a robust foundation for Claude CLI integration while maintaining compatibility with existing framework components and patterns.
+
+---
+
+## Claude Agent SDK Consideration
+
+<!-- [UNVERIFIED] Rust SDK status is uncertain — only Python and TypeScript SDKs are confirmed as of 2026-03 -->
+
+Since the original specification was written, Anthropic has released the **Claude Agent SDK** (September 2025) providing official programmatic APIs in Python and TypeScript. A community Rust SDK also exists (`claude-agents-sdk` on GitHub). The Agent SDK wraps the Claude Code CLI subprocess and provides:
+
+- **Typed message streaming**: Structured access to assistant messages, tool use events, and results
+- **Multi-turn conversation**: Session management with resume capability
+- **Hook integration**: Programmatic hook registration via SDK callbacks
+- **Tool permissions**: Fine-grained control over which tools agents can use
+- **Cost tracking**: Token usage and cost data per session
+
+**Integration decision**: The current spec designs raw subprocess management (`std::process::Command` / `tokio::process::Command`). If a mature Rust Agent SDK becomes available, it may simplify `ClaudeSession` management significantly. Evaluate before implementation whether to:
+1. Use raw CLI subprocess management (current spec approach — maximum control)
+2. Use the community Rust SDK (less boilerplate, but third-party dependency)
+3. Bridge to the official Python/TypeScript SDK via IPC (adds complexity but guarantees API compatibility)

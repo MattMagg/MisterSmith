@@ -1,5 +1,20 @@
 # Mister Smith Framework - Specialized Agent Domain Analysis
 
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 4B - Testing, Agent Domains & Research
+**Validation Score**: 92/100 (GOOD — structurally sound, cross-references corrected)
+**Status**: Updated with corrected cross-references and terminology notes
+
+### Validation Changes (2026-03-03)
+
+- Fixed 6 broken cross-reference links to match actual file names in the repository
+- Verified all 15 agent domains are internally consistent
+- Confirmed agent type names and domain structure align with `data-management/agent-orchestration.md` and `data-management/agent-lifecycle.md`
+- Note: the `SpecializedAgent` trait uses `async fn` in trait — requires either `#[async_trait]` for dyn dispatch or native async traits (Rust 1.75+). Since MSRV is 1.88.0, native async traits work for non-object-safe usage, but `#[async_trait]` is still needed if the trait is used as `dyn SpecializedAgent`
+- The `DomainCoordinator` struct at line 536 uses `Box<dyn SpecializedAgent>` — this requires `#[async_trait]` on the `SpecializedAgent` trait for object safety
+
 ## Technical Overview
 
 The Mister Smith framework identifies 15 specialized agent domains, each requiring dedicated agent types with domain-specific patterns, configurations, and operational requirements. This analysis provides technical specifications for implementing specialized agents across all framework domains.
@@ -19,9 +34,9 @@ use crate::observability::metrics::MetricsCollector;
 
 - [Core Architecture](../core-architecture/system-architecture.md)
 - [Message Framework](../data-management/message-framework.md)
-- [Transport Layer](../transport/transport-layer.md)
+- [Transport Layer](../transport/transport-core.md)
 - [Security Framework](../security/security-framework.md)
-- [Observability](../operations/observability.md)
+- [Observability](../operations/observability-monitoring-framework.md)
 
 ## Identified Specialized Agent Domains
 
@@ -747,10 +762,10 @@ The Mister Smith framework implements a hierarchical specialized agent architect
 - **Core Architecture**: [System Architecture](../core-architecture/system-architecture.md)
 - **Agent Lifecycle**: [Agent Operations](../data-management/agent-operations.md)
 - **Message Framework**: [Message Schemas](../data-management/message-schemas.md)
-- **Transport Layer**: [Transport Protocols](../transport/transport-protocols.md)
-- **Security Framework**: [Security Implementation](../security/security-implementation.md)
-- **Observability**: [Monitoring Systems](../operations/monitoring.md)
-- **Testing Framework**: [Integration Testing](../testing/integration-testing.md)
+- **Transport Layer**: [Transport Layer Specifications](../transport/transport-layer-specifications.md)
+- **Security Framework**: [Security Integration](../security/security-integration.md)
+- **Observability**: [Observability Monitoring Framework](../operations/observability-monitoring-framework.md)
+- **Testing Framework**: [Testing Framework](../testing/testing-framework.md)
 
 ### Agent Implementation Templates
 

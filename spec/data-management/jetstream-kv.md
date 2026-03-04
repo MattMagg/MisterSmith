@@ -10,10 +10,18 @@ tags:
 
 **Key Technologies**:
 
-- NATS JetStream 2.9+ with KV store buckets
-- async-nats 0.34+ Rust client
-- SQLx 0.7+ for PostgreSQL integration
-- Tokio async runtime for concurrent operations
+- NATS JetStream 2.9+ with KV store buckets (nats-server 2.12.4)
+- async-nats 0.46.0 Rust client (feature `kv` required)
+- SQLx 0.8.6 for PostgreSQL integration
+- Tokio 1.49 async runtime for concurrent operations
+- MSRV: 1.88.0
+
+> **async-nats 0.46 KV API Notes**: The `kv` feature is now feature-gated and must be explicitly
+> enabled: `async-nats = { version = "0.46", features = ["jetstream", "kv"] }`. Key API differences
+> from earlier versions: `Config.ttl` is now `Config.max_age`, `Config.replicas` is now
+> `Config.num_replicas`, `get()` returns `Result<Option<Bytes>, EntryError>` (raw bytes, not Entry),
+> use `entry()` for the full `Entry` struct. Error types are granular: `PutError`, `EntryError`,
+> `UpdateError`, `DeleteError`, `WatchError`, `PurgeError`.
 
 ## Overview
 
@@ -99,12 +107,22 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum KVError {
-    #[error("NATS error: {0}")]
-    Nats(#[from] async_nats::Error),
-    #[error("JetStream error: {0}")]
-    JetStream(#[from] async_nats::jetstream::Error),
+    #[error("KV put error: {0}")]
+    Put(#[from] kv::PutError),
+    #[error("KV entry error: {0}")]
+    Entry(#[from] kv::EntryError),
+    #[error("KV update error: {0}")]
+    Update(#[from] kv::UpdateError),
+    #[error("KV delete error: {0}")]
+    Delete(#[from] kv::DeleteError),
+    #[error("KV create error: {0}")]
+    Create(#[from] jetstream::context::CreateKeyValueError),
     #[error("Bucket not found: {0}")]
     BucketNotFound(String),
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+    #[error("Operation timed out")]
+    Timeout,
 }
 
 pub struct KVStoreManager {
@@ -115,75 +133,79 @@ pub struct KVStoreManager {
 impl KVStoreManager {
     pub async fn new(client: async_nats::Client) -> Result<Self, KVError> {
         let jetstream = jetstream::new(client);
-        
+
         Ok(Self {
             jetstream,
             buckets: HashMap::new(),
         })
     }
-    
+
     pub async fn create_bucket(
-        &mut self, 
-        name: &str, 
-        ttl_seconds: u64,
-        replicas: Option<usize>
+        &mut self,
+        name: &str,
+        max_age_seconds: u64,
+        num_replicas: Option<usize>
     ) -> Result<kv::Store, KVError> {
+        // async-nats 0.46: Config uses `max_age` (not `ttl`) and `num_replicas` (not `replicas`)
         let config = kv::Config {
             bucket: name.to_string(),
             description: format!("KV bucket for {}", name),
             max_value_size: 1024 * 1024, // 1MB
             history: 1, // Keep only latest
-            ttl: Duration::from_secs(ttl_seconds),
+            max_age: Duration::from_secs(max_age_seconds),
             max_bytes: 1024 * 1024 * 1024, // 1GB
             storage: jetstream::stream::StorageType::File,
-            replicas: replicas.unwrap_or(3),
+            num_replicas: num_replicas.unwrap_or(3),
             ..Default::default()
         };
-        
+
         let bucket = self.jetstream.create_key_value(config).await?;
         self.buckets.insert(name.to_string(), bucket.clone());
-        
+
         Ok(bucket)
     }
-    
+
     pub async fn create_tiered_buckets(&mut self) -> Result<HashMap<String, kv::Store>, KVError> {
         let mut buckets = HashMap::new();
-        
+
         // Session data - 1 hour TTL
         let session_bucket = self.create_bucket(
-            "SESSION_DATA", 
+            "SESSION_DATA",
             3600, // 1 hour
             Some(3)
         ).await?;
         buckets.insert("session".to_string(), session_bucket);
-        
+
         // Agent state - 30 minutes TTL
         let agent_bucket = self.create_bucket(
-            "AGENT_STATE", 
+            "AGENT_STATE",
             1800, // 30 minutes
             Some(3)
         ).await?;
         buckets.insert("agent".to_string(), agent_bucket);
-        
+
         // Query cache - 5 minutes TTL
         let cache_bucket = self.create_bucket(
-            "QUERY_CACHE", 
+            "QUERY_CACHE",
             300, // 5 minutes
             Some(1) // Single replica for cache
         ).await?;
         buckets.insert("cache".to_string(), cache_bucket);
-        
+
         Ok(buckets)
     }
-    
+
     pub fn get_bucket(&self, name: &str) -> Result<&kv::Store, KVError> {
         self.buckets.get(name)
             .ok_or_else(|| KVError::BucketNotFound(name.to_string()))
     }
-    
+
     pub async fn health_check(&self) -> Result<(), KVError> {
-        // Test connectivity by listing buckets
-        let _buckets = self.jetstream.list_key_value_stores().await?;
+        // Test connectivity by getting a known bucket
+        // Note: async-nats 0.46 does not expose list_key_value_stores() on Context.
+        // Use get_key_value() to verify a known bucket is accessible.
+        let _store = self.jetstream.get_key_value("AGENT_STATE").await
+            .map_err(|e| KVError::BucketNotFound(format!("Health check failed: {}", e)))?;
         Ok(())
     }
 }
@@ -219,7 +241,7 @@ pub struct StateManager {
 
 impl StateManager {
     pub fn new(
-        kv_bucket: kv::Store, 
+        kv_bucket: kv::Store,
         conflict_strategy: ConflictStrategy
     ) -> Self {
         Self {
@@ -228,14 +250,14 @@ impl StateManager {
             timeout: Duration::from_secs(10),
         }
     }
-    
+
     pub async fn save_state<T>(
-        &self, 
-        key: &str, 
+        &self,
+        key: &str,
         value: T,
         agent_id: &str
-    ) -> Result<u64, KVError> 
-    where 
+    ) -> Result<u64, KVError>
+    where
         T: Serialize + Send + Sync,
     {
         let entry = StateEntry {
@@ -244,17 +266,16 @@ impl StateManager {
             agent_id: agent_id.to_string(),
             version: 1, // Will be updated if conflict resolution needed
         };
-        
+
         let serialized = serde_json::to_vec(&entry)
-            .map_err(|e| KVError::Nats(async_nats::Error::new(
-                async_nats::ErrorKind::Other, 
-                Some(&format!("Serialization failed: {}", e))
-            )))?;
-        
+            .map_err(|e| KVError::Serialization(format!("Serialization failed: {}", e)))?;
+
         // Optimistic concurrency control with timeout
+        // NOTE: Use entry() to get the full Entry struct (with revision field).
+        // get() returns only Option<Bytes> in async-nats 0.46.
         match tokio::time::timeout(
             self.timeout,
-            self.kv_bucket.get(key)
+            self.kv_bucket.entry(key)
         ).await {
             Ok(Ok(Some(current))) => {
                 self.handle_conflict(key, current, entry).await
@@ -264,36 +285,33 @@ impl StateManager {
                 let revision = self.kv_bucket.put(key, serialized.into()).await?;
                 Ok(revision)
             }
-            Ok(Err(e)) => Err(KVError::Nats(e)),
-            Err(_) => Err(KVError::Nats(async_nats::Error::new(
-                async_nats::ErrorKind::TimedOut,
-                Some("Timeout getting current state")
-            ))),
+            Ok(Err(e)) => Err(KVError::Entry(e)),
+            Err(_) => Err(KVError::Timeout),
         }
     }
-    
+
     pub async fn get_state<T>(&self, key: &str) -> Result<Option<StateEntry<T>>, KVError>
     where
         T: for<'de> Deserialize<'de> + Send,
     {
-        match tokio::time::timeout(self.timeout, self.kv_bucket.get(key)).await {
+        // Use entry() to get full Entry struct; get() returns only raw Bytes
+        match tokio::time::timeout(self.timeout, self.kv_bucket.entry(key)).await {
             Ok(Ok(Some(entry))) => {
+                if entry.operation != kv::Operation::Put {
+                    return Ok(None); // Deleted or purged
+                }
                 let state: StateEntry<T> = serde_json::from_slice(&entry.value)
-                    .map_err(|e| KVError::Nats(async_nats::Error::new(
-                        async_nats::ErrorKind::Other,
-                        Some(&format!("Deserialization failed: {}", e))
-                    )))?;
+                    .map_err(|e| KVError::Serialization(
+                        format!("Deserialization failed: {}", e)
+                    ))?;
                 Ok(Some(state))
             }
             Ok(Ok(None)) => Ok(None),
-            Ok(Err(e)) => Err(KVError::Nats(e)),
-            Err(_) => Err(KVError::Nats(async_nats::Error::new(
-                async_nats::ErrorKind::TimedOut,
-                Some("Timeout getting state")
-            ))),
+            Ok(Err(e)) => Err(KVError::Entry(e)),
+            Err(_) => Err(KVError::Timeout),
         }
     }
-    
+
     async fn handle_conflict<T>(
         &self,
         key: &str,
@@ -304,21 +322,19 @@ impl StateManager {
         T: Serialize + Send + Sync,
     {
         let current_state: StateEntry<T> = serde_json::from_slice(&current.value)
-            .map_err(|e| KVError::Nats(async_nats::Error::new(
-                async_nats::ErrorKind::Other,
-                Some(&format!("Failed to deserialize current state: {}", e))
-            )))?;
-        
+            .map_err(|e| KVError::Serialization(
+                format!("Failed to deserialize current state: {}", e)
+            ))?;
+
         match self.conflict_strategy {
             ConflictStrategy::LastWriteWins => {
                 // Always accept new value, but increment version
                 new_entry.version = current_state.version + 1;
                 let serialized = serde_json::to_vec(&new_entry)
-                    .map_err(|e| KVError::Nats(async_nats::Error::new(
-                        async_nats::ErrorKind::Other,
-                        Some(&format!("Serialization failed: {}", e))
-                    )))?;
-                
+                    .map_err(|e| KVError::Serialization(
+                        format!("Serialization failed: {}", e)
+                    ))?;
+
                 let revision = self.kv_bucket.update(key, serialized.into(), current.revision).await?;
                 Ok(revision)
             }
@@ -326,11 +342,10 @@ impl StateManager {
                 if new_entry.timestamp > current_state.timestamp {
                     new_entry.version = current_state.version + 1;
                     let serialized = serde_json::to_vec(&new_entry)
-                        .map_err(|e| KVError::Nats(async_nats::Error::new(
-                            async_nats::ErrorKind::Other,
-                            Some(&format!("Serialization failed: {}", e))
-                        )))?;
-                    
+                        .map_err(|e| KVError::Serialization(
+                            format!("Serialization failed: {}", e)
+                        ))?;
+
                     let revision = self.kv_bucket.update(key, serialized.into(), current.revision).await?;
                     Ok(revision)
                 } else {
@@ -339,22 +354,18 @@ impl StateManager {
                 }
             }
             ConflictStrategy::Reject => {
-                Err(KVError::Nats(async_nats::Error::new(
-                    async_nats::ErrorKind::Other,
-                    Some(&format!("Conflict detected for key: {}", key))
-                )))
+                Err(KVError::Serialization(
+                    format!("Conflict detected for key: {}", key)
+                ))
             }
         }
     }
-    
+
     pub async fn delete_state(&self, key: &str) -> Result<(), KVError> {
         match tokio::time::timeout(self.timeout, self.kv_bucket.delete(key)).await {
             Ok(Ok(_)) => Ok(()),
-            Ok(Err(e)) => Err(KVError::Nats(e)),
-            Err(_) => Err(KVError::Nats(async_nats::Error::new(
-                async_nats::ErrorKind::TimedOut,
-                Some("Timeout deleting state")
-            ))),
+            Ok(Err(e)) => Err(KVError::Delete(e)),
+            Err(_) => Err(KVError::Timeout),
         }
     }
 }
@@ -450,10 +461,9 @@ impl KVAgentCache {
         for task in tasks {
             match task.await {
                 Ok(result) => results.push(result),
-                Err(e) => results.push(Err(KVError::Nats(async_nats::Error::new(
-                    async_nats::ErrorKind::Other,
-                    Some(&format!("Task join error: {}", e))
-                )))),
+                Err(e) => results.push(Err(KVError::Serialization(
+                    format!("Task join error: {}", e)
+                ))),
             }
         }
         
@@ -691,16 +701,23 @@ agent_messages_stream:
 
 ```yaml
 # KV Bucket Configurations for Agent Framework
+#
+# NOTE: NATS server config uses `ttl` and `replicas`, but the async-nats 0.46 Rust
+# client uses `max_age` and `num_replicas` respectively. When implementing these
+# configs in Rust, map accordingly:
+#   YAML ttl       -> kv::Config.max_age (Duration)
+#   YAML replicas  -> kv::Config.num_replicas (usize)
+#   YAML storage   -> kv::Config.storage (StorageType::File or StorageType::Memory)
 
 # Session Data Bucket - User and agent sessions
 session_data_kv:
   bucket: "SESSION_DATA"
   description: "Temporary user and agent session storage"
-  
+
   # Configuration
-  ttl: 3600          # 1 hour TTL
+  ttl: 3600          # 1 hour TTL (Rust: max_age = Duration::from_secs(3600))
   storage: file      # Persistent across restarts
-  replicas: 3        # High availability
+  replicas: 3        # High availability (Rust: num_replicas = 3)
   history: 1         # Keep only latest value
   max_value_size: 1048576  # 1MB per entry
   max_bytes: 1073741824    # 1GB total bucket size
@@ -897,11 +914,20 @@ impl PostgresNatsIntegration {
         });
         
         // Publish with timeout and retry
+        // NOTE: async-nats 0.43+ uses two-phase publish with backpressure:
+        // publish() returns a future that resolves to PublishAckFuture,
+        // which must be awaited separately for the server acknowledgment.
         let publish_result = tokio::time::timeout(
             std::time::Duration::from_secs(5),
-            self.jetstream.publish(subject, serde_json::to_vec(&payload)?.into())
+            async {
+                let ack_future = self.jetstream
+                    .publish(subject, serde_json::to_vec(&payload)?.into())
+                    .await?;
+                let ack = ack_future.await?;
+                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(ack)
+            }
         ).await;
-        
+
         match publish_result {
             Ok(Ok(ack)) => {
                 tracing::debug!("Published agent state change: sequence {}", ack.sequence);
@@ -909,7 +935,7 @@ impl PostgresNatsIntegration {
             }
             Ok(Err(e)) => {
                 tracing::error!("Failed to publish agent state change: {}", e);
-                Err(e.into())
+                Err(e)
             }
             Err(_) => {
                 tracing::error!("Timeout publishing agent state change");
@@ -1046,10 +1072,14 @@ pub async fn example_usage() -> Result<(), Box<dyn std::error::Error + Send + Sy
 
 **Dependencies**:
 
-- async-nats 0.34+ (NATS JetStream client)
-- sqlx 0.7+ (PostgreSQL integration)
-- tokio 1.38+ (async runtime)
-- serde 1.0+ (serialization)
+- async-nats 0.46.0 with features `jetstream`, `kv` (NATS JetStream KV client)
+- sqlx 0.8.6 (PostgreSQL integration)
+- tokio 1.49.0 (async runtime)
+- serde 1.0.228 (serialization)
+- thiserror 1.0.69 (error derive macros)
+- chrono 0.4.x (timestamps)
+
+> **Validated**: 2026-03-03 against async-nats 0.46.0 source at `nats.rs/async-nats/src/jetstream/kv/`
 
 ## Related Documentation
 

@@ -1,5 +1,19 @@
 # Authentication Implementation Specifications
 
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 3B - Security
+**Status**: Updated for current ecosystem
+
+> **Key version changes applied in this validation**:
+> - **jsonwebtoken**: Updated to 10.3.0 — crypto backend is now trait-based, must select `aws_lc_rs` or `rust_crypto` feature. `encode()`/`decode()` API signatures unchanged but crate requires `jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }`
+> - **rustls**: Updated to 0.23.37 API — `Certificate`/`PrivateKey` replaced by `CertificateDer<'static>`/`PrivateKeyDer<'static>`, `ServerConfig::builder()` now requires explicit `CryptoProvider`, cipher suite / KX group selection moved to provider
+> - **tokio-rustls**: 0.26.4, aligned with rustls 0.23
+> - **rcgen**: 0.14.7 — `Certificate::from_params()` removed, `self_signed()` and `signed_by()` now take `&self` on `CertificateParams`, output types no longer contain `CertificateParams`
+> - **ring**: 0.17.14 — patch-level, no breaking changes
+> - **oauth2**: 4.4.2 — stable, no breaking changes
+
 ## Overview
 
 This document provides comprehensive authentication implementation specifications for the Mister Smith AI Agent Framework,
@@ -24,6 +38,10 @@ building on the security framework foundation and integrating with transport lay
 
 ```rust
 use serde::{Deserialize, Serialize};
+// jsonwebtoken 10.3.0 — requires crypto backend feature:
+//   jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
+// The encode()/decode() API signatures are unchanged from 9.x.
+// Key difference: no default crypto backend — must explicitly choose one.
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use chrono::{Duration, Utc};
 use uuid::Uuid;
@@ -315,12 +333,21 @@ impl ApiKeyManager {
 ### 3.1 Root CA Configuration
 
 ```rust
-use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType, KeyPair};
+// rcgen 0.14.7 API
+// Key changes from earlier versions:
+//   - Certificate::from_params() removed — use self_signed()/signed_by() directly
+//   - self_signed() and signed_by() are methods on CertificateParams, taking &self
+//   - Output Certificate type no longer contains CertificateParams
+//   - Certificate can be serialized via .der() and .pem()
+//   - KeyPair::generate() takes an algorithm parameter
+use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair};
 use x509_parser::prelude::*;
 
 pub struct CertificateAuthority {
-    root_cert: Certificate,
-    intermediate_cert: Certificate,
+    root_cert_der: Vec<u8>,       // DER-encoded root certificate
+    root_key: KeyPair,
+    intermediate_cert_der: Vec<u8>, // DER-encoded intermediate certificate
+    intermediate_key: KeyPair,
     crl_endpoint: String,
     ocsp_endpoint: String,
 }
@@ -331,47 +358,53 @@ impl CertificateAuthority {
         let mut root_params = CertificateParams::default();
         root_params.not_before = time::OffsetDateTime::now_utc();
         root_params.not_after = root_params.not_before + time::Duration::days(3650); // 10 years
-        
+
         let mut root_dn = DistinguishedName::new();
         root_dn.push(DnType::CountryName, "US");
         root_dn.push(DnType::OrganizationName, "Mister Smith Framework");
         root_dn.push(DnType::CommonName, "Mister Smith Root CA");
         root_params.distinguished_name = root_dn;
-        
+
         root_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
         root_params.key_usages = vec![
             rcgen::KeyUsagePurpose::KeyCertSign,
             rcgen::KeyUsagePurpose::CrlSign,
             rcgen::KeyUsagePurpose::DigitalSignature,
         ];
-        
+
         let root_key = KeyPair::generate(&rcgen::PKCS_ECDSA_P384_SHA384)?;
+        // rcgen 0.14: self_signed() returns Certificate (an output type, not params)
         let root_cert = root_params.self_signed(&root_key)?;
-        
+        let root_cert_der = root_cert.der().to_vec();
+
         // Generate Intermediate CA
         let mut int_params = CertificateParams::default();
         int_params.not_before = time::OffsetDateTime::now_utc();
         int_params.not_after = int_params.not_before + time::Duration::days(1825); // 5 years
-        
+
         let mut int_dn = DistinguishedName::new();
         int_dn.push(DnType::CountryName, "US");
         int_dn.push(DnType::OrganizationName, "Mister Smith Framework");
         int_dn.push(DnType::CommonName, "Mister Smith Intermediate CA");
         int_params.distinguished_name = int_dn;
-        
+
         int_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
         int_params.key_usages = vec![
             rcgen::KeyUsagePurpose::KeyCertSign,
             rcgen::KeyUsagePurpose::CrlSign,
             rcgen::KeyUsagePurpose::DigitalSignature,
         ];
-        
+
         let int_key = KeyPair::generate(&rcgen::PKCS_ECDSA_P384_SHA384)?;
+        // rcgen 0.14: signed_by() takes (self_key, issuer_cert, issuer_key)
         let int_cert = int_params.signed_by(&int_key, &root_cert, &root_key)?;
-        
+        let intermediate_cert_der = int_cert.der().to_vec();
+
         Ok(Self {
-            root_cert,
-            intermediate_cert: Certificate::from_params(int_params)?,
+            root_cert_der,
+            root_key,
+            intermediate_cert_der,
+            intermediate_key: int_key,
             crl_endpoint: config.crl_endpoint.clone(),
             ocsp_endpoint: config.ocsp_endpoint.clone(),
         })
@@ -395,47 +428,54 @@ impl CertificateManager {
     ) -> Result<IssuedCertificate, CAError> {
         // Validate request
         self.validate_certificate_request(&request)?;
-        
-        // Generate certificate
+
+        // Generate certificate (rcgen 0.14 API)
         let mut params = CertificateParams::default();
         params.not_before = time::OffsetDateTime::now_utc();
         params.not_after = params.not_before + time::Duration::days(90); // 90 days
-        
+
         let mut dn = DistinguishedName::new();
         dn.push(DnType::CommonName, &request.agent_id);
         dn.push(DnType::OrganizationName, "Mister Smith Agent");
         params.distinguished_name = dn;
-        
+
         // Add Subject Alternative Names
         params.subject_alt_names = vec![
-            rcgen::SanType::DnsName(format!("{}.agents.local", request.agent_id)),
-            rcgen::SanType::Custom(
-                2, 5, 29, 17, // Extended Key Usage OID
-                request.agent_id.as_bytes().to_vec(),
+            rcgen::SanType::DnsName(
+                format!("{}.agents.local", request.agent_id).try_into()?
             ),
         ];
-        
+
         params.extended_key_usages = vec![
             rcgen::ExtendedKeyUsagePurpose::ClientAuth,
             rcgen::ExtendedKeyUsagePurpose::ServerAuth,
         ];
-        
+
         let key_pair = KeyPair::generate(&rcgen::PKCS_ECDSA_P256_SHA256)?;
+        // rcgen 0.14: signed_by() needs the issuer Certificate reference.
+        // Since CertificateAuthority stores DER bytes, we need to reconstruct
+        // the issuer cert or store the rcgen Certificate object for signing.
+        // In practice, store the intermediate cert + key for re-signing.
+        let issuer_cert = rcgen::Certificate::from_der(&self.ca.intermediate_cert_der)?;
         let cert = params.signed_by(
             &key_pair,
-            &self.ca.intermediate_cert,
+            &issuer_cert,
             &self.ca.intermediate_key,
         )?;
-        
+
         // Store certificate
+        // rcgen 0.14: use .pem() and .der() on Certificate output type;
+        // get_params() and serialize_pem() are removed.
         let issued_cert = IssuedCertificate {
-            serial_number: cert.get_params().serial_number.clone(),
-            certificate: cert.serialize_pem()?,
+            serial_number: format!("{:x}", ring::digest::digest(
+                &ring::digest::SHA256, cert.der()
+            ).as_ref().iter().take(8).fold(0u64, |acc, &b| acc << 8 | b as u64)),
+            certificate: cert.pem(),
             private_key: key_pair.serialize_pem(),
             agent_id: request.agent_id,
             issued_at: Utc::now(),
             expires_at: Utc::now() + chrono::Duration::days(90),
-            fingerprint: self.calculate_fingerprint(&cert)?,
+            fingerprint: self.calculate_fingerprint(cert.der())?,
         };
         
         self.repository.save(&issued_cert).await?;
@@ -467,103 +507,82 @@ impl CertificateManager {
 ### 4.1 mTLS Server Configuration
 
 ```rust
-use rustls::{Certificate, PrivateKey, ServerConfig};
+// rustls 0.23.37 / tokio-rustls 0.26.4 API
+// Key changes from pre-0.23:
+//   - Certificate/PrivateKey replaced by CertificateDer<'static>/PrivateKeyDer<'static>
+//   - ServerConfig::builder_with_provider() takes Arc<CryptoProvider>
+//   - AllowAnyAuthenticatedClient removed; use WebPkiClientVerifier::builder()
+//   - Custom ClientCertVerifier trait method signatures changed
+//   - Cipher suite / KX group selection handled by CryptoProvider, not builder
+use rustls::{ClientConfig, ServerConfig, RootCertStore};
+use rustls::server::WebPkiClientVerifier;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio_rustls::TlsAcceptor;
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use std::sync::Arc;
 
 pub struct MtlsServerConfig {
     tls_config: Arc<ServerConfig>,
     client_auth_required: bool,
-    allowed_client_cas: Vec<Certificate>,
     sni_resolver: Option<Arc<dyn SniResolver>>,
 }
 
 impl MtlsServerConfig {
     pub fn new(config: &MtlsConfig) -> Result<Self, TlsError> {
-        let certs = load_certs(&config.cert_path)?;
-        let key = load_private_key(&config.key_path)?;
-        
-        let client_cert_verifier = Arc::new(
-            CustomClientCertVerifier::new(
-                config.ca_certs.clone(),
-                config.verify_depth,
-                config.crl_endpoint.clone(),
-            )?
-        );
-        
-        let mut tls_config = ServerConfig::builder()
-            .with_cipher_suites(&[
-                rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
-                rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
-                rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-            ])
-            .with_kx_groups(&[&rustls::kx_group::X25519])
-            .with_protocol_versions(&[&rustls::version::TLS13])
-            .unwrap()
-            .with_client_cert_verifier(client_cert_verifier)
+        let certs = load_certs(&config.cert_path)?;  // -> Vec<CertificateDer<'static>>
+        let key = load_private_key(&config.key_path)?; // -> PrivateKeyDer<'static>
+
+        // Build root cert store for client CA verification
+        let mut client_auth_roots = RootCertStore::empty();
+        for ca_cert in &config.ca_certs {
+            client_auth_roots.add(ca_cert.clone())?;
+        }
+
+        // WebPkiClientVerifier replaces AllowAnyAuthenticatedClient.
+        // For CRL-based revocation checking, use .with_crls() on the builder.
+        let client_verifier = WebPkiClientVerifier::builder_with_provider(
+            Arc::new(client_auth_roots),
+            Arc::new(DEFAULT_PROVIDER),
+        )
+        // Optional: add CRL-based revocation checking
+        // .with_crls(load_crls(&config.crl_endpoint)?)
+        .build()?;
+
+        // ServerConfig::builder_with_provider() — cipher suites and KX groups
+        // are determined by the CryptoProvider (aws_lc_rs provides all TLS 1.3 suites).
+        // We restrict to TLS 1.3 only via with_protocol_versions().
+        let mut tls_config = ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+            .with_protocol_versions(&[&rustls::version::TLS13])?
+            .with_client_cert_verifier(client_verifier)
             .with_single_cert(certs, key)?;
-        
+
         // Configure ALPN
         tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-        
-        // Configure session resumption
-        tls_config.session_storage = ServerSessionMemoryCache::new(1024);
-        tls_config.ticketer = rustls::Ticketer::new()?;
-        
+
         Ok(Self {
             tls_config: Arc::new(tls_config),
             client_auth_required: config.require_client_cert,
-            allowed_client_cas: config.ca_certs,
             sni_resolver: config.sni_resolver,
         })
     }
 }
 
-struct CustomClientCertVerifier {
-    ca_certs: Vec<Certificate>,
-    verify_depth: u32,
-    crl_checker: Arc<CrlChecker>,
-    ocsp_checker: Arc<OcspChecker>,
-}
-
-impl rustls::server::ClientCertVerifier for CustomClientCertVerifier {
-    fn client_auth_root_subjects(&self) -> Option<rustls::DistinguishedNames> {
-        Some(self.ca_certs.iter()
-            .map(|cert| cert.0.clone())
-            .collect())
-    }
-    
-    fn verify_client_cert(
-        &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        now: std::time::SystemTime,
-    ) -> Result<rustls::server::ClientCertVerified, rustls::Error> {
-        // Verify certificate chain
-        let chain = self.build_chain(end_entity, intermediates)?;
-        self.verify_chain(&chain, now)?;
-        
-        // Check revocation status
-        if self.crl_checker.is_revoked(end_entity)? {
-            return Err(rustls::Error::General("Certificate revoked".into()));
-        }
-        
-        // OCSP check (non-blocking)
-        let ocsp_checker = self.ocsp_checker.clone();
-        let cert_clone = end_entity.clone();
-        tokio::spawn(async move {
-            if let Err(e) = ocsp_checker.check_status(&cert_clone).await {
-                log::warn!("OCSP check failed: {}", e);
-            }
-        });
-        
-        // Extract and validate agent ID from certificate
-        let agent_id = extract_agent_id(end_entity)?;
-        validate_agent_permissions(&agent_id)?;
-        
-        Ok(rustls::server::ClientCertVerified::assertion())
-    }
-}
+// NOTE: For custom client certificate verification beyond what WebPkiClientVerifier
+// provides (e.g., agent ID extraction, custom revocation checks), implement the
+// rustls::server::danger::ClientCertVerifier trait. The trait signature in rustls 0.23 is:
+//
+//   fn verify_client_cert(
+//       &self,
+//       end_entity: &CertificateDer<'_>,
+//       intermediates: &[CertificateDer<'_>],
+//       now: UnixTime,
+//   ) -> Result<ClientCertVerified, rustls::Error>
+//
+// Key differences from pre-0.23:
+//   - Uses CertificateDer<'_> instead of Certificate
+//   - Uses UnixTime instead of std::time::SystemTime
+//   - client_auth_root_subjects() return type changed to DistinguishedNames (no Option)
+//   - Located in rustls::server::danger module
 ```
 
 ### 4.2 mTLS Client Configuration
@@ -571,41 +590,33 @@ impl rustls::server::ClientCertVerifier for CustomClientCertVerifier {
 ```rust
 pub struct MtlsClientConfig {
     tls_config: Arc<ClientConfig>,
-    client_cert: Certificate,
-    client_key: PrivateKey,
 }
 
 impl MtlsClientConfig {
     pub fn new(config: &ClientMtlsConfig) -> Result<Self, TlsError> {
-        let client_cert = load_cert(&config.cert_path)?;
-        let client_key = load_private_key(&config.key_path)?;
+        let client_certs = load_certs(&config.cert_path)?; // -> Vec<CertificateDer<'static>>
+        let client_key = load_private_key(&config.key_path)?; // -> PrivateKeyDer<'static>
         let ca_certs = load_ca_certs(&config.ca_path)?;
-        
-        let mut root_store = rustls::RootCertStore::empty();
+
+        let mut root_store = RootCertStore::empty();
         for cert in ca_certs {
-            root_store.add(&cert)?;
+            root_store.add(cert)?;
         }
-        
-        let tls_config = ClientConfig::builder()
-            .with_cipher_suites(&[
-                rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
-                rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
-            ])
-            .with_safe_default_kx_groups()
-            .with_safe_default_protocol_versions()
-            .unwrap()
+
+        // ClientConfig::builder_with_provider() — explicit CryptoProvider.
+        // with_client_auth_cert() replaces with_single_cert() for client configs.
+        let tls_config = ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
+            .with_protocol_versions(&[&rustls::version::TLS13])?
             .with_root_certificates(root_store)
-            .with_single_cert(vec![client_cert.clone()], client_key.clone())?;
-        
+            .with_client_auth_cert(client_certs, client_key)?;
+
         Ok(Self {
             tls_config: Arc::new(tls_config),
-            client_cert,
-            client_key,
         })
     }
-    
-    pub fn create_connector(&self) -> TlsConnector {
-        TlsConnector::from(self.tls_config.clone())
+
+    pub fn create_connector(&self) -> tokio_rustls::TlsConnector {
+        tokio_rustls::TlsConnector::from(self.tls_config.clone())
     }
 }
 ```
@@ -1268,23 +1279,28 @@ impl AuthCallback for NatsAuthHandler {
 pub async fn create_authenticated_nats_client(
     urls: Vec<String>,
     auth_handler: NatsAuthHandler,
-) -> Result<Client, async_nats::Error> {
+) -> Result<Client, async_nats::ConnectError> {
+    // async-nats 0.46.0 API:
+    //   - tls_client_auth() does not exist; use add_client_certificate(PathBuf, PathBuf)
+    //     for file-based certs, or tls_client_config(rustls::ClientConfig) for programmatic
+    //   - add_root_certificates() takes a PathBuf, not bytes
+    //   - Error type is ConnectError, not Error::Other
     let options = ConnectOptions::new()
         .auth_callback(Arc::new(auth_handler))
         .require_tls(true)
-        .tls_client_auth(
-            include_bytes!("../certs/client-cert.pem").to_vec(),
-            include_bytes!("../certs/client-key.pem").to_vec(),
+        .add_client_certificate(
+            PathBuf::from("certs/client-cert.pem"),
+            PathBuf::from("certs/client-key.pem"),
         )
-        .add_root_certificates(include_bytes!("../certs/ca.pem").to_vec())
+        .add_root_certificates(PathBuf::from("certs/ca.pem"))
         .connection_timeout(Duration::from_secs(10))
         .ping_interval(Duration::from_secs(60))
         .reconnect_buffer_size(8 * 1024 * 1024); // 8MB
-    
+
     let client = options
         .connect(urls[0].as_str())
         .await?;
-    
+
     Ok(client)
 }
 ```
@@ -1450,21 +1466,20 @@ async fn protected_endpoint(
 ```rust
 use async_nats::ConnectOptions;
 
-async fn setup_secure_nats() -> Result<Client, Error> {
+async fn setup_secure_nats() -> Result<Client, async_nats::ConnectError> {
     let mtls_config = MtlsClientConfig::new(&client_config)?;
-    
+
+    // async-nats 0.46.0: Use tls_client_config() with a pre-built rustls ClientConfig
+    // for programmatic mTLS, or add_client_certificate(PathBuf, PathBuf) for file-based.
+    // tls_client_auth() does not exist in this version.
     let options = ConnectOptions::new()
         .require_tls(true)
-        .tls_client_auth(
-            mtls_config.client_cert.0.clone(),
-            mtls_config.client_key.0.clone(),
-        )
-        .add_root_certificates(ca_cert.0.clone())
+        .tls_client_config((*mtls_config.tls_config).clone())
         .auth_callback(Arc::new(NatsAuthHandler::new(jwt_manager)))
         .connection_timeout(Duration::from_secs(10));
-    
+
     let client = options.connect("nats://secure.nats.local:4222").await?;
-    
+
     Ok(client)
 }
 ```

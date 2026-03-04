@@ -8,6 +8,10 @@ tags:
 
 ## Agent Communication Architecture
 
+<!-- Last validated: 2026-03-03 by Agent 2A against VERSION_REFERENCE.md and type-definitions.md -->
+<!-- Priority scale standardized to 0-4 (5 levels) per MessagePriority enum in agent-orchestration.md -->
+<!-- async-nats API usage verified against 0.46.0: Subscriber implements Stream directly (no .messages() method) -->
+
 ### Technical Implementation Guide
 
 This document provides technical specifications for agent communication patterns, message passing protocols, and coordination mechanisms within the MisterSmith framework. It includes verified async implementations using Tokio, comprehensive message schemas, and error handling patterns for distributed agent systems.
@@ -144,6 +148,9 @@ struct PubSubBus {
     subscriptions: HashMap<String, mpsc::UnboundedSender<()>>,
 }
 
+/// Note: async-nats 0.46 defines specific error types (ConnectError, SubscribeError,
+/// PublishError) but `async_nats::Error` (= Box<dyn Error + Send + Sync>) is still
+/// available as a catch-all. For production code, prefer the specific error types.
 #[derive(Debug, thiserror::Error)]
 enum PubSubError {
     #[error("Connection failed: {0}")]
@@ -188,12 +195,14 @@ impl PubSubBus {
         self.subscriptions.insert(topic.to_string(), shutdown_tx);
         
         let topic_name = topic.to_string();
+        // async-nats 0.46: Subscriber implements Stream<Item = Message> directly.
+        // Use futures::StreamExt for .next() — there is no .messages() method.
         tokio::spawn(async move {
-            let mut messages = subscriber.messages();
-            
+            use futures::StreamExt;
+
             loop {
                 tokio::select! {
-                    Some(msg) = messages.next() => {
+                    Some(msg) = subscriber.next() => {
                         match serde_json::from_slice::<Message>(&msg.payload) {
                             Ok(message) => {
                                 if let Err(e) = handler(message).await {
@@ -463,9 +472,9 @@ impl Blackboard {
     "priority": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 9,
-      "description": "Message priority (0=lowest, 9=highest)",
-      "default": 5
+      "maximum": 4,
+      "description": "Message priority: 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk (matches MessagePriority enum in agent-orchestration.md)",
+      "default": 2
     }
   },
   "$defs": {
@@ -1761,7 +1770,7 @@ impl CircuitBreaker {
 
 ### Implementation References
 
-- **[Technology Stack](../core-architecture/tech-framework.md)** - Rust/Tokio runtime specifications
+- **[Technology Stack](../core-architecture/dependency-specifications.md)** - Rust/Tokio runtime specifications
 - **[Data Persistence](data-persistence.md)** - State storage and persistence strategies
 - **[Message Schemas](core-message-schemas.md)** - Comprehensive message format definitions
 

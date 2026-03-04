@@ -1,5 +1,18 @@
 # Authentication Implementation - Certificate + JWT
 
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 3B - Security
+**Status**: Updated for current ecosystem
+
+> **Key version changes applied in this validation**:
+> - **rustls**: Updated to 0.23.37 API — `Certificate`/`PrivateKey` replaced by `CertificateDer<'static>`/`PrivateKeyDer<'static>`, `ServerConfig::builder()` now requires explicit `CryptoProvider`, `AllowAnyAuthenticatedClient` replaced by `WebPkiClientVerifier`
+> - **rustls-pemfile**: Updated API — `certs()` and key parsers now return iterators of `Result<T>`
+> - **tokio-rustls**: 0.26.4, aligned with rustls 0.23
+> - **jwt-simple**: 0.12.10 — no breaking changes, API stable
+> - **axum**: 0.8.8 — `axum::Server` removed, use `TcpListener` + `axum::serve()`
+
 ## Overview
 
 This document provides complete implementation patterns for certificate management and JWT authentication in the Mister Smith Framework. It includes production-ready code for certificate lifecycle management, JWT token operations, and authentication middleware.
@@ -188,11 +201,22 @@ fi
 
 ```rust
 // certificate_manager.rs
-use rustls::{Certificate, PrivateKey, ServerConfig, ClientConfig};
-use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
+//
+// rustls 0.23.37 / tokio-rustls 0.26.4 API
+// Key changes from pre-0.23:
+//   - Certificate/PrivateKey replaced by CertificateDer<'static>/PrivateKeyDer<'static>
+//   - ServerConfig::builder() requires explicit CryptoProvider (or process-default)
+//   - AllowAnyAuthenticatedClient removed; use WebPkiClientVerifier::builder()
+//   - rustls_pemfile functions return iterators of Result<T>
+//   - with_single_cert() takes (Vec<CertificateDer>, PrivateKeyDer) directly
+//   - Cipher suite / KX group selection moved to CryptoProvider configuration
+//   - Identity type wraps cert chain for with_single_cert on latest API
+//
+use rustls::{ClientConfig, ServerConfig, RootCertStore};
+use rustls::server::WebPkiClientVerifier;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::pem::PemObject;
+use rustls_aws_lc_rs::DEFAULT_PROVIDER;
 use std::sync::Arc;
 use tokio::time::{Duration, interval};
 use tracing::{info, warn, error};
@@ -218,17 +242,12 @@ impl CertificateManager {
         }
     }
 
-    /// Load certificates from PEM files
-    pub fn load_certificates(&self, path: &str) -> Result<Vec<Certificate>> {
-        let file = File::open(path)
-            .with_context(|| format!("Failed to open certificate file: {}", path))?;
-        let mut reader = BufReader::new(file);
-        
-        let certs = certs(&mut reader)
-            .with_context(|| "Failed to parse certificates")?
-            .into_iter()
-            .map(Certificate)
-            .collect();
+    /// Load certificates from PEM files (rustls 0.23 API)
+    pub fn load_certificates(&self, path: &str) -> Result<Vec<CertificateDer<'static>>> {
+        let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(path)
+            .with_context(|| format!("Failed to open certificate file: {}", path))?
+            .collect::<Result<Vec<_>, _>>()
+            .with_context(|| format!("Failed to parse certificates from: {}", path))?;
 
         if certs.is_empty() {
             anyhow::bail!("No certificates found in file: {}", path);
@@ -238,119 +257,97 @@ impl CertificateManager {
         Ok(certs)
     }
 
-    /// Load private key from PEM file
-    pub fn load_private_key(&self, path: &str) -> Result<PrivateKey> {
-        let file = File::open(path)
-            .with_context(|| format!("Failed to open private key file: {}", path))?;
-        let mut reader = BufReader::new(file);
+    /// Load private key from PEM file (rustls 0.23 API)
+    pub fn load_private_key(&self, path: &str) -> Result<PrivateKeyDer<'static>> {
+        let key = PrivateKeyDer::from_pem_file(path)
+            .with_context(|| format!("Failed to load private key from: {}", path))?;
 
-        // Try PKCS8 format first
-        if let Ok(mut keys) = pkcs8_private_keys(&mut reader) {
-            if !keys.is_empty() {
-                info!("Loaded PKCS8 private key from {}", path);
-                return Ok(PrivateKey(keys.remove(0)));
-            }
-        }
-
-        // Reset reader and try RSA format
-        let file = File::open(path)?;
-        let mut reader = BufReader::new(file);
-        
-        let mut keys = rsa_private_keys(&mut reader)
-            .with_context(|| "Failed to parse RSA private key")?;
-
-        if keys.is_empty() {
-            anyhow::bail!("No private keys found in file: {}", path);
-        }
-
-        info!("Loaded RSA private key from {}", path);
-        Ok(PrivateKey(keys.remove(0)))
+        info!("Loaded private key from {}", path);
+        Ok(key)
     }
 
-    /// Create TLS server configuration with mTLS
+    /// Create TLS server configuration with mTLS (rustls 0.23 API)
+    ///
+    /// Key differences from pre-0.23:
+    /// - ServerConfig::builder() takes an Arc<CryptoProvider>
+    /// - Client cert verification uses WebPkiClientVerifier::builder()
+    /// - Cipher suite selection is determined by the CryptoProvider, not the builder
+    /// - Protocol version restriction uses .with_protocol_versions() on the builder
     pub fn create_server_config(&self) -> Result<Arc<ServerConfig>> {
         let certs = self.load_certificates(&self.server_cert_path)?;
         let key = self.load_private_key(&self.server_key_path)?;
         let ca_certs = self.load_certificates(&self.ca_cert_path)?;
 
-        let mut root_store = rustls::RootCertStore::empty();
+        // Build root cert store for client certificate verification
+        let mut client_auth_roots = RootCertStore::empty();
         for cert in ca_certs {
-            root_store.add(&cert)
+            client_auth_roots.add(cert)
                 .with_context(|| "Failed to add CA certificate to root store")?;
         }
 
-        let client_cert_verifier = rustls::server::AllowAnyAuthenticatedClient::new(root_store);
+        // WebPkiClientVerifier replaces AllowAnyAuthenticatedClient
+        let client_verifier = WebPkiClientVerifier::builder_with_provider(
+            Arc::new(client_auth_roots),
+            Arc::new(DEFAULT_PROVIDER),
+        )
+        .build()
+        .with_context(|| "Failed to build client certificate verifier")?;
 
-        let config = ServerConfig::builder()
-            .with_cipher_suites(&[
-                rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
-                rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-                rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
-            ])
-            .with_kx_groups(&[
-                &rustls::kx_group::X25519,
-                &rustls::kx_group::SECP384R1,
-                &rustls::kx_group::SECP256R1,
-            ])
+        // ServerConfig::builder() now takes an explicit CryptoProvider.
+        // Cipher suites and KX groups are determined by the provider — TLS 1.3
+        // suites (AES-256-GCM, CHACHA20-POLY1305, AES-128-GCM) and KX groups
+        // (X25519, SECP384R1, SECP256R1) are all supported by aws_lc_rs.
+        // We restrict to TLS 1.3 only via with_protocol_versions().
+        let config = ServerConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
             .with_protocol_versions(&[&rustls::version::TLS13])
-            // ✅ STANDARDIZED: TLS 1.3 minimum enforced framework-wide
-            .with_context(|| "Failed to configure TLS parameters")?
-            .with_client_cert_verifier(client_cert_verifier)
+            // STANDARDIZED: TLS 1.3 minimum enforced framework-wide
+            .with_context(|| "Failed to configure TLS protocol versions")?
+            .with_client_cert_verifier(client_verifier)
             .with_single_cert(certs, key)
             .with_context(|| "Failed to configure server certificate")?;
 
-        info!("Created TLS server configuration with mTLS");
+        info!("Created TLS server configuration with mTLS (rustls 0.23)");
         Ok(Arc::new(config))
     }
 
-    /// Create TLS client configuration
+    /// Create TLS client configuration (rustls 0.23 API)
     pub fn create_client_config(&self) -> Result<Arc<ClientConfig>> {
         let certs = self.load_certificates(&self.client_cert_path)?;
         let key = self.load_private_key(&self.client_key_path)?;
         let ca_certs = self.load_certificates(&self.ca_cert_path)?;
 
-        let mut root_store = rustls::RootCertStore::empty();
+        let mut root_store = RootCertStore::empty();
         for cert in ca_certs {
-            root_store.add(&cert)
+            root_store.add(cert)
                 .with_context(|| "Failed to add CA certificate to root store")?;
         }
 
-        let config = ClientConfig::builder()
-            .with_cipher_suites(&[
-                rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
-                rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-                rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
-            ])
-            .with_kx_groups(&[
-                &rustls::kx_group::X25519,
-                &rustls::kx_group::SECP384R1,
-                &rustls::kx_group::SECP256R1,
-            ])
+        let config = ClientConfig::builder_with_provider(Arc::new(DEFAULT_PROVIDER))
             .with_protocol_versions(&[&rustls::version::TLS13])
-            // ✅ STANDARDIZED: TLS 1.3 minimum enforced framework-wide
-            .with_context(|| "Failed to configure TLS parameters")?
+            // STANDARDIZED: TLS 1.3 minimum enforced framework-wide
+            .with_context(|| "Failed to configure TLS protocol versions")?
             .with_root_certificates(root_store)
-            .with_single_cert(certs, key)
+            .with_client_auth_cert(certs, key)
             .with_context(|| "Failed to configure client certificate")?;
 
-        info!("Created TLS client configuration");
+        info!("Created TLS client configuration (rustls 0.23)");
         Ok(Arc::new(config))
     }
 
     /// Check certificate expiration
     pub fn check_certificate_expiration(&self, cert_path: &str) -> Result<Duration> {
         use x509_parser::prelude::*;
-        
+
         let cert_data = std::fs::read(cert_path)
             .with_context(|| format!("Failed to read certificate: {}", cert_path))?;
-            
+
         let pem = pem::parse(&cert_data)
             .with_context(|| "Failed to parse PEM certificate")?;
-            
-        let x509 = X509Certificate::from_der(&pem.contents)
+
+        let (_, x509) = X509Certificate::from_der(&pem.contents)
             .with_context(|| "Failed to parse X509 certificate")?;
 
-        let expiry_time = x509.1.validity().not_after.timestamp() as u64;
+        let expiry_time = x509.validity().not_after.timestamp() as u64;
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -361,9 +358,9 @@ impl CertificateManager {
         }
 
         let remaining = Duration::from_secs(expiry_time - current_time);
-        
+
         if remaining.as_secs() < 30 * 24 * 60 * 60 { // 30 days
-            warn!("Certificate expires in {} days: {}", 
+            warn!("Certificate expires in {} days: {}",
                 remaining.as_secs() / (24 * 60 * 60), cert_path);
         }
 
@@ -374,23 +371,23 @@ impl CertificateManager {
     pub async fn start_monitoring(&self) {
         let manager = self.clone();
         tokio::spawn(async move {
-            let mut interval = interval(Duration::from_hours(24));
-            
+            let mut interval = interval(Duration::from_secs(24 * 60 * 60));
+
             loop {
                 interval.tick().await;
-                
+
                 // Check server certificate expiration
                 if let Err(e) = manager.check_certificate_expiration(&manager.server_cert_path) {
                     error!("Server certificate check failed: {}", e);
                 }
-                
+
                 // Check client certificate expiration
                 if let Err(e) = manager.check_certificate_expiration(&manager.client_cert_path) {
                     error!("Client certificate check failed: {}", e);
                 }
             }
         });
-        
+
         info!("Started certificate monitoring task");
     }
 }

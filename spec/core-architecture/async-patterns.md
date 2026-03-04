@@ -2383,8 +2383,8 @@ the async patterns demonstrate **EXCELLENT** consistency across all framework do
 
 All 5 domains (Core, Data Management, Transport, Security, Operations) consistently implement:
 
-- **Tokio Runtime**: `tokio = { version = "1.45.1", features = ["full"] }`
-- **Async Traits**: `async-trait = "0.1"` for trait definitions
+- **Tokio Runtime**: `tokio = { version = "1.49.0", features = ["full"] }`
+- **Async Traits**: `async-trait = "0.1.83"` for trait definitions
 - **Standardized Patterns**: Consistent async/await usage across all agent implementations
 
 #### Evidence of Consistency

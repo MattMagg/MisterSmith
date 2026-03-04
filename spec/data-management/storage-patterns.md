@@ -21,10 +21,11 @@ tags:
 
 Storage architecture patterns for distributed agent state management using:
 
-- **PostgreSQL 15 + SQLx 0.7**: Long-term persistence and complex queries
-- **NATS JetStream KV**: Fast distributed state cache with TTL
+- **PostgreSQL 15+ with SQLx 0.8.6**: Long-term persistence and complex queries
+- **NATS JetStream KV (async-nats 0.46.0)**: Fast distributed state cache with TTL (feature `kv` required)
 - **Dual-store pattern**: KV for hot data, SQL for durability
 - **Async patterns**: Non-blocking operations with proper error handling
+- **MSRV**: 1.88.0 (driven by async-nats 0.46.0)
 
 ## 1. Basic Storage Architecture
 
@@ -169,8 +170,10 @@ impl HybridStateManager {
     
     pub async fn read_state(&self, key: &str) -> Result<Option<Vec<u8>>, StorageError> {
         // Try fast KV first
+        // NOTE: async-nats 0.46 get() returns Result<Option<Bytes>, EntryError>.
+        // Use entry() instead if you need the full Entry struct (revision, operation, etc.).
         match self.kv_store.get(key).await {
-            Ok(Some(entry)) => return Ok(Some(entry.value)),
+            Ok(Some(bytes)) => return Ok(Some(bytes.to_vec())),
             Ok(None) => {}, // Not in KV, try SQL
             Err(e) => {
                 tracing::warn!("KV read failed, falling back to SQL: {}", e);
@@ -211,11 +214,13 @@ impl HybridStateManager {
         let mut tx = sql_pool.begin().await.map_err(StorageError::Database)?;
         
         for key in keys {
-            if let Ok(Some(entry)) = kv_store.get(&key).await {
+            // NOTE: async-nats 0.46 entry() returns full Entry struct with value + revision.
+            // get() only returns Option<Bytes> without revision metadata.
+            if let Ok(Some(entry)) = kv_store.entry(&key).await {
                 sqlx::query(
-                    "INSERT INTO agent_state (key, value, version, updated_at) 
+                    "INSERT INTO agent_state (key, value, version, updated_at)
                      VALUES ($1, $2, $3, NOW())
-                     ON CONFLICT (key) 
+                     ON CONFLICT (key)
                      DO UPDATE SET value = $2, version = $3, updated_at = NOW()"
                 )
                 .bind(&key)
@@ -441,11 +446,12 @@ impl Repository<Agent> for AgentRepository {
     
     async fn find(&self, id: Uuid) -> Result<Option<Agent>, StorageError> {
         let kv_key = Self::kv_key(id);
-        
+
         // Try KV first (fast path)
+        // NOTE: async-nats 0.46 get() returns Result<Option<Bytes>, EntryError>
         match self.kv_store.get(&kv_key).await {
-            Ok(Some(entry)) => {
-                match serde_json::from_slice::<Agent>(&entry.value) {
+            Ok(Some(bytes)) => {
+                match serde_json::from_slice::<Agent>(&bytes) {
                     Ok(agent) => return Ok(Some(agent)),
                     Err(e) => {
                         tracing::warn!("Failed to deserialize agent from KV: {}", e);
@@ -641,12 +647,14 @@ impl StateLifecycleManager {
         for key in &dirty_keys {
             let kv_key = format!("{}:{}", agent_id, key);
             
-            match self.kv_store.get(&kv_key).await {
+            // NOTE: async-nats 0.46 entry() returns full Entry struct with value + revision.
+            // get() only returns Option<Bytes> without revision metadata.
+            match self.kv_store.entry(&kv_key).await {
                 Ok(Some(entry)) => {
                     match sqlx::query(
-                        "INSERT INTO agents.state (agent_id, key, value, version, updated_at) 
+                        "INSERT INTO agents.state (agent_id, key, value, version, updated_at)
                          VALUES ($1, $2, $3, $4, NOW())
-                         ON CONFLICT (agent_id, key) 
+                         ON CONFLICT (agent_id, key)
                          DO UPDATE SET value = $3, version = $4, updated_at = NOW()"
                     )
                     .bind(agent_id)

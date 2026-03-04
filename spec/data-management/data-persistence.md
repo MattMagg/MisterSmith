@@ -12,8 +12,8 @@ tags:
 
 ## Executive Summary
 
-This document defines foundational data persistence and memory management patterns using PostgreSQL 15 with SQLx 0.7
-as the primary data layer, complemented by JetStream KV for distributed state management. The architecture implements
+This document defines foundational data persistence and memory management patterns using PostgreSQL 15+ with SQLx 0.8.6
+as the primary data layer, complemented by JetStream KV (async-nats 0.46.0) for distributed state management. The architecture implements
 a dual-store approach with short-term state in NATS JetStream KV and long-term state in PostgreSQL, achieving high
 throughput while maintaining durability.
 

@@ -1,20 +1,29 @@
 # Claude Code CLI Integration Summary
 
-## 🔍 VALIDATION STATUS - FINAL AGENT VALIDATION
+## VALIDATION STATUS
 
-**Last Validated**: 2025-07-07  
-**Validator**: Agent 4, Team Eta (FINAL VALIDATION AGENT)  
-**Validation Score**: 98/100 (PRODUCTION READY)  
-**Status**: ✅ APPROVED FOR AGENT IMPLEMENTATION
-**Framework Integration**: ✅ COMPLETE CONSISTENCY VERIFIED
+**Last Validated**: 2026-03-03
+**Validator**: Agent 4B - Testing, Agent Domains & Research
+**Previous Validation**: 2025-07-07 (Agent 4, Team Eta — 98/100)
+**Current Validation Score**: 55/100 (NEEDS UPDATE — hook system and model references significantly outdated)
+**Status**: Summary reflects 2025-07 state; Claude Code CLI has expanded significantly since then
 
-### Final Assessment Results
+### Current Assessment
 
-- ✅ **Cross-Reference Validation**: All NATS subject taxonomy verified consistent across transport layer
-- ✅ **Architecture Alignment**: Perfect integration with existing supervision trees and actor patterns
-- ✅ **Technical Specifications**: Complete and implementable
-- ✅ **Resource Requirements**: Validated for 25-30 concurrent agents
-- ✅ **Integration Patterns**: Fully documented and tested
+- **Hook system**: This summary describes 5 hook types (`startup`, `pre_task`, `post_task`, `on_error`, `on_file_change`). Claude Code now has **14 lifecycle events** with different names. See `spec/core-architecture/claude-code-cli-technical-analysis.md` for the updated mapping
+- **Model reference**: `claude-3-5-sonnet-20241022` is outdated. Current frontier model is `claude-opus-4-6`
+- **Agent SDK**: Not mentioned in this summary. Anthropic released the Claude Agent SDK (Python/TypeScript) in September 2025, and a community Rust SDK exists. This is a significant new integration option
+- **Hook handler types**: This summary only mentions `command` handlers. Claude Code now supports `command`, `prompt`, and `agent` handler types
+- **Architecture and resource assessments remain valid**: The NATS subject mapping, supervision tree integration, and resource requirements (25-30 agents) are still accurate
+- **Cross-reference validation**: NATS subject taxonomy still consistent with transport layer specs
+
+### What Remains Accurate
+
+- Core architecture alignment (supervision trees, Tokio patterns)
+- Resource requirements (25-30 concurrent agents, 8-16GB memory)
+- NATS subject taxonomy for existing hook integration points
+- Component architecture (Claude CLI Controller, Hook Bridge, Task Output Parser)
+- Performance and reliability targets
 
 ## Comprehensive Research and Implementation Plan for Mister Smith Framework
 
@@ -50,20 +59,36 @@ multi-agent framework. The research confirms excellent alignment between Claude 
 - **Concurrent Coordination**: Automatic parallel task management
 - **Scalability**: Confirmed viable for 25-30 concurrent agents
 
-#### 3. Hook System (5 Hook Types)
+#### 3. Hook System (14 Lifecycle Events)
 
-- **startup**: Runs when Claude Code starts
-- **pre_task**: Runs before task execution
-- **post_task**: Runs after task completion
-- **on_error**: Runs when errors occur
-- **on_file_change**: Runs when files are modified
+> **UPDATED 2026-03**: The original summary described 5 hook types. Claude Code now has 14 lifecycle events:
+
+| Event | When It Fires | Can Block? |
+|-------|--------------|------------|
+| `SessionStart` | Session begins, resumes, or context compacted | No |
+| `SessionEnd` | Session ends | No |
+| `UserPromptSubmit` | User submits a prompt | Yes |
+| `PreToolUse` | Before a tool call executes | Yes |
+| `PermissionRequest` | Permission dialog appears | Yes |
+| `PostToolUse` | After a tool call succeeds | No |
+| `PostToolUseFailure` | After a tool call fails | No |
+| `Notification` | Claude sends a notification | No |
+| `SubagentStart` | A subagent is spawned | No |
+| `SubagentStop` | A subagent finishes | Yes |
+| `Stop` | Claude finishes responding | Yes |
+| `TeammateIdle` | Agent team teammate about to go idle | Yes |
+| `TaskCompleted` | Task marked as completed | Yes |
+| `PreCompact` | Before context compaction | No |
 
 #### 4. Hook Integration Capabilities
 
 - **JSON Input/Output**: Structured data exchange via stdin/stdout
 - **Decision Control**: Hooks can approve, block, or modify tool execution
-- **Tool Matching**: Target specific tools or MCP tools
+- **Tool Matching**: Target specific tools or MCP tools via `matcher` field
 - **NATS Integration**: Hook output can be published to NATS subjects
+- **Handler Types**: `command` (shell command), `prompt` (inject into context), `agent` (spawn separate Claude agent)
+- **Async Execution**: Hooks support async execution (added January 2026)
+- **Environment Persistence**: `SessionStart` hooks can persist env vars via `CLAUDE_ENV_FILE`
 
 #### 5. MCP Integration
 
@@ -140,13 +165,21 @@ ctx.{gid}.file_change        # File change notifications
 
 #### 1. Hook System Integration
 
+> **UPDATED 2026-03**: Event names updated to reflect current Claude Code hook event names.
+
 ```text
-Claude Code Hook → Hook Bridge → NATS Subject → Framework Component
-startup          → control.startup
-pre_task         → agent.{id}.pre
-post_task        → agent.{id}.post
-on_error         → agent.{id}.error
-on_file_change   → ctx.{gid}.file_change
+Claude Code Hook Event → Hook Bridge → NATS Subject → Framework Component
+SessionStart           → control.startup
+SessionEnd             → control.shutdown
+PreToolUse             → agent.{id}.pre
+PostToolUse            → agent.{id}.post
+PostToolUseFailure     → agent.{id}.error
+SubagentStart          → agent.{id}.subagent.start
+SubagentStop           → agent.{id}.subagent.stop
+TaskCompleted          → agent.{id}.task_completed
+Stop                   → agent.{id}.stop
+TeammateIdle           → agent.{id}.teammate_idle
+ConfigChange           → control.config_change
 ```
 
 #### 2. Parallel Execution Integration
@@ -227,7 +260,7 @@ Spawn Request → Resource Validation → Agent Pool → Claude CLI Process
 ```toml
 [claude_cli]
 max_concurrent_agents = 25
-default_model = "claude-3-5-sonnet-20241022"
+default_model = "claude-opus-4-6"  # Updated from claude-3-5-sonnet-20241022
 api_timeout = 300
 hook_timeout = 60
 output_format = "stream-json"
@@ -240,14 +273,16 @@ hook_execution_timeout = 30
 
 ### Hook Message Format
 
+> **UPDATED 2026-03**: Claude Code hook input JSON structure uses `hook_event_name`, not `hook_type`.
+
 ```json
 {
-  "hook_type": "pre_task",
-  "agent_id": "agent_001",
+  "session_id": "abc-123",
+  "cwd": "/path/to/project",
+  "hook_event_name": "PreToolUse",
   "tool_name": "Edit",
-  "tool_input": {...},
-  "session_info": {...},
-  "timestamp": "2025-01-03T10:00:00Z"
+  "tool_input": {"file_path": "src/main.rs", "old_string": "...", "new_string": "..."},
+  "tool_use_id": "toolu_abc123"
 }
 ```
 
@@ -307,40 +342,34 @@ hook_execution_timeout = 30
 
 ---
 
-## Final Agent Validation Report
+## Validation History
 
-### Agent 4 Team Eta - Complete Framework Integration Assessment
+### Agent 4 Team Eta - Original Validation (2025-07-07)
 
-As the final validation agent in the 60-agent MS Framework Documentation Optimization operation, I have performed comprehensive cross-reference validation across the entire framework ecosystem.
+The original 60-agent validation operation assessed this summary at 98/100 (PRODUCTION READY). That assessment was accurate at the time, but the Claude Code CLI has expanded significantly since then.
 
-#### Framework-Wide Consistency Verification ✅
+### Agent 4B - Re-validation (2026-03-03)
 
-**NATS Subject Taxonomy Validation**:
+Re-validation identified significant drift between this summary and the current Claude Code CLI state:
 
-- ✅ `control.startup` - Verified in transport-layer-specifications.md line 56
-- ✅ `agent.{id}.pre` - Verified in transport-layer-specifications.md line 57  
-- ✅ `agent.{id}.hook_response` - Verified in transport-layer-specifications.md line 60
-- ✅ `ctx.{gid}.file_change` - Verified in transport-layer-specifications.md line 61
+**What Changed Since Original Validation**:
 
-**Architecture Integration Points**:
+- Claude Code hook events expanded from 5 to 14 lifecycle events
+- Hook handler types expanded from `command` only to `command`, `prompt`, and `agent`
+- Claude Agent SDK released (Python/TypeScript official, community Rust SDK)
+- Model naming updated (claude-opus-4-6 is current frontier model)
+- New hook events for agent teams: `SubagentStart`, `SubagentStop`, `TeammateIdle`, `TaskCompleted`
 
-- ✅ Core architecture supervision trees align with hook system patterns
-- ✅ Tokio runtime specifications support parallel agent execution
-- ✅ Agent lifecycle management compatible with Claude CLI session management
-- ✅ Resource allocation patterns support 25-30 concurrent agents
+**What Remains Valid**:
 
-#### Critical Dependencies Verified ✅
+- NATS subject taxonomy (validated in transport-layer-specifications.md)
+- Architecture alignment (supervision trees, Tokio patterns)
+- Resource requirements (25-30 concurrent agents feasible)
+- Component architecture (Controller, Hook Bridge, Task Parser)
 
-**Agent Domain Specialization**: 15 specialized agent domains identified and validated
-**Security Framework**: mTLS and authentication patterns ready for CLI integration
-**Data Management**: PostgreSQL + JetStream KV hybrid storage ready
-**Transport Layer**: NATS messaging with full hook integration support
-
-#### Implementation Readiness Assessment
-
-**Technical Readiness Score**: 98/100 (PRODUCTION READY)
-**Critical Gaps**: 0 blocking issues identified
-**Framework Consistency**: 100% validated across all documentation
+**Updated Technical Readiness Score**: 55/100 (NEEDS UPDATE before implementation)
+**Critical Gaps**: Hook system implementation code is outdated; Agent SDK option not evaluated
+**Framework Consistency**: Core architecture specs updated by Agent 1C; this research summary lags behind
 
 ## Conclusion
 
@@ -353,21 +382,9 @@ The framework's existing hook integration points demonstrate it was designed wit
 - Excellent feature alignment
 - Scalable to 25-30 concurrent agents
 - Compatible with existing patterns
-- **Perfect framework consistency validated by final agent**
 
-**Implementation Readiness**: The framework is ready for Claude Code CLI integration with the provided technical specifications and implementation roadmap.
-
-This integration will provide native Claude Code CLI capabilities while maintaining the integrity and performance of the existing Mister Smith multi-agent framework.
-
-### Final Agent Certification
-
-**Agent 4, Team Eta Certification**: ✅ CLAUDE CODE CLI INTEGRATION SUMMARY OPTIMIZED AND VALIDATED
-
-**Framework Status**: ✅ READY FOR AGENT IMPLEMENTATION  
-**Integration Status**: ✅ COMPLETE TECHNICAL SPECIFICATIONS APPROVED  
-**Cross-Reference Status**: ✅ PERFECT CONSISTENCY ACROSS ALL FRAMEWORK DOCUMENTATION
+**Implementation Readiness**: Before implementation, the hook system code in this document and the implementation roadmap must be updated to reflect the current 14-event Claude Code hook system. The Claude Agent SDK should also be evaluated as an alternative to raw CLI subprocess management. See the updated core specs (`spec/core-architecture/claude-cli-integration.md` and `spec/core-architecture/claude-code-cli-technical-analysis.md`) for the canonical, current-state integration architecture.
 
 ---
 
-**Final Operation Status**: Agent 4 Team Eta - Claude Code CLI Integration Final Validation Complete
-**60-Agent Operation**: ✅ SUCCESSFULLY CONCLUDED WITH FRAMEWORK OPTIMIZATION EXCELLENCE
+**Re-validation Status**: Agent 4B - Research files flagged for hook system and SDK updates. Core architecture specs are authoritative for current Claude Code integration patterns.

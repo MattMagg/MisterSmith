@@ -1267,56 +1267,60 @@ pub struct CleanupPolicy {
 ### Environment Setup Procedures
 
 ```rust
-use testcontainers::{clients::Cli, images::generic::GenericImage, Container};
+// NOTE: testcontainers 0.23+ removed `clients::Cli` in favor of `runners::AsyncRunner`.
+// The `GenericImage` API uses builder-style `.with_exposed_port()` and `.with_env_var()`.
+// Containers are started with `.start().await` instead of `docker.run()`.
+use testcontainers::{runners::AsyncRunner, GenericImage, ContainerAsync};
 
 pub struct TestEnvironmentManager {
-    docker: Cli,
-    containers: HashMap<String, Container<'static, GenericImage>>,
+    containers: HashMap<String, ContainerAsync<GenericImage>>,
     configurations: HashMap<String, TestEnvironmentConfig>,
 }
 
 impl TestEnvironmentManager {
     pub fn new() -> Self {
         Self {
-            docker: Cli::default(),
             containers: HashMap::new(),
             configurations: HashMap::new(),
         }
     }
-    
-    pub async fn setup_environment(&mut self, config: TestEnvironmentConfig) 
+
+    pub async fn setup_environment(&mut self, config: TestEnvironmentConfig)
         -> Result<TestEnvironment, SetupError> {
-        
+
         let environment_id = Uuid::new_v4().to_string();
-        
+
         // Setup NATS server if enabled
         if config.services.nats_server.enabled {
-            let nats_container = self.docker.run(
-                GenericImage::new("nats", "latest")
-                    .with_exposed_port(config.services.nats_server.port)
-                    .with_env_var("NATS_CLUSTER_NAME", &config.services.nats_server.cluster_name)
-            );
+            let nats_container = GenericImage::new("nats", "latest")
+                .with_exposed_port(config.services.nats_server.port.into())
+                .with_env_var("NATS_CLUSTER_NAME", &config.services.nats_server.cluster_name)
+                .start()
+                .await
+                .map_err(|e| SetupError::ContainerStart(e.to_string()))?;
             self.containers.insert("nats".to_string(), nats_container);
         }
-        
+
         // Setup PostgreSQL if enabled
         if config.databases.postgres.enabled {
-            let postgres_container = self.docker.run(
-                GenericImage::new("postgres", "13")
-                    .with_exposed_port(config.databases.postgres.port)
-                    .with_env_var("POSTGRES_DB", &config.databases.postgres.database)
-                    .with_env_var("POSTGRES_USER", &config.databases.postgres.username)
-                    .with_env_var("POSTGRES_PASSWORD", &config.databases.postgres.password)
-            );
+            let postgres_container = GenericImage::new("postgres", "16")
+                .with_exposed_port(config.databases.postgres.port.into())
+                .with_env_var("POSTGRES_DB", &config.databases.postgres.database)
+                .with_env_var("POSTGRES_USER", &config.databases.postgres.username)
+                .with_env_var("POSTGRES_PASSWORD", &config.databases.postgres.password)
+                .start()
+                .await
+                .map_err(|e| SetupError::ContainerStart(e.to_string()))?;
             self.containers.insert("postgres".to_string(), postgres_container);
         }
-        
+
         // Setup Redis if enabled
         if config.databases.redis.enabled {
-            let redis_container = self.docker.run(
-                GenericImage::new("redis", "6-alpine")
-                    .with_exposed_port(6379)
-            );
+            let redis_container = GenericImage::new("redis", "7-alpine")
+                .with_exposed_port(6379.into())
+                .start()
+                .await
+                .map_err(|e| SetupError::ContainerStart(e.to_string()))?;
             self.containers.insert("redis".to_string(), redis_container);
         }
         
@@ -1461,16 +1465,15 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
+
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: rustfmt, clippy
           
       - name: Cache Dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -1488,7 +1491,7 @@ jobs:
           grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o coverage.lcov
           
       - name: Upload Coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           file: coverage.lcov
 
@@ -1521,15 +1524,13 @@ jobs:
           - 6379:6379
           
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
+
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
           
       - name: Cache Dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -1552,15 +1553,13 @@ jobs:
     name: Performance Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
+
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
           
       - name: Cache Dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -1583,12 +1582,10 @@ jobs:
     name: Security Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
+
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
           
       - name: Security Audit
         run: |
@@ -1607,12 +1604,10 @@ jobs:
     name: End-to-End Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
+
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
           
       - name: Install Docker Compose
         run: |
@@ -1635,7 +1630,7 @@ jobs:
           
       - name: Upload Test Artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-artifacts
           path: |

@@ -8,6 +8,9 @@ tags:
 
 ## Agent Operations Architecture
 
+<!-- Last validated: 2026-03-03 by Agent 2A against VERSION_REFERENCE.md and type-definitions.md -->
+<!-- RestartStrategy renamed to RestartPolicy to match type-definitions.md canonical naming -->
+
 ## Discovery, Workflow, Error Handling & Metrics
 
 > **📋 TECHNICAL SPECIFICATION: AGENT OPERATIONS**
@@ -19,7 +22,8 @@ tags:
 > - See `agent-lifecycle.md` for basic agent architecture and supervision patterns (sections 1-3)
 > - See `agent-communication.md` for message passing and coordination patterns (sections 4-5)
 > - See `agent-integration.md` for resource management and integration patterns (sections 10-15)
-> - See `../../internal-operations/framework-dev-docs/tech-framework.md` for authoritative technology stack specifications
+> - See [VERSION_REFERENCE.md](../../VERSION_REFERENCE.md) for authoritative technology stack versions
+> <!-- Note: internal-operations/ was archived — tech-framework.md is now in archive/ -->
 >
 > **Navigation**:
 >
@@ -312,13 +316,13 @@ pub struct AgentError {
 
 pub struct ErrorHandler {
     supervisor_tx: mpsc::UnboundedSender<SupervisionEvent>,
-    restart_strategy: RestartStrategy,
+    restart_policy: RestartPolicy,
 }
 
 impl ErrorHandler {
     pub fn new(
         supervisor_tx: mpsc::UnboundedSender<SupervisionEvent>,
-        restart_strategy: RestartStrategy,
+        restart_policy: RestartPolicy,
     ) -> Self {
         Self {
             supervisor_tx,
@@ -352,7 +356,7 @@ impl ErrorHandler {
     async fn restart_agent(&self, agent: &Agent) -> Result<(), HandlerError> {
         let restart_event = SupervisionEvent::RestartAgent {
             agent_id: agent.id.clone(),
-            strategy: self.restart_strategy.clone(),
+            strategy: self.restart_policy.clone(),
         };
         
         self.supervisor_tx.send(restart_event)
@@ -824,7 +828,7 @@ Operational patterns coordinate with supervision hierarchies through:
 // Supervision events sent from operations to orchestration layer
 pub enum SupervisionEvent {
     AgentUnhealthy(AgentId),
-    RestartAgent { agent_id: AgentId, strategy: RestartStrategy },
+    RestartAgent { agent_id: AgentId, policy: RestartPolicy },
     PauseAgent(AgentId),
     ResumeAgent(AgentId),
     TerminateAgent(AgentId),

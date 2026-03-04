@@ -46,20 +46,21 @@ This module provides concrete implementations for runtime configuration and life
 name = "mister-smith-core"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.88"
 
 [dependencies]
-tokio = { version = "1.38", features = ["full"] }
-futures = "0.3"
-async-trait = "0.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "1.0"
-uuid = { version = "1.0", features = ["v4", "serde"] }
-dashmap = "6.0"
+tokio = { version = "1.49.0", features = ["full"] }
+futures = "0.3.32"
+async-trait = "0.1.83"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+thiserror = "1.0.69"
+uuid = { version = "1.11.0", features = ["v4", "serde"] }
+dashmap = "6.1.0"
 num_cpus = "1.0"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-metrics = "0.23"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.22"
+metrics = "0.24.3"
 ```
 
 ## 🔍 VALIDATION STATUS
@@ -441,6 +442,7 @@ impl RuntimeManager {
 ```rust
 // src/core/runtime/metrics.rs
 use std::sync::Arc;
+// metrics 0.24.x: macros return metric handles; call .set() / .increment() / .absolute() on them
 use metrics::{counter, gauge, histogram};
 use tokio::runtime::RuntimeMetrics;
 
@@ -456,33 +458,38 @@ impl RuntimePerformanceMonitor {
     
     pub fn collect_metrics(&self) {
         let metrics = self.runtime_handle.metrics();
-        
+
         // Worker thread metrics
-        gauge!("runtime.workers.count", metrics.num_workers() as f64);
-        gauge!("runtime.workers.blocking_count", metrics.num_blocking_threads() as f64);
-        gauge!("runtime.workers.idle_count", metrics.num_idle_blocking_threads() as f64);
-        
-        // Task metrics
-        counter!("runtime.tasks.spawned_total", metrics.spawned_tasks_count());
-        gauge!("runtime.tasks.active", metrics.active_tasks_count() as f64);
-        
+        gauge!("runtime.workers.count").set(metrics.num_workers() as f64);
+        gauge!("runtime.workers.blocking_count").set(metrics.num_blocking_threads() as f64);
+        gauge!("runtime.workers.idle_count").set(metrics.num_idle_blocking_threads() as f64);
+
+        // Task metrics (Tokio 1.49 API)
+        // Note: spawned_tasks_count() removed; use num_alive_tasks() for current alive count
+        gauge!("runtime.tasks.alive").set(metrics.num_alive_tasks() as f64);
+
         // Queue metrics
-        gauge!("runtime.queue.local_size", metrics.local_queue_capacity() as f64);
-        gauge!("runtime.queue.global_size", metrics.global_queue_depth() as f64);
-        gauge!("runtime.queue.injection_size", metrics.injection_queue_depth() as f64);
-        
+        // Note: injection_queue_depth() renamed to global_queue_depth() in Tokio 1.49
+        gauge!("runtime.queue.global_size").set(metrics.global_queue_depth() as f64);
+
+        // Per-worker queue and scheduling metrics
+        for worker in 0..metrics.num_workers() {
+            let labels = [("worker", format!("{}", worker))];
+            gauge!("runtime.queue.worker_local_size", &labels)
+                .set(metrics.worker_local_queue_depth(worker) as f64);
+            counter!("runtime.worker.park_count", &labels)
+                .absolute(metrics.worker_park_count(worker));
+            counter!("runtime.worker.noop_count", &labels)
+                .absolute(metrics.worker_noop_count(worker));
+            counter!("runtime.worker.steal_count", &labels)
+                .absolute(metrics.worker_steal_count(worker));
+        }
+
         // Blocking metrics
-        histogram!("runtime.blocking.queue_depth", metrics.blocking_queue_depth() as f64);
-        
-        // Park/unpark metrics
-        counter!("runtime.park.count", metrics.park_count());
-        counter!("runtime.park.no_work_count", metrics.noop_count());
-        
-        // Steal operations
-        counter!("runtime.steal.operations", metrics.steal_operations());
-        
+        gauge!("runtime.blocking.queue_depth").set(metrics.blocking_queue_depth() as f64);
+
         // Budget metrics
-        counter!("runtime.budget.forced_yield", metrics.budget_forced_yield_count());
+        counter!("runtime.budget.forced_yield").absolute(metrics.budget_forced_yield_count());
     }
 }
 ```
@@ -556,7 +563,7 @@ impl RuntimeTuning {
                 
                 // Adaptive logic based on metrics
                 let metrics = runtime_handle.metrics();
-                let queue_depth = metrics.injection_queue_depth();
+                let queue_depth = metrics.global_queue_depth();
                 
                 if queue_depth > 1000 {
                     tracing::warn!("High queue depth detected: {}", queue_depth);

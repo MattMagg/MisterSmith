@@ -17,10 +17,10 @@ This document provides complete protocol implementations and specifications for 
 
 **Implemented Protocols**:
 
-- **NATS** (async-nats 0.34) - High-throughput messaging, pub/sub, JetStream persistence
-- **gRPC** (Tonic 0.11) - Type-safe RPC services, streaming, health checks
+- **NATS** (async-nats 0.46) - High-throughput messaging, pub/sub, JetStream persistence
+- **gRPC** (Tonic 0.14) - Type-safe RPC services, streaming, health checks
 - **HTTP** (Axum 0.8) - RESTful APIs, WebSocket real-time communication
-- **Tokio 1.38** - Async runtime foundation for all protocols
+- **Tokio 1.49** - Async runtime foundation for all protocols
 
 **Document Scope**: Complete protocol specifications, configurations, and schemas. For foundational patterns, see [transport-core.md](./transport-core.md).
 

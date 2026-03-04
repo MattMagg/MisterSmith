@@ -64,8 +64,11 @@ The Supervision Tree Architecture defines hierarchical fault-tolerance patterns 
 ## Implementation Notes
 
 - Language: Pseudocode (requires Rust translation)
-- Async Runtime: Tokio (when implemented)
+- Async Runtime: Tokio 1.49+ (when implemented)
 - Key Dependencies: Arc, Mutex, RwLock for thread safety
+- Shutdown Coordination: Prefer `tokio_util::sync::CancellationToken` over `AtomicBool` for cooperative cancellation (composable, cloneable, supports hierarchical cancellation trees)
+- Async Traits: Use `#[async_trait]` crate for `dyn Trait` compatibility; native `async fn` in traits (stable since Rust 1.75) lacks `Send` bounds required for `tokio::spawn`
+- Task Supervision: Use `tokio::task::JoinSet` for managing groups of spawned tasks with structured concurrency
 
 ## Core Concepts
 
@@ -121,14 +124,18 @@ struct SupervisionTree {
 }
 
 // Supervisor trait definition with async methods
-trait Supervisor {
-    type Child;
-    
+// NOTE: Uses #[async_trait] because dyn Supervisor requires object safety,
+// and native async fn in traits does not support dyn dispatch or Send bounds.
+// See: https://blog.rust-lang.org/2023/12/21/async-fn-rpit-in-traits.html
+#[async_trait]
+trait Supervisor: Send + Sync {
+    type Child: Send + Sync;
+
     async fn supervise(&self, children: Vec<Self::Child>) -> SupervisionResult;
-    fn supervision_strategy() -> SupervisionStrategy;
-    fn restart_policy() -> RestartPolicy;
-    fn escalation_policy() -> EscalationPolicy;
-    
+    fn supervision_strategy(&self) -> SupervisionStrategy;
+    fn restart_policy(&self) -> RestartPolicy;
+    fn escalation_policy(&self) -> EscalationPolicy;
+
     // Hub-and-Spoke pattern: central routing logic
     async fn route_task(&self, task: Task) -> AgentId {
         // Central routing decision based on task type
@@ -300,8 +307,9 @@ struct CircuitBreaker {
 impl CircuitBreaker {
     // Execute operation with circuit breaker protection
     async fn call<F, R>(&self, operation: F) -> Result<R>
-    where 
-        F: Future<Output = Result<R>> 
+    where
+        F: Future<Output = Result<R>> + Send,
+        R: Send,
     {
         let state_guard = self.state.lock().await;
         
@@ -643,9 +651,11 @@ impl Bulkhead {
     {
         // Acquire permit with timeout to prevent blocking
         let permit = timeout(
-            self.max_wait_duration, 
+            self.max_wait_duration,
             self.semaphore.acquire()
-        ).await??;
+        ).await
+            .map_err(|_| BulkheadError::WaitTimeout)?
+            .map_err(|_| BulkheadError::SemaphoreClosed)?;
         
         // Execute in isolated context
         let result = if let Some(pool) = &self.thread_pool {
@@ -683,9 +693,11 @@ struct RetryBudget {
 
 impl RetryPolicy {
     // Execute operation with intelligent retry logic
-    async fn execute_with_retry<F, R>(&self, operation: F) -> Result<R>
-    where 
-        F: Fn() -> Future<Output = Result<R>> + Clone 
+    async fn execute_with_retry<F, Fut, R>(&self, operation: F) -> Result<R>
+    where
+        F: Fn() -> Fut + Send + Sync,
+        Fut: Future<Output = Result<R>> + Send,
+        R: Send,
     {
         let mut attempt = 0;
         
@@ -858,7 +870,7 @@ impl BackpressureController {
         match self.flow_control_policy.evaluate(pressure) {
             FlowDecision::Accept => {
                 // System has capacity
-                self.input_queue.lock().await.push(task)??;
+                self.input_queue.lock().await.push(task)?;
                 Ok(())
             },
             FlowDecision::Delay(duration) => {
@@ -873,7 +885,7 @@ impl BackpressureController {
             FlowDecision::Shed(priority_threshold) => {
                 // Accept only high priority tasks
                 if task.priority >= priority_threshold {
-                    self.input_queue.lock().await.push(task)??;
+                    self.input_queue.lock().await.push(task)?;
                     Ok(())
                 } else {
                     Err(BackpressureError::LoadShedding)
@@ -958,10 +970,11 @@ impl Supervisor for CustomAgentSupervisor {
 ```rust
 // Initialize supervision system with configuration
 let supervision_tree = SupervisionTree::new();
-let failure_detector = FailureDetector::new(
+let failure_detector = FailureDetector {
     heartbeat_interval: Duration::from_secs(5),
-    failure_threshold: 3
-);
+    failure_threshold: 3,
+    ..Default::default()
+};
 
 // Start supervision and monitoring
 supervision_tree.start().await?;
@@ -995,11 +1008,12 @@ supervision_tree.set_restart_policies(policies);
 
 ```rust
 // Circuit breaker protects external service calls
-let circuit_breaker = CircuitBreaker::new(
+let circuit_breaker = CircuitBreaker {
     failure_threshold: 5,
     timeout: Duration::from_secs(30),
-    half_open_max_calls: 3
-);
+    half_open_max_calls: 3,
+    ..Default::default()
+};
 
 // Execute with circuit breaker protection
 let result = circuit_breaker.call(async {

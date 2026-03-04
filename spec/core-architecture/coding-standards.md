@@ -354,17 +354,26 @@ pub enum ComponentState {
 
 ### 5.1 Async Trait Usage
 
-Always use `#[async_trait]` for traits with async methods:
+Use `#[async_trait]` for traits with async methods that require dynamic dispatch
+(`dyn Trait`, `Box<dyn Trait>`, `Arc<dyn Trait>`):
+
+> **NOTE (validated 2026-03-03):** Rust 1.75+ supports native `async fn` in traits,
+> but this does **not** work with `dyn Trait` (object safety). Since the framework
+> extensively uses dynamic dispatch (e.g., `Box<dyn Agent>`, `Arc<dyn Transport>`),
+> `#[async_trait]` remains required for all traits used as trait objects.
+> For traits used only with static dispatch (generics, `impl Trait`), native
+> `async fn` in traits is preferred — no `#[async_trait]` needed.
 
 ```rust
 use async_trait::async_trait;
 
+// Required: this trait is used as `dyn AsyncProcessor` / `Box<dyn AsyncProcessor>`
 #[async_trait]
 pub trait AsyncProcessor: Send + Sync + 'static {
     type Input: Send + 'static;
     type Output: Send + 'static;
     type Error: Send + std::error::Error + 'static;
-    
+
     async fn process(&self, input: Self::Input) -> Result<Self::Output, Self::Error>;
 }
 ```
@@ -917,6 +926,9 @@ use serde_json::{Value, json, from_str, to_string};
 
 // Error handling
 use thiserror::Error;
+// NOTE: anyhow is shown here for illustration only. The framework uses thiserror
+// for typed error hierarchies (see integration-patterns.md). Use anyhow sparingly,
+// if at all — prefer typed errors via thiserror throughout production code.
 use anyhow::{Context, Result as AnyhowResult};
 ```
 
@@ -1149,7 +1161,7 @@ mod mocks {
 
 ### 10.2 Async Patterns Checklist
 
-- [ ] `#[async_trait]` is used for trait objects with async methods
+- [ ] `#[async_trait]` is used for trait objects with async methods (still required for `dyn Trait`; native async fn in traits only works with static dispatch)
 - [ ] Timeout handling is explicit and appropriate
 - [ ] No blocking operations in async context
 - [ ] Proper use of `tokio::spawn` vs direct `.await`

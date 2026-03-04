@@ -9,7 +9,7 @@ It outlines the key components, implementation patterns, and operational procedu
 
 ### 1. Process Management Specifications (NEW)
 
-**File**: `/ms-framework-docs/operations/process-management-specifications.md`
+**File**: `/spec/operations/process-management-specifications.md`
 
 **Comprehensive coverage including**:
 
@@ -51,7 +51,7 @@ It outlines the key components, implementation patterns, and operational procedu
 
 ### 2. Enhanced Observability Framework
 
-**File**: `/ms-framework-docs/operations/observability-monitoring-framework.md`
+**File**: `/spec/operations/observability-monitoring-framework.md`
 
 **Completed network monitoring implementation**:
 

@@ -8,6 +8,9 @@ tags:
 
 ## Agent Integration Architecture
 
+<!-- Last validated: 2026-03-03 by Agent 2A against VERSION_REFERENCE.md -->
+<!-- async-nats publish() calls updated to use Bytes type (0.46 API) -->
+
 ## Resource Management, Tool-Bus, Extensions & Data Persistence
 
 > **Technical Specifications**: Agent integration patterns with persistence error handling integration
@@ -18,7 +21,8 @@ tags:
 > - See `agent-lifecycle.md` for basic agent architecture and supervision patterns (sections 1-3)
 > - See `agent-communication.md` for message passing and coordination patterns (sections 4-5)
 > - See `agent-operations.md` for discovery, workflow, and error handling patterns (sections 6-9)
-> - See `../../internal-operations/framework-dev-docs/tech-framework.md` for authoritative technology stack specifications
+> - See [VERSION_REFERENCE.md](../../VERSION_REFERENCE.md) for authoritative technology stack versions
+> <!-- Note: internal-operations/ was archived — tech-framework.md is now in archive/ -->
 >
 > **Navigation**:
 >
@@ -254,11 +258,13 @@ impl ClaudeTaskOutputParser {
     }
 
     async fn publish_with_retry(&self, subject: &str, payload: Vec<u8>) -> Result<(), RoutingError> {
+        use bytes::Bytes;
         const MAX_RETRIES: usize = 3;
         const BASE_DELAY: Duration = Duration::from_millis(100);
-        
+
         for attempt in 0..MAX_RETRIES {
-            match self.nats_client.publish(subject, payload.clone()).await {
+            // async-nats 0.46: publish() takes Bytes, not Vec<u8>
+            match self.nats_client.publish(subject, Bytes::from(payload.clone())).await {
                 Ok(_) => return Ok(()),
                 Err(e) if attempt == MAX_RETRIES - 1 => {
                     return Err(RoutingError::PublishFailed(e.to_string()));
@@ -528,8 +534,10 @@ impl HookShim {
         let response: HookResponse = serde_json::from_slice(&output.stdout)?;
 
         // Publish to NATS for orchestrator processing
+        // async-nats 0.46: publish() takes Bytes, not Vec<u8>
         let subject = format!("agent.{}.hook_response", self.agent_id);
-        self.nats_client.publish(subject, serde_json::to_vec(&response)?).await?;
+        let payload_bytes = bytes::Bytes::from(serde_json::to_vec(&response)?);
+        self.nats_client.publish(subject, payload_bytes).await?;
 
         Ok(response)
     }
@@ -2033,7 +2041,7 @@ This document provides comprehensive agent integration patterns including:
 - **With agent-lifecycle.md**: Uses basic agent types, supervision patterns, and state management (sections 1-3)
 - **With agent-communication.md**: Extends message passing and task distribution with resource management (sections 4-5)
 - **With agent-operations.md**: Builds on discovery, workflow, and error handling patterns (sections 6-9)
-- **With tech-framework.md**: Implements the specified technology stack and runtime requirements
+- **With [dependency-specifications.md](../core-architecture/dependency-specifications.md)**: Implements the specified technology stack and runtime requirements
 - **Cross-Module Dependencies**:
   - **Core Architecture**: Tokio runtime and supervision trees
   - **Transport Layer**: NATS messaging for Claude-CLI integration and hook systems

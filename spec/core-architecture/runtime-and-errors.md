@@ -45,20 +45,21 @@
 name = "mister-smith-core"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.88"
 
 [dependencies]
-tokio = { version = "1.45.1", features = ["full"] }
-futures = "0.3"
-async-trait = "0.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "1.0"
-uuid = { version = "1.0", features = ["v4", "serde"] }
-dashmap = "6.0"
+tokio = { version = "1.49.0", features = ["full"] }
+futures = "0.3.32"
+async-trait = "0.1.83"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+thiserror = "1.0.69"   # Staying on 1.x per spec decision
+uuid = { version = "1.11.0", features = ["v4", "serde"] }
+dashmap = "6.1.0"
 num_cpus = "1.0"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-metrics = "0.23"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.22"
+metrics = "0.24.3"
 ```
 
 ## Core Error Types

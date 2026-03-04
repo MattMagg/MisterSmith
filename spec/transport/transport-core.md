@@ -10,7 +10,7 @@ permalink: ms-framework/transport/transport-core
 
 > **Modularization Note**: This document contains core transport abstractions extracted from the complete transport layer specifications.
 > For protocol-specific implementations, see companion files for NATS, gRPC, and HTTP specifics.
-> **Technology Stack Reference**: See `/Users/mac-main/Mister-Smith/MisterSmith/ms-framework-docs/core-architecture/dependency-specifications.md` for authoritative dependency specifications
+> **Technology Stack Reference**: See `../core-architecture/dependency-specifications.md` for authoritative dependency specifications
 
 ## Overview
 
@@ -19,10 +19,10 @@ Focus is on core abstractions, connection management, error handling, and securi
 
 **Core Technologies**:
 
-- **async-nats 0.34** - High-performance messaging and pub/sub
-- **Tonic 0.11** - gRPC services and streaming
-- **Axum 0.8** - HTTP/WebSocket API endpoints  
-- **Tokio 1.38** - Async runtime foundation
+- **async-nats 0.46** - High-performance messaging and pub/sub
+- **Tonic 0.14** - gRPC services and streaming
+- **Axum 0.8** - HTTP/WebSocket API endpoints
+- **Tokio 1.49** - Async runtime foundation
 
 **Document Scope**: Core transport abstractions and patterns. For protocol-specific implementations, see [transport-layer-specifications.md](./transport-layer-specifications.md).
 

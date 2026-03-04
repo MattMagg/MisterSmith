@@ -338,6 +338,10 @@ where
             secondary,
             message_translator: MessageTranslator::new(),
             routing_table: RoutingTable::new(),
+            // Data flow integrity components (Agent 12)
+            flow_validator: BridgeFlowValidator::new(),
+            transformation_tracker: TransformationTracker::new(),
+            consistency_checker: ConsistencyChecker::new(),
         }
     }
     
@@ -431,6 +435,13 @@ where
 }
 
 // NATS Transport Implementation
+// NOTE: Targets async-nats 0.46.0. Key API changes from the spec's original 0.37.0:
+// - publish() is now async and applies backpressure (since v0.43.0)
+// - JetStream, KV, Object Store are feature-gated (since v0.46.0):
+//   async-nats = { version = "0.46", features = ["jetstream", "kv", "object-store"] }
+// - Message types were reorganized in v0.44.0
+// - MSRV raised to 1.88.0
+// See VERSION_REFERENCE.md for full migration notes.
 pub struct NatsTransport {
     client: async_nats::Client,
     jetstream: async_nats::jetstream::Context,

@@ -12,12 +12,12 @@
 
 ---
 
-## 🔍 VALIDATION STATUS
+## VALIDATION STATUS
 
-**Last Validated**: 2025-07-07  
-**Validator**: Agent 1 - Team Alpha  
-**Component**: Implementation Guidelines and Patterns  
-**Status**: Complete Guidelines  
+**Last Validated**: 2026-03-03
+**Validator**: Agent 1C - Supervision & Implementation
+**Component**: Implementation Guidelines and Patterns
+**Status**: Complete Guidelines — dependency versions updated, Rust idiom corrections applied  
 
 ### Key Content
 
@@ -733,21 +733,32 @@ src/
 
 ### Key Dependencies
 
+<!-- Last verified: 2026-03-03 against crates.io. Aligned with system-architecture.md canonical versions. -->
 ```toml
 [dependencies]
-tokio = { version = "1.45.1", features = ["full"] }
-futures = "0.3"
-async-trait = "0.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "1.0"
-uuid = { version = "1.0", features = ["v4", "serde"] }
-dashmap = "6.0"
+tokio = { version = "1.49.0", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }  # CancellationToken for graceful shutdown
+futures = "0.3.32"
+async-trait = "0.1.83"                                 # Still needed for dyn Trait + Send bounds
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+thiserror = "1.0.69"                                   # Staying on 1.x per spec decision (2.0 available)
+uuid = { version = "1.11.0", features = ["v4", "serde"] }
+dashmap = "6.1.0"
 num_cpus = "1.0"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-metrics = "0.23"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.22"
+metrics = "0.24.3"
 ```
+
+> **MSRV**: 1.88.0 (driven by async-nats 0.46.0). See [dependency-specifications.md](dependency-specifications.md) for full version matrix.
+
+**Version notes:**
+- **tokio**: 1.49.0 is latest stable (as of 2026-03). Includes `JoinSet::join_all()` and improved cancellation.
+- **tokio-util**: Provides `CancellationToken` for cooperative, hierarchical shutdown (preferred over `AtomicBool`).
+- **thiserror**: Staying on 1.x per spec decision. Version 2.0 is available with `#[no_std]` support but is a semver-major bump.
+- **async-trait**: Still required for traits used as `dyn Trait` objects with `Send` bounds. Native `async fn` in traits (Rust 1.75+) does not yet support bounding the returned future as `Send`, which is required for `tokio::spawn`.
+- **metrics**: Updated from 0.23 to 0.24.3. The facade API is stable.
 
 ### Usage Example
 

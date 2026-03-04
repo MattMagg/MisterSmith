@@ -86,7 +86,7 @@ pub struct MonitoringConfig {
     pub metrics_export_interval: Duration,
     
     /// Log level (trace, debug, info, warn, error)
-    #[validate(regex = "^(trace|debug|info|warn|error)$")]
+    #[validate(custom(function = "validate_log_level"))]
     #[serde(default = "default_log_level")]
     pub log_level: String,
 }
@@ -126,6 +126,13 @@ fn default_metrics_export_interval() -> Duration {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn validate_log_level(log_level: &str) -> Result<(), validator::ValidationError> {
+    match log_level {
+        "trace" | "debug" | "info" | "warn" | "error" => Ok(()),
+        _ => Err(validator::ValidationError::new("invalid_log_level")),
+    }
 }
 ```
 
@@ -353,6 +360,11 @@ pub enum ConfigValidationError {
     DeserializationError(#[from] serde_json::Error),
 }
 
+// NOTE (validated 2026-03-03): The jsonschema crate has undergone significant API
+// changes. Version 0.18 used `jsonschema::JSONSchema::compile()`. Starting from
+// v0.20+, the API shifted to `jsonschema::validator_for()`. The current version
+// is 0.42.2. If targeting 0.18, the code below is correct. If upgrading, replace
+// `JSONSchema` with the new validator API: `jsonschema::validator_for(&schema)?`.
 pub struct ConfigValidator {
     schema_validator: jsonschema::JSONSchema,
     environment_prefix: String,
@@ -372,10 +384,10 @@ impl ConfigValidator {
         T: DeserializeOwned + Validate + JsonSchema,
     {
         let mut builder = Config::builder();
-        
-        // 1. Load default configuration
-        builder = builder.add_source(Config::try_from(&T::default())?);        
-        
+
+        // 1. Default values are established by the struct's Default impl;
+        // the config crate will layer file/env sources on top.
+
         // 2. Load from configuration files
         let config_paths = self.get_config_paths();
         for path in config_paths {
@@ -396,7 +408,7 @@ impl ConfigValidator {
             .build()
             .map_err(|e| ConfigValidationError::ValidationError(e.to_string()))?
             .try_deserialize()
-            .map_err(|e| ConfigValidationError::DeserializationError(e))?;
+            .map_err(|e| ConfigValidationError::ValidationError(e.to_string()))?;
         
         // 5. Validate using validator crate
         config.validate()
@@ -877,24 +889,24 @@ src/
 
 ```toml
 [dependencies]
-tokio = { version = "1.45.1", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 futures = "0.3"
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
-dashmap = "6.0"
+dashmap = "6.1"
 num_cpus = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
-metrics = "0.23"
+metrics = "0.24"
 
 # Configuration validation dependencies
 config = "0.14"
-validator = { version = "0.18", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }  # Updated from 0.18
 schemars = "0.8"
-jsonschema = "0.18"
+jsonschema = "0.18"  # NOTE: Current is 0.42.2 with breaking API changes (JSONSchema::compile → validator_for). Pin to 0.18 if using the compile() API shown in this spec, or migrate to 0.42+ with the new API.
 humantime-serde = "1.1"
 semver = "1.0"
 ```

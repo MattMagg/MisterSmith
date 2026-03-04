@@ -9,7 +9,7 @@ permalink: ms-framework/transport/http-transport
 ## Agent Framework Implementation Module
 
 > **Source**: Extracted from `transport-layer-specifications.md` sections 4 and 14
-> **Technology Stack**: Axum 0.8 (HTTP), Tokio 1.38 (async runtime)
+> **Technology Stack**: Axum 0.8 (HTTP), Tokio 1.49 (async runtime)
 
 ## Overview
 
@@ -27,7 +27,7 @@ HTTP transport provides the foundation for web-compatible agent communication wi
 **Technology Reference** (from tech-framework.md):
 
 - Axum 0.8 (HTTP)
-- Tokio 1.38 (async runtime)
+- Tokio 1.49 (async runtime)
 
 **Transport Core Dependencies**:
 
@@ -639,21 +639,23 @@ pub struct AppState {
 }
 
 // Main HTTP router setup
+// NOTE: Axum 0.8 uses {param} syntax for path parameters (not :param).
+// The :param syntax was used in axum 0.6 and earlier.
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         // Agent endpoints
         .route("/agents", get(list_agents).post(register_agent))
-        .route("/agents/:agent_id", get(get_agent).put(update_agent).delete(deregister_agent))
-        .route("/agents/:agent_id/commands", post(send_command))
-        .route("/agents/:agent_id/status", get(get_agent_status))
-        
+        .route("/agents/{agent_id}", get(get_agent).put(update_agent).delete(deregister_agent))
+        .route("/agents/{agent_id}/commands", post(send_command))
+        .route("/agents/{agent_id}/status", get(get_agent_status))
+
         // Task endpoints
         .route("/tasks", get(list_tasks).post(create_task))
-        .route("/tasks/:task_id", get(get_task).delete(cancel_task))
-        
+        .route("/tasks/{task_id}", get(get_task).delete(cancel_task))
+
         // WebSocket upgrade
         .route("/ws", get(websocket_handler))
-        
+
         // Middleware for authentication and logging
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -939,12 +941,17 @@ WEBSOCKET_PROTOCOL: {
 #### 2.4.1 WebSocket Connection Management
 
 ```rust
-use axum::extract::ws::{Message, WebSocket};
+use axum::extract::ws::{Message, Utf8Bytes, WebSocket};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
+
+// NOTE: In axum 0.8 (tungstenite 0.26+), Message variants changed:
+// - Message::Text(Utf8Bytes) — not Message::Text(String)
+// - Message::Binary(Bytes) — not Message::Binary(Vec<u8>)
+// Utf8Bytes is a UTF-8 wrapper around bytes::Bytes.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSocketMessage {
@@ -1007,17 +1014,19 @@ impl WebSocketManager {
         let mut broadcast_rx = self.broadcast_tx.subscribe();
 
         // Handle incoming messages
+        // NOTE: In axum 0.8, Message::Text wraps Utf8Bytes (not String).
+        // Use .as_str() or Deref to get &str for deserialization.
         let incoming_task = tokio::spawn(async move {
             while let Some(msg) = receiver.next().await {
                 match msg {
                     Ok(Message::Text(text)) => {
-                        if let Ok(ws_msg) = serde_json::from_str::<WebSocketMessage>(&text) {
+                        if let Ok(ws_msg) = serde_json::from_str::<WebSocketMessage>(text.as_str()) {
                             // Process incoming message
                             // Handle commands, responses, etc.
                         }
                     }
                     Ok(Message::Binary(data)) => {
-                        // Handle binary messages if needed
+                        // Handle binary messages if needed (data is Bytes, not Vec<u8>)
                     }
                     Ok(Message::Close(_)) => {
                         break;
@@ -1031,10 +1040,11 @@ impl WebSocketManager {
         });
 
         // Handle outgoing messages
+        // NOTE: Message::Text takes Utf8Bytes. Use Utf8Bytes::from() or .into().
         let outgoing_task = tokio::spawn(async move {
             while let Ok(msg) = broadcast_rx.recv().await {
                 let json_msg = serde_json::to_string(&msg).unwrap();
-                if sender.send(Message::Text(json_msg)).await.is_err() {
+                if sender.send(Message::Text(Utf8Bytes::from(json_msg))).await.is_err() {
                     break;
                 }
             }

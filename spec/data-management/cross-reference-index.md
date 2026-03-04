@@ -1,5 +1,8 @@
 # Data Management Cross-Reference Index
 
+<!-- Last validated: 2026-03-03 by Agent 2A — all link targets verified against filesystem -->
+<!-- Fixed: encryption.md → security-patterns.md, agent-lifecycle.md path corrected, health-monitoring.md → observability-monitoring-framework.md -->
+
 ## File Relationships
 
 ### Core Schema Files
@@ -19,7 +22,8 @@
 #### Security Integration
 
 - `../security/` - Authentication and authorization for message handling
-- `../security/encryption.md` - Message encryption standards
+- `../security/security-patterns.md` - Security patterns including encryption standards
+- `../security/security-framework.md` - Comprehensive security framework
 
 #### Transport Layer
 
@@ -29,12 +33,12 @@
 #### Core Architecture
 
 - `../core-architecture/` - System design patterns
-- `../core-architecture/agent-lifecycle.md` - Agent lifecycle management
+- `./agent-lifecycle.md` - Agent lifecycle management (in data-management/, not core-architecture/)
 
 #### Operations
 
 - `../operations/` - Deployment and monitoring
-- `../operations/health-monitoring.md` - System health checks
+- `../operations/observability-monitoring-framework.md` - System health checks and monitoring
 
 ## Message Schema Dependencies
 

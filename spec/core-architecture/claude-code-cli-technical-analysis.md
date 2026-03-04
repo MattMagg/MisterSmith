@@ -10,20 +10,21 @@ This document provides the technical analysis that informed the Claude CLI integ
 
 ---
 
-## 🔍 VALIDATION STATUS
+## VALIDATION STATUS
 
-**Last Validated**: 2025-07-07  
-**Validator**: Team Alpha Agent 10 - Claude Integration Specialist  
-**Validation Score**: 98/100 (ANALYSIS COMPLETE)  
-**Status**: Approved - Reference Document
+**Last Validated**: 2026-03-03
+**Validator**: Agent 1C - Supervision & Implementation
+**Validation Score**: 75/100 (PARTIALLY OUTDATED — hook system and CLI capabilities have expanded significantly)
+**Status**: Updated with current Claude Code CLI state (March 2026)
 
 ### Analysis Completeness
 
-- ✅ CLI capabilities comprehensively analyzed
+- ⚠️ CLI capabilities partially outdated — Agent SDK now available, new hook events added
 - ✅ Parallel execution patterns validated
-- ✅ Hook system mapping confirmed
+- ⚠️ Hook system mapping needs update — expanded from 5 to 14+ event types
 - ✅ Resource requirements verified (25-30 agents feasible)
 - ✅ Integration complexity assessed (LOW-MEDIUM)
+- ⚠️ Model name outdated — current frontier model is claude-opus-4-6
 
 ---
 
@@ -96,39 +97,76 @@ claude --mcp-config .claude/mcp.json
 
 ### 3. Hook System Architecture
 
-**Five Hook Types**:
+<!-- Updated 2026-03: Claude Code hooks expanded from 5 to 14+ event types -->
 
-1. **startup**: Runs when Claude Code starts
-2. **pre_task**: Runs before task execution
-3. **post_task**: Runs after task completion  
-4. **on_error**: Runs when errors occur
-5. **on_file_change**: Runs when files are modified
+**Hook Lifecycle Events** (as of February 2026):
+
+| Event | When It Fires | Framework Relevance |
+|-------|--------------|-------------------|
+| `SessionStart` | Session begins or resumes | Agent initialization, context loading |
+| `SessionEnd` | Session ends | Cleanup, state persistence |
+| `UserPromptSubmit` | Before Claude processes a prompt | Input validation, routing |
+| `PreToolUse` | Before a tool call executes (can block) | Permission control, NATS pre-events |
+| `PostToolUse` | After a tool call succeeds | Result routing, metrics |
+| `PostToolUseFailure` | After a tool call fails | Error handling, NATS error events |
+| `PermissionRequest` | Permission dialog appears | Automated approval/denial |
+| `Notification` | Claude Code sends a notification | Alert routing |
+| `SubagentStart` | A subagent is spawned | Agent pool tracking |
+| `SubagentStop` | A subagent finishes | Resource cleanup |
+| `Stop` | Claude finishes responding | Turn completion tracking |
+| `TeammateIdle` | Agent team teammate is about to go idle | Load balancing |
+| `TaskCompleted` | Task marked as completed | Workflow coordination |
+| `ConfigChange` | Configuration file changes during session | Dynamic reconfiguration |
+| `PreCompact` | Before context compaction | Context management |
+| `WorktreeCreate` | Git worktree created | Workspace isolation |
+| `WorktreeRemove` | Git worktree removed | Workspace cleanup |
+
+**Hook Handler Types** (expanded from `command` only):
+
+1. **command**: Execute a shell command
+2. **prompt**: Inject a prompt into Claude's context
+3. **agent**: Spawn a separate Claude agent
 
 **Hook Configuration Structure**:
 
 ```json
 {
-  "PreToolUse": [
-    {
-      "matcher": "Task|Bash|Edit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "nats-publish agent.{id}.pre",
-          "timeout": 60
-        }
-      ]
-    }
-  ]
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Task|Bash|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nats-publish agent.{id}.pre",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "Bash|Explore|Plan",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nats-publish agent.{id}.subagent.start"
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
 **Hook Input/Output**:
 
-- **Input**: JSON via stdin with session info and tool parameters
+- **Input**: JSON via stdin with session_id, cwd, hook_event_name, tool_name, tool_input, and tool_use_id
 - **Output**: Exit codes (0=success, 2=block) or structured JSON
 - **Decision Control**: Hooks can approve, block, or modify tool execution
 - **NATS Integration**: Hook output can be published to NATS subjects
+- **Async Execution**: Hooks support async execution (added January 2026)
+- **Environment Persistence**: `SessionStart` hooks can persist env vars via `CLAUDE_ENV_FILE`
 
 ### 4. MCP Integration Capabilities
 
@@ -211,15 +249,23 @@ ctx.{gid}.file_change         # File change notifications
 
 ### 2. Hook System Integration
 
-**Direct Mapping**:
+**Direct Mapping** (updated for current Claude Code hook events):
 
 ```rust
-// Claude Code Hook → NATS Subject
-startup     → control.startup
-pre_task    → agent.{id}.pre  
-post_task   → agent.{id}.post
-on_error    → agent.{id}.error
-on_file_change → ctx.{gid}.file_change
+// Claude Code Hook Event → NATS Subject
+SessionStart       → control.startup
+SessionEnd         → control.shutdown
+PreToolUse         → agent.{id}.pre
+PostToolUse        → agent.{id}.post
+PostToolUseFailure → agent.{id}.error
+SubagentStart      → agent.{id}.subagent.start
+SubagentStop       → agent.{id}.subagent.stop
+TaskCompleted      → agent.{id}.task_completed
+Stop               → agent.{id}.stop
+TeammateIdle       → agent.{id}.teammate_idle
+ConfigChange       → control.config_change
+// Legacy mappings (no longer direct hook events):
+// on_file_change  → ctx.{gid}.file_change (now handled via PostToolUse matcher on Edit/Write)
 ```
 
 **Integration Pattern**:
@@ -229,19 +275,37 @@ struct HookBridge {
     nats_client: async_nats::Client,
     hook_configs: Vec<HookConfig>,
     json_parser: HookJsonParser,
+    subject_mapper: HookSubjectMapper,
 }
 
 impl HookBridge {
     async fn publish_hook_event(
         &self,
-        hook_type: HookType,
+        hook_event: HookEventName,
         agent_id: &str,
         payload: HookPayload
-    ) -> Result<(), NatsError> {
-        let subject = format!("agent.{}.{}", agent_id, hook_type.as_str());
-        self.nats_client.publish(subject, payload.to_json()).await
+    ) -> Result<(), async_nats::PublishError> {
+        let subject = self.subject_mapper.map_to_nats_subject(hook_event, agent_id);
+        self.nats_client.publish(subject, payload.to_json().into()).await
     }
 }
+
+// Maps Claude Code hook event names to NATS subjects
+struct HookSubjectMapper {
+    custom_mappings: HashMap<String, String>,
+}
+
+impl HookSubjectMapper {
+    fn map_to_nats_subject(&self, event: HookEventName, agent_id: &str) -> String {
+        // Check custom mappings first, then use default pattern
+        if let Some(custom) = self.custom_mappings.get(event.as_str()) {
+            return custom.replace("{id}", agent_id);
+        }
+        // Default: agent.{id}.{event_name_snake_case}
+        format!("agent.{}.{}", agent_id, event.to_snake_case())
+    }
+}
+```
 ```
 
 ### 3. Parallel Execution Integration
@@ -259,7 +323,8 @@ async fn route_task_output(
     output: &str
 ) -> Result<(), RoutingError> {
     let subject = format!("agents.{}.output", agent_id);
-    self.nats_client.publish(subject, output.as_bytes()).await?;
+    // NOTE: async-nats 0.46+ accepts Bytes, not &[u8]. Use .into() for conversion.
+    self.nats_client.publish(subject, bytes::Bytes::from(output.to_owned())).await?;
     Ok(())
 }
 ```
@@ -310,7 +375,7 @@ struct TaskOutputParser {
 ```toml
 [claude_cli]
 max_concurrent_agents = 25
-default_model = "claude-3-5-sonnet-20241022"
+default_model = "claude-opus-4-6"  # Updated from claude-3-5-sonnet-20241022
 api_timeout = 300
 hook_timeout = 60
 output_format = "stream-json"
@@ -366,5 +431,31 @@ hook_execution_timeout = 30
 2. **Update Framework Documentation** - Integrate Claude CLI specifications
 3. **Implementation Roadmap** - Phased development approach
 4. **Prototype Development** - Proof of concept implementation
+5. **Evaluate Agent SDK** - Assess whether the official Claude Agent SDK (Python/TypeScript) or community Rust SDK should replace raw CLI subprocess management
 
 This analysis confirms that Claude Code CLI integration with the Mister Smith framework is highly feasible and well-aligned with the existing architecture.
+
+---
+
+## Addendum: Claude Agent SDK (September 2025+)
+
+<!-- [UNVERIFIED] Exact Rust SDK API surface may differ from Python/TypeScript SDKs -->
+
+Since this analysis was written, Anthropic has released the **Claude Agent SDK** providing official programmatic interfaces:
+
+- **Python SDK**: `claude-agent-sdk` — full-featured, official
+- **TypeScript SDK**: Official, mirrors Python API
+- **Community Rust SDK**: `claude-agents-sdk` (GitHub: `jimmystridh/claude-agents-sdk`) — wraps CLI with Tokio async, typed messages, streaming support
+
+**Key SDK capabilities relevant to this framework:**
+
+| Capability | Raw CLI | Agent SDK |
+|-----------|---------|-----------|
+| Session management | Manual stdin/stdout parsing | Typed API with `ClaudeClient` |
+| Message streaming | Line-by-line JSON parsing | Typed `MessageStream` with content blocks |
+| Tool permissions | CLI flags (`--allowedTools`) | Programmatic callbacks |
+| Hook integration | External hook scripts | In-process callbacks |
+| Multi-turn conversation | Session resume via `--resume` | Built-in session state |
+| Cost tracking | Parse from output | Structured `CostInfo` |
+
+**Recommendation**: Evaluate the community Rust SDK maturity before implementing raw CLI subprocess management. The SDK approach reduces boilerplate in `ClaudeSession` and `TaskOutputParser` significantly.

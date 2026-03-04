@@ -8,6 +8,10 @@ tags:
 
 # Connection Pool & Transaction Management
 
+<!-- Last validated: 2026-03-03 by Agent 2A against VERSION_REFERENCE.md -->
+<!-- This file uses pseudocode patterns — no direct crate API references to update -->
+<!-- SQLx 0.8 references are compatible with current 0.8.6 -->
+
 ## Technical Specification
 
 Connection pooling strategies and transaction management patterns for the Mister Smith AI Agent Framework. Covers multi-pool architectures, distributed transaction coordination using SAGA patterns, connection health monitoring, and failover strategies with focus on high availability, optimal resource utilization, and consistency across PostgreSQL and JetStream KV stores.

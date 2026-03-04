@@ -6,7 +6,9 @@ tags:
 - '#revised-document #agent-orchestration #foundation-focus #validation-warnings'
 ---
 
-## 🔧 TECHNICAL SPECIFICATIONS: AGENT ORCHESTRATION
+## TECHNICAL SPECIFICATIONS: AGENT ORCHESTRATION
+
+<!-- Last validated: 2026-03-03 by Agent 2A against VERSION_REFERENCE.md -->
 
 **CRITICAL SCHEMA STANDARDIZATION REQUIREMENTS**
 
@@ -18,13 +20,15 @@ tags:
 **Implementation Notes**: This document provides async Rust patterns for actor-based agent
 orchestration using Tokio runtime and supervision trees.
 
+> **Dependency versions**: tokio 1.49+, async-nats 0.46.0, MSRV 1.88.0. See [VERSION_REFERENCE.md](../../VERSION_REFERENCE.md) for full matrix.
+
 ---
 
 ## Agent Orchestration & Supervision Architecture
 
 ## Foundation Patterns Guide
 
-> **Canonical Reference**: See `tech-framework.md` for authoritative technology stack specifications
+> **Canonical Reference**: See [dependency-specifications.md](../core-architecture/dependency-specifications.md) and [VERSION_REFERENCE.md](../../VERSION_REFERENCE.md) for authoritative technology stack specifications
 
 ## Executive Summary
 
@@ -646,27 +650,33 @@ use tokio::task::JoinHandle;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
+/// Restart policy enum — aligned with supervision-trees.md and type-definitions.md
+/// See type-definitions.md `SupervisionStrategy` struct for the canonical definition.
+/// Note: type-definitions.md defines `SupervisionStrategy` as a struct (not an enum)
+/// containing `restart_policy: RestartPolicy`, `max_failures`, `failure_window`,
+/// `escalation_policy`, and `backoff_strategy`.
 #[derive(Debug, Clone)]
-pub enum RestartStrategy {
+pub enum RestartPolicy {
     OneForOne,        // Restart only failed agent
-    AllForOne,        // Restart all agents when any fails
-    RestForOne,       // Restart failed agent and all subsequent ones
-    OneForAll,        // One failure terminates all
+    OneForAll,        // Restart all children when one fails
+    RestForOne,       // Restart failed agent and all started after it
 }
 
+/// Supervision strategy configuration — matches type-definitions.md canonical definition
 #[derive(Debug, Clone)]
 pub struct SupervisionStrategy {
-    pub restart_strategy: RestartStrategy,
-    pub max_restarts: u32,
-    pub restart_window: Duration,
-    pub escalation_strategy: EscalationStrategy,
+    pub restart_policy: RestartPolicy,
+    pub max_failures: u32,
+    pub failure_window: Duration,
+    pub escalation_policy: EscalationPolicy,
+    pub backoff_strategy: BackoffStrategy,
 }
 
 #[derive(Debug, Clone)]
-pub enum EscalationStrategy {
+pub enum EscalationPolicy {
     Terminate,        // Terminate the supervisor
     Restart,          // Restart the supervisor
-    EscalateUp,       // Report to parent supervisor
+    Escalate,         // Propagate to parent supervisor
 }
 
 #[derive(Clone)]
@@ -775,19 +785,16 @@ impl SupervisionTree {
     }
     
     async fn handle_child_failure(&self, agent_id: &AgentId, error: AgentError) -> Result<(), SupervisionError> {
-        match self.strategy.restart_strategy {
-            RestartStrategy::OneForOne => {
+        match self.strategy.restart_policy {
+            RestartPolicy::OneForOne => {
                 self.restart_child(agent_id).await
             },
-            RestartStrategy::AllForOne => {
+            RestartPolicy::OneForAll => {
                 self.restart_all_children().await
             },
-            RestartStrategy::RestForOne => {
+            RestartPolicy::RestForOne => {
                 self.restart_from_child(agent_id).await
             },
-            RestartStrategy::OneForAll => {
-                self.terminate_all_children().await
-            }
         }
     }
     
@@ -795,9 +802,9 @@ impl SupervisionTree {
         let should_restart = {
             let children = self.children.read().await;
             if let Some(child) = children.get(agent_id) {
-                let restart_allowed = child.restart_count < self.strategy.max_restarts;
+                let restart_allowed = child.restart_count < self.strategy.max_failures;
                 let window_ok = child.last_restart
-                    .map(|last| last.elapsed() > self.strategy.restart_window)
+                    .map(|last| last.elapsed() > self.strategy.failure_window)
                     .unwrap_or(true);
                 restart_allowed && window_ok
             } else {
@@ -895,32 +902,61 @@ impl DirectChannel {
 
 ### 3.2 Publish/Subscribe Pattern
 
-Topic-based message distribution:
+Topic-based message distribution using async-nats 0.46:
+
+<!-- Updated 2026-03-03: Migrated from synchronous nats crate to async-nats 0.46.0 -->
 
 ```rust
+use async_nats::Client;
+use bytes::Bytes;
+use futures::StreamExt;
+
 struct PubSubBus {
-    broker_url: String,
-    subscriptions: HashMap<Topic, Vec<CallbackFn>>,
+    client: Client,
+    subscriptions: HashMap<String, tokio::task::JoinHandle<()>>,
 }
 
 impl PubSubBus {
-    async fn publish(&self, topic: Topic, message: Message) -> Result<(), Error> {
-        // Publish to broker (e.g., NATS)
-        let nc = nats::connect(&self.broker_url)?;
-        nc.publish(&topic.as_str(), &message.serialize()?)?;
+    async fn new(broker_url: &str) -> Result<Self, async_nats::Error> {
+        let client = async_nats::connect(broker_url).await?;
+        Ok(Self {
+            client,
+            subscriptions: HashMap::new(),
+        })
+    }
+
+    async fn publish(&self, topic: &str, message: &Message) -> Result<(), Box<dyn std::error::Error>> {
+        let payload = serde_json::to_vec(message)?;
+        // async-nats 0.43+ applies backpressure on publish — awaiting is required
+        self.client.publish(topic, Bytes::from(payload)).await?;
         Ok(())
     }
-    
-    async fn subscribe<F>(&mut self, topic: Topic, callback: F) 
-    where F: Fn(Message) + Send + 'static {
-        let nc = nats::connect(&self.broker_url)?;
-        let sub = nc.subscribe(&topic.as_str())?;
-        
-        tokio::spawn(async move {
-            for msg in sub.messages() {
-                callback(Message::deserialize(&msg.data).unwrap());
+
+    async fn subscribe<F, Fut>(&mut self, topic: &str, mut handler: F) -> Result<(), async_nats::Error>
+    where
+        F: FnMut(Message) -> Fut + Send + 'static,
+        Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send,
+    {
+        let mut subscriber = self.client.subscribe(topic).await?;
+        let topic_owned = topic.to_string();
+
+        let handle = tokio::spawn(async move {
+            while let Some(msg) = subscriber.next().await {
+                match serde_json::from_slice::<Message>(&msg.payload) {
+                    Ok(message) => {
+                        if let Err(e) = handler(message).await {
+                            tracing::error!(topic = %topic_owned, error = %e, "Handler error");
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!(topic = %topic_owned, error = %e, "Deserialization error");
+                    }
+                }
             }
         });
+
+        self.subscriptions.insert(topic.to_string(), handle);
+        Ok(())
     }
 }
 ```
@@ -967,9 +1003,8 @@ impl Blackboard {
 
 ### 3.4 Complete Message Schema Definitions
 
-**⚠️ CRITICAL WARNING [Team Alpha]**: These schemas contain the priority scale inconsistencies
-that MUST be fixed before implementation. Each schema below requires validation updates after
-standardization decision.
+<!-- Priority scale standardized to 0-4 (5 levels) per MessagePriority enum in section 1.
+     Schema updated 2026-03-03 to resolve the Team Alpha inconsistency warning. -->
 
 #### 3.4.1 Base Message Schema
 
@@ -1023,12 +1058,9 @@ standardization decision.
     "priority": {
       "type": "integer",
       "minimum": 0,
-      "maximum": 9,
-      "description": "Message priority (0=lowest, 9=highest)",
-      "default": 5,
-      "$comment": "⚠️ CRITICAL INCONSISTENCY [Team Alpha]: Implementation uses 5 priority levels (0-4), 
-                  not 10 levels (0-9). This WILL cause runtime array index out of bounds errors. 
-                  FIX REQUIRED before production."
+      "maximum": 4,
+      "description": "Message priority: 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk (matches MessagePriority enum)",
+      "default": 2
     }
   },
   "$defs": {
@@ -1485,9 +1517,9 @@ IMPL ValidationRule FOR AgentCapabilityRule {
 
 ```rust
 STRUCT AgentMailbox {
-    priority_queues: [VecDeque<Message>; 5], // ⚠️ CRITICAL INCONSISTENCY [Team Alpha]: Only 5 levels but schemas define 0-9 scale
-    capacity_per_priority: [usize; 5],       // ⚠️ CRITICAL: Will cause runtime array index out of bounds for priorities 5-9
-    // FIX REQUIRED: Either update to [VecDeque<Message>; 10] or standardize schemas to 0-4 scale
+    priority_queues: [VecDeque<Message>; 5], // 5 levels matching MessagePriority enum (0=Critical..4=Bulk)
+    capacity_per_priority: [usize; 5],       // Standardized to 0-4 scale per agent-orchestration.md section 1
+    // Resolved: schemas standardized to 0-4 (5 levels) — see base message schema in section 3.4.1
     total_capacity: usize,
     current_size: AtomicUsize,
     backpressure_strategy: BackpressureStrategy,

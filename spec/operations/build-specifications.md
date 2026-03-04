@@ -75,7 +75,7 @@ The root package configuration defines the fundamental build parameters and meta
 name = "mister-smith-framework"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.88"
 authors = ["Mister Smith AI Framework Team"]
 description = "AI Agent Framework with Tokio-based async architecture, supervision trees, and tool integration"
 license = "MIT OR Apache-2.0"
@@ -104,7 +104,7 @@ exclude = [
 
 [package.metadata]
 # Minimum supported Rust version policy
-msrv = "1.75.0"
+msrv = "1.88.0"
 # Security audit configuration - integrates with security framework
 audit = { db-update-frequency = "daily", severity-threshold = "medium" }
 # Documentation configuration - supports observability documentation
@@ -285,26 +285,26 @@ The dependency configuration defines exact versions for all external crates used
 ```toml
 [dependencies]
 # === ASYNC RUNTIME ===
-tokio = { version = "1.45.0", optional = true }
-futures = "0.3.31"
+tokio = { version = "1.49.0", optional = true }
+futures = "0.3.32"
 async-trait = { version = "0.1.83", optional = true }
 pin-project = "1.1.6"
 
 # === SERIALIZATION ===
-serde = { version = "1.0.214", features = ["derive"] }
-serde_json = { version = "1.0.132", optional = true }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149", optional = true }
 toml = { version = "0.8.19", optional = true }
 jsonschema = { version = "0.18.3", optional = true }
 
 # === ERROR HANDLING ===
 thiserror = "1.0.69"
-anyhow = "1.0.93"
+anyhow = "1.0.102"
 
 # === LOGGING AND TRACING ===
-tracing = { version = "0.1.41", optional = true }
-tracing-subscriber = { version = "0.3.18", optional = true }
-tracing-opentelemetry = { version = "0.26.0", optional = true }
-opentelemetry = { version = "0.26.0", optional = true }
+tracing = { version = "0.1.44", optional = true }
+tracing-subscriber = { version = "0.3.22", optional = true }
+tracing-opentelemetry = { version = "0.32.1", optional = true }
+opentelemetry = { version = "0.31.0", optional = true }
 
 # === COLLECTIONS ===
 indexmap = "2.6.0"
@@ -322,7 +322,7 @@ chrono = { version = "0.4.38", features = ["serde"] }
 cron = "0.12.1"
 
 # === SECURITY ===
-ring = { version = "0.17.8", optional = true }
+ring = { version = "0.17.14", optional = true }
 jwt-simple = { version = "0.12.10", optional = true }
 aes-gcm = { version = "0.10.3", optional = true }
 chacha20poly1305 = { version = "0.10.1", optional = true }
@@ -331,25 +331,25 @@ rustls = { version = "0.23.18", optional = true }
 rustls-pemfile = { version = "2.2.0", optional = true }
 
 # === DATABASE ===
-sqlx = { version = "0.8.2", optional = true, default-features = false }
-redis = { version = "0.27.5", optional = true, default-features = false }
+sqlx = { version = "0.8.6", optional = true, default-features = false }
+redis = { version = "1.0.4", optional = true, default-features = false }
 sled = { version = "0.34.7", optional = true }
 
 # === DISTRIBUTED SYSTEMS ===
 raft = { version = "0.7.0", optional = true }
-async-nats = { version = "0.37.0", optional = true }
+async-nats = { version = "0.46.0", optional = true }
 consul = { version = "0.4.2", optional = true }
 
 # === HTTP/NETWORKING ===
-reqwest = { version = "0.12.9", optional = true, default-features = false }
+reqwest = { version = "0.13.2", optional = true, default-features = false }
 tokio-tungstenite = { version = "0.24.0", optional = true }
-tonic = { version = "0.12.3", optional = true }
-prost = { version = "0.13.3", optional = true }
+tonic = { version = "0.14.5", optional = true }
+prost = { version = "0.14.3", optional = true }
 
 # === METRICS ===
 prometheus = { version = "0.13.4", optional = true }
-metrics = { version = "0.23.0", optional = true }
-metrics-exporter-prometheus = { version = "0.15.3", optional = true }
+metrics = { version = "0.24.3", optional = true }
+metrics-exporter-prometheus = { version = "0.18.1", optional = true }
 
 # === PERFORMANCE ===
 wide = { version = "0.7.28", optional = true }
@@ -374,8 +374,8 @@ url = "2.5.4"
 dirs = "5.0.1"
 
 # === TOWER MIDDLEWARE ===
-tower = { version = "0.5.1", optional = true }
-tower-http = { version = "0.6.2", optional = true }
+tower = { version = "0.5.3", optional = true }
+tower-http = { version = "0.6.8", optional = true }
 
 [dev-dependencies]
 # Testing framework
@@ -401,7 +401,7 @@ serial_test = "3.1.1"
 # Build script dependencies
 vergen = { version = "9.0.1", features = ["build", "git", "gitcl", "cargo"] }
 cc = "1.2.2"
-prost-build = { version = "0.13.3", optional = true }
+prost-build = { version = "0.14.3", optional = true }
 ```
 
 ---
@@ -708,7 +708,7 @@ build-all-targets = """
 
 ```dockerfile
 # Dockerfile.cross - Multi-arch build environment
-FROM rust:1.75 as builder
+FROM rust:1.88 as builder
 
 # Install cross-compilation toolchains
 RUN apt-get update && apt-get install -y \
@@ -1197,8 +1197,8 @@ if ! command -v rustc &> /dev/null; then
 fi
 
 # Install required Rust version
-rustup toolchain install 1.75
-rustup default 1.75
+rustup toolchain install 1.88
+rustup default 1.88
 
 # Add necessary components
 rustup component add rustfmt clippy rust-src rust-analyzer
@@ -1365,7 +1365,7 @@ release-prep:
 
 ```dockerfile
 # .devcontainer/Dockerfile
-FROM rust:1.75
+FROM rust:1.88
 
 # Install development tools
 RUN apt-get update && apt-get install -y \
@@ -1629,7 +1629,7 @@ The following automation scripts are provided for complete build and deployment 
 - **Location**: `scripts/setup-build-env.sh`
 - **Purpose**: Complete development environment setup with all dependencies
 - **Features**:
-  - Rust toolchain installation with required version (1.75)
+  - Rust toolchain installation with required version (1.88)
   - Cross-compilation targets setup
   - Build tool installation (cargo extensions, cross, sccache)
   - Platform-specific optimizations (mold linker, system dependencies)

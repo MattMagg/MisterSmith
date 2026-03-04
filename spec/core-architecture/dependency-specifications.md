@@ -48,42 +48,38 @@ defining exact versions, feature selections, security requirements, and manageme
 $ cargo tree --all-features
 
 mister-smith-framework v0.1.0
-├── async-nats v0.37.0
+├── async-nats v0.46.0
 │   ├── base64 v0.22.1
 │   ├── bytes v1.5.0
-│   ├── futures v0.3.31
-│   │   ├── futures-channel v0.3.31
-│   │   ├── futures-core v0.3.31
-│   │   ├── futures-executor v0.3.31
-│   │   ├── futures-io v0.3.31
-│   │   ├── futures-sink v0.3.31
-│   │   ├── futures-task v0.3.31
-│   │   └── futures-util v0.3.31
-│   ├── nkeys v0.4.1
-│   ├── nuid v0.5.0
-│   ├── serde v1.0.214
-│   ├── serde_json v1.0.132
+│   ├── futures-util v0.3.32
+│   │   ├── futures-core v0.3.32
+│   │   ├── futures-io v0.3.32
+│   │   ├── futures-sink v0.3.32
+│   │   └── futures-task v0.3.32
+│   ├── nkeys v0.4.1 (feature-gated)
+│   ├── nuid v0.5.0 (feature-gated)
+│   ├── serde v1.0.228
+│   ├── serde_json v1.0.149
 │   ├── thiserror v1.0.69
-│   └── tokio v1.45.0
-├── tokio v1.45.0
+│   └── tokio v1.49.0
+├── tokio v1.49.0
 │   ├── bytes v1.5.0
 │   ├── libc v0.2.153
-│   ├── mio v0.8.11
-│   ├── num_cpus v1.16.0
+│   ├── mio v1.0.x
 │   ├── parking_lot v0.12.3
 │   ├── pin-project-lite v0.2.14
 │   ├── signal-hook-registry v1.4.2
 │   ├── socket2 v0.5.7
-│   └── tokio-macros v2.2.0 (proc-macro)
+│   └── tokio-macros v2.x (proc-macro)
 └── ...
 
 # Check for duplicate dependencies
 $ cargo tree --duplicates
-serde v1.0.214
+serde v1.0.228
 ├── mister-smith-framework v0.1.0
-├── async-nats v0.37.0
+├── async-nats v0.46.0
 ├── config v0.14.1
-└── sqlx v0.8.2
+└── sqlx v0.8.6
 ```
 
 ---
@@ -97,7 +93,7 @@ serde v1.0.214
 name = "mister-smith-framework"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.88"
 authors = ["Mister Smith AI Framework Team"]
 description = "AI Agent Framework with Tokio-based async architecture, supervision trees, and tool integration"
 license = "MIT OR Apache-2.0"
@@ -108,7 +104,8 @@ categories = ["asynchronous", "development-tools"]
 readme = "README.md"
 
 # MSRV Policy: Update quarterly, maintain 6-month compatibility window
-rust-version = "1.75"
+# Current MSRV driven by async-nats 0.46.0 requirement (rustc >= 1.88.0)
+rust-version = "1.88"
 ```
 
 ### 2.2 Feature Flags Architecture
@@ -146,7 +143,8 @@ embedded = ["persistence", "sled/compression"]
 # Distributed system features
 clustering = ["dep:raft", "dep:async-nats"]
 consensus = ["clustering", "raft/prost-codec"]
-messaging = ["clustering", "async-nats/jetstream"]
+# async-nats 0.46.0 feature-gates these modules; enable explicitly
+messaging = ["clustering", "async-nats/jetstream", "async-nats/kv", "async-nats/object-store", "async-nats/service"]
 
 # Observability features
 metrics = ["dep:metrics", "dep:metrics-exporter-prometheus"]
@@ -157,7 +155,8 @@ tracing = [
 health-checks = ["monitoring", "dep:tower", "dep:tower-http"]
 
 # Network and communication features
-http-client = ["dep:reqwest", "reqwest/json", "reqwest/stream"]
+# reqwest 0.13 requires explicit query/form features
+http-client = ["dep:reqwest", "reqwest/json", "reqwest/stream", "reqwest/query"]
 websockets = ["http-client", "reqwest/websocket"]
 
 # Development and testing features
@@ -177,9 +176,9 @@ compression = ["dep:lz4", "dep:zstd"]
 [dependencies]
 # === ASYNC RUNTIME AND EXECUTION ===
 # Tokio: Comprehensive async runtime with all features enabled
-tokio = { version = "1.45.0", features = ["full"] }
+tokio = { version = "1.49.0", features = ["full"] }
 # Futures: Core async utilities and combinators
-futures = "0.3.31"
+futures = "0.3.32"
 # Async trait support for defining async traits
 async-trait = { version = "0.1.83", optional = true }
 # Pin projection for complex async types
@@ -187,9 +186,9 @@ pin-project = "1.1.6"
 
 # === SERIALIZATION AND DATA HANDLING ===
 # Serde: Core serialization framework with derive macros
-serde = { version = "1.0.214", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 # JSON serialization for API communication
-serde_json = { version = "1.0.132", optional = true }
+serde_json = { version = "1.0.149", optional = true }
 # TOML parsing for configuration files
 toml = "0.8.19"
 # JSON schema validation for API contracts
@@ -201,11 +200,11 @@ semver = { version = "1.0.23", features = ["serde"] }
 # Structured error types with derive macros
 thiserror = "1.0.69"
 # Error context and propagation utilities
-anyhow = "1.0.93"
+anyhow = "1.0.102"
 # Async-aware logging facade
-tracing = { version = "0.1.41", optional = true }
+tracing = { version = "0.1.44", optional = true }
 # Tracing subscriber implementations
-tracing-subscriber = { version = "0.3.18", optional = true, features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.22", optional = true, features = ["env-filter"] }
 
 # === COLLECTIONS AND UTILITIES ===
 # Ordered hash maps for deterministic iteration
@@ -249,52 +248,56 @@ dirs = "5.0.1"
 ```toml
 # === SECURITY AND CRYPTOGRAPHY ===
 # Ring: Cryptographic operations and key management
-ring = { version = "0.17.8", optional = true }
+ring = { version = "=0.17.14", optional = true }
 # JWT token handling with multiple algorithms
-jwt-simple = { version = "0.12.10", optional = true }
+jwt-simple = { version = "=0.12.10", optional = true }
 # AES-GCM authenticated encryption
-aes-gcm = { version = "0.10.3", optional = true }
+aes-gcm = { version = "=0.10.3", optional = true }
 # ChaCha20-Poly1305 authenticated encryption
-chacha20poly1305 = { version = "0.10.1", optional = true }
+chacha20poly1305 = { version = "=0.10.1", optional = true }
 # OAuth2 client implementation
 oauth2 = { version = "4.4.2", optional = true }
-# JSON Web Token library
-jsonwebtoken = { version = "9.3.0", optional = true }
+# JSON Web Token library — v10.x uses trait-based crypto backends;
+# choose "aws_lc_rs" or "rust_crypto" feature for the backend
+jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"], optional = true }
 
 # === HTTP CLIENT AND NETWORKING ===
 # Feature-rich HTTP client with async support
-reqwest = { 
-    version = "0.12.9", 
-    optional = true, 
-    features = ["json", "stream", "gzip"] 
+# v0.13 uses rustls by default; query/form require explicit features
+reqwest = {
+    version = "0.13.2",
+    optional = true,
+    features = ["json", "stream", "gzip", "query"]
 }
 # URL parsing and manipulation
 url = "2.5.4"
 
 # === METRICS AND MONITORING ===
 # Metrics collection framework
-metrics = { version = "0.23.0", optional = true }
+metrics = { version = "0.24.3", optional = true }
 # Prometheus metrics exporter
-prometheus = { version = "0.13.4", optional = true }
-# Prometheus metrics exporter integration
-metrics-exporter-prometheus = { version = "0.15.3", optional = true }
-# OpenTelemetry integration for distributed tracing
-tracing-opentelemetry = { version = "0.26.0", optional = true }
+prometheus = { version = "0.14.0", optional = true }
+# Prometheus metrics exporter integration — must match metrics version
+metrics-exporter-prometheus = { version = "0.18.1", optional = true }
+# OpenTelemetry integration for distributed tracing — must match opentelemetry version
+tracing-opentelemetry = { version = "0.32.1", optional = true }
 # OpenTelemetry SDK
-opentelemetry = { version = "0.26.0", optional = true }
+opentelemetry = { version = "0.31.0", optional = true }
 
 # === DATABASE AND PERSISTENCE ===
 # SQL database toolkit with async support
-sqlx = { 
-    version = "0.8.2", 
-    optional = true, 
-    features = ["runtime-tokio-rustls", "any"] 
+sqlx = {
+    version = "0.8.6",
+    optional = true,
+    features = ["runtime-tokio-rustls", "any"]
 }
 # Redis client with async support
-redis = { 
-    version = "0.27.5", 
-    optional = true, 
-    features = ["tokio-comp", "connection-manager"] 
+# v1.0 breaking changes: FromRedisValue takes owned value, ToSingleRedisArg trait,
+# iterators return Result, async-std removed (Tokio only)
+redis = {
+    version = "1.0.4",
+    optional = true,
+    features = ["tokio-comp", "connection-manager"]
 }
 # Embedded key-value database
 sled = { version = "0.34.7", optional = true }
@@ -302,8 +305,10 @@ sled = { version = "0.34.7", optional = true }
 # === DISTRIBUTED SYSTEMS ===
 # Raft consensus algorithm implementation
 raft = { version = "0.7.0", optional = true }
-# NATS messaging system client - consistent version
-async-nats = { version = "0.37.0", optional = true }
+# NATS messaging system client
+# v0.46.0: feature-gated modules, publish backpressure, message type reorg
+# MSRV: rustc 1.88.0
+async-nats = { version = "0.46.0", optional = true }
 
 # === PERFORMANCE OPTIMIZATION ===
 # SIMD operations for performance-critical code
@@ -317,9 +322,9 @@ zstd = { version = "0.13.2", optional = true }
 
 # === HTTP SERVER AND MIDDLEWARE ===
 # Tower service abstraction (for health checks)
-tower = { version = "0.5.1", optional = true }
+tower = { version = "0.5.3", optional = true }
 # HTTP middleware and utilities
-tower-http = { version = "0.6.2", optional = true, features = ["trace"] }
+tower-http = { version = "0.6.8", optional = true, features = ["trace"] }
 ```
 
 ### 2.5 Development Dependencies
@@ -363,8 +368,8 @@ doc-comment = "0.3.3"
 
 ```toml
 [build-dependencies]
-# Protocol Buffers code generation
-prost-build = "0.13.3"
+# Protocol Buffers code generation — must match prost version
+prost-build = "0.14.3"
 # Version information embedding
 vergen = { version = "9.0.1", features = ["build", "git", "gitcl"] }
 # Build script utilities
@@ -440,14 +445,21 @@ cargo audit --db-update --quiet
 ### 5.1 Minimum Supported Rust Version (MSRV)
 
 ```toml
-# Current MSRV: Rust 1.75 (December 2023)
-rust-version = "1.75"
+# Current MSRV: Rust 1.88.0 (driven by async-nats 0.46.0 requirement)
+# Previous MSRV was 1.75; updated to support async-nats 0.46.0
+rust-version = "1.88"
 
 # MSRV Update Policy:
 # - Review quarterly (March, June, September, December)
 # - Maintain 6-month compatibility window
-# - Update only for significant feature benefits
+# - Update only for significant feature benefits or dependency requirements
 # - Announce MSRV changes 30 days in advance
+#
+# MSRV Binding Constraints:
+#   async-nats 0.46.0 requires rustc 1.88.0
+#   axum 0.8.8 requires rustc 1.78.0
+#   tonic 0.14.5 requires rustc 1.75.0
+#   tokio 1.49.0 requires rustc 1.70
 ```
 
 ### 5.2 Dependency Version Constraints
@@ -528,22 +540,22 @@ resolver = "2"
 # Workspace-wide dependency versions (inherited by members)
 [workspace.dependencies]
 # Core async runtime - shared version across all crates
-tokio = { version = "1.45.0", features = ["full"] }
+tokio = { version = "1.49.0", features = ["full"] }
 async-trait = "0.1.83"
-futures = "0.3.31"
+futures = "0.3.32"
 
 # Serialization - consistent across workspace
-serde = { version = "1.0.214", features = ["derive"] }
-serde_json = "1.0.132"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
 
 # Error handling - unified approach
 thiserror = "1.0.69"
-anyhow = "1.0.93"
+anyhow = "1.0.102"
 
 # Common utilities
 uuid = { version = "1.11.0", features = ["v4", "serde"] }
 chrono = { version = "0.4.38", features = ["serde"] }
-tracing = "0.1.41"
+tracing = "0.1.44"
 
 # Development dependencies - shared versions
 [workspace.dev-dependencies]
@@ -553,7 +565,7 @@ criterion = "0.5.1"
 
 # Workspace metadata
 [workspace.metadata]
-msrv = "1.75.0"
+msrv = "1.88.0"
 repository = "https://github.com/mister-smith/framework"
 ```
 
@@ -587,18 +599,18 @@ features = ["v4", "v7", "serde"]  # Add v7 to workspace default
 
 ```toml
 # RULE 1: All async runtime deps must match
-tokio = "1.45.0"         # ✓ Consistent
-tokio-util = "0.7.10"    # ✓ Compatible with tokio 1.45
-tokio-stream = "0.1.14"  # ✓ Compatible with tokio 1.45
+tokio = "1.49.0"         # ✓ Consistent
+tokio-util = "0.7.10"    # ✓ Compatible with tokio 1.49
+tokio-stream = "0.1.14"  # ✓ Compatible with tokio 1.49
 
-# RULE 2: Serialization ecosystem alignment  
-serde = "1.0.214"        # ✓ Base version
-serde_json = "1.0.132"   # ✓ Compatible
+# RULE 2: Serialization ecosystem alignment
+serde = "1.0.228"        # ✓ Base version
+serde_json = "1.0.149"   # ✓ Compatible
 serde_yaml = "0.9.34"    # ✓ Compatible
 toml = "0.8.19"          # ✓ Uses serde 1.0
 
 # RULE 3: Cryptography version locking
-ring = "=0.17.8"         # ✓ Exact version
+ring = "=0.17.14"        # ✓ Exact version
 chacha20poly1305 = "=0.10.1"  # ✓ Exact version
 # NEVER mix different versions of crypto libraries
 ```
@@ -780,13 +792,17 @@ signal-hook-tokio = { version = "0.3.1", features = ["futures-v0_3"] }
 
 ```toml
 # NATS client for agent communication
+# v0.46.0: all major modules are feature-gated (default features enable them all)
+# Explicit listing ensures clarity about which capabilities are required
 [dependencies.async-nats]
-version = "0.37.0"  # Updated to match transport specs
+version = "0.46.0"
 features = [
     "jetstream",      # Persistent messaging
-    "kv",            # Key-value store  
-    "object_store",  # Object storage
-    "service",       # Service discovery
+    "kv",             # Key-value store
+    "object-store",   # Object storage (note: hyphenated in 0.46.0)
+    "service",        # Service discovery
+    "nkeys",          # NATS key authentication
+    "ring",           # TLS crypto backend via ring
 ]
 optional = true
 ```
@@ -819,7 +835,7 @@ testcontainers = "0.23.1"
 testcontainers-modules = { version = "0.11.2", features = ["postgres", "redis"] }
 
 # Network testing utilities
-reqwest = { version = "0.12.9", features = ["json"] }
+reqwest = { version = "0.13.2", features = ["json", "query"] }
 wiremock = "0.6.2"
 
 # Time manipulation in tests
@@ -849,9 +865,9 @@ pprof = { version = "0.13.0", features = ["criterion", "protobuf-codec"] }
 # Comprehensive metrics stack
 [dependencies]
 # Core metrics framework
-metrics = "0.23.0"
-# Prometheus metrics export
-metrics-exporter-prometheus = "0.15.3"
+metrics = "0.24.3"
+# Prometheus metrics export — must match metrics version
+metrics-exporter-prometheus = "0.18.1"
 # StatsD metrics export
 metrics-exporter-statsd = "0.8.0"
 # Metrics utility macros
@@ -863,12 +879,15 @@ metrics-util = "0.17.0"
 ```toml
 # OpenTelemetry tracing stack
 [dependencies]
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
-tracing-opentelemetry = "0.26.0"
-opentelemetry = { version = "0.26.0", features = ["trace"] }
-opentelemetry-jaeger = "0.25.0"
-opentelemetry-zipkin = "0.24.0"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.32.1"
+opentelemetry = { version = "0.31.0", features = ["trace"] }
+# NOTE: opentelemetry-jaeger and opentelemetry-zipkin are DEPRECATED.
+# Use opentelemetry-otlp with the appropriate OTLP endpoint instead:
+opentelemetry-otlp = "0.31.0"
+# For Jaeger: configure OTLP exporter pointing to Jaeger's OTLP endpoint (port 4317)
+# For Zipkin: configure OTLP exporter pointing to Zipkin's OTLP endpoint
 ```
 
 ### 11.3 Health Checking
@@ -879,7 +898,7 @@ opentelemetry-zipkin = "0.24.0"
 # Health check framework
 health-check = "0.1.4"
 # HTTP health endpoints
-tower-http = { version = "0.6.2", features = ["trace", "metrics"] }
+tower-http = { version = "0.6.8", features = ["trace", "metrics"] }
 ```
 
 ---
@@ -1018,27 +1037,27 @@ cargo-tree = "0.32.0"
 
 [workspace.dependencies]
 # Core Runtime - Exact versions across all domains
-tokio = "1.45.0"                    # ✓ All domains
+tokio = "1.49.0"                    # ✓ All domains
 async-trait = "0.1.83"              # ✓ All domains
-futures = "0.3.31"                  # ✓ All domains
+futures = "0.3.32"                  # ✓ All domains
 
 # Transport - Unified versions
-async-nats = "0.37.0"               # ✓ Transport + Core
-tonic = "0.11.0"                    # ✓ Transport + Agents
-axum = "0.8.0"                      # ✓ Transport + Operations
+async-nats = "0.46.0"              # ✓ Transport + Core (MSRV: 1.88.0)
+tonic = "0.14.5"                   # ✓ Transport + Agents
+axum = "0.8.8"                     # ✓ Transport + Operations
 
 # Serialization - Consistent everywhere
-serde = "1.0.214"                   # ✓ All domains
-serde_json = "1.0.132"              # ✓ All domains
-prost = "0.12.0"                    # ✓ Transport + Data
+serde = "1.0.228"                  # ✓ All domains
+serde_json = "1.0.149"             # ✓ All domains
+prost = "0.14.3"                   # ✓ Transport + Data (must match tonic)
 
 # Error Handling - Standardized
-thiserror = "1.0.69"                # ✓ All domains (not 2.0)
-anyhow = "1.0.93"                   # ✓ All domains
+thiserror = "1.0.69"               # ✓ All domains (staying on 1.x per spec decision)
+anyhow = "1.0.102"                 # ✓ All domains
 
 # Security - Exact pinning
-ring = "=0.17.8"                    # ✓ Security + Transport
-jwt-simple = "=0.12.10"             # ✓ Security + Transport
+ring = "=0.17.14"                  # ✓ Security + Transport
+jwt-simple = "=0.12.10"            # ✓ Security + Transport
 ```
 
 ### Dependency Validation Commands

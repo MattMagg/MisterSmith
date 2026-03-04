@@ -1,5 +1,32 @@
 # Claude Code CLI Implementation Roadmap
 
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 4B - Testing, Agent Domains & Research
+**Validation Score**: 60/100 (NEEDS UPDATE — hook system and model references outdated)
+**Status**: Partially updated — critical outdated sections flagged
+
+### Validation Changes (2026-03-03)
+
+- Updated `default_model` from `claude-3-5-sonnet-20241022` to `claude-opus-4-6` in configuration examples
+- Flagged outdated hook system: Phase 2 references 5 hook types (`startup`, `pre_task`, `post_task`, `on_error`, `on_file_change`) — Claude Code now has **14 lifecycle events** with different names (`SessionStart`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `Stop`, `TeammateIdle`, `TaskCompleted`, `PreCompact`, etc.)
+- Flagged outdated hook configuration JSON: uses `OnError` and `OnFileChange` which are not valid Claude Code hook event names
+- Added Claude Agent SDK consideration — official Python/TypeScript SDKs now available, community Rust SDK exists
+- See `spec/core-architecture/claude-cli-integration.md` and `spec/core-architecture/claude-code-cli-technical-analysis.md` for the updated hook event mappings and Agent SDK discussion
+- Hook handler types expanded: Claude Code now supports `command`, `prompt`, and `agent` handler types (this file only references `command`)
+
+### Key Discrepancies with Updated Core Specs
+
+| This File Says | Current State (per core-architecture updates) |
+|---------------|----------------------------------------------|
+| 5 hook types: startup, pre_task, post_task, on_error, on_file_change | 14 hook events: SessionStart, SessionEnd, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, Notification, SubagentStart, SubagentStop, Stop, TeammateIdle, TaskCompleted, PreCompact |
+| `HookType::Startup`, `HookType::PreTask`, etc. | `HookType::SessionStart`, `HookType::PreToolUse`, etc. |
+| Model: `claude-3-5-sonnet-20241022` | Model: `claude-opus-4-6` |
+| Raw CLI subprocess management only | Claude Agent SDK (Python/TypeScript) and community Rust SDK available as alternatives |
+
+---
+
 ## Technical Implementation Strategy for Mister Smith Framework
 
 ### Implementation Overview
@@ -270,7 +297,7 @@ agent_spawn_timeout = 30
 agent_shutdown_timeout = 15
 
 # Claude API Configuration
-default_model = "claude-3-5-sonnet-20241022"
+default_model = "claude-opus-4-6"  # Updated from claude-3-5-sonnet-20241022
 api_timeout = 300
 max_retries = 3
 backoff_multiplier = 2.0
@@ -795,7 +822,9 @@ Add hook execution metrics:
 
 ### Phase 2 Success Criteria
 
-- All 5 hook types (startup, pre_task, post_task, on_error, on_file_change) are functional
+> **OUTDATED**: The criteria below reference 5 hook types. Claude Code now has 14 lifecycle events. See `spec/core-architecture/claude-code-cli-technical-analysis.md` for the updated mapping. The `HookType` enum, `HookConfiguration` struct, `SubjectRouter`, and hook configuration JSON in this section all need to be rewritten to use current Claude Code event names.
+
+- All hook event types are functional (14 events, not the original 5)
 - Hook responses can control Claude CLI execution (approve/block/continue)
 - Error handling prevents system failures
 - Timeout management prevents hanging hooks

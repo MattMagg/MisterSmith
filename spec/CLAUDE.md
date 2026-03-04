@@ -44,7 +44,7 @@ spec/
 - **Agent types**: Use exact names from `SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md`
 - **Messages**: Match schemas in `message-schemas.md`
 - **Async patterns**: Align with `async-patterns.md` and `tokio-runtime.md`
-- **Versions**: Tokio 1.38, async-nats 0.34, Axum 0.8, Tonic 0.11
+- **Versions**: Tokio 1.49, async-nats 0.46, Axum 0.8, Tonic 0.14 (see `core-architecture/dependency-specifications.md` for full matrix)
 
 ## Navigation
 

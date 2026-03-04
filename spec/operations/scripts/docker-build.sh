@@ -71,7 +71,7 @@ create_dockerfile() {
         minimal)
             cat > "$PROJECT_ROOT/$dockerfile" << 'EOF'
 # Build stage
-FROM rust:1.75 AS builder
+FROM rust:1.88 AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -124,7 +124,7 @@ EOF
         standard)
             cat > "$PROJECT_ROOT/$dockerfile" << 'EOF'
 # Build stage
-FROM rust:1.75 AS builder
+FROM rust:1.88 AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -192,7 +192,7 @@ EOF
         full)
             cat > "$PROJECT_ROOT/$dockerfile" << 'EOF'
 # Build stage
-FROM rust:1.75 AS builder
+FROM rust:1.88 AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -268,7 +268,7 @@ EOF
         debug)
             cat > "$PROJECT_ROOT/$dockerfile" << 'EOF'
 # Debug image with development tools
-FROM rust:1.75
+FROM rust:1.88
 
 # Install development and debugging tools
 RUN apt-get update && apt-get install -y \

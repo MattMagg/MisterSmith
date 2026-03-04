@@ -43,7 +43,7 @@ permalink: revision-swarm/operations/deployment-architecture-specifications-revi
 
 **External Dependencies**:
 
-- Kubernetes cluster (v1.24+)
+- Kubernetes cluster (v1.29+)
 - Container registry access
 - Service mesh infrastructure
 - Monitoring infrastructure
@@ -885,8 +885,8 @@ PATTERN DeploymentOrchestration:
 # syntax=docker/dockerfile:1
 # Multi-stage Dockerfile for Mister Smith Orchestrator Agent
 
-ARG RUST_VERSION="1.75"
-ARG ALPINE_VERSION="3.19"
+ARG RUST_VERSION="1.88"
+ARG ALPINE_VERSION="3.21"
 
 # Build Stage
 FROM rust:${RUST_VERSION}-alpine${ALPINE_VERSION} AS builder
@@ -914,7 +914,7 @@ RUN cargo build --release --locked && \
     strip target/release/mister-smith-orchestrator
 
 # Runtime Stage
-FROM alpine:${ALPINE_VERSION}@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c AS runtime
+FROM alpine:${ALPINE_VERSION} AS runtime
 
 # Install runtime dependencies
 RUN apk add --no-cache \
@@ -963,10 +963,10 @@ ENTRYPOINT ["/usr/local/bin/orchestrator"]
 # syntax=docker/dockerfile:1
 # Multi-stage Dockerfile for Mister Smith Worker Agent
 
-ARG RUST_VERSION="1.75"
-ARG ALPINE_VERSION="3.19"
+ARG RUST_VERSION="1.88"
+ARG ALPINE_VERSION="3.21"
 
-# Build Stage  
+# Build Stage
 FROM rust:${RUST_VERSION}-alpine${ALPINE_VERSION} AS builder
 LABEL stage=builder
 
@@ -987,7 +987,7 @@ RUN cargo build --release --locked && \
     strip target/release/mister-smith-worker
 
 # Runtime Stage
-FROM alpine:${ALPINE_VERSION}@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c AS runtime
+FROM alpine:${ALPINE_VERSION} AS runtime
 
 # Install runtime dependencies
 RUN apk add --no-cache \
@@ -1032,7 +1032,7 @@ ENTRYPOINT ["/usr/local/bin/worker"]
 # syntax=docker/dockerfile:1
 # NATS-based Messaging Container for Mister Smith
 
-FROM nats:2.10-alpine AS runtime
+FROM nats:2.12-alpine AS runtime
 
 # Install additional tools
 RUN apk add --no-cache curl
@@ -1070,7 +1070,7 @@ version: '3.8'
 
 services:
   nats:
-    image: nats:2.10-alpine
+    image: nats:2.12-alpine
     container_name: mister-smith-nats
     ports:
       - "4222:4222"
@@ -1223,7 +1223,7 @@ version: '3.8'
 
 services:
   prometheus:
-    image: prom/prometheus:v2.48.0
+    image: prom/prometheus:v2.54.0
     container_name: mister-smith-prometheus
     ports:
       - "9091:9090"
@@ -1239,7 +1239,7 @@ services:
       - mister-smith-net
 
   grafana:
-    image: grafana/grafana:10.2.0
+    image: grafana/grafana:11.3.0
     container_name: mister-smith-grafana
     ports:
       - "3000:3000"
@@ -1253,11 +1253,11 @@ services:
       - mister-smith-net
 
   jaeger:
-    image: jaegertracing/all-in-one:1.51
+    image: jaegertracing/all-in-one:1.62
     container_name: mister-smith-jaeger
     ports:
-      - "16686:16686"
-      - "14268:14268"
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC (native since Jaeger v1.35)
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
@@ -1659,7 +1659,7 @@ DATABASE_URL=postgresql://postgres:password@postgres.mister-smith-data:5432/mist
 METRICS_ENABLED=true
 METRICS_PORT=9090
 TRACING_ENABLED=true
-JAEGER_ENDPOINT=http://jaeger.mister-smith-monitoring:14268/api/traces
+OTLP_ENDPOINT=http://otel-collector.mister-smith-monitoring:4317
 
 # Logging Configuration
 RUST_LOG=info
@@ -1821,36 +1821,11 @@ metadata:
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
----
-# Pod Security Policy (for clusters < 1.25)
-apiVersion: policy/v1beta1
-kind: PodSecurityPolicy
-metadata:
-  name: mister-smith-restricted
-spec:
-  privileged: false
-  allowPrivilegeEscalation: false
-  requiredDropCapabilities:
-  - ALL
-  volumes:
-  - 'configMap'
-  - 'emptyDir'
-  - 'projected'
-  - 'secret'
-  - 'downwardAPI'
-  - 'persistentVolumeClaim'
-  hostNetwork: false
-  hostIPC: false
-  hostPID: false
-  runAsUser:
-    rule: 'MustRunAsNonRoot'
-  seLinux:
-    rule: 'RunAsAny'
-  supplementalGroups:
-    rule: 'RunAsAny'
-  fsGroup:
-    rule: 'RunAsAny'
-  readOnlyRootFilesystem: true
+
+# NOTE: PodSecurityPolicy (policy/v1beta1) was removed in Kubernetes 1.25.
+# Use the Pod Security Standards namespace labels above instead (pod-security.kubernetes.io/*).
+# The namespace-level labels enforce/audit/warn: restricted|baseline|privileged,
+# which replaces the old PSP resource entirely.
 
 ### 18. Health Check Implementation Templates
 

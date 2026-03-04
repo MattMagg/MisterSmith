@@ -1,5 +1,27 @@
 # Claude Code CLI Integration Plan
 
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 4B - Testing, Agent Domains & Research
+**Validation Score**: 58/100 (NEEDS UPDATE — significant outdated content)
+**Status**: Partially updated — critical outdated sections flagged
+
+### Validation Changes (2026-03-03)
+
+- Updated `default_model` from `claude-3-5-sonnet-20241022` to `claude-opus-4-6`
+- Flagged outdated hook system: `HookBridge.determine_subject()` uses 5 old hook types (`Startup`, `PreTask`, `PostTask`, `OnError`, `OnFileChange`). Claude Code now has **14 lifecycle events** with different names
+- Flagged outdated hook configuration JSON: references `Notification`, `Stop`, `SubagentStop` correctly but also contains outdated `pre_task`/`post_task` naming in the bridge script
+- The `HookType` enum in the `HookBridge` implementation needs to be updated to match current Claude Code event names
+- Hook handler types: Claude Code now supports `command`, `prompt`, and `agent` handler types (this file only uses `command`)
+- See `spec/core-architecture/claude-cli-integration.md` and `spec/core-architecture/claude-code-cli-technical-analysis.md` for the updated hook mappings and Claude Agent SDK discussion
+
+### Key Discrepancies with Updated Core Specs
+
+The `HookBridge.determine_subject()` method and `SubjectRouter` in this file map 5 old-style hook types to NATS subjects. The updated core spec (`claude-code-cli-technical-analysis.md`) maps 14+ Claude Code events. This file's implementation code should be considered superseded by the core spec versions.
+
+---
+
 ## Technical Integration Strategy for Mister Smith Framework
 
 ### Overview
@@ -294,7 +316,7 @@ pub struct TaskOutputEvent {
 ```toml
 [claude_cli]
 max_concurrent_agents = 25
-default_model = "claude-3-5-sonnet-20241022"
+default_model = "claude-opus-4-6"  # Updated from claude-3-5-sonnet-20241022
 api_timeout = 300
 retry_attempts = 3
 hook_timeout = 60

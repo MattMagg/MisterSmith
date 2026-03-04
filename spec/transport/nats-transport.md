@@ -17,14 +17,21 @@ This document defines the complete NATS messaging specifications for the Mister 
 
 ## Technology Stack
 
-```rust
-// Core Dependencies
-async-nats = "0.34"
-tokio = { version = "1.38", features = ["full"] }
+```toml
+# Core Dependencies
+async-nats = { version = "0.46.0", features = ["jetstream", "kv", "service", "ring"] }
+tokio = { version = "1.49", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1.0", features = ["v4"] }
 ```
+
+> **Version Note (async-nats 0.46)**: JetStream, KV, Object Store, Service API, and nkeys
+> are now behind feature flags (all enabled in `default`). If using a minimal feature set,
+> enable features explicitly. Publish operations are now async with backpressure support
+> (can block when the internal buffer is full). MSRV is 1.88.0. TLS uses rustls 0.23 with
+> selectable crypto backend (`ring` or `aws-lc-rs`). See `nats.rs/async-nats/Cargo.toml`
+> for the full feature matrix.
 
 ## Transport Integration Points
 
@@ -288,28 +295,32 @@ const SUBSCRIPTION_CONFIG: SubscriptionConfig = SubscriptionConfig {
 #### Stream Configuration Specifications
 
 ```rust
-use async_nats::jetstream::stream::{Config as StreamConfig, RetentionPolicy, StorageType};
+use async_nats::jetstream::stream::{Config as StreamConfig, RetentionPolicy, StorageType, DiscardPolicy};
 use async_nats::jetstream::consumer::{Config as ConsumerConfig, AckPolicy, DeliverPolicy};
 use std::time::Duration;
 
+// NOTE: In async-nats 0.46, StreamConfig fields use plain numeric types (i64, i32),
+// not Option wrappers. max_age and duplicate_window are Duration (not Option<Duration>).
+// A value of 0 or -1 means "unlimited" for most numeric limits.
+
 // Agent Events Stream
-const AGENT_EVENTS_STREAM: StreamConfig = StreamConfig {
+let agent_events_stream = StreamConfig {
     name: "agent-events".to_string(),
     subjects: vec!["agents.*.events.>".to_string(), "agents.*.status".to_string()],
     storage: StorageType::File,
     retention: RetentionPolicy::Limits,
     max_age: Duration::from_secs(7 * 24 * 60 * 60), // 7 days
-    max_bytes: Some(1024 * 1024 * 1024), // 1GB
-    max_messages: Some(1_000_000),
-    max_message_size: Some(1024 * 1024), // 1MB
-    discard: async_nats::jetstream::stream::DiscardPolicy::Old,
+    max_bytes: 1024 * 1024 * 1024,                   // 1GB (i64, not Option)
+    max_messages: 1_000_000,                          // i64, not Option
+    max_message_size: 1024 * 1024,                    // 1MB (i32, not Option)
+    discard: DiscardPolicy::Old,
     num_replicas: 3,
-    duplicate_window: Some(Duration::from_secs(120)), // 2 minutes
+    duplicate_window: Duration::from_secs(120),       // 2 minutes (Duration, not Option)
     ..Default::default()
 };
 
 // Task Lifecycle Stream
-const TASK_LIFECYCLE_STREAM: StreamConfig = StreamConfig {
+let task_lifecycle_stream = StreamConfig {
     name: "task-lifecycle".to_string(),
     subjects: vec![
         "tasks.*.assignment".to_string(),
@@ -320,12 +331,12 @@ const TASK_LIFECYCLE_STREAM: StreamConfig = StreamConfig {
     storage: StorageType::File,
     retention: RetentionPolicy::Limits,
     max_age: Duration::from_secs(30 * 24 * 60 * 60), // 30 days
-    max_bytes: Some(5 * 1024 * 1024 * 1024), // 5GB
-    max_messages: Some(10_000_000),
-    max_message_size: Some(10 * 1024 * 1024), // 10MB
-    discard: async_nats::jetstream::stream::DiscardPolicy::Old,
+    max_bytes: 5 * 1024 * 1024 * 1024,                // 5GB (i64)
+    max_messages: 10_000_000,                          // i64
+    max_message_size: 10 * 1024 * 1024,                // 10MB (i32)
+    discard: DiscardPolicy::Old,
     num_replicas: 3,
-    duplicate_window: Some(Duration::from_secs(300)), // 5 minutes
+    duplicate_window: Duration::from_secs(300),        // 5 minutes (Duration)
     ..Default::default()
 };
 ```
@@ -333,29 +344,37 @@ const TASK_LIFECYCLE_STREAM: StreamConfig = StreamConfig {
 #### Consumer Configuration Patterns
 
 ```rust
+use async_nats::jetstream::consumer::ReplayPolicy;
+
+// NOTE: In async-nats 0.46, ConsumerConfig field types changed:
+// - filter_subject: String (not Option<String>) — empty string means no filter
+// - max_deliver: i64 (not Option<i64>) — 0 means unlimited
+// - max_ack_pending: i64 (not Option<i64>) — 0 means unlimited
+// - ack_wait: Duration (not Option<Duration>)
+
 // Event Processing Consumer
-const EVENT_PROCESSOR_CONSUMER: ConsumerConfig = ConsumerConfig {
+let event_processor_consumer = ConsumerConfig {
     name: Some("event-processor".to_string()),
     deliver_policy: DeliverPolicy::New,
     ack_policy: AckPolicy::Explicit,
     ack_wait: Duration::from_secs(30),
-    max_deliver: Some(3),
-    filter_subject: Some("agents.*.events.>".to_string()),
-    replay_policy: async_nats::jetstream::consumer::ReplayPolicy::Instant,
-    max_ack_pending: Some(1000),
+    max_deliver: 3,                                     // i64, not Option
+    filter_subject: "agents.*.events.>".to_string(),    // String, not Option<String>
+    replay_policy: ReplayPolicy::Instant,
+    max_ack_pending: 1000,                              // i64, not Option
     ..Default::default()
 };
 
 // Task Assignment Consumer
-const TASK_ASSIGNMENT_CONSUMER: ConsumerConfig = ConsumerConfig {
+let task_assignment_consumer = ConsumerConfig {
     name: Some("task-assignment".to_string()),
     deliver_policy: DeliverPolicy::All,
     ack_policy: AckPolicy::Explicit,
     ack_wait: Duration::from_secs(300), // 5 minutes
-    max_deliver: Some(5),
-    filter_subject: Some("tasks.*.assignment".to_string()),
-    replay_policy: async_nats::jetstream::consumer::ReplayPolicy::Instant,
-    max_ack_pending: Some(100),
+    max_deliver: 5,                                       // i64, not Option
+    filter_subject: "tasks.*.assignment".to_string(),     // String, not Option<String>
+    replay_policy: ReplayPolicy::Instant,
+    max_ack_pending: 100,                                 // i64, not Option
     ..Default::default()
 };
 ```
@@ -390,7 +409,14 @@ pub struct JetStreamLimits {
 
 ```rust
 use async_nats::{Client, Message};
+use bytes::Bytes;
+use futures_util::StreamExt;
 use tokio::time::{Duration, timeout};
+
+// NOTE: In async-nats 0.46, publish() is async and applies backpressure — it can
+// block when the internal send buffer is full. This is a behavioral change from 0.34
+// where publish was effectively fire-and-forget. Design agent communication patterns
+// to handle potential publish delays under load.
 
 // 1. Direct Agent Command Pattern
 pub async fn send_agent_command(
@@ -400,8 +426,10 @@ pub async fn send_agent_command(
 ) -> Result<(), NatsError> {
     let subject = format!("agents.{}.commands.{}", agent_id, command.command_type);
     let payload = serde_json::to_vec(&command)?;
-    
-    client.publish(subject, payload.into()).await?;
+
+    // publish() takes S: ToSubject — String, &str, and Subject all implement ToSubject
+    // publish() is async and may block under backpressure (0.46 behavior)
+    client.publish(subject, Bytes::from(payload)).await?;
     Ok(())
 }
 
@@ -413,12 +441,14 @@ pub async fn query_agent_capabilities(
     let subject = format!("agents.{}.capabilities", agent_id);
     let query = CapabilityQuery::new();
     let payload = serde_json::to_vec(&query)?;
-    
+
+    // request() returns Result<Message, RequestError>
+    // RequestErrorKind variants: TimedOut, NoResponders, Other
     let response = timeout(
         Duration::from_secs(5),
-        client.request(subject, payload.into())
+        client.request(subject, Bytes::from(payload))
     ).await??;
-    
+
     let capabilities: AgentCapabilities = serde_json::from_slice(&response.payload)?;
     Ok(capabilities)
 }
@@ -428,16 +458,19 @@ pub async fn subscribe_to_agent_events(
     client: &Client,
     handler: impl Fn(Message) -> Result<(), NatsError> + Send + 'static,
 ) -> Result<(), NatsError> {
+    // subscribe() takes S: ToSubject — &str works directly
+    // Subscriber implements futures_util::Stream<Item = Message>
     let mut subscription = client.subscribe("agents.*.events.>").await?;
-    
+
     tokio::spawn(async move {
+        // StreamExt::next() from futures_util
         while let Some(message) = subscription.next().await {
             if let Err(e) = handler(message) {
                 eprintln!("Error handling agent event: {}", e);
             }
         }
     });
-    
+
     Ok(())
 }
 ```
@@ -935,6 +968,10 @@ impl JetStreamManager {
     }
     
     // Agent Events Stream Configuration
+    // NOTE: In async-nats 0.46, StreamConfig numeric fields (max_bytes, max_messages,
+    // max_message_size) are plain i64/i32 — NOT Option<>. Duration fields (max_age,
+    // duplicate_window) are plain Duration — NOT Option<Duration>. A value of 0 means
+    // "unlimited" for numeric limits.
     fn agent_events_stream() -> StreamConfig {
         StreamConfig {
             name: "agent_events".to_string(),
@@ -945,17 +982,17 @@ impl JetStreamManager {
             ],
             storage: StorageType::File,
             retention: RetentionPolicy::Limits,
-            max_age: Some(Duration::from_secs(7 * 24 * 60 * 60)), // 7 days
-            max_bytes: Some(1024 * 1024 * 1024), // 1GB
-            max_messages: Some(1_000_000),
-            max_message_size: Some(1024 * 1024), // 1MB
+            max_age: Duration::from_secs(7 * 24 * 60 * 60),       // 7 days
+            max_bytes: 1024 * 1024 * 1024,                         // 1GB (i64)
+            max_messages: 1_000_000,                                // i64
+            max_message_size: 1024 * 1024,                         // 1MB (i32)
             discard: DiscardPolicy::Old,
             num_replicas: 3,
-            duplicate_window: Some(Duration::from_secs(120)), // 2 minutes
+            duplicate_window: Duration::from_secs(120),            // 2 minutes
             ..Default::default()
         }
     }
-    
+
     // Task Lifecycle Stream Configuration
     fn task_lifecycle_stream() -> StreamConfig {
         StreamConfig {
@@ -968,17 +1005,17 @@ impl JetStreamManager {
             ],
             storage: StorageType::File,
             retention: RetentionPolicy::Limits,
-            max_age: Some(Duration::from_secs(30 * 24 * 60 * 60)), // 30 days
-            max_bytes: Some(5 * 1024 * 1024 * 1024), // 5GB
-            max_messages: Some(10_000_000),
-            max_message_size: Some(10 * 1024 * 1024), // 10MB
+            max_age: Duration::from_secs(30 * 24 * 60 * 60),      // 30 days
+            max_bytes: 5 * 1024 * 1024 * 1024,                    // 5GB (i64)
+            max_messages: 10_000_000,                              // i64
+            max_message_size: 10 * 1024 * 1024,                   // 10MB (i32)
             discard: DiscardPolicy::Old,
             num_replicas: 3,
-            duplicate_window: Some(Duration::from_secs(300)), // 5 minutes
+            duplicate_window: Duration::from_secs(300),            // 5 minutes
             ..Default::default()
         }
     }
-    
+
     // System Monitoring Stream Configuration
     fn system_monitoring_stream() -> StreamConfig {
         StreamConfig {
@@ -990,17 +1027,17 @@ impl JetStreamManager {
             ],
             storage: StorageType::File,
             retention: RetentionPolicy::Limits,
-            max_age: Some(Duration::from_secs(90 * 24 * 60 * 60)), // 90 days
-            max_bytes: Some(2 * 1024 * 1024 * 1024), // 2GB
-            max_messages: Some(5_000_000),
-            max_message_size: Some(512 * 1024), // 512KB
+            max_age: Duration::from_secs(90 * 24 * 60 * 60),      // 90 days
+            max_bytes: 2 * 1024 * 1024 * 1024,                    // 2GB (i64)
+            max_messages: 5_000_000,                               // i64
+            max_message_size: 512 * 1024,                          // 512KB (i32)
             discard: DiscardPolicy::Old,
             num_replicas: 3,
-            duplicate_window: Some(Duration::from_secs(60)), // 1 minute
+            duplicate_window: Duration::from_secs(60),             // 1 minute
             ..Default::default()
         }
     }
-    
+
     // Claude CLI Integration Stream Configuration
     fn claude_cli_stream() -> StreamConfig {
         StreamConfig {
@@ -1008,32 +1045,37 @@ impl JetStreamManager {
             subjects: vec!["cli.>".to_string()],
             storage: StorageType::Memory,
             retention: RetentionPolicy::Limits,
-            max_age: Some(Duration::from_secs(3600)), // 1 hour
-            max_bytes: Some(256 * 1024 * 1024), // 256MB
-            max_messages: Some(100_000),
-            max_message_size: Some(1024 * 1024), // 1MB
+            max_age: Duration::from_secs(3600),                    // 1 hour
+            max_bytes: 256 * 1024 * 1024,                          // 256MB (i64)
+            max_messages: 100_000,                                 // i64
+            max_message_size: 1024 * 1024,                         // 1MB (i32)
             discard: DiscardPolicy::New,
             num_replicas: 1,
-            duplicate_window: Some(Duration::from_secs(30)), // 30 seconds
+            duplicate_window: Duration::from_secs(30),             // 30 seconds
             ..Default::default()
         }
     }
     
     // Agent Status Monitor Consumer
+    // NOTE: In async-nats 0.46, ConsumerConfig field types changed:
+    // - filter_subject: String (not Option<String>) — empty string means no filter
+    // - max_deliver: i64 (not Option<i64>) — 0 means unlimited
+    // - max_ack_pending: i64 (not Option<i64>) — 0 means unlimited
+    // - ack_wait: Duration (not Option<Duration>)
     fn agent_status_consumer() -> ConsumerConfig {
         ConsumerConfig {
             name: Some("agent_status_monitor".to_string()),
             deliver_policy: DeliverPolicy::New,
             ack_policy: AckPolicy::Explicit,
             ack_wait: Duration::from_secs(30),
-            max_deliver: Some(3),
-            filter_subject: Some("agents.*.status".to_string()),
+            max_deliver: 3,                                        // i64, not Option
+            filter_subject: "agents.*.status".to_string(),         // String, not Option
             replay_policy: ReplayPolicy::Instant,
-            max_ack_pending: Some(1000),
+            max_ack_pending: 1000,                                 // i64, not Option
             ..Default::default()
         }
     }
-    
+
     // Task Processor Consumer
     fn task_processor_consumer() -> ConsumerConfig {
         ConsumerConfig {
@@ -1041,14 +1083,14 @@ impl JetStreamManager {
             deliver_policy: DeliverPolicy::All,
             ack_policy: AckPolicy::Explicit,
             ack_wait: Duration::from_secs(300), // 5 minutes
-            max_deliver: Some(5),
-            filter_subject: Some("tasks.*.assignment".to_string()),
+            max_deliver: 5,                                        // i64, not Option
+            filter_subject: "tasks.*.assignment".to_string(),      // String, not Option
             replay_policy: ReplayPolicy::Instant,
-            max_ack_pending: Some(100),
+            max_ack_pending: 100,                                  // i64, not Option
             ..Default::default()
         }
     }
-    
+
     // System Alerting Consumer
     fn system_alerting_consumer() -> ConsumerConfig {
         ConsumerConfig {
@@ -1056,10 +1098,10 @@ impl JetStreamManager {
             deliver_policy: DeliverPolicy::New,
             ack_policy: AckPolicy::Explicit,
             ack_wait: Duration::from_secs(60),
-            max_deliver: Some(3),
-            filter_subject: Some("system.*.alerts.>".to_string()),
+            max_deliver: 3,                                        // i64, not Option
+            filter_subject: "system.*.alerts.>".to_string(),       // String, not Option
             replay_policy: ReplayPolicy::Instant,
-            max_ack_pending: Some(500),
+            max_ack_pending: 500,                                  // i64, not Option
             ..Default::default()
         }
     }
@@ -1121,17 +1163,19 @@ impl Default for JetStreamResourceLimits {
 }
 
 // Resource monitoring
+// NOTE: In async-nats 0.46, the method is context.query_account() (not account_info()).
+// The Account struct has fields: memory: u64, storage: u64, streams: usize, consumers: usize.
 pub async fn monitor_jetstream_resources(
     context: &Context,
     limits: &JetStreamResourceLimits,
 ) -> Result<ResourceUsageReport, Box<dyn std::error::Error>> {
-    let account_info = context.account_info().await?;
-    
+    let account = context.query_account().await?;
+
     Ok(ResourceUsageReport {
-        memory_usage: account_info.memory,
-        storage_usage: account_info.storage,
-        streams_count: account_info.streams,
-        consumers_count: account_info.consumers,
+        memory_usage: account.memory,
+        storage_usage: account.storage,
+        streams_count: account.streams,
+        consumers_count: account.consumers,
         limits: limits.clone(),
     })
 }
@@ -1140,8 +1184,8 @@ pub async fn monitor_jetstream_resources(
 pub struct ResourceUsageReport {
     pub memory_usage: u64,
     pub storage_usage: u64,
-    pub streams_count: u32,
-    pub consumers_count: u32,
+    pub streams_count: usize,  // usize in async-nats 0.46 Account struct
+    pub consumers_count: usize, // usize in async-nats 0.46 Account struct
     pub limits: JetStreamResourceLimits,
 }
 
@@ -1149,8 +1193,8 @@ impl ResourceUsageReport {
     pub fn is_within_limits(&self) -> bool {
         self.memory_usage <= self.limits.max_memory
             && self.storage_usage <= self.limits.max_storage
-            && self.streams_count <= self.limits.max_streams
-            && self.consumers_count <= self.limits.max_consumers
+            && self.streams_count <= self.limits.max_streams as usize
+            && self.consumers_count <= self.limits.max_consumers as usize
     }
     
     pub fn memory_usage_percentage(&self) -> f64 {
@@ -1297,31 +1341,42 @@ impl NatsConnectionManager {
         let (event_sender, mut event_receiver) = mpsc::unbounded_channel();
         let connection_healthy = Arc::new(AtomicBool::new(false));
         
+        // NOTE: In async-nats 0.46, event_callback requires an async closure:
+        //   F: Fn(Event) -> Fut + Send + Sync + 'static
+        //   Fut: Future<Output = ()> + Send + Sync + 'static
+        // The callback must return a Future, not a bare unit value.
+        // reconnect_delay_callback takes Fn(usize) -> Duration (sync, not async).
         let options = ConnectOptions::new()
             .ping_interval(Duration::from_secs(30))
             .reconnect_delay_callback(|attempts| {
-                std::cmp::min(Duration::from_secs(attempts), Duration::from_secs(60))
+                std::cmp::min(
+                    Duration::from_millis((attempts * 100) as u64),
+                    Duration::from_secs(60),
+                )
             })
             .event_callback({
                 let event_sender = event_sender.clone();
                 move |event| {
-                    let event_msg = match event {
-                        Event::Connected => {
-                            ConnectionEvent::Connected
-                        }
-                        Event::Disconnected => {
-                            ConnectionEvent::Disconnected
-                        }
-                        Event::ClientError(e) => {
-                            ConnectionEvent::Error(e.to_string())
-                        }
-                        _ => return,
-                    };
-                    
-                    let _ = event_sender.send(event_msg);
+                    let event_sender = event_sender.clone();
+                    async move {
+                        let event_msg = match event {
+                            Event::Connected => {
+                                ConnectionEvent::Connected
+                            }
+                            Event::Disconnected => {
+                                ConnectionEvent::Disconnected
+                            }
+                            Event::ClientError(e) => {
+                                ConnectionEvent::Error(e.to_string())
+                            }
+                            _ => return,
+                        };
+
+                        let _ = event_sender.send(event_msg);
+                    }
                 }
             });
-        
+
         let client = async_nats::connect_with_options(server_url, options).await?;
         
         let manager = NatsConnectionManager {

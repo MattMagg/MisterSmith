@@ -8,7 +8,7 @@ permalink: transport/grpc-transport
 
 ## Mister Smith AI Agent Framework
 
-> **Canonical Reference**: See `/Users/mac-main/Mister-Smith/Mister-Smith/tech-framework.md` for authoritative technology stack specifications
+> **Canonical Reference**: See `../core-architecture/dependency-specifications.md` for authoritative technology stack specifications
 
 ## Technical Specifications
 
@@ -16,7 +16,7 @@ permalink: transport/grpc-transport
 
 - **Protocol Buffers v3**: Message serialization with efficient binary encoding
 - **HTTP/2 Transport**: Multiplexed streams with header compression
-- **Tonic 0.11**: High-performance gRPC framework for Rust
+- **Tonic 0.14**: High-performance gRPC framework for Rust
 - **TLS 1.3**: Mandatory encryption with mutual authentication
 
 **Streaming Patterns Implemented**:
@@ -40,10 +40,10 @@ gRPC provides high-performance, cross-language RPC capabilities using Protocol B
 
 **Technology Stack**:
 
-- Tonic 0.11 (gRPC framework for Rust)
+- Tonic 0.14 (gRPC framework for Rust)
 - Protocol Buffers v3 for message serialization
 - HTTP/2 for transport
-- Tokio 1.38 for async runtime
+- Tokio 1.49 for async runtime
 
 **Transport Core Dependencies**:
 
