@@ -7,6 +7,7 @@
 **Status**: Updated for current ecosystem
 
 > **Key version changes applied in this validation**:
+>
 > - **jsonwebtoken**: Updated to 10.3.0 — crypto backend is now trait-based, must select `aws_lc_rs` or `rust_crypto` feature. `encode()`/`decode()` API signatures unchanged but crate requires `jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }`
 > - **rustls**: Updated to 0.23.37 API — `Certificate`/`PrivateKey` replaced by `CertificateDer<'static>`/`PrivateKeyDer<'static>`, `ServerConfig::builder()` now requires explicit `CryptoProvider`, cipher suite / KX group selection moved to provider
 > - **tokio-rustls**: 0.26.4, aligned with rustls 0.23

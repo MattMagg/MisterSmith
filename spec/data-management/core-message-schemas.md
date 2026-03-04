@@ -560,7 +560,7 @@ This file is part of the Message Schema Documentation suite:
 
 1. **[Core Message Schemas](./core-message-schemas.md)** - Foundation schemas and agent communication *(current file)*
 2. [Complete Message Schemas](./message-schemas.md) - Full specification with all message types
-4. [Message Framework](./message-framework.md) - Validation, serialization, and framework specifications
+3. [Message Framework](./message-framework.md) - Validation, serialization, and framework specifications
 
 ### Quick Access
 
