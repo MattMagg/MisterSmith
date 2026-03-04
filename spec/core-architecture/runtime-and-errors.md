@@ -2,13 +2,13 @@
 
 **Framework Documentation > Core Architecture > Runtime and Errors**
 
-**Quick Links**: [System Architecture](system-architecture.md) | [Async Patterns](async-patterns-detailed.md) | [Supervision & Events](supervision-and-events.md) | [Component Architecture](component-architecture.md)
+**Quick Links**: [System Architecture](system-architecture.md) | [Async Patterns](async-patterns.md) | [Supervision & Events](supervision-and-events.md) | [Component Architecture](component-architecture.md)
 
 ---
 
 ## Navigation
 
-[← Back to Specifications](../CLAUDE.md) | [System Architecture Overview](./system-architecture.md) | [Async Patterns →](./async-patterns-detailed.md)
+[← Back to Specifications](../CLAUDE.md) | [System Architecture Overview](./system-architecture.md) | [Async Patterns →](./async-patterns.md)
 
 ---
 
@@ -522,7 +522,7 @@ impl RuntimeManager {
 
 ## Cross-References
 
-- For async execution patterns, see [Async Patterns](async-patterns-detailed.md)
+- For async execution patterns, see [Async Patterns](async-patterns.md)
 - For supervision tree implementation, see [Supervision & Events](supervision-and-events.md)
 - For component integration, see [Component Architecture](component-architecture.md)
 - For monitoring implementation, see [Monitoring & Health](monitoring-and-health.md)

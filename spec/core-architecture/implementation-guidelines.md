@@ -2,7 +2,7 @@
 
 **Framework Documentation > Core Architecture > Implementation Guidelines**
 
-**Quick Links**: [System Architecture](system-architecture.md) | [Runtime & Errors](runtime-and-errors.md) | [Async Patterns](async-patterns-detailed.md) | [Monitoring & Health](monitoring-and-health.md)
+**Quick Links**: [System Architecture](system-architecture.md) | [Runtime & Errors](runtime-and-errors.md) | [Async Patterns](async-patterns.md) | [Monitoring & Health](monitoring-and-health.md)
 
 ---
 

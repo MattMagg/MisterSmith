@@ -2,13 +2,13 @@
 
 **Framework Documentation > Core Architecture > Supervision and Events**
 
-**Quick Links**: [Runtime & Errors](runtime-and-errors.md) | [Async Patterns](async-patterns-detailed.md) | [System Architecture](system-architecture.md) | [Monitoring & Health](monitoring-and-health.md)
+**Quick Links**: [Runtime & Errors](runtime-and-errors.md) | [Async Patterns](async-patterns.md) | [System Architecture](system-architecture.md) | [Monitoring & Health](monitoring-and-health.md)
 
 ---
 
 ## Navigation
 
-[← Async Patterns](./async-patterns-detailed.md) | [System Architecture Overview](./system-architecture.md) | [Monitoring & Health →](./monitoring-and-health.md)
+[← Async Patterns](./async-patterns.md) | [System Architecture Overview](./system-architecture.md) | [Monitoring & Health →](./monitoring-and-health.md)
 
 ---
 
@@ -844,7 +844,7 @@ impl EventBuilder {
 ## Cross-References
 
 - For runtime integration, see [Runtime & Errors](runtime-and-errors.md)
-- For async patterns, see [Async Patterns](async-patterns-detailed.md)
+- For async patterns, see [Async Patterns](async-patterns.md)
 - For health monitoring integration, see [Monitoring & Health](monitoring-and-health.md)
 - For component integration, see [Component Architecture](component-architecture.md)
 

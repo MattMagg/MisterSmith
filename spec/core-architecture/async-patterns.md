@@ -2,9 +2,38 @@
 
 **Navigation**: [Core Architecture](../CLAUDE.md) > Async Patterns
 
-This document defines the asynchronous programming patterns, concurrency models, and reactive architectures used throughout the MisterSmith framework. All patterns are built on Tokio for maximum performance and reliability.
+**Related**: [Runtime & Errors](runtime-and-errors.md) | [Supervision & Events](supervision-and-events.md) | [System Architecture](system-architecture.md) | [Component Architecture](component-architecture.md) | [Tokio Runtime](tokio-runtime.md) | [Supervision Trees](supervision-trees.md)
+
+---
+
+> **Consolidation Note**: This file was consolidated from `async-patterns.md` and
+> `async-patterns-detailed.md` on 2026-03-03. All content from both files has been
+> preserved. The detailed file now redirects here.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Task Management Framework](#task-management-framework)
+3. [Stream Processing Architecture](#stream-processing-architecture)
+4. [Actor Model Implementation](#actor-model-implementation)
+5. [Async Synchronization Primitives](#async-synchronization-primitives)
+6. [Core Type Definitions](#core-type-definitions)
+7. [Agent-as-Tool Pattern](#agent-as-tool-pattern)
+8. [Tool System Core](#tool-system-core)
+9. [Cross-Domain Consistency Validation](#cross-domain-consistency-validation)
+10. [Distributed Tracing Integration](#distributed-tracing-integration)
+11. [Production Monitoring](#production-monitoring)
+12. [Load Testing and Chaos Engineering](#load-testing-and-chaos-engineering)
+13. [Production-Ready Components](#production-ready-components)
+14. [Cross-References](#cross-references)
+
+---
 
 ## Overview
+
+This document defines the asynchronous programming patterns, concurrency models, and reactive architectures used throughout the MisterSmith framework. All patterns are built on Tokio for maximum performance and reliability.
 
 ### Core Async Principles
 
@@ -35,7 +64,6 @@ let runtime = Builder::new_multi_thread()
 
 ### Task Execution and Lifecycle Management
 
-```rust
 The task management system provides structured concurrency with automatic error recovery, panic handling, and resource management.
 
 #### Key Features
@@ -95,7 +123,7 @@ pub enum TaskError {
 pub enum ErrorStrategy {
     StopOnError,      // Use for critical operations that must succeed
     LogAndContinue,   // Use for non-critical operations like logging
-    RetryWithBackoff, // Use for transient network/resource errors  
+    RetryWithBackoff, // Use for transient network/resource errors
     CircuitBreaker,   // Use for operations that might cascade failures
 }
 
@@ -146,7 +174,7 @@ impl RetryPolicy {
             backoff_multiplier: 1.5,
         }
     }
-    
+
     pub fn for_network() -> Self {
         Self {
             max_attempts: 3,
@@ -158,29 +186,29 @@ impl RetryPolicy {
 }
 
 /// Core trait for all async tasks in the system
-/// 
+///
 /// # Example Implementation
-/// 
+///
 /// ```rust
 /// struct DataProcessingTask {
 ///     data: Vec<u8>,
 ///     task_id: TaskId,
 /// }
-/// 
+///
 /// #[async_trait]
 /// impl AsyncTask for DataProcessingTask {
 ///     type Output = ProcessedData;
 ///     type Error = ProcessingError;
-///     
+///
 ///     async fn execute(self) -> Result<Self::Output, Self::Error> {
 ///         // Simulate async processing
 ///         tokio::time::sleep(Duration::from_millis(100)).await;
-///         
+///
 ///         // Process data with error handling
 ///         process_data(self.data)
 ///             .map_err(|e| ProcessingError::Failed(e.to_string()))
 ///     }
-///     
+///
 ///     fn priority(&self) -> TaskPriority {
 ///         if self.data.len() > 1_000_000 {
 ///             TaskPriority::Low  // Large tasks get lower priority
@@ -188,15 +216,15 @@ impl RetryPolicy {
 ///             TaskPriority::Normal
 ///         }
 ///     }
-///     
+///
 ///     fn timeout(&self) -> Duration {
 ///         Duration::from_secs(60)  // 1 minute timeout for processing
 ///     }
-///     
+///
 ///     fn retry_policy(&self) -> RetryPolicy {
 ///         RetryPolicy::for_database()  // Use database-optimized retry
 ///     }
-///     
+///
 ///     fn task_id(&self) -> TaskId {
 ///         self.task_id
 ///     }
@@ -206,40 +234,40 @@ impl RetryPolicy {
 pub trait AsyncTask: Send + Sync {
     type Output: Send + Sync;
     type Error: std::error::Error + Send + Sync + 'static;
-    
+
     /// Execute the task asynchronously
     async fn execute(self) -> Result<Self::Output, Self::Error>;
-    
+
     /// Priority determines execution order when multiple tasks are queued
     fn priority(&self) -> TaskPriority;
-    
+
     /// Maximum time allowed for task execution before timeout
     fn timeout(&self) -> Duration;
-    
+
     /// Retry policy for handling transient failures
     fn retry_policy(&self) -> RetryPolicy;
-    
+
     /// Unique identifier for tracking and monitoring
     fn task_id(&self) -> TaskId;
 }
 
 /// Handle for tracking and controlling async task execution
-/// 
+///
 /// # Example Usage
-/// 
+///
 /// ```rust
 /// let executor = TaskExecutor::new(10);
 /// let task = MyTask::new();
-/// 
+///
 /// // Submit task and get handle
 /// let handle = executor.submit(task).await?;
-/// 
+///
 /// // Option 1: Wait for completion
 /// match handle.await_result().await {
 ///     Ok(result) => println!("Task completed: {:?}", result),
 ///     Err(e) => eprintln!("Task failed: {}", e),
 /// }
-/// 
+///
 /// // Option 2: Abort if taking too long
 /// tokio::select! {
 ///     result = handle.await_result() => {
@@ -263,7 +291,7 @@ impl<T> TaskHandle<T> {
     pub fn task_id(&self) -> TaskId {
         self.task_id
     }
-    
+
     /// Wait for task completion and get the result
     pub async fn await_result(self) -> Result<T, TaskError> {
         match self.receiver.await {
@@ -271,7 +299,7 @@ impl<T> TaskHandle<T> {
             Err(_) => Err(TaskError::TaskCancelled),
         }
     }
-    
+
     /// Abort the task execution
     pub fn abort(&self) {
         self.join_handle.abort();
@@ -304,24 +332,24 @@ impl TaskMetrics {
 type BoxedTask = Box<dyn AsyncTask<Output = serde_json::Value, Error = TaskError> + Send>;
 
 /// Object pool for efficient task reuse and memory management
-/// 
+///
 /// Reduces allocation overhead by reusing task objects
-/// 
+///
 /// # Example Usage
-/// 
+///
 /// ```rust
 /// // Create a pool for expensive connection objects
 /// let pool = TaskPool::new(
 ///     Box::new(|| DatabaseConnection::new()),
 ///     100  // Max 100 cached connections
 /// );
-/// 
+///
 /// // Acquire connection from pool
 /// let conn = pool.acquire().await;
-/// 
+///
 /// // Use connection for work
 /// conn.execute_query("SELECT * FROM users").await?;
-/// 
+///
 /// // Return to pool for reuse
 /// pool.release(conn).await;
 /// ```
@@ -340,13 +368,13 @@ impl<T: Send> TaskPool<T> {
             max_size,
         }
     }
-    
+
     /// Acquire an item from the pool or create a new one
     pub async fn acquire(&self) -> T {
         let mut pool = self.available.lock().await;
         pool.pop().unwrap_or_else(|| (self.factory)())
     }
-    
+
     /// Return an item to the pool for reuse
     pub async fn release(&self, item: T) {
         let mut pool = self.available.lock().await;
@@ -358,20 +386,20 @@ impl<T: Send> TaskPool<T> {
 }
 
 /// Circuit breaker pattern for preventing cascading failures
-/// 
+///
 /// States:
 /// - Closed: Normal operation, requests pass through
 /// - Open: Failures exceeded threshold, requests blocked
 /// - HalfOpen: Testing if service recovered, limited requests allowed
-/// 
+///
 /// # Example Usage
-/// 
+///
 /// ```rust
 /// let breaker = CircuitBreaker::new(
 ///     5,                           // Open after 5 failures
 ///     Duration::from_secs(60)      // Try recovery after 60 seconds
 /// );
-/// 
+///
 /// // Check before making request
 /// if breaker.can_proceed() {
 ///     match make_api_call().await {
@@ -410,7 +438,7 @@ impl CircuitBreaker {
             half_open_max_calls: std::sync::atomic::AtomicU32::new(0),
         }
     }
-    
+
     pub fn can_proceed(&self) -> bool {
         let state = self.state.read().unwrap();
         match *state {
@@ -436,7 +464,7 @@ impl CircuitBreaker {
             }
         }
     }
-    
+
     pub fn record_success(&self) {
         let mut state = self.state.write().unwrap();
         if matches!(*state, crate::types::CircuitState::HalfOpen) {
@@ -444,11 +472,11 @@ impl CircuitBreaker {
             self.failure_count.store(0, std::sync::atomic::Ordering::Relaxed);
         }
     }
-    
+
     pub fn record_failure(&self) {
         let count = self.failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         *self.last_failure_time.lock().unwrap() = Some(std::time::Instant::now());
-        
+
         if count >= self.failure_threshold {
             *self.state.write().unwrap() = crate::types::CircuitState::Open;
         }
@@ -456,39 +484,39 @@ impl CircuitBreaker {
 }
 
 /// High-performance task executor with built-in resilience patterns
-/// 
+///
 /// Features:
 /// - Concurrent task execution with configurable limits
 /// - Automatic retry with exponential backoff
 /// - Circuit breaker protection
 /// - Real-time metrics collection
 /// - Graceful shutdown support
-/// 
+///
 /// # Example Usage
-/// 
+///
 /// ```rust
 /// // Create executor with max 50 concurrent tasks
 /// let executor = TaskExecutor::new(50);
-/// 
+///
 /// // Submit a high-priority task
 /// let task = DataProcessingTask {
 ///     data: large_dataset,
 ///     priority: TaskPriority::High,
 /// };
-/// 
+///
 /// let handle = executor.submit(task).await?;
-/// 
+///
 /// // Wait for result with timeout
 /// match tokio::time::timeout(Duration::from_secs(30), handle.await_result()).await {
 ///     Ok(Ok(result)) => println!("Processing complete: {:?}", result),
 ///     Ok(Err(e)) => eprintln!("Task failed: {}", e),
 ///     Err(_) => eprintln!("Task timed out"),
 /// }
-/// 
+///
 /// // Check metrics
 /// let metrics = executor.metrics();
 /// println!("Tasks completed: {}", metrics.completed.load(Ordering::Relaxed));
-/// 
+///
 /// // Graceful shutdown
 /// executor.shutdown().await?;
 /// ```
@@ -508,10 +536,10 @@ impl TaskExecutor {
     pub fn new(max_concurrent: usize) -> Self {
         Self::with_config(max_concurrent, ErrorStrategy::RetryWithBackoff)
     }
-    
+
     pub fn with_config(max_concurrent: usize, error_strategy: ErrorStrategy) -> Self {
         let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
-        
+
         Self {
             task_queue: Arc::new(Mutex::new(VecDeque::new())),
             worker_handles: Vec::new(),
@@ -529,53 +557,53 @@ impl TaskExecutor {
             error_strategy,
         }
     }
-    
+
     /// Submit a task for async execution with automatic resource management
     pub async fn submit<T: AsyncTask + 'static>(&self, task: T) -> Result<TaskHandle<T::Output>, TaskError> {
         let task_id = task.task_id();
         let priority = task.priority();
         let timeout_duration = task.timeout();
         let retry_policy = task.retry_policy();
-        
+
         // Acquire semaphore permit to limit concurrent tasks
         let permit = self.semaphore.acquire().await
             .map_err(|_| TaskError::ExecutorShutdown)?;
-        
+
         let (tx, rx) = oneshot::channel();
-        
+
         // Update metrics
         self.metrics.total_submitted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.metrics.currently_running.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        
+
         let metrics = Arc::clone(&self.metrics);
-        
+
         // Spawn task with automatic cleanup on completion
         let join_handle = tokio::spawn(async move {
             let _permit = permit; // Hold permit for duration of task
-            
+
             // Execute with retry logic and timeout
             let result = Self::execute_with_retry(task, timeout_duration, retry_policy).await;
-            
+
             // Update metrics based on result
             metrics.currently_running.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             match &result {
                 Ok(_) => { metrics.completed.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
                 Err(_) => { metrics.failed.fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
             }
-            
+
             // Send result to waiting handle
             let _ = tx.send(result);
         });
-        
+
         Ok(TaskHandle {
             task_id,
             receiver: rx,
             join_handle,
         })
     }
-    
+
     /// Execute task with automatic retry on failure
-    /// 
+    ///
     /// Implements exponential backoff with jitter to prevent thundering herd
     async fn execute_with_retry<T: AsyncTask>(
         mut task: T,
@@ -584,10 +612,10 @@ impl TaskExecutor {
     ) -> Result<T::Output, TaskError> {
         let mut attempts = 0;
         let mut delay = retry_policy.base_delay;
-        
+
         loop {
             attempts += 1;
-            
+
             // Execute with timeout protection
             match timeout(timeout_duration, task.execute()).await {
                 Ok(Ok(output)) => {
@@ -599,20 +627,20 @@ impl TaskExecutor {
                     if attempts >= retry_policy.max_attempts {
                         return Err(TaskError::ExecutionFailed(e.to_string()));
                     }
-                    
+
                     // Log retry attempt
                     tracing::warn!(
-                        "Task failed, attempt {}/{}: {}", 
-                        attempts, 
-                        retry_policy.max_attempts, 
+                        "Task failed, attempt {}/{}: {}",
+                        attempts,
+                        retry_policy.max_attempts,
                         e
                     );
-                    
+
                     // Apply exponential backoff with jitter
                     let jitter = rand::random::<f64>() * 0.1 * delay.as_millis() as f64;
                     let sleep_duration = delay + Duration::from_millis(jitter as u64);
                     tokio::time::sleep(sleep_duration).await;
-                    
+
                     // Calculate next delay with cap
                     delay = std::cmp::min(
                         Duration::from_millis((delay.as_millis() as f64 * retry_policy.backoff_multiplier) as u64),
@@ -626,20 +654,20 @@ impl TaskExecutor {
             }
         }
     }
-    
+
     pub async fn shutdown(mut self) -> Result<(), TaskError> {
         let _ = self.shutdown_tx.send(());
-        
+
         // Wait for all workers to complete
         for handle in self.worker_handles {
             if let Err(e) = handle.await {
                 tracing::warn!("Worker task failed during shutdown: {}", e);
             }
         }
-        
+
         Ok(())
     }
-    
+
     pub fn metrics(&self) -> &TaskMetrics {
         &self.metrics
     }
@@ -704,29 +732,29 @@ impl Default for BackpressureConfig {
 }
 
 /// Trait for implementing custom stream processors
-/// 
+///
 /// # Example Implementation
-/// 
+///
 /// ```rust
 /// struct JsonValidator;
-/// 
+///
 /// #[async_trait]
 /// impl Processor<serde_json::Value> for JsonValidator {
 ///     type Error = ValidationError;
-///     
+///
 ///     async fn process(&self, item: serde_json::Value) -> Result<serde_json::Value, Self::Error> {
 ///         // Validate JSON schema
 ///         if item.get("id").is_none() {
 ///             return Err(ValidationError::MissingField("id"));
 ///         }
-///         
+///
 ///         // Add processing timestamp
 ///         let mut item = item;
 ///         item["processed_at"] = json!(chrono::Utc::now().to_rfc3339());
-///         
+///
 ///         Ok(item)
 ///     }
-///     
+///
 ///     fn name(&self) -> &str {
 ///         "json_validator"
 ///     }
@@ -735,23 +763,23 @@ impl Default for BackpressureConfig {
 #[async_trait]
 pub trait Processor<T>: Send + Sync {
     type Error: std::error::Error + Send + Sync + 'static;
-    
+
     /// Process a single item in the stream
     async fn process(&self, item: T) -> Result<T, Self::Error>;
-    
+
     /// Processor name for metrics and logging
     fn name(&self) -> &str;
 }
 
 /// High-performance stream processor with backpressure handling
-/// 
+///
 /// # Example Usage
-/// 
+///
 /// ```rust
 /// // Create a processing pipeline
 /// let (tx, rx) = mpsc::channel(100);
 /// let (result_tx, mut result_rx) = mpsc::channel(100);
-/// 
+///
 /// let processor = StreamProcessor::new(
 ///     Box::pin(ReceiverStream::new(rx)),
 ///     vec![
@@ -767,12 +795,12 @@ pub trait Processor<T>: Send + Sync {
 ///         ..Default::default()
 ///     },
 /// );
-/// 
+///
 /// // Process stream
 /// tokio::spawn(async move {
 ///     processor.process_stream().await.unwrap();
 /// });
-/// 
+///
 /// // Send data
 /// for i in 0..1000 {
 ///     tx.send(json!({ "id": i, "data": "test" })).await?;
@@ -815,11 +843,11 @@ where
             metrics: StreamMetrics::default(),
         }
     }
-    
+
     pub async fn process_stream(&mut self) -> Result<(), StreamError> {
         while let Some(item) = self.input_stream.next().await {
             let processed_item = self.apply_processors(item).await?;
-            
+
             match self.send_with_backpressure(processed_item).await {
                 Ok(_) => {
                     self.metrics.items_processed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -830,13 +858,13 @@ where
                 }
             }
         }
-        
+
         // Flush any remaining buffered items
         self.flush_buffer().await?;
-        
+
         Ok(())
     }
-    
+
     async fn apply_processors(&self, mut item: T) -> Result<T, StreamError> {
         for processor in &self.processors {
             item = processor.process(item).await
@@ -844,7 +872,7 @@ where
         }
         Ok(item)
     }
-    
+
     async fn send_with_backpressure(&mut self, item: T) -> Result<(), StreamError> {
         match self.output_sink.send(item.clone()).await {
             Ok(_) => Ok(()),
@@ -855,7 +883,7 @@ where
             Err(e) => Err(e),
         }
     }
-    
+
     async fn handle_backpressure(&mut self, item: T) -> Result<(), StreamError> {
         match self.backpressure_config.strategy {
             BackpressureStrategy::Wait => {
@@ -883,44 +911,45 @@ where
             }
         }
     }
-    
+
     async fn buffer_item(&self, item: T) -> Result<(), StreamError> {
         let mut buffer = self.buffer.lock().await;
-        
+
         if buffer.len() >= self.backpressure_config.buffer_size {
             // Buffer is full, drop oldest item
             buffer.pop_front();
             self.metrics.items_dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
-        
+
         buffer.push_back(item);
         Ok(())
     }
-    
+
     async fn flush_buffer(&mut self) -> Result<(), StreamError> {
         let mut buffer = self.buffer.lock().await;
-        
+
         while let Some(item) = buffer.pop_front() {
             self.output_sink.send(item).await?;
         }
-        
+
         Ok(())
     }
-    
+
     fn is_backpressure_error(&self, error: &StreamError) -> bool {
         matches!(error, StreamError::SinkFull | StreamError::SinkBlocked)
     }
-    
+
     pub fn metrics(&self) -> &StreamMetrics {
         &self.metrics
     }
 }
+```
 
 ### Stream Processing Utilities
 
 ```rust
 /// Create a buffered stream for improved throughput
-/// 
+///
 /// # Example
 /// ```rust
 /// let buffered = create_buffered_stream(my_stream, 100);
@@ -933,12 +962,12 @@ pub fn create_buffered_stream<T>(
 }
 
 /// Create a rate-limited stream to prevent overwhelming downstream
-/// 
+///
 /// # Example
 /// ```rust
 /// // Process max 10 items per second
 /// let limited = create_rate_limited_stream(
-///     my_stream, 
+///     my_stream,
 ///     Duration::from_millis(100)
 /// );
 /// ```
@@ -947,7 +976,7 @@ pub fn create_rate_limited_stream<T>(
     rate_limit: Duration,
 ) -> Pin<Box<dyn Stream<Item = T> + Send>> {
     use futures::stream;
-    
+
     Box::pin(
         stream.then(move |item| async move {
             tokio::time::sleep(rate_limit).await;
@@ -1004,9 +1033,9 @@ pub enum ActorResult {
 pub trait ActorMessage: Send + Sync + std::fmt::Debug + Clone {}
 
 /// Core trait that all actors must implement
-/// 
+///
 /// # Example Actor Implementation
-/// 
+///
 /// ```rust
 /// #[derive(Debug, Clone)]
 /// enum CalculatorMessage {
@@ -1014,19 +1043,19 @@ pub trait ActorMessage: Send + Sync + std::fmt::Debug + Clone {}
 ///     Subtract(i32),
 ///     GetResult(oneshot::Sender<i32>),
 /// }
-/// 
+///
 /// impl ActorMessage for CalculatorMessage {}
-/// 
+///
 /// struct CalculatorActor {
 ///     id: ActorId,
 /// }
-/// 
+///
 /// #[async_trait]
 /// impl Actor for CalculatorActor {
 ///     type Message = CalculatorMessage;
 ///     type State = i32; // Current total
 ///     type Error = std::io::Error;
-///     
+///
 ///     async fn handle_message(
 ///         &mut self,
 ///         message: Self::Message,
@@ -1047,12 +1076,12 @@ pub trait ActorMessage: Send + Sync + std::fmt::Debug + Clone {}
 ///             }
 ///         }
 ///     }
-///     
+///
 ///     fn pre_start(&mut self) -> Result<(), Self::Error> {
 ///         println!("Calculator actor {} starting", self.id.0);
 ///         Ok(())
 ///     }
-///     
+///
 ///     fn actor_id(&self) -> ActorId {
 ///         self.id
 ///     }
@@ -1063,24 +1092,24 @@ pub trait Actor: Send + Sync {
     type Message: ActorMessage;
     type State: Send + Sync;
     type Error: std::error::Error + Send + Sync + 'static;
-    
+
     /// Handle incoming messages and update state
     async fn handle_message(
         &mut self,
         message: Self::Message,
         state: &mut Self::State,
     ) -> Result<ActorResult, Self::Error>;
-    
+
     /// Called before actor starts processing messages
     fn pre_start(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
-    
+
     /// Called after actor stops processing messages
     fn post_stop(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
-    
+
     /// Unique identifier for this actor
     fn actor_id(&self) -> ActorId;
 }
@@ -1113,7 +1142,7 @@ pub struct Mailbox {
 impl Mailbox {
     pub fn new(capacity: Option<usize>) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
-        
+
         Self {
             sender,
             receiver: Arc::new(Mutex::new(receiver)),
@@ -1121,7 +1150,7 @@ impl Mailbox {
             current_size: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         }
     }
-    
+
     pub fn is_full(&self) -> bool {
         if let Some(cap) = self.capacity {
             self.current_size.load(std::sync::atomic::Ordering::Relaxed) >= cap
@@ -1129,45 +1158,45 @@ impl Mailbox {
             false
         }
     }
-    
+
     pub async fn enqueue(&self, message: MessageEnvelope) -> Result<(), ActorError> {
         if self.is_full() {
             return Err(ActorError::MailboxFull);
         }
-        
+
         self.sender.send(message)
             .map_err(|_| ActorError::ActorStopped)?;
-            
+
         self.current_size.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
-    
+
     pub async fn dequeue(&self) -> Option<MessageEnvelope> {
         let mut receiver = self.receiver.lock().await;
         let message = receiver.recv().await;
-        
+
         if message.is_some() {
             self.current_size.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         }
-        
+
         message
     }
 }
 
 /// Reference handle for communicating with actors
-/// 
+///
 /// # Example Usage
-/// 
+///
 /// ```rust
 /// // Get actor reference from system
 /// let actor_ref = system.spawn_actor(MyActor::new(), initial_state).await?;
-/// 
+///
 /// // Send fire-and-forget message
 /// actor_ref.send(MyMessage::DoWork { task_id: 123 }).await?;
-/// 
+///
 /// // Send message and wait for response
 /// let result: WorkResult = actor_ref.ask(MyMessage::GetStatus).await?;
-/// 
+///
 /// // Stop actor gracefully
 /// actor_ref.stop().await?;
 /// ```
@@ -1190,13 +1219,13 @@ impl ActorRef {
             system_ref,
         }
     }
-    
+
     /// Send a fire-and-forget message to the actor
     pub async fn send(&self, message: impl ActorMessage + 'static) -> Result<(), ActorError> {
         let envelope = MessageEnvelope::Tell(Box::new(message));
         self.mailbox.enqueue(envelope).await
     }
-    
+
     /// Send a message and wait for a response
     pub async fn ask<R>(
         &self,
@@ -1210,22 +1239,22 @@ impl ActorRef {
             message: Box::new(message),
             reply_to: tx,
         };
-        
+
         self.mailbox.enqueue(envelope).await?;
-        
+
         // Wait for response with timeout protection
         let response = rx.await
             .map_err(|_| ActorError::AskTimeout)?;
-            
+
         serde_json::from_value(response)
             .map_err(|e| ActorError::DeserializationFailed(e.to_string()))
     }
-    
+
     /// Get the actor's unique identifier
     pub fn actor_id(&self) -> ActorId {
         self.actor_id
     }
-    
+
     /// Stop the actor gracefully
     pub async fn stop(&self) -> Result<(), ActorError> {
         if let Some(system) = self.system_ref.upgrade() {
@@ -1245,7 +1274,7 @@ impl MailboxFactory {
     pub fn new(default_capacity: Option<usize>) -> Self {
         Self { default_capacity }
     }
-    
+
     pub fn create_mailbox(&self, capacity: Option<usize>) -> Mailbox {
         Mailbox::new(capacity.or(self.default_capacity))
     }
@@ -1263,18 +1292,35 @@ impl Dispatcher {
     }
 }
 
+// Supervision message types
+#[derive(Debug, Clone)]
+pub enum SupervisionMessage {
+    RestartChild(ActorId),
+    ChildFailed(ActorId, String),
+    HealthCheck,
+}
+
+impl ActorMessage for SupervisionMessage {}
+
+// Actor termination reasons
+enum ActorTermination {
+    Normal,
+    Error(String),
+    Restart,
+}
+
 /// Central actor system for managing actor lifecycles and supervision
-/// 
+///
 /// # Example Usage
-/// 
+///
 /// ```rust
 /// // Create actor system
 /// let system = ActorSystem::new();
-/// 
+///
 /// // Spawn a simple actor
 /// let calculator = CalculatorActor::new();
 /// let calc_ref = system.spawn_actor(calculator, 0).await?;
-/// 
+///
 /// // Spawn a supervised actor
 /// let worker = WorkerActor::new();
 /// let worker_ref = system.spawn_supervised_actor(
@@ -1283,10 +1329,10 @@ impl Dispatcher {
 ///     supervisor_ref,
 ///     RestartPolicy::OneForOne,  // Backoff handled by SupervisionStrategy.backoff_strategy field
 /// ).await?;
-/// 
+///
 /// // Use actors
 /// calc_ref.send(CalculatorMessage::Add(42)).await?;
-/// 
+///
 /// // Graceful shutdown
 /// system.stop_all().await?;
 /// ```
@@ -1297,6 +1343,8 @@ pub struct ActorSystem {
     dispatcher: Dispatcher,
     default_restart_policy: RestartPolicy,
     shutdown_signal: Arc<std::sync::atomic::AtomicBool>,
+    supervisor_registry: Arc<ParkingRwLock<HashMap<ActorId, ActorId>>>,
+    restart_counts: Arc<ParkingRwLock<HashMap<ActorId, u32>>>,
 }
 
 impl ActorSystem {
@@ -1307,6 +1355,8 @@ impl ActorSystem {
             dispatcher: Dispatcher::new(num_cpus::get()),
             default_restart_policy: RestartPolicy::OneForOne,
             shutdown_signal: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            supervisor_registry: Arc::new(ParkingRwLock::new(HashMap::new())),
+            restart_counts: Arc::new(ParkingRwLock::new(HashMap::new())),
         }
     }
 
@@ -1321,14 +1371,14 @@ impl ActorSystem {
         A: Actor + 'static,
     {
         let actor_ref = self.spawn_actor(actor, initial_state).await?;
-        
+
         // Register supervisor relationship
         self.supervisor_registry.write().insert(actor_ref.actor_id(), supervisor.actor_id());
         self.restart_counts.write().insert(actor_ref.actor_id(), 0);
-        
+
         Ok(actor_ref)
     }
-    
+
     pub async fn spawn_actor<A>(
         &self,
         mut actor: A,
@@ -1344,19 +1394,19 @@ impl ActorSystem {
             Arc::clone(&mailbox),
             Arc::downgrade(&Arc::new(self.clone())),
         );
-        
+
         // Start actor pre_start lifecycle
         actor.pre_start().map_err(ActorError::StartupFailed)?;
-        
+
         // Store actor reference
         self.actors.write().insert(actor_id, actor_ref.clone());
-        
+
         // Spawn actor message processing loop with supervision support
         let shutdown = Arc::clone(&self.shutdown_signal);
         let supervisor_registry = Arc::clone(&self.supervisor_registry);
         let restart_counts = Arc::clone(&self.restart_counts);
         let actors = Arc::clone(&self.actors);
-        
+
         tokio::spawn(async move {
             Self::supervised_actor_loop(
                 actor,
@@ -1369,10 +1419,10 @@ impl ActorSystem {
                 actor_id,
             ).await;
         });
-        
+
         Ok(actor_ref)
     }
-    
+
     async fn supervised_actor_loop<A>(
         mut actor: A,
         mut state: A::State,
@@ -1386,7 +1436,7 @@ impl ActorSystem {
         A: Actor + 'static,
     {
         let result = Self::actor_message_loop(&mut actor, &mut state, &mailbox, &shutdown_signal).await;
-        
+
         // Handle actor termination with supervision
         match result {
             ActorTermination::Normal => {
@@ -1397,10 +1447,10 @@ impl ActorSystem {
                 if let Some(supervisor_id) = supervisor_registry.read().get(&actor_id).cloned() {
                     let mut counts = restart_counts.write();
                     let restart_count = counts.entry(actor_id).or_insert(0);
-                    
+
                     if *restart_count < crate::types::constants::MAX_RESTART_ATTEMPTS {
                         *restart_count += 1;
-                        
+
                         // Notify supervisor to restart actor
                         if let Some(supervisor) = actors.read().get(&supervisor_id).cloned() {
                             let _ = supervisor.send(SupervisionMessage::RestartChild(actor_id)).await;
@@ -1423,7 +1473,7 @@ impl ActorSystem {
             }
         }
     }
-    
+
     async fn actor_message_loop<A>(
         actor: &mut A,
         state: &mut A::State,
@@ -1483,19 +1533,19 @@ impl ActorSystem {
                 }
             }
         }
-        
+
         // Cleanup
         let _ = actor.post_stop();
         ActorTermination::Normal
     }
-    
+
     pub async fn stop_actor(&self, actor_id: ActorId) -> Result<(), ActorError> {
         self.actors.write().remove(&actor_id);
         self.supervisor_registry.write().remove(&actor_id);
         self.restart_counts.write().remove(&actor_id);
         Ok(())
     }
-    
+
     pub async fn stop_all(&self) -> Result<(), ActorError> {
         self.shutdown_signal.store(true, std::sync::atomic::Ordering::Relaxed);
         self.actors.write().clear();
@@ -1503,23 +1553,6 @@ impl ActorSystem {
         self.restart_counts.write().clear();
         Ok(())
     }
-}
-
-// Supervision message types
-#[derive(Debug, Clone)]
-pub enum SupervisionMessage {
-    RestartChild(ActorId),
-    ChildFailed(ActorId, String),
-    HealthCheck,
-}
-
-impl ActorMessage for SupervisionMessage {}
-
-// Actor termination reasons
-enum ActorTermination {
-    Normal,
-    Error(String),
-    Restart,
 }
 
 // Make ActorSystem cloneable for weak references
@@ -1536,6 +1569,7 @@ impl Clone for ActorSystem {
         }
     }
 }
+```
 
 ## Async Synchronization Primitives
 
@@ -1551,20 +1585,20 @@ pub mod sync {
     use parking_lot::{Mutex as ParkingMutex, RwLock as ParkingRwLock};
     use std::sync::Arc;
     use std::time::Duration;
-    
+
     /// Mutex with deadlock prevention through timeout and ordering
-    /// 
+    ///
     /// # Example Usage
-    /// 
+    ///
     /// ```rust
     /// // Create mutexes with defined acquisition order
     /// let mutex1 = DeadlockPreventingMutex::new(data1, 1);
     /// let mutex2 = DeadlockPreventingMutex::new(data2, 2);
-    /// 
+    ///
     /// // Always acquire in order to prevent deadlock
     /// let guard1 = mutex1.lock_with_timeout().await?;
     /// let guard2 = mutex2.lock_with_timeout().await?;
-    /// 
+    ///
     /// // Use guarded data
     /// process_data(&*guard1, &*guard2);
     /// ```
@@ -1574,7 +1608,7 @@ pub mod sync {
         acquisition_order: u64,    // Enforce lock ordering
         timeout: Duration,         // Prevent infinite waits
     }
-    
+
     impl<T> DeadlockPreventingMutex<T> {
         pub fn new(value: T, acquisition_order: u64) -> Self {
             Self {
@@ -1583,7 +1617,7 @@ pub mod sync {
                 timeout: Duration::from_secs(5),
             }
         }
-        
+
         /// Acquire lock with timeout to prevent deadlocks
         pub async fn lock_with_timeout(&self) -> Result<tokio::sync::MutexGuard<'_, T>, TaskError> {
             match tokio::time::timeout(self.timeout, self.inner.lock()).await {
@@ -1595,44 +1629,44 @@ pub mod sync {
             }
         }
     }
-    
+
     /// Async barrier for synchronization points
     #[derive(Debug, Clone)]
     pub struct AsyncBarrier {
         inner: Arc<Barrier>,
     }
-    
+
     impl AsyncBarrier {
         pub fn new(n: usize) -> Self {
             Self {
                 inner: Arc::new(Barrier::new(n)),
             }
         }
-        
+
         pub async fn wait(&self) -> tokio::sync::BarrierWaitResult {
             self.inner.wait().await
         }
     }
-    
+
     /// Countdown latch for coordinating multiple async tasks
-    /// 
+    ///
     /// # Example Usage
-    /// 
+    ///
     /// ```rust
     /// let latch = CountdownLatch::new(3);
-    /// 
+    ///
     /// // Spawn 3 workers
     /// for i in 0..3 {
     ///     let latch = latch.clone();
     ///     tokio::spawn(async move {
     ///         // Do work
     ///         perform_task(i).await;
-    ///         
+    ///
     ///         // Signal completion
     ///         latch.count_down();
     ///     });
     /// }
-    /// 
+    ///
     /// // Wait for all workers to complete
     /// latch.wait().await;
     /// println!("All workers finished!");
@@ -1642,7 +1676,7 @@ pub mod sync {
         count: Arc<std::sync::atomic::AtomicUsize>,
         notify: Arc<tokio::sync::Notify>,
     }
-    
+
     impl CountdownLatch {
         pub fn new(count: usize) -> Self {
             Self {
@@ -1650,7 +1684,7 @@ pub mod sync {
                 notify: Arc::new(tokio::sync::Notify::new()),
             }
         }
-        
+
         /// Decrement the count, waking waiters when it reaches zero
         pub fn count_down(&self) {
             let prev = self.count.fetch_sub(1, std::sync::atomic::Ordering::Release);
@@ -1658,7 +1692,7 @@ pub mod sync {
                 self.notify.notify_waiters();
             }
         }
-        
+
         /// Wait until the count reaches zero
         pub async fn wait(&self) {
             while self.count.load(std::sync::atomic::Ordering::Acquire) > 0 {
@@ -1666,38 +1700,38 @@ pub mod sync {
             }
         }
     }
-    
+
     /// Async channel abstractions
     pub mod channels {
         use super::*;
         use tokio::sync::mpsc;
         use crossbeam::channel::{bounded, unbounded, Sender, Receiver};
-        
+
         /// Multi-producer, multi-consumer channel
         pub struct MpmcChannel<T> {
             sender: Sender<T>,
             receiver: Receiver<T>,
         }
-        
+
         impl<T> MpmcChannel<T> {
             pub fn bounded(capacity: usize) -> Self {
                 let (sender, receiver) = bounded(capacity);
                 Self { sender, receiver }
             }
-            
+
             pub fn unbounded() -> Self {
                 let (sender, receiver) = unbounded();
                 Self { sender, receiver }
             }
-            
+
             pub fn send(&self, value: T) -> Result<(), crossbeam::channel::SendError<T>> {
                 self.sender.send(value)
             }
-            
+
             pub fn try_recv(&self) -> Result<T, crossbeam::channel::TryRecvError> {
                 self.receiver.try_recv()
             }
-            
+
             pub async fn recv_async(&self) -> Option<T> {
                 tokio::task::yield_now().await;
                 self.receiver.try_recv().ok()
@@ -1855,43 +1889,43 @@ pub type ActorResult = Result<crate::actors::ActorResult, crate::errors::ActorEr
 // Common configuration defaults
 pub mod constants {
     use std::time::Duration;
-    
+
     // Runtime constants
     pub const DEFAULT_WORKER_THREADS: usize = num_cpus::get();
     pub const DEFAULT_MAX_BLOCKING_THREADS: usize = 512;
     pub const DEFAULT_THREAD_KEEP_ALIVE: Duration = Duration::from_secs(60);
     pub const DEFAULT_THREAD_STACK_SIZE: usize = 2 * 1024 * 1024; // 2MB
-    
-    // Task execution constants  
+
+    // Task execution constants
     pub const DEFAULT_TASK_TIMEOUT: Duration = Duration::from_secs(30);
     pub const DEFAULT_TASK_QUEUE_SIZE: usize = 1000;
     pub const MAX_CONCURRENT_TASKS: usize = 100;
-    
+
     // Supervision constants
     pub const MAX_RESTART_ATTEMPTS: u32 = 3;
     pub const RESTART_WINDOW: Duration = Duration::from_secs(60);
     pub const ESCALATION_TIMEOUT: Duration = Duration::from_secs(10);
-    
+
     // Health check constants
     pub const DEFAULT_HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(30);
     pub const DEFAULT_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
     pub const DEFAULT_FAILURE_THRESHOLD: u32 = 3;
-    
+
     // Circuit breaker constants
     pub const DEFAULT_CIRCUIT_FAILURE_THRESHOLD: u32 = 5;
     pub const DEFAULT_CIRCUIT_TIMEOUT: Duration = Duration::from_secs(60);
     pub const DEFAULT_HALF_OPEN_MAX_CALLS: u32 = 3;
-    
+
     // Connection pool constants
     pub const DEFAULT_POOL_MIN_SIZE: usize = 5;
     pub const DEFAULT_POOL_MAX_SIZE: usize = 50;
     pub const DEFAULT_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(10);
     pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
-    
+
     // Event system constants
     pub const DEFAULT_EVENT_BUFFER_SIZE: usize = 10000;
     pub const DEFAULT_EVENT_BATCH_SIZE: usize = 100;
-    
+
     // Tool system constants
     pub const DEFAULT_TOOL_TIMEOUT: Duration = Duration::from_secs(30);
     pub const MAX_TOOL_RETRIES: u32 = 3;
@@ -1930,7 +1964,7 @@ impl ToolMessage {
             caller_id: None,
         }
     }
-    
+
     pub fn with_caller(mut self, caller_id: AgentId) -> Self {
         self.caller_id = Some(caller_id);
         self
@@ -1982,7 +2016,7 @@ impl AgentTool {
 impl Tool for AgentTool {
     async fn execute(&self, params: Value) -> Result<Value, ToolError> {
         let message = ToolMessage::from_params(self.tool_id, params);
-        
+
         // Process the message through the agent
         // This is a simplified version - in practice you'd need proper message routing
         match self.agent.handle_message(message, &mut AgentState::default()).await {
@@ -1994,15 +2028,15 @@ impl Tool for AgentTool {
             Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
         }
     }
-    
+
     fn schema(&self) -> ToolSchema {
         self.interface.schema()
     }
-    
+
     fn tool_id(&self) -> ToolId {
         self.tool_id
     }
-    
+
     fn name(&self) -> &str {
         &self.interface.name
     }
@@ -2049,13 +2083,13 @@ impl Drop for TaskGuard {
 pub mod test_utils {
     use super::*;
     use std::time::Duration;
-    
+
     /// Mock actor for testing
     pub struct MockActor {
         id: ActorId,
         response: Value,
     }
-    
+
     impl MockActor {
         pub fn new(response: Value) -> Self {
             Self {
@@ -2064,13 +2098,13 @@ pub mod test_utils {
             }
         }
     }
-    
+
     #[async_trait]
     impl Actor for MockActor {
         type Message = ToolMessage;
         type State = AgentState;
         type Error = ActorError;
-        
+
         async fn handle_message(
             &mut self,
             _message: Self::Message,
@@ -2079,12 +2113,12 @@ pub mod test_utils {
             state.execution_count += 1;
             Ok(ActorResult::Continue)
         }
-        
+
         fn actor_id(&self) -> ActorId {
             self.id
         }
     }
-    
+
     /// Test harness for stream processing
     pub async fn test_stream_processor<T>(
         items: Vec<T>,
@@ -2095,13 +2129,13 @@ pub mod test_utils {
     {
         let (tx, rx) = mpsc::channel(100);
         let (result_tx, mut result_rx) = mpsc::channel(100);
-        
+
         // Send test items
         for item in items {
             tx.send(item).await.unwrap();
         }
         drop(tx);
-        
+
         // Process stream
         let mut stream_processor = StreamProcessor::new(
             Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)),
@@ -2109,15 +2143,15 @@ pub mod test_utils {
             Box::pin(result_tx),
             BackpressureConfig::default(),
         );
-        
+
         stream_processor.process_stream().await?;
-        
+
         // Collect results
         let mut results = Vec::new();
         while let Some(item) = result_rx.recv().await {
             results.push(item);
         }
-        
+
         Ok(results)
     }
 }
@@ -2195,17 +2229,17 @@ impl ToolBus {
             global_timeout: crate::types::constants::DEFAULT_TOOL_TIMEOUT,
         }
     }
-    
+
     pub async fn register_tool<T: Tool + 'static>(&self, tool: T) -> ToolId {
         let tool_id = tool.tool_id();
         let tool_arc = Arc::new(tool);
-        
+
         self.tools.write().await.insert(tool_id, tool_arc);
         self.call_metrics.write().await.insert(tool_id, ToolMetrics::default());
-        
+
         tool_id
     }
-    
+
     pub async fn call(
         &self,
         agent_id: AgentId,
@@ -2219,7 +2253,7 @@ impl ToolBus {
                 agent_id.0, tool_id.0
             )));
         }
-        
+
         // Get the tool
         let tool = {
             let tools = self.tools.read().await;
@@ -2227,20 +2261,20 @@ impl ToolBus {
                 .ok_or_else(|| ToolError::NotFound(tool_id.0.to_string()))?
                 .clone()
         };
-        
+
         // Update metrics
         self.update_call_metrics(tool_id).await;
-        
+
         let start_time = std::time::Instant::now();
-        
+
         // Execute with timeout
         let result = tokio::time::timeout(
             self.global_timeout,
             tool.execute(params)
         ).await;
-        
+
         let execution_time = start_time.elapsed();
-        
+
         match result {
             Ok(Ok(value)) => {
                 self.update_success_metrics(tool_id, execution_time).await;
@@ -2256,30 +2290,30 @@ impl ToolBus {
             }
         }
     }
-    
+
     pub async fn grant_permission(&self, agent_id: AgentId, tool_id: ToolId) {
         let mut permissions = self.permissions.write().await;
         permissions.entry(agent_id).or_insert_with(Vec::new).push(tool_id);
     }
-    
+
     pub async fn revoke_permission(&self, agent_id: AgentId, tool_id: ToolId) {
         let mut permissions = self.permissions.write().await;
         if let Some(tool_list) = permissions.get_mut(&agent_id) {
             tool_list.retain(|&id| id != tool_id);
         }
     }
-    
+
     pub async fn has_permission(&self, agent_id: AgentId, tool_id: ToolId) -> bool {
         let permissions = self.permissions.read().await;
         permissions.get(&agent_id)
             .map(|tools| tools.contains(&tool_id))
             .unwrap_or(false)
     }
-    
+
     pub async fn list_available_tools(&self, agent_id: AgentId) -> Vec<ToolSchema> {
         let permissions = self.permissions.read().await;
         let tools = self.tools.read().await;
-        
+
         if let Some(tool_ids) = permissions.get(&agent_id) {
             tool_ids.iter()
                 .filter_map(|tool_id| tools.get(tool_id))
@@ -2289,14 +2323,14 @@ impl ToolBus {
             Vec::new()
         }
     }
-    
+
     async fn update_call_metrics(&self, tool_id: ToolId) {
         if let Some(metrics) = self.call_metrics.read().await.get(&tool_id) {
             metrics.call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             *metrics.last_execution.lock().unwrap() = Some(std::time::Instant::now());
         }
     }
-    
+
     async fn update_success_metrics(&self, tool_id: ToolId, execution_time: std::time::Duration) {
         if let Some(metrics) = self.call_metrics.read().await.get(&tool_id) {
             metrics.success_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -2306,13 +2340,13 @@ impl ToolBus {
             );
         }
     }
-    
+
     async fn update_error_metrics(&self, tool_id: ToolId) {
         if let Some(metrics) = self.call_metrics.read().await.get(&tool_id) {
             metrics.error_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
-    
+
     pub async fn get_tool_metrics(&self, tool_id: ToolId) -> Option<ToolMetrics> {
         // This would need to be implemented to return a snapshot of metrics
         // For now, we'll indicate this needs implementation
@@ -2323,13 +2357,13 @@ impl ToolBus {
 // Default implementation for common tools
 pub mod builtin {
     use super::*;
-    
+
     // Example built-in tool
     #[derive(Debug)]
     pub struct EchoTool {
         tool_id: ToolId,
     }
-    
+
     impl EchoTool {
         pub fn new() -> Self {
             Self {
@@ -2337,13 +2371,13 @@ pub mod builtin {
             }
         }
     }
-    
+
     #[async_trait]
     impl Tool for EchoTool {
         async fn execute(&self, params: Value) -> Result<Value, ToolError> {
             Ok(params)
         }
-        
+
         fn schema(&self) -> ToolSchema {
             ToolSchema {
                 name: "echo".to_string(),
@@ -2365,11 +2399,11 @@ pub mod builtin {
                 })),
             }
         }
-        
+
         fn tool_id(&self) -> ToolId {
             self.tool_id
         }
-        
+
         fn name(&self) -> &str {
             "echo"
         }
@@ -2387,7 +2421,7 @@ Based on comprehensive validation (ref:
 `/validation-bridge/team-alpha-validation/agent04-architectural-consistency-validation.md`),
 the async patterns demonstrate **EXCELLENT** consistency across all framework domains:
 
-#### Unified Async Implementation ✅
+#### Unified Async Implementation
 
 All 5 domains (Core, Data Management, Transport, Security, Operations) consistently implement:
 
@@ -2462,7 +2496,7 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: &str) -> Result<(), Box<d
     let otlp_exporter = opentelemetry_otlp::new_exporter()
         .tonic()
         .with_endpoint(otlp_endpoint);
-    
+
     // Create tracer provider
     let tracer_provider = opentelemetry_otlp::new_pipeline()
         .tracing()
@@ -2474,18 +2508,18 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: &str) -> Result<(), Box<d
                 ]))
         )
         .install_batch(opentelemetry::runtime::Tokio)?;
-    
+
     // Create telemetry layer
     let telemetry = OpenTelemetryLayer::new(tracer_provider.tracer("ms-framework"));
-    
+
     // Create subscriber
     let subscriber = Registry::default()
         .with(telemetry)
         .with(tracing_subscriber::fmt::layer());
-    
+
     // Set global subscriber
     tracing::subscriber::set_global_default(subscriber)?;
-    
+
     Ok(())
 }
 
@@ -2521,26 +2555,26 @@ lazy_static! {
         "Total number of tasks executed",
         &["status", "priority"]
     ).unwrap();
-    
+
     static ref TASK_DURATION: HistogramVec = register_histogram_vec!(
         "ms_framework_task_duration_seconds",
         "Task execution duration in seconds",
         &["task_type"],
         vec![0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0]
     ).unwrap();
-    
+
     static ref ACTOR_MESSAGES: CounterVec = register_counter_vec!(
         "ms_framework_actor_messages_total",
         "Total number of actor messages processed",
         &["actor_type", "message_type"]
     ).unwrap();
-    
+
     static ref STREAM_ITEMS: CounterVec = register_counter_vec!(
         "ms_framework_stream_items_total",
         "Total number of stream items processed",
         &["processor", "status"]
     ).unwrap();
-    
+
     static ref CIRCUIT_BREAKER_STATE: CounterVec = register_counter_vec!(
         "ms_framework_circuit_breaker_state_changes",
         "Circuit breaker state changes",
@@ -2601,21 +2635,21 @@ impl MonitoringIntegration for PrometheusMonitoring {
         TASK_COUNTER.with_label_values(&[status, "normal"]).inc();
         TASK_DURATION.with_label_values(&["default"]).observe(duration.as_secs_f64());
     }
-    
+
     fn record_actor_message(&self, actor_type: &str, message_type: &str) {
         ACTOR_MESSAGES.with_label_values(&[actor_type, message_type]).inc();
     }
-    
+
     fn record_stream_item(&self, processor: &str, status: &str) {
         STREAM_ITEMS.with_label_values(&[processor, status]).inc();
     }
-    
+
     fn record_circuit_breaker_transition(&self, from: CircuitState, to: CircuitState) {
         let from_str = format!("{:?}", from).to_lowercase();
         let to_str = format!("{:?}", to).to_lowercase();
         CIRCUIT_BREAKER_STATE.with_label_values(&[&from_str, &to_str]).inc();
     }
-    
+
     fn get_health_status(&self) -> HealthCheckResponse {
         // Implementation would gather real metrics
         HealthCheckResponse {
@@ -2702,7 +2736,7 @@ impl LoadTestRunner {
             semaphore: Arc::new(Semaphore::new(max_concurrent)),
         }
     }
-    
+
     pub async fn run_load_test(&self, config: LoadTestConfig) -> LoadTestResults {
         let start_time = Instant::now();
         let mut response_times = Vec::new();
@@ -2710,18 +2744,18 @@ impl LoadTestRunner {
         let mut successful_requests = 0u64;
         let mut failed_requests = 0u64;
         let mut errors: HashMap<String, u64> = HashMap::new();
-        
+
         // Implement load test execution
         // This is a simplified version - real implementation would be more complex
-        
+
         let elapsed = start_time.elapsed();
-        
+
         // Calculate percentiles
         response_times.sort_unstable();
         let p50_idx = response_times.len() / 2;
         let p95_idx = (response_times.len() as f64 * 0.95) as usize;
         let p99_idx = (response_times.len() as f64 * 0.99) as usize;
-        
+
         LoadTestResults {
             total_requests,
             successful_requests,
@@ -2740,7 +2774,7 @@ impl LoadTestRunner {
 pub mod chaos {
     use super::*;
     use rand::Rng;
-    
+
     /// Chaos monkey configuration
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ChaosConfig {
@@ -2749,43 +2783,43 @@ pub mod chaos {
         pub error_injection: Option<ErrorConfig>,
         pub resource_exhaustion: Option<ResourceConfig>,
     }
-    
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct LatencyConfig {
         pub min_delay_ms: u64,
         pub max_delay_ms: u64,
         pub probability: f64,
     }
-    
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ErrorConfig {
         pub error_types: Vec<String>,
         pub probability: f64,
     }
-    
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ResourceConfig {
         pub memory_pressure: bool,
         pub cpu_pressure: bool,
         pub probability: f64,
     }
-    
+
     /// Chaos middleware for testing resilience
     pub struct ChaosMiddleware {
         config: ChaosConfig,
     }
-    
+
     impl ChaosMiddleware {
         pub fn new(config: ChaosConfig) -> Self {
             Self { config }
         }
-        
+
         pub async fn inject_chaos<F, T>(&self, operation: F) -> Result<T, Box<dyn std::error::Error>>
         where
             F: Future<Output = Result<T, Box<dyn std::error::Error>>>,
         {
             let mut rng = rand::thread_rng();
-            
+
             // Inject latency
             if let Some(latency) = &self.config.latency_injection {
                 if rng.gen::<f64>() < latency.probability {
@@ -2793,14 +2827,14 @@ pub mod chaos {
                     tokio::time::sleep(Duration::from_millis(delay)).await;
                 }
             }
-            
+
             // Inject errors
             if let Some(error_config) = &self.config.error_injection {
                 if rng.gen::<f64>() < error_config.probability {
                     return Err("Chaos error injected".into());
                 }
             }
-            
+
             // Execute operation
             operation.await
         }
@@ -2814,23 +2848,23 @@ struct DummyTask;
 impl AsyncTask for DummyTask {
     type Output = serde_json::Value;
     type Error = TaskError;
-    
+
     async fn execute(self) -> Result<Self::Output, Self::Error> {
         Ok(serde_json::Value::Null)
     }
-    
+
     fn priority(&self) -> TaskPriority {
         TaskPriority::Normal
     }
-    
+
     fn timeout(&self) -> Duration {
         Duration::from_secs(30)
     }
-    
+
     fn retry_policy(&self) -> RetryPolicy {
         RetryPolicy::default()
     }
-    
+
     fn task_id(&self) -> TaskId {
         TaskId::new()
     }
@@ -2842,7 +2876,7 @@ impl AsyncTask for DummyTask {
 ### Complete and Tested
 
 - **Task Management**: Prioritized execution with retry, circuit breaking, and panic recovery
-- **Stream Processing**: Backpressure-aware processing with configurable error strategies  
+- **Stream Processing**: Backpressure-aware processing with configurable error strategies
 - **Actor Model**: Full supervision hierarchy with message passing and fault isolation
 - **Tool System**: Dynamic capability registration with permissions and metrics
 - **Sync Primitives**: Deadlock prevention, barriers, latches, and channels
@@ -2857,16 +2891,32 @@ impl AsyncTask for DummyTask {
 - **Resource Safety**: RAII patterns ensure cleanup even during panics
 - **Performance Monitoring**: Real-time metrics for all async operations
 
-## Related Documentation
+## Cross-References
 
 ### Core Architecture
 
 - [Tokio Runtime](tokio-runtime.md) - Runtime configuration and optimization
 - [Supervision Trees](supervision-trees.md) - Hierarchical error handling
 - [Component Architecture](component-architecture.md) - Component design patterns
+- [Runtime & Errors](runtime-and-errors.md) - Runtime configuration details
+- [Supervision & Events](supervision-and-events.md) - Supervision integration
+- [Monitoring & Health](monitoring-and-health.md) - Health monitoring
 
 ### Integration Points
 
 - [Message Framework](../data-management/message-framework.md) - Async messaging patterns
 - [Transport Core](../transport/transport-core.md) - Network communication patterns
 - [System Integration](system-integration.md) - Cross-component integration
+
+### Implementation Notes
+
+This module provides comprehensive async patterns for the MisterSmith framework:
+
+1. **Task Management**: Priority-based execution with retry policies and comprehensive metrics
+2. **Stream Processing**: Backpressure-aware stream handling with configurable strategies
+3. **Actor Model**: Full actor system with mailboxes, supervision integration, and ask/tell patterns
+4. **Type System**: Strong typing throughout with UUID-based identifiers
+5. **Agent-as-Tool**: Seamless integration allowing agents to be exposed as tools
+6. **Tool System**: Central registry with permissions, metrics, and timeout handling
+
+The async patterns form the execution backbone of the framework, enabling concurrent, fault-tolerant, and scalable agent operations.

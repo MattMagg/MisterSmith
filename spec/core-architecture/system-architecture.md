@@ -24,7 +24,7 @@
 This document has been reorganized into focused sub-documents for improved agent readability and maintenance. The original 4755-line document has been segmented into:
 
 1. **[Runtime and Errors](runtime-and-errors.md)** - Core error types and Tokio runtime architecture
-2. **[Async Patterns](async-patterns-detailed.md)** - Task management, stream processing, and actor model
+2. **[Async Patterns](async-patterns.md)** - Task management, stream processing, and actor model
 3. **[Supervision and Events](supervision-and-events.md)** - Supervision trees and event system
 4. **[Monitoring and Health](monitoring-and-health.md)** - Health checks and metrics collection
 5. **[Implementation Guidelines](implementation-guidelines.md)** - Patterns, anti-patterns, and best practices
@@ -60,7 +60,7 @@ The Mister Smith AI Agent Framework is built on a robust, async-first architectu
 - Agent-as-Tool pattern for composition
 - Central tool registry with permissions
 
-[→ Full Async Patterns Documentation](async-patterns-detailed.md)
+[→ Full Async Patterns Documentation](async-patterns.md)
 
 ### 3. Supervision and Events
 
@@ -214,7 +214,7 @@ The system architecture integrates with other framework domains:
 ## Next Steps
 
 1. Review the [Runtime and Errors](runtime-and-errors.md) documentation for error handling patterns
-2. Explore [Async Patterns](async-patterns-detailed.md) for task and actor implementations
+2. Explore [Async Patterns](async-patterns.md) for task and actor implementations
 3. Understand [Supervision and Events](supervision-and-events.md) for fault tolerance
 4. Configure [Monitoring and Health](monitoring-and-health.md) for production observability
 5. Follow [Implementation Guidelines](implementation-guidelines.md) for best practices

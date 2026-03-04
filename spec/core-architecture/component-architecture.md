@@ -757,7 +757,7 @@ impl CircuitBreaker {
 
 - [System Architecture Overview](system-architecture.md) - Complete system design
 - [Runtime and Errors](runtime-and-errors.md) - Error handling patterns
-- [Async Patterns](async-patterns-detailed.md) - Async implementation details
+- [Async Patterns](async-patterns.md) - Async implementation details
 - [Supervision Trees](supervision-trees.md) - Fault tolerance mechanisms
 
 ### Related Architecture Documents
