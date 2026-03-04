@@ -4,16 +4,19 @@
 
 **Last Validated**: 2026-03-03
 **Validator**: Agent 4B - Testing, Agent Domains & Research
-**Validation Score**: 92/100 (GOOD — structurally sound, cross-references corrected)
-**Status**: Updated with corrected cross-references and terminology notes
+**Validation Score**: 91/100 (GOOD — structurally sound, cross-references verified, one design issue noted)
+**Status**: Validated — all 15 domains internally consistent, cross-references correct
 
 ### Validation Changes (2026-03-03)
 
 - Fixed 6 broken cross-reference links to match actual file names in the repository
 - Verified all 15 agent domains are internally consistent
 - Confirmed agent type names and domain structure align with `data-management/agent-orchestration.md` and `data-management/agent-lifecycle.md`
+- Verified all framework reference links at the bottom of the document point to files that exist in the repository
 - Note: the `SpecializedAgent` trait uses `async fn` in trait — requires either `#[async_trait]` for dyn dispatch or native async traits (Rust 1.75+). Since MSRV is 1.88.0, native async traits work for non-object-safe usage, but `#[async_trait]` is still needed if the trait is used as `dyn SpecializedAgent`
-- The `DomainCoordinator` struct at line 536 uses `Box<dyn SpecializedAgent>` — this requires `#[async_trait]` on the `SpecializedAgent` trait for object safety
+- **Design issue**: The `DomainCoordinator` struct uses `Box<dyn SpecializedAgent>`, but `SpecializedAgent` has associated types (`DomainConfig`, `DomainState`, `DomainMessage`), making it NOT object-safe even with `#[async_trait]`. Implementation must either: (a) use a type-erased wrapper trait without associated types, (b) use an enum dispatch pattern, or (c) use `Box<dyn Any>` with downcasting. This applies to `DomainCoordinator` (line ~550) and `MultiDomainAgent` trait
+- Confirmed terminology consistency: the 15 domains here (CoreArchitecture, DataPersistence, TransportLayer, Security, Observability, TaskOrchestration, AgentLifecycle, MessageSchema, ConfigurationManagement, NetworkProtocol, StorageOptimization, BackupRecovery, DeploymentScaling, IntegrationTesting, NeuralOperations) are distinct from the communication-level `agent_type` enum in `message-schemas.md` (`supervisor`, `worker`, `coordinator`, etc.) — these operate at different levels of abstraction and are consistent by design
+- The `agent_status` enum in `message-schemas.md` uses `["initializing", "idle", "busy", "paused", "error", "stopping", "terminated"]` while `agent-lifecycle.md` uses `[initializing, active, idle, suspended, terminated, error]` — the AgentLifecycle domain (section 7) references the lifecycle states, which is correct
 
 ## Technical Overview
 

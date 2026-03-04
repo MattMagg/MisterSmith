@@ -42,7 +42,7 @@ tags:
 
 ## Framework Authority
 
-This document implements specifications from the canonical tech-framework.md located at /Users/mac-main/Mister-Smith/Mister-Smith/tech-framework.md
+This document implements specifications from the canonical framework. See [system-architecture.md](../core-architecture/system-architecture.md) and [dependency-specifications.md](../core-architecture/dependency-specifications.md) for authoritative technology stack specifications.
 
 As stated in the canonical framework: "Agents: use this framework as the canonical source."
 

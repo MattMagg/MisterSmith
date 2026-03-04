@@ -1,13 +1,22 @@
 # Claude Code CLI Integration Plan
 
+> **OBSOLETE -- FOR ARCHIVAL ONLY**
+>
+> Mister Smith is model-agnostic. This document was written when Claude CLI integration was planned, but the framework now supports any LLM backend. The hook bridge, NATS subject mappings, and Claude-specific configuration described here are no longer part of the framework's architecture. Retained for historical reference only.
+
 ## VALIDATION STATUS
 
 **Last Validated**: 2026-03-03
 **Validator**: Agent 4B - Testing, Agent Domains & Research
-**Validation Score**: 58/100 (NEEDS UPDATE — significant outdated content)
-**Status**: Partially updated — critical outdated sections flagged
+**Validation Score**: N/A (OBSOLETE)
+**Status**: OBSOLETE -- Mister Smith is model-agnostic; Claude CLI-specific integration is no longer planned
 
 ### Validation Changes (2026-03-03)
+
+- **Marked OBSOLETE**: Framework is model-agnostic; Claude CLI integration is no longer part of the architecture
+- Previous validation notes retained below for historical context
+
+#### Historical Notes (pre-obsolescence)
 
 - Updated `default_model` from `claude-3-5-sonnet-20241022` to `claude-opus-4-6`
 - Flagged outdated hook system: `HookBridge.determine_subject()` uses 5 old hook types (`Startup`, `PreTask`, `PostTask`, `OnError`, `OnFileChange`). Claude Code now has **14 lifecycle events** with different names

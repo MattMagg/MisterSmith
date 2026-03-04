@@ -2,7 +2,25 @@
 
 **Technical Test Data Structures and Configuration Schemas**
 
-*Cross-references: [Test Framework](test-framework.md) | [Test Configuration](test-configuration.md) | [Message Schemas](../data-management/message-schemas.md) | [Agent Domains](../agent-domains/)*
+*Cross-references: [Test Framework](testing-framework.md) | [Test Configuration](test-configuration.md) | [Message Schemas](../data-management/message-schemas.md) | [Agent Domains](../agent-domains/)*
+
+## VALIDATION STATUS
+
+**Last Validated**: 2026-03-03
+**Validator**: Agent 4B - Testing, Agent Domains & Research
+**Validation Score**: 85/100 (GOOD — structurally sound, consistency notes added)
+**Status**: Validated with cross-reference consistency notes
+
+### Validation Changes (2026-03-03)
+
+- Fixed cross-reference link: `test-framework.md` -> `testing-framework.md` (correct filename)
+- Confirmed `testcontainers` usage at line ~1270 already updated to `runners::AsyncRunner` API (v0.26.3+)
+- Confirmed `mockall` and `async_trait` usage patterns are current (mockall 0.14.0)
+- Confirmed `proptest` patterns (`prop_compose!`, `proptest!` macros) are current (proptest 1.10.0)
+- Fixed non-idiomatic Rust enum variants: `SecurityAudit` -> `SecurityAudit`, `PerformanceAnalysis` -> `PerformanceAnalysis` in `TaskType` enum
+- Noted `AgentStatus` discrepancy: this file uses `[Created, Starting, Running, Paused, Stopping, Stopped, Failed, Unknown]` while `message-schemas.md` uses `["initializing", "idle", "busy", "paused", "error", "stopping", "terminated"]`. These represent different layers — the test schemas define implementation-level states, while message schemas define wire-format states. Implementation should map between them
+- Noted `AgentType` discrepancy: this file uses domain-role types `[Analyst, Architect, Engineer, ...]` while `message-schemas.md` uses communication-level types `["supervisor", "worker", "coordinator", ...]`. These are complementary — domain roles and communication roles are orthogonal classifications
+- Marked Claude CLI mock service section with model-agnostic note
 
 ## SCHEMA VALIDATION FRAMEWORK
 
@@ -248,8 +266,8 @@ pub enum TaskType {
     SystemDesign,
     Implementation,
     Testing,
-    Security_Audit,
-    Performance_Analysis,
+    SecurityAudit,
+    PerformanceAnalysis,
     Documentation,
     Monitoring,
     Custom(String),
@@ -596,7 +614,7 @@ impl TaskTestFixtures {
     pub fn performance_test_task() -> TestTask {
         TestTask {
             id: Uuid::new_v4(),
-            task_type: TaskType::Performance_Analysis,
+            task_type: TaskType::PerformanceAnalysis,
             description: "Benchmark agent orchestration performance".to_string(),
             parameters: TaskParameters {
                 input_files: vec!["benchmarks/agent_orchestration.rs".to_string()],
@@ -1131,7 +1149,9 @@ impl DatabaseService for MockDatabaseService {
 }
 ```
 
-### Mock Claude CLI Service
+### Mock LLM Backend Service
+
+> **Note**: Mister Smith is model-agnostic. This mock was originally written for Claude CLI integration but applies to any LLM backend. Rename `ClaudeCliService`, `ClaudeCommand`, `ClaudeResponse`, and `ClaudeError` to your concrete backend types (e.g., `LlmBackendService`, `LlmCommand`, `LlmResponse`, `LlmError`).
 
 ```rust
 pub struct MockClaudeCliService {
@@ -1217,7 +1237,7 @@ pub struct TestEnvironmentConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceConfiguration {
     pub nats_server: NatsServerConfig,
-    pub claude_cli: ClaudeCliConfig,
+    pub llm_backend: LlmBackendConfig, // Model-agnostic: configure for any LLM provider
     pub file_system: FileSystemConfig,
     pub network: NetworkConfig,
 }

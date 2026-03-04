@@ -210,7 +210,7 @@ impl PubSubBus {
                                 }
                             },
                             Err(e) => {
-                                warn!(topic = %topic_name, error = %e, "Failed to deserialize message");
+                                tracing::warn!(topic = %topic_name, error = %e, "Failed to deserialize message");
                             }
                         }
                     },
@@ -331,7 +331,7 @@ impl Blackboard {
         };
         
         if let Err(_) = self.change_notifier.send(change) {
-            warn!(key = %key, "No active watchers for blackboard changes");
+            tracing::warn!(key = %key, "No active watchers for blackboard changes");
         }
         
         info!(key = %key, version = version, "Blackboard entry written");
@@ -1129,14 +1129,14 @@ IMPL AgentMailbox {
     async fn schedule_overflow_cleanup(&self) {
         // Implementation would spawn a background task to clean up overflow
         // This is a placeholder for the actual implementation
-        warn!("Overflow detected, cleanup scheduled");
+        tracing::warn!("Overflow detected, cleanup scheduled");
     }
     
     async fn spill_to_storage(&self, message: &Message, storage_path: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Implementation would write message to secondary storage
         // This is a placeholder for the actual implementation
         let spill_id = uuid::Uuid::new_v4().to_string();
-        warn!(spill_id = %spill_id, storage_path = %storage_path, "Message spilled to storage");
+        tracing::warn!(spill_id = %spill_id, storage_path = %storage_path, "Message spilled to storage");
         Ok(spill_id)
     }
     

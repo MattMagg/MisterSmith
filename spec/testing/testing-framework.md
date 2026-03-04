@@ -6,20 +6,23 @@
 
 **Last Validated**: 2026-03-03
 **Validator**: Agent 4B - Testing, Agent Domains & Research
-**Validation Score**: 88/100 (GOOD — crate version updates applied)
-**Status**: Updated with current Rust testing ecosystem state
+**Validation Score**: 90/100 (GOOD — crate versions and code examples verified current)
+**Status**: Validated with current Rust testing ecosystem state
 
 ### Validation Changes (2026-03-03)
 
 - Updated `testcontainers` API from deprecated `clients::Cli` to current `runners::AsyncRunner` (v0.26.3)
 - Updated GitHub Actions: `actions/checkout@v4`, `dtolnay/rust-toolchain@stable` (replaces deprecated `actions-rs/toolchain`), `codecov/codecov-action@v5`
-- Fixed `use tokio_test;` → `#[tokio::test]` attribute (no separate import needed)
+- Fixed `use tokio_test;` -> `#[tokio::test]` attribute (no separate import needed)
 - Updated `mockall` from 0.13.1 to **0.14.0** — MSRV raised to 1.77. API patterns (`#[automock]`, `expect_*`, `returning`) are unchanged
 - Updated `proptest` from 1.6.0 to **1.10.0** — `proptest!` macro and `prop_compose!` patterns unchanged
-- Updated `criterion` from 0.5.1 to **0.7.0** — **breaking**: crate renamed to `criterion` (same name, but 0.6+ is a different lineage). `criterion_group!`/`criterion_main!` macros still work. Review benchmarks if upgrading from 0.5.x
+- Updated `criterion` from 0.5.1 to **0.8.2** — breaking changes from 0.5.x lineage. `criterion_group!`/`criterion_main!` macros still work. `html_reports` feature now available
 - Confirmed `wiremock` 0.6.5 API patterns are current
 - `async_trait` crate still required for mockall's `#[automock]` on async traits (object safety)
 - CI/CD pipeline: replaced deprecated `actions-rs/toolchain@v1` with `dtolnay/rust-toolchain@stable`
+- Fixed integration test example: replaced deprecated `clients::Cli` / `images::generic::GenericImage` with `runners::AsyncRunner` / `GenericImage` + `ImageExt`
+- Marked Claude CLI integration test section with model-agnostic note
+- Fixed `actions/checkout@v3` -> `actions/checkout@v4` in quality-gates job
 
 ### Testing Crate Versions (Current Stable)
 
@@ -27,7 +30,7 @@
 |-------|----------------|------|-------|
 | mockall | 0.14.0 | 1.77 | Stable API, `#[automock]` pattern unchanged |
 | proptest | 1.10.0 | 1.84 | `proptest!` macro and `prop_compose!` patterns unchanged |
-| criterion | 0.7.0 | — | Major update from 0.5.x; `criterion_group!`/`criterion_main!` still work |
+| criterion | 0.8.2 | — | Major update from 0.5.x; `criterion_group!`/`criterion_main!` still work. Use `features = ["html_reports"]` for HTML output |
 | wiremock | 0.6.5 | — | Async mock server API unchanged |
 | testcontainers | 0.26.3 | — | **Breaking**: `clients::Cli` replaced by `runners::AsyncRunner` |
 | tokio-test | (part of tokio) | — | Use `#[tokio::test]` attribute directly |
@@ -287,22 +290,23 @@ fn test_authorization_policies() {
 ### Multi-Agent Communication Testing
 
 ```rust
-use testcontainers::{clients::Cli, images::generic::GenericImage};
+use testcontainers::{core::{IntoContainerPort, WaitFor}, runners::AsyncRunner, GenericImage, ImageExt};
 use crate::transport::NatsMessagingService;
 use crate::agents::{AgentOrchestrator, AgentType};
 
 #[tokio::test]
 async fn test_multi_agent_coordination() {
-    // Start NATS test container
-    let docker = Cli::default();
-    let nats_container = docker.run(
-        GenericImage::new("nats", "latest")
-            .with_exposed_port(4222)
-    );
-    
+    // Start NATS test container (testcontainers 0.26.3+ API)
+    let nats_container = GenericImage::new("nats", "latest")
+        .with_exposed_port(4222.tcp())
+        .with_wait_for(WaitFor::message_on_stderr("Server is ready"))
+        .start()
+        .await
+        .expect("Failed to start NATS container");
+
     let nats_url = format!(
-        "nats://localhost:{}", 
-        nats_container.get_host_port_ipv4(4222)
+        "nats://localhost:{}",
+        nats_container.get_host_port_ipv4(4222.tcp()).await.unwrap()
     );
     
     // Setup orchestrator with test agents
@@ -358,26 +362,28 @@ async fn test_database_migrations() {
 }
 ```
 
-### Claude CLI Integration Testing
+### LLM Backend Integration Testing
+
+> **Note**: Mister Smith is model-agnostic. The example below uses a generic LLM backend service pattern. Replace `LlmBackendService` and `MockLlmProcess` with the concrete backend implementation for your chosen provider. The original Claude CLI-specific patterns have been generalized.
 
 ```rust
-use crate::claude::{ClaudeCliService, ClaudeCommand};
-use crate::testing::{MockClaudeProcess, TestTaskBuilder};
+use crate::llm::{LlmBackendService, LlmCommand};
+use crate::testing::{MockLlmProcess, TestTaskBuilder};
 
 #[tokio::test]
-async fn test_claude_cli_integration() {
-    let mut mock_process = MockClaudeProcess::new();
+async fn test_llm_backend_integration() {
+    let mut mock_process = MockLlmProcess::new();
     mock_process
         .expect_execute()
         .returning(|cmd| Ok(format!("Executed: {}", cmd)));
-    
-    let claude_service = ClaudeCliService::new(mock_process);
+
+    let llm_service = LlmBackendService::new(mock_process);
     let task = TestTaskBuilder::new()
         .with_type("code-analysis")
         .with_files(vec!["src/main.rs"])
         .build();
-    
-    let result = claude_service.execute_task(task).await.unwrap();
+
+    let result = llm_service.execute_task(task).await.unwrap();
     
     assert!(result.is_success());
     assert!(!result.output().is_empty());
@@ -1781,7 +1787,7 @@ jobs:
     needs: [unit-tests, integration-tests, security-tests, performance-tests]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Download Test Artifacts
         uses: actions/download-artifact@v4
       - name: Validate Quality Gates

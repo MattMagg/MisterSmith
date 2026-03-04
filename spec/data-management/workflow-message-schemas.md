@@ -64,10 +64,10 @@ See [Agent Communication](./agent-communication.md) for implementation patterns.
         },
         "priority": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 10,
-          "default": 5,
-          "description": "Task priority (1=highest, 10=lowest)"
+          "minimum": 0,
+          "maximum": 4,
+          "default": 2,
+          "description": "Task priority: 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk (matches MessagePriority enum in agent-orchestration.md)"
         },
         "requirements": {
           "type": "object",

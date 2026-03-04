@@ -1,14 +1,23 @@
 # Claude Code CLI Integration Summary
 
+> **OBSOLETE -- FOR ARCHIVAL ONLY**
+>
+> Mister Smith is model-agnostic. This document was written when Claude CLI integration was planned, but the framework now supports any LLM backend. The hook system descriptions, model references, and Claude-specific architecture assessments described here are no longer part of the framework's direction. Retained for historical reference only.
+
 ## VALIDATION STATUS
 
 **Last Validated**: 2026-03-03
 **Validator**: Agent 4B - Testing, Agent Domains & Research
-**Previous Validation**: 2025-07-07 (Agent 4, Team Eta — 98/100)
-**Current Validation Score**: 55/100 (NEEDS UPDATE — hook system and model references significantly outdated)
-**Status**: Summary reflects 2025-07 state; Claude Code CLI has expanded significantly since then
+**Previous Validation**: 2025-07-07 (Agent 4, Team Eta -- 98/100)
+**Current Validation Score**: N/A (OBSOLETE)
+**Status**: OBSOLETE -- Mister Smith is model-agnostic; Claude CLI-specific integration is no longer planned
 
-### Current Assessment
+### Validation Changes (2026-03-03)
+
+- **Marked OBSOLETE**: Framework is model-agnostic; Claude CLI integration is no longer part of the architecture
+- Previous assessment notes retained below for historical context
+
+#### Historical Assessment (pre-obsolescence)
 
 - **Hook system**: This summary describes 5 hook types (`startup`, `pre_task`, `post_task`, `on_error`, `on_file_change`). Claude Code now has **14 lifecycle events** with different names. See `spec/core-architecture/claude-code-cli-technical-analysis.md` for the updated mapping
 - **Model reference**: `claude-3-5-sonnet-20241022` is outdated. Current frontier model is `claude-opus-4-6`

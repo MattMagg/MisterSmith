@@ -2935,8 +2935,7 @@ CREATE TABLE tasks (
     status VARCHAR(20) NOT NULL CHECK (status IN (
         'PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CANCELLED'
     )),
-    priority INTEGER NOT NULL DEFAULT 5 CHECK (priority BETWEEN 0 AND 9), -- ⚠️ CRITICAL INCONSISTENCY [Team Alpha]: DB allows 0-9 but implementation only handles 0-4
-    -- FIX REQUIRED: Standardize to either 0-4 or 0-9 across all components to prevent runtime errors
+    priority INTEGER NOT NULL DEFAULT 2 CHECK (priority BETWEEN 0 AND 4), -- Resolved: 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk (matches MessagePriority enum)
     title VARCHAR(200) NOT NULL,
     description TEXT,
     requirements JSONB NOT NULL DEFAULT '{}',
@@ -2982,8 +2981,7 @@ CREATE TABLE messages (
     routing_type VARCHAR(20) NOT NULL CHECK (routing_type IN (
         'BROADCAST', 'TARGET', 'ROUND_ROBIN'
     )),
-    priority INTEGER NOT NULL DEFAULT 5 CHECK (priority BETWEEN 0 AND 9), -- ⚠️ CRITICAL INCONSISTENCY [Team Alpha]: DB allows 0-9 but implementation only handles 0-4
-    -- FIX REQUIRED: Standardize to either 0-4 or 0-9 across all components to prevent runtime errors
+    priority INTEGER NOT NULL DEFAULT 2 CHECK (priority BETWEEN 0 AND 4), -- Resolved: 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk (matches MessagePriority enum)
     ttl_seconds INTEGER NOT NULL DEFAULT 300,
     payload JSONB NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN (
@@ -3358,7 +3356,7 @@ GROUP BY a.agent_id, a.agent_type, a.current_state, a.restart_count, a.error_cou
 
 1. **Schema Validation Inconsistencies** ❌
    - [ ] Standardize AgentId patterns across all components
-   - [ ] Fix message priority scale mismatch (choose 0-4 or 0-9)
+   - [x] Fix message priority scale mismatch — standardized to 0-4 (MessagePriority enum)
    - [ ] Implement runtime schema validation with proper error handling
    - **Estimated Fix Time**: 1 week
 
@@ -3414,10 +3412,10 @@ GROUP BY a.agent_id, a.agent_type, a.current_state, a.restart_count, a.error_cou
 
 **ORIGINAL CRITICAL FIXES NEEDED BEFORE PRODUCTION**:
 
-1. **Standardize Priority Scales**:
-   - Option A: Update all schemas to use 0-4 scale (5 levels)
-   - Option B: Update implementation to handle full 0-9 scale (10 levels)
-   - Current state will cause array index out of bounds errors
+1. **Standardize Priority Scales**: ✅ Resolved
+   - Standardized to 0-4 scale (5 levels) matching MessagePriority enum: Critical=0, High=1, Normal=2, Low=3, Bulk=4
+   - SQL schemas, JSON schemas, and implementation code aligned to this range
+   - Note: `message-schemas.md`, `core-message-schemas.md`, `workflow-message-schemas.md`, and `database-schemas.md` may still use 1-10 scale and need separate validation
 
 2. **Standardize AgentId Format**:
    - Define single canonical AgentId pattern

@@ -1,13 +1,22 @@
 # Claude Code CLI Implementation Roadmap
 
+> **OBSOLETE -- FOR ARCHIVAL ONLY**
+>
+> Mister Smith is model-agnostic. This document was written when Claude CLI integration was planned, but the framework now supports any LLM backend. The Claude Code-specific hook system, model references, and integration patterns described here are no longer part of the framework's architecture. Retained for historical reference only.
+
 ## VALIDATION STATUS
 
 **Last Validated**: 2026-03-03
 **Validator**: Agent 4B - Testing, Agent Domains & Research
-**Validation Score**: 60/100 (NEEDS UPDATE — hook system and model references outdated)
-**Status**: Partially updated — critical outdated sections flagged
+**Validation Score**: N/A (OBSOLETE)
+**Status**: OBSOLETE -- Mister Smith is model-agnostic; Claude CLI-specific integration is no longer planned
 
 ### Validation Changes (2026-03-03)
+
+- **Marked OBSOLETE**: Framework is model-agnostic; Claude CLI integration is no longer part of the architecture
+- Previous validation notes retained below for historical context
+
+#### Historical Notes (pre-obsolescence)
 
 - Updated `default_model` from `claude-3-5-sonnet-20241022` to `claude-opus-4-6` in configuration examples
 - Flagged outdated hook system: Phase 2 references 5 hook types (`startup`, `pre_task`, `post_task`, `on_error`, `on_file_change`) — Claude Code now has **14 lifecycle events** with different names (`SessionStart`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `Stop`, `TeammateIdle`, `TaskCompleted`, `PreCompact`, etc.)

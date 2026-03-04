@@ -1,5 +1,8 @@
 # Claude CLI Integration Architecture
 
+> **OBSOLETE -- FOR ARCHIVAL ONLY**
+> Mister Smith is model-agnostic. This Claude CLI-specific integration document is no longer part of the active architecture. See the research/ directory for related historical analysis. For LLM backend integration patterns, refer to [system-architecture.md](system-architecture.md).
+
 ## Core Component Specifications for Mister Smith Framework
 
 ### Overview

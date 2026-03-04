@@ -854,7 +854,7 @@ This enables seamless integration between operational monitoring and supervision
 ```toml
 # Required Cargo.toml dependencies for operational patterns
 [dependencies]
-tokio = { version = "1.38", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 futures = "0.3"
 prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }

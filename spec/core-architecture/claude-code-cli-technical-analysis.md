@@ -1,5 +1,8 @@
 # Claude Code CLI Technical Analysis
 
+> **OBSOLETE -- FOR ARCHIVAL ONLY**
+> Mister Smith is model-agnostic. This Claude CLI-specific analysis is no longer part of the active architecture. See the research/ directory for related historical analysis. For LLM backend integration patterns, refer to [system-architecture.md](system-architecture.md).
+
 ## Research Findings and Integration Feasibility Assessment
 
 ### Executive Summary

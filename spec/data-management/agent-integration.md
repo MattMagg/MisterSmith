@@ -705,7 +705,7 @@ CREATE TABLE tasks (
     status VARCHAR(20) NOT NULL CHECK (status IN (
         'PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'FAILED', 'CANCELLED'
     )),
-    priority INTEGER NOT NULL DEFAULT 5 CHECK (priority BETWEEN 0 AND 9),
+    priority INTEGER NOT NULL DEFAULT 2 CHECK (priority BETWEEN 0 AND 4), -- 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk
     title VARCHAR(200) NOT NULL,
     description TEXT,
     requirements JSONB NOT NULL DEFAULT '{}',
@@ -751,7 +751,7 @@ CREATE TABLE messages (
     routing_type VARCHAR(20) NOT NULL CHECK (routing_type IN (
         'BROADCAST', 'TARGET', 'ROUND_ROBIN'
     )),
-    priority INTEGER NOT NULL DEFAULT 5 CHECK (priority BETWEEN 0 AND 9),
+    priority INTEGER NOT NULL DEFAULT 2 CHECK (priority BETWEEN 0 AND 4), -- 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk
     ttl_seconds INTEGER NOT NULL DEFAULT 300,
     payload JSONB NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN (

@@ -122,7 +122,7 @@ CREATE TABLE messages (
     message_type TEXT NOT NULL,
     subject TEXT,
     content JSONB NOT NULL,
-    priority INTEGER NOT NULL DEFAULT 5 CHECK (priority BETWEEN 1 AND 10),
+    priority INTEGER NOT NULL DEFAULT 2 CHECK (priority BETWEEN 0 AND 4), -- 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk (matches MessagePriority enum)
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN (
         'pending', 'sent', 'delivered', 'processed', 'failed', 'expired'
     )),

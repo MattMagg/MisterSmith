@@ -2092,7 +2092,7 @@ mod property_tests {
     prop_compose! {
         fn arb_actor_config()(
             mailbox_size in 10..1000usize,
-            priority in 0..10u8,
+            priority in 0..5u8, // 0-4 matching MessagePriority enum
             timeout_ms in 100..5000u64,
         ) -> ActorConfig {
             ActorConfig {

@@ -1979,7 +1979,7 @@ pub struct BaseMessage {
     pub metadata: Option<std::collections::HashMap<String, String>>,
 }
 
-fn default_priority() -> u8 { 5 }
+fn default_priority() -> u8 { 2 } // 2 = Normal (matches MessagePriority enum: 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk)
 
 // Message type discriminated union
 #[derive(Debug, Clone, Serialize, Deserialize)]

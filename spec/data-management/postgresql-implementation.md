@@ -591,7 +591,7 @@ CREATE TABLE messages.log (
   is_persistent BOOLEAN DEFAULT TRUE,
   
   -- Constraints
-  CONSTRAINT valid_priority CHECK (priority BETWEEN 0 AND 10),
+  CONSTRAINT valid_priority CHECK (priority BETWEEN 0 AND 4), -- 0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk (matches MessagePriority enum)
   CONSTRAINT valid_delivery_attempts CHECK (delivery_attempts >= 0),
   CONSTRAINT routing_consistency CHECK (
     (to_agent_id IS NOT NULL AND broadcast_to_type IS NULL) OR

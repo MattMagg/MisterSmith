@@ -280,7 +280,7 @@ AGENT_COMMAND_SCHEMA: {
     "agent_id": {"type": "string", "pattern": "^[a-zA-Z0-9_-]+$"},
     "timestamp": {"type": "string", "format": "date-time"},
     "payload": {"type": "object"},
-    "priority": {"type": "integer", "minimum": 1, "maximum": 10},
+    "priority": {"type": "integer", "minimum": 0, "maximum": 4, "description": "0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk"},
     "timeout_ms": {"type": "integer", "minimum": 1000},
     "reply_to": {"type": "string", "pattern": "^[a-zA-Z0-9._-]+$"},
     "correlation_id": {"type": "string", "format": "uuid"},
@@ -333,7 +333,7 @@ TASK_ASSIGNMENT_SCHEMA: {
     "task_type": {"type": "string", "enum": ["analysis", "synthesis", "execution", "validation", "monitoring"]},
     "assigned_agent": {"type": "string", "pattern": "^[a-zA-Z0-9_-]+$"},
     "timestamp": {"type": "string", "format": "date-time"},
-    "priority": {"type": "integer", "minimum": 1, "maximum": 10},
+    "priority": {"type": "integer", "minimum": 0, "maximum": 4, "description": "0=Critical, 1=High, 2=Normal, 3=Low, 4=Bulk"},
     "deadline": {"type": "string", "format": "date-time"},
     "requirements": {
       "type": "object",
