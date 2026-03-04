@@ -8,6 +8,8 @@ members = [
     "crates/mister-smith-events",
     "crates/mister-smith-async",
     "crates/mister-smith-resources",
+    "crates/mister-smith-actor",
+    "crates/mister-smith-supervision",
     "crates/mister-smith-integration-tests",
 ]
 
@@ -59,3 +61,5 @@ mister-smith-monitoring = { path = "crates/mister-smith-monitoring" }
 mister-smith-events = { path = "crates/mister-smith-events" }
 mister-smith-async = { path = "crates/mister-smith-async" }
 mister-smith-resources = { path = "crates/mister-smith-resources" }
+mister-smith-actor = { path = "crates/mister-smith-actor" }
+mister-smith-supervision = { path = "crates/mister-smith-supervision" }

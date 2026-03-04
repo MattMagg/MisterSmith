@@ -1,20 +1,49 @@
 # Mister Smith
 
-Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-agnostic (works with any LLM). Currently in specification form; no implementation code exists yet.
+Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-agnostic (works with any LLM).
+
+## Commands
+
+```bash
+cargo build --workspace                    # Build all crates
+cargo test --workspace                     # Run all tests (243 as of Phase 2)
+cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
+```
+
+## Implementation Status
+
+| Phase | Status | Crates |
+|-------|--------|--------|
+| 1. Foundation | Complete | `mister-smith-core`, `mister-smith-config` |
+| 2. Runtime & Async | Complete | `mister-smith-runtime`, `mister-smith-monitoring`, `mister-smith-events`, `mister-smith-async`, `mister-smith-resources`, `mister-smith-integration-tests` |
+| 3. Actor System & Supervision | Next | `mister-smith-actor`, `mister-smith-supervision` (planned) |
+| 4–8 | Not started | See `ROADMAP.md` |
+
+## Workspace Crate Dependencies
+
+```
+mister-smith-core (foundation types, traits, errors)
+├── mister-smith-config (typed TOML config, env overlay)
+├── mister-smith-runtime (Tokio RuntimeManager, scheduling)
+├── mister-smith-monitoring (HealthMonitor, phi accrual failure detector, metrics)
+├── mister-smith-events (EventBus pub/sub, dead letter queue)
+├── mister-smith-async (TaskExecutor, CircuitBreaker, RetryPolicy, stream processing)
+├── mister-smith-resources (ConnectionPool, pool sizing, health reports)
+└── mister-smith-integration-tests (cross-crate validation)
+```
 
 ## Repository Structure
 
 | Directory | Contents |
 |-----------|----------|
+| `crates/` | Rust workspace — 8 crates (Phase 1 foundation + Phase 2 runtime/async) |
+| `specs/` | SpecKit feature directories with spec, plan, and task artifacts |
 | `ROADMAP.md` | 8-phase build roadmap — dependency-aware implementation order |
-| `VALIDATION_REPORT.md` | Latest validation assessment (95/100 readiness) |
-| `VERSION_REFERENCE.md` | Crate version matrix — pinned versions for all dependencies |
 | `spec/` | Framework specifications — 65+ files across 8 domains |
 | `plans/` | Implementation plans — batch 1 (core architecture) 7 of 8 agents complete, batch 2 partial |
 | `archive/` | Completed validation work, historical operations, and research |
 | `nats.rs/` | Official NATS Rust client (cloned from nats-io/nats.rs) — reference for async-nats API |
-| `.github/workflows/` | CI/CD pipelines for documentation validation |
-| `logs/` | Session logs |
+| `.github/workflows/` | CI/CD pipelines |
 
 ## Key Entry Points
 
@@ -73,15 +102,6 @@ Changes to these files cascade across the spec:
 
 **NATS Rust client**: `nats.rs/` — cloned from `nats-io/nats.rs`, contains async-nats 0.46.0 source for API reference
 
-## Validation Summary
-
-A multi-agent validation operation assessed the framework (see `VALIDATION_REPORT.md`):
-
-- **Overall readiness**: 95/100
-- **Documentation quality**: 97/100
-- **Critical gaps resolved**: Version alignment, type reconciliation, terminology generalization
-- **Remaining risk**: Supervision trees (pseudocode → production Rust is the hardest phase)
-
 ## Available Apps (via Rube MCP)
 
 The following apps are connected and available for use. Select the most appropriate app or tool based on the task at hand.
@@ -90,5 +110,11 @@ The following apps are connected and available for use. Select the most appropri
 |-----|-------------|
 | **Context7 MCP** | Fetches up-to-date, version-specific documentation and code examples directly into the prompt. Use when you need accurate library/framework docs or API references. |
 | **GitHub** | Code hosting and version control platform. Use for managing repositories, creating/reviewing pull requests, tracking issues, and CI/CD workflows. |
-| **Mem0** | Self-improving memory layer for LLM applications. Use for persisting, retrieving, and managing long-term memory across agent sessions and conversations. |
 | **Tavily** | AI-optimized search and data retrieval. Use for quickly searching the web or filtering relevant information from documents and databases. Load the Tavily-best-practices skill whenever you need to use Tavily > .claude/skills/tavily-best-practices |
+
+## Active Technologies
+- Rust, MSRV 1.88.0 + okio 1.49.0 (mpsc, oneshot, sync, time), async-trait 0.1.83, mister-smith-core (Actor/Supervisor traits, supervision types, error types), mister-smith-events (EventBus, AgentEventType), mister-smith-monitoring (HealthCheck, HealthMonitor, MetricsCollector) (003-phase3-actor-supervision)
+- N/A (in-memory only; no persistence in Phase 3) (003-phase3-actor-supervision)
+
+## Recent Changes
+- 003-phase3-actor-supervision: Added Rust, MSRV 1.88.0 + okio 1.49.0 (mpsc, oneshot, sync, time), async-trait 0.1.83, mister-smith-core (Actor/Supervisor traits, supervision types, error types), mister-smith-events (EventBus, AgentEventType), mister-smith-monitoring (HealthCheck, HealthMonitor, MetricsCollector)

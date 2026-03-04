@@ -1,0 +1,23 @@
+[package]
+name = "mister-smith-supervision"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Supervision trees: hierarchical fault tolerance with restart policies and escalation"
+
+[dependencies]
+mister-smith-core = { workspace = true }
+mister-smith-actor = { workspace = true }
+mister-smith-events = { workspace = true }
+mister-smith-monitoring = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

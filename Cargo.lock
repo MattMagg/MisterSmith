@@ -406,6 +406,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mister-smith-actor"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mister-smith-core",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "mister-smith-async"
 version = "0.1.0"
 dependencies = [
@@ -464,6 +478,7 @@ name = "mister-smith-integration-tests"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "mister-smith-actor",
  "mister-smith-async",
  "mister-smith-config",
  "mister-smith-core",
@@ -471,6 +486,7 @@ dependencies = [
  "mister-smith-monitoring",
  "mister-smith-resources",
  "mister-smith-runtime",
+ "mister-smith-supervision",
  "serde_json",
  "tokio",
  "uuid",
@@ -518,6 +534,23 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "mister-smith-supervision"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mister-smith-actor",
+ "mister-smith-core",
+ "mister-smith-events",
+ "mister-smith-monitoring",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 
