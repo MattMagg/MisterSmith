@@ -45,3 +45,11 @@ If running `nats.rs` tests locally, install server first: `go install github.com
 ## Security & Configuration Tips
 - Never commit secrets; use GitHub Actions secrets (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) for workflow credentials.
 - Treat `mistersmith-api.json` and workflow files as integration surfaces: validate references and paths after edits.
+
+## Active Technologies
+- Markdown specifications + Rust contract references (MSRV 1.88 context) + Existing canonical docs in `spec/core-architecture/`, `spec/operations/`; repo checks via `rg`, `cargo`, `markdownlint` (001-phase1-foundation)
+- N/A (documentation artifacts only) (001-phase1-foundation)
+- Markdown specifications + Rust-oriented contract references (Tokio 1.49.0 baseline context) + Canonical docs in `spec/core-architecture/`, `spec/data-management/`, `spec/operations/`; repository checks via `rg` and `markdownlint` (002-phase2-runtime-async)
+
+## Recent Changes
+- 001-phase1-foundation: Added Markdown specifications + Rust contract references (MSRV 1.88 context) + Existing canonical docs in `spec/core-architecture/`, `spec/operations/`; repo checks via `rg`, `cargo`, `markdownlint`
