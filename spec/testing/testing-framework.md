@@ -79,7 +79,7 @@
 ### Testing Resources
 
 - [Test Schemas](test-schemas.md) - Test data structures and message schemas
-- [Testing CLAUDE Guide](CLAUDE.md) - Testing directory navigation and instructions
+- [Testing CLAUDE Guide](../CLAUDE.md) - Testing directory navigation and instructions
 
 ## TESTING PHILOSOPHY
 

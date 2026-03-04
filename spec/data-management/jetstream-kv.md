@@ -36,7 +36,7 @@ JetStream Key-Value storage patterns for distributed agent state management:
 > **Related Documentation**:
 >
 > - See [PostgreSQL Implementation](./postgresql-implementation.md) for comprehensive database schemas and hybrid storage integration
-> - See [Data Management Directory](./CLAUDE.md) for complete data management architecture
+> - See [Data Management Directory](../CLAUDE.md) for complete data management architecture
 > - See [NATS Transport](../transport/nats-transport.md) for NATS messaging patterns
 > - See [Transport Core](../transport/transport-core.md) for transport layer specifications
 

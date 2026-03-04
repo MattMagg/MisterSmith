@@ -2410,6 +2410,6 @@ This file is part of the Message Schema Documentation suite:
 - **Transformation**: [Protocol Adaptation](#8-serialization-specifications), [Enrichment](#8-serialization-specifications), [Content Mapping](#95-content-based-routing)
 - **Management**: [Versioning](#8-serialization-specifications), [Compatibility](#8-serialization-specifications), [Registry](#94-topic-based-routing)
 
-For the complete framework documentation, see the [Data Management Index](./CLAUDE.md).
+For the complete framework documentation, see the [Data Management Index](../CLAUDE.md).
 
 *Message Schema Definitions v1.0.0 - Mister Smith AI Agent Framework*

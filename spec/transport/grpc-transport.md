@@ -759,7 +759,40 @@ Standard gRPC status codes are used for error reporting:
 - `UNAVAILABLE` (14): Service unavailable
 - `DATA_LOSS` (15): Unrecoverable data loss
 
-### 8.2 Retry Policy
+### 8.2 gRPC Status → Framework Error Mapping
+
+Tonic `Status` codes map to framework error types as follows:
+
+| gRPC Status | Framework Error | Recovery Action |
+|-------------|----------------|-----------------|
+| `INVALID_ARGUMENT` (3) | `AgentError::InvalidInput` | Return error to caller |
+| `DEADLINE_EXCEEDED` (4) | `AgentError::Timeout` | Retry per policy |
+| `NOT_FOUND` (5) | `AgentError::NotFound` | Return error to caller |
+| `PERMISSION_DENIED` (7) | `SecurityError::Unauthorized` | Escalate to supervisor |
+| `RESOURCE_EXHAUSTED` (8) | `AgentError::ResourceExhausted` | Apply backpressure, retry after delay |
+| `ABORTED` (10) | `AgentError::Cancelled` | Report to supervisor |
+| `UNIMPLEMENTED` (12) | `AgentError::UnsupportedOperation` | Return error to caller |
+| `INTERNAL` (13) | `FrameworkError::Internal` | Log, escalate to supervisor |
+| `UNAVAILABLE` (14) | `TransportError::ConnectionFailed` | Retry per policy, circuit breaker |
+| `DATA_LOSS` (15) | `PersistenceError::DataCorruption` | Alert, manual intervention |
+
+```rust
+/// Convert tonic::Status to framework error types
+impl From<tonic::Status> for FrameworkError {
+    fn from(status: tonic::Status) -> Self {
+        match status.code() {
+            tonic::Code::InvalidArgument => FrameworkError::Agent(AgentError::InvalidInput(status.message().to_string())),
+            tonic::Code::DeadlineExceeded => FrameworkError::Agent(AgentError::Timeout(status.message().to_string())),
+            tonic::Code::NotFound => FrameworkError::Agent(AgentError::NotFound(status.message().to_string())),
+            tonic::Code::PermissionDenied => FrameworkError::Security(SecurityError::Unauthorized(status.message().to_string())),
+            tonic::Code::Unavailable => FrameworkError::Transport(TransportError::ConnectionFailed(status.message().to_string())),
+            _ => FrameworkError::Internal(format!("gRPC error {}: {}", status.code() as i32, status.message())),
+        }
+    }
+}
+```
+
+### 8.3 Retry Policy
 
 Automatic retry with exponential backoff for transient errors:
 

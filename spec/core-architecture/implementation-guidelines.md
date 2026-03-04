@@ -8,7 +8,7 @@
 
 ## Navigation
 
-[← Monitoring & Health](./monitoring-and-health.md) | [System Architecture Overview](./system-architecture.md) | [Core Architecture Index](./CLAUDE.md)
+[← Monitoring & Health](./monitoring-and-health.md) | [System Architecture Overview](./system-architecture.md) | [Core Architecture Index](../CLAUDE.md)
 
 ---
 

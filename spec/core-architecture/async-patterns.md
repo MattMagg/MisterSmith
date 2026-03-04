@@ -1,6 +1,6 @@
 # Async Patterns Architecture
 
-**Navigation**: [Core Architecture](./CLAUDE.md) > Async Patterns
+**Navigation**: [Core Architecture](../CLAUDE.md) > Async Patterns
 
 This document defines the asynchronous programming patterns, concurrency models, and reactive architectures used throughout the MisterSmith framework. All patterns are built on Tokio for maximum performance and reliability.
 

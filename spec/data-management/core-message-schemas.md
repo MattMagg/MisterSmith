@@ -569,6 +569,6 @@ This file is part of the Message Schema Documentation suite:
 - **Claude CLI**: [Hook Events](./message-schemas.md#hook-event-message), [Hook Responses](./message-schemas.md#hook-response-message)
 - **Framework**: [Validation](./message-framework.md#validation-framework), [Serialization](./message-framework.md#serialization-specifications)
 
-For the complete framework documentation, see the [Data Management Index](./CLAUDE.md).
+For the complete framework documentation, see the [Data Management Index](../CLAUDE.md).
 
 *Message Schema Definitions v1.0.0 - Mister Smith AI Agent Framework*

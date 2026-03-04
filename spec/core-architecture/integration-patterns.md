@@ -1,6 +1,6 @@
 # Error, Event, and Dependency Injection Patterns
 
-[← Back to Core Architecture](./CLAUDE.md) | [Integration Contracts](./integration-contracts.md) | [System Integration →](./system-integration.md)
+[← Back to Core Architecture](../CLAUDE.md) | [Integration Contracts](./integration-contracts.md) | [System Integration →](./system-integration.md)
 
 ## Executive Summary
 
@@ -3005,4 +3005,4 @@ scalable, and maintainable multi-agent systems.
 
 ---
 
-[← System Integration](system-integration.md) | [↑ Core Architecture](CLAUDE.md) | [Implementation Configuration →](implementation-config.md)
+[← System Integration](system-integration.md) | [↑ Core Architecture](../CLAUDE.md) | [Implementation Configuration →](implementation-config.md)

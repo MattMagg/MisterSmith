@@ -773,6 +773,6 @@ This file is part of the Message Schema Documentation suite:
 - **Message Routing**: [NATS Patterns](#91-nats-subject-pattern-schemas), [Correlation](#92-message-correlation-strategies)
 - **Agent Operations**: [Agent Communication](./agent-communication.md), [Agent Integration](./agent-integration.md)
 
-For the complete framework documentation, see the [Data Management Index](./CLAUDE.md).
+For the complete framework documentation, see the [Data Management Index](../CLAUDE.md).
 
 *Message Schema Definitions v1.0.0 - Mister Smith AI Agent Framework*

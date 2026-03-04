@@ -1,6 +1,6 @@
 # Supervision Tree Architecture
 
-**Navigation**: [Home](../../README.md) > [Core Architecture](./CLAUDE.md) > Supervision Tree Architecture
+**Navigation**: [Home](../../README.md) > [Core Architecture](../CLAUDE.md) > Supervision Tree Architecture
 
 **Quick Links**: [Component Architecture](component-architecture.md) | [System Architecture](system-architecture.md) | [Async Patterns](async-patterns.md) | [System Integration](system-integration.md)
 
@@ -43,7 +43,7 @@ The Supervision Tree Architecture defines hierarchical fault-tolerance patterns 
 **Parent Document**: [System Architecture](system-architecture.md)  
 **Related Modules**:
 
-- [Core Architecture](./CLAUDE.md) - Main architecture directory navigation
+- [Core Architecture](../CLAUDE.md) - Main architecture directory navigation
 - [Tokio Runtime](tokio-runtime.md) - Runtime management and supervision integration
 - [Async Patterns](async-patterns.md) - Asynchronous programming patterns used in supervision
 - [Component Architecture](component-architecture.md) - Core system components and event handling
