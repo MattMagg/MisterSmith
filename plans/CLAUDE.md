@@ -15,6 +15,8 @@ Phased implementation plans for building Mister Smith from the specifications in
 Implementation specs are generated via SpecKit into `specs/`:
 - `specs/001-phase1-foundation/` — Phase 1 spec, plan, tasks (all complete)
 - `specs/002-phase2-runtime-async/` — Phase 2 spec, plan, tasks (all complete)
+- `specs/003-phase3-actor-supervision/` — Phase 3 spec, plan, tasks (all complete)
+- `specs/004-phase4-transport-messaging/` — Phase 4 spec, plan, data-model, research (in progress)
 
 ## Usage
 

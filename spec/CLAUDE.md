@@ -13,7 +13,7 @@ spec/
 ├── operations/          # Deployment, monitoring, configuration, build scripts (7 + scripts/)
 ├── agent-domains/       # Consolidated agent type analysis (1 file)
 ├── testing/             # Test framework and schemas (2 files)
-└── research/            # Claude CLI integration analysis (3 files)
+└── research/            # LLM CLI integration analysis (3 files, legacy — to be archived)
 ```
 
 ## Document Interconnections
