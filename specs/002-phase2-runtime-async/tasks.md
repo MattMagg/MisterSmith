@@ -17,14 +17,14 @@
 
 **Purpose**: Initialize Phase 2 feature workspace and references.
 
-- [ ] T001 Confirm active feature paths with `./.specify/scripts/bash/check-prerequisites.sh --json --paths-only`
-- [ ] T002 Verify Phase 2 canonical anchors exist in
+- [x] T001 Confirm active feature paths with `./.specify/scripts/bash/check-prerequisites.sh --json --paths-only`
+- [x] T002 Verify Phase 2 canonical anchors exist in
   `/Users/matthewmaggio/Mister-Smith/spec/core-architecture/`,
   `/Users/matthewmaggio/Mister-Smith/spec/data-management/`, and
   `/Users/matthewmaggio/Mister-Smith/spec/operations/`; confirm Phase 1 Gate 1 evidence in
   `/Users/matthewmaggio/Mister-Smith/specs/001-phase1-foundation/spec.md` (`## Success Criteria`) and
   `/Users/matthewmaggio/Mister-Smith/specs/001-phase1-foundation/quickstart.md`
-- [ ] T003 [P] Create/verify artifact layout under `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/`
+- [x] T003 [P] Create/verify artifact layout under `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/`
 
 ---
 
@@ -32,12 +32,12 @@
 
 **Purpose**: Build shared contract-planning artifacts needed by all stories.
 
-- [ ] T004 Author Phase 2 implementation summary and technical context in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/plan.md`
-- [ ] T005 [P] Consolidate planning decisions in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/research.md`
-- [ ] T006 [P] Define shared contract entities in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/data-model.md`
-- [ ] T007 [P] Define baseline runtime/async contracts in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/contracts/phase2-runtime-async-contracts.md`
-- [ ] T008 [P] Capture reproducible validation workflow in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/quickstart.md`
-- [ ] T009 Update Codex agent context via `./.specify/scripts/bash/update-agent-context.sh codex`
+- [x] T004 Author Phase 2 implementation summary and technical context in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/plan.md`
+- [x] T005 [P] Consolidate planning decisions in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/research.md`
+- [x] T006 [P] Define shared contract entities in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/data-model.md`
+- [x] T007 [P] Define baseline runtime/async contracts in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/contracts/phase2-runtime-async-contracts.md`
+- [x] T008 [P] Capture reproducible validation workflow in `/Users/matthewmaggio/Mister-Smith/specs/002-phase2-runtime-async/quickstart.md`
+- [x] T009 Update Codex agent context via `./.specify/scripts/bash/update-agent-context.sh codex`
 
 **Checkpoint**: Shared design artifacts are ready for story-specific evidence tasks.
 

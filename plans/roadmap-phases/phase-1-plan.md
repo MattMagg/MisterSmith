@@ -302,3 +302,30 @@ rg -n "pub struct SupervisionStrategy|pub enum EscalationPolicy|pub enum Backoff
 | Config validation library churn (jsonschema 0.18 vs 0.42) | Low | Defer heavy validation deps; use manual validation (Decision 5) |
 | Legacy docs with non-canonical type snippets | Low | Annotate as illustrative; canonical section takes precedence |
 | `configuration-management.md` contains Claude CLI-specific config blocks | Low | Exclude from implementation; generalize before Phase 1.3 |
+
+## Implementation Changelog
+
+### 2026-03-04 — Phase 1 Implementation Complete
+
+**Spec reconciliation changes made during implementation:**
+
+1. **EscalationPolicy canonicalized** (Decision 1 resolved): Implemented as `{ Terminate, Restart, Escalate, LogAndIgnore }` in `crates/mister-smith-core/src/supervision.rs`. Reconciles 4 competing definitions: `agent-lifecycle.md` (Terminate/Restart/Escalate), `async-patterns.md` (added LogAndIgnore), `process-management-specifications.md` (operational concerns deferred to Phase 8). This is now the single canonical definition.
+
+2. **BackoffStrategy canonicalized** (Decision 2 resolved): Implemented as `{ Fixed(Duration), Exponential { initial, max, multiplier }, Linear { initial, increment } }` per `agent-lifecycle.md`. The `Custom(fn)` variant from `integration-patterns.md` was excluded because function pointers are not serializable.
+
+3. **SystemError uses nested #[from] hierarchy** (Decision 3 resolved): Implemented the `runtime-and-errors.md` typed sub-error hierarchy rather than the flat-string version from `type-definitions.md` canonical section. All 11 sub-error types have `#[from]` conversions to `SystemError`.
+
+4. **Agent extends Tool** (Decision 4 resolved): `pub trait Agent: Tool + Send + Sync + 'static` per `module-organization-type-system.md`. The `create_with_dependencies` factory method was omitted (requires `ServiceRegistry` which is a later-phase construct).
+
+5. **Manual config validation** (Decision 5 resolved): Hand-written `validate()` methods on all config structs. No `validator`/`schemars`/`jsonschema` dependencies.
+
+6. **ResourceId added**: `ResourceId` newtype was added to `ids.rs` (same pattern as AgentId) to support the `Resource` trait's `resource_id()` method. Not in original spec's Phase 1.1 canonical section but required by the Phase 1.2 `Resource` trait.
+
+7. **EventPublisher trait added**: Trait defined in core crate to break the circular dependency between monitoring and events crates (per audit-report C3). Uses `SystemEvent` struct with `serde_json::Value` payload to avoid pulling full event types into core.
+
+8. **rust-toolchain.toml set to `stable`**: Changed from `channel = "1.88.0"` to `channel = "stable"` for local development. MSRV enforcement is via `rust-version = "1.88"` in Cargo.toml and CI pins 1.88.0.
+
+**Gate validation results:**
+- `cargo build --workspace`: PASS (zero errors, zero warnings)
+- `cargo test --workspace`: PASS (60 tests, 0 failures)
+- `cargo clippy` / `cargo fmt`: Not available locally (missing components); CI enforces

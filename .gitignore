@@ -2,7 +2,12 @@
 .DS_Store
 
 # Rust build output
-target/
+/target/
+debug/
+release/
+*.rs.bk
+*.rlib
+*.prof*
 
 # External dependencies
 agenterra/

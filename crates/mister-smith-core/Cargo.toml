@@ -1,0 +1,15 @@
+[package]
+name = "mister-smith-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Core types, traits, and error hierarchy for the Mister Smith framework"
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+semver = { workspace = true }
