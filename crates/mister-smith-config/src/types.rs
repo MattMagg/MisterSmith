@@ -104,7 +104,7 @@ impl Default for MonitoringConfig {
 }
 
 /// Agent configuration combining runtime, supervision, and monitoring.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// Runtime settings.
     #[serde(default)]
@@ -117,18 +117,8 @@ pub struct AgentConfig {
     pub monitoring: MonitoringConfig,
 }
 
-impl Default for AgentConfig {
-    fn default() -> Self {
-        Self {
-            runtime: RuntimeConfig::default(),
-            supervision: SupervisionConfig::default(),
-            monitoring: MonitoringConfig::default(),
-        }
-    }
-}
-
 /// Transport configuration (minimal placeholder — full definition in Phase 4).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TransportConfig {
     /// NATS server URL.
     #[serde(default)]
@@ -141,18 +131,8 @@ pub struct TransportConfig {
     pub grpc_port: Option<u16>,
 }
 
-impl Default for TransportConfig {
-    fn default() -> Self {
-        Self {
-            nats_url: None,
-            http_port: None,
-            grpc_port: None,
-        }
-    }
-}
-
 /// Security configuration (minimal placeholder — full definition in Phase 5).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SecurityConfig {
     /// Whether security features are enabled.
     #[serde(default)]
@@ -165,18 +145,8 @@ pub struct SecurityConfig {
     pub auth_required: bool,
 }
 
-impl Default for SecurityConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            tls_enabled: false,
-            auth_required: false,
-        }
-    }
-}
-
 /// Top-level framework configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FrameworkConfig {
     /// Agent configuration.
     #[serde(default)]
@@ -187,16 +157,6 @@ pub struct FrameworkConfig {
     /// Security configuration.
     #[serde(default)]
     pub security: SecurityConfig,
-}
-
-impl Default for FrameworkConfig {
-    fn default() -> Self {
-        Self {
-            agent: AgentConfig::default(),
-            transport: TransportConfig::default(),
-            security: SecurityConfig::default(),
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

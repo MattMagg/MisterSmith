@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Lower discriminant values represent higher priority.
 /// `Critical` (0) is highest; `Bulk` (4) is lowest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum MessagePriority {
     /// Highest priority — system-critical messages.
@@ -14,17 +14,12 @@ pub enum MessagePriority {
     /// High priority — time-sensitive operations.
     High = 1,
     /// Normal priority — standard message processing.
+    #[default]
     Normal = 2,
     /// Low priority — background operations.
     Low = 3,
     /// Lowest priority — bulk/batch operations.
     Bulk = 4,
-}
-
-impl Default for MessagePriority {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 /// Lifecycle state machine for Phase 7 agent lifecycle management.

@@ -40,7 +40,7 @@ impl From<&str> for ComponentId {
 }
 
 /// Health status of a monitored component.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
     /// Component is fully operational.
     Healthy,
@@ -49,6 +49,7 @@ pub enum Status {
     /// Component is not operational.
     Unhealthy,
     /// Component health is unknown (not yet checked).
+    #[default]
     Unknown,
 }
 
@@ -60,12 +61,6 @@ impl fmt::Display for Status {
             Status::Unhealthy => write!(f, "Unhealthy"),
             Status::Unknown => write!(f, "Unknown"),
         }
-    }
-}
-
-impl Default for Status {
-    fn default() -> Self {
-        Self::Unknown
     }
 }
 

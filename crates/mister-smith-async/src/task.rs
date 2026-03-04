@@ -18,7 +18,7 @@ use uuid::Uuid;
 ///
 /// This mirrors [`MessagePriority`](mister_smith_core::MessagePriority) but
 /// omits the `Bulk` level, which is not applicable to discrete tasks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum TaskPriority {
     /// Highest priority — system-critical tasks.
@@ -26,15 +26,10 @@ pub enum TaskPriority {
     /// High priority — time-sensitive tasks.
     High = 1,
     /// Normal priority — standard task processing.
+    #[default]
     Normal = 2,
     /// Low priority — background tasks.
     Low = 3,
-}
-
-impl Default for TaskPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 /// Errors that can occur during task execution.

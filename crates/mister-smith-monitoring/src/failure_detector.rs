@@ -125,7 +125,7 @@ impl PhiAccrualFailureDetector {
                 // but available if there's exactly one heartbeat (just started).
                 self.heartbeats
                     .get(node_id)
-                    .map_or(false, |arrivals| !arrivals.is_empty())
+                    .is_some_and(|arrivals| !arrivals.is_empty())
             }
         }
     }

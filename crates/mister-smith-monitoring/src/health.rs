@@ -134,7 +134,7 @@ impl HealthMonitor {
             // Detect status change and publish event if needed.
             let mut cache = self.status_cache.write().await;
             let previous_status = cache.get(&component_id).map(|h| h.status);
-            let status_changed = previous_status.map_or(true, |prev| prev != new_status);
+            let status_changed = previous_status != Some(new_status);
 
             if status_changed {
                 debug!(
