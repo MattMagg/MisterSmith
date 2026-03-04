@@ -24,7 +24,7 @@ HTTP transport provides the foundation for web-compatible agent communication wi
 - Standardized error handling with HTTP status codes
 - Integration with Axum 0.8 framework patterns
 
-**Technology Reference** (from tech-framework.md):
+**Technology Reference** (from `VERSION_REFERENCE.md` and dependency specifications):
 
 - Axum 0.8 (HTTP)
 - Tokio 1.49 (async runtime)
@@ -1191,8 +1191,8 @@ The specifications are designed for use with Axum 0.8 and provide a complete fou
   - **[Component Architecture](../core-architecture/component-architecture.md)** - HTTP service component patterns
   - **[Supervision Trees](../core-architecture/supervision-trees.md)** - HTTP service supervision and restart strategies
 - **[Security](../security/)** - Authentication, authorization, and transport security
-  - **[Authentication](../security/authentication.md)** - JWT and API key implementation patterns
-  - **[Authorization](../security/authorization.md)** - HTTP request authorization middleware
+  - **[Authentication](../security/authentication-specifications.md)** - JWT and API key implementation patterns
+  - **[Authorization](../security/authorization-specifications.md)** - HTTP request authorization middleware
   - **[Security Integration](../security/security-integration.md)** - End-to-end security patterns
 - **[Data Management](../data-management/)** - Message schemas and persistence patterns
   - **[Message Schemas](../data-management/message-schemas.md)** - HTTP request/response schema validation
@@ -1201,7 +1201,8 @@ The specifications are designed for use with Axum 0.8 and provide a complete fou
 
 ### External References
 
-- **Technology Stack**: `/tech-framework.md` - Canonical technology specifications
+- **Technology Stack**: `../../VERSION_REFERENCE.md` and
+  `../core-architecture/dependency-specifications.md` - Canonical technology specifications
 - **OpenAPI/Swagger**: For API documentation and client generation
 - **Axum Documentation**: Framework-specific implementation guidance
 - **Tokio Documentation**: Async runtime patterns and best practices

@@ -194,4 +194,4 @@ The 0.5 point deduction is for:
 
 ## Conclusion
 
-The MisterSmith CLAUDE.md instructions represent a **highly effective** adaptation of global system instructions to a documentation-first project phase. They successfully prevent the "ruv-FANN problem" by enforcing foundation-first development starting with solid documentation. The instructions guide agents to build specifications that are clear, consistent, and implementable - setting up the project for successful incremental implementation when that phase begins.
+The MisterSmith CLAUDE.md instructions represent a **highly effective** adaptation of global system instructions to a documentation-first project phase. They successfully prevent the "integration-overfitting problem" by enforcing foundation-first development starting with solid documentation. The instructions guide agents to build specifications that are clear, consistent, and implementable - setting up the project for successful incremental implementation when that phase begins.

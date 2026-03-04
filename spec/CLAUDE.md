@@ -36,7 +36,7 @@ spec/
 
 - **Technical accuracy**: Specifications must be implementable with stated technologies
 - **Consistency**: Terms, patterns, agent names, and version numbers uniform across files
-- **Completeness**: Minimize TODO/TBD sections
+- **Completeness**: Minimize placeholder or unresolved sections
 - **Feasibility**: Patterns must follow Rust best practices for the stated dependency versions
 
 ### Terminology Consistency

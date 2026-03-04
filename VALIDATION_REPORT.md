@@ -17,8 +17,45 @@ All critical and high-priority issues have been resolved:
 - gRPC Status → FrameworkError mapping added
 - Broken CLAUDE.md breadcrumb links fixed (11 links across core-architecture and data-management)
 - Phantom file reference links fixed (23+ links mapped to actual filenames)
+- Transport status/lifecycle naming collision resolved (`AgentAvailability` vs lifecycle `AgentState`)
 
 Five files are correctly marked OBSOLETE. No stale absolute filesystem paths were found.
+
+## Roadmap Reconciliation Addendum (2026-03-04)
+
+Mandatory discrepancy checklist reconciled against current files:
+
+| Discrepancy | Where found (file + section) | Canonical location | Resolution status |
+|---|---|---|---|
+| AgentState lifecycle vs transport collision | `spec/transport/nats-transport.md` (Message Schema Definitions), `spec/transport/grpc-transport.md` (gRPC Service Definitions), `spec/transport/transport-layer-specifications.md` (gRPC Service Definitions), `ROADMAP.md` (Phase 4/7 definitions) | `spec/core-architecture/type-definitions.md` (Canonical Core Types, `AgentState` + `AgentAvailability`) | Resolved |
+| MessagePriority 4-level vs 5-level mismatch | `spec/testing/test-schemas.md` (Test Message Schema), cross-checked with transport/message-schema docs | `spec/core-architecture/type-definitions.md` (`MessagePriority`) | Resolved |
+| SupervisionStrategy / RestartPolicy inconsistency | `spec/data-management/agent-lifecycle.md` (Basic Supervision Tree, Simple Restart Logic), cross-checked with supervision/core docs | `spec/core-architecture/type-definitions.md` (`RestartPolicy`, `RestartScope`, `SupervisionStrategy`) | Resolved |
+| Missing canonical Phase 1.1 core types in type-definitions | `spec/core-architecture/type-definitions.md` (pre-addendum lacked explicit canonical block) | `spec/core-architecture/type-definitions.md` (Canonical Core Types section) | Resolved |
+| Tool trait duplication/inconsistency | `spec/core-architecture/module-organization-type-system.md` (Core Trait Definitions), `spec/core-architecture/system-integration.md` (Shared Tool Registry Pattern) | `spec/core-architecture/module-organization-type-system.md` (`Tool` trait is canonical) | Resolved |
+
+1. **AgentState naming collision (lifecycle vs transport)** — **Resolved**
+   - Canonical lifecycle state remains `AgentState` in `type-definitions.md` and lifecycle specs
+   - Transport/gRPC status enums renamed to `AgentAvailability` in:
+     - `spec/transport/nats-transport.md`
+     - `spec/transport/grpc-transport.md`
+     - `spec/transport/transport-layer-specifications.md`
+
+2. **MessagePriority mismatch (4 vs 5 levels)** — **Resolved**
+   - `spec/testing/test-schemas.md` updated to five levels with explicit discriminants:
+     `Critical=0`, `High=1`, `Normal=2`, `Low=3`, `Bulk=4`
+
+3. **SupervisionStrategy / RestartPolicy inconsistency** — **Resolved**
+   - `spec/data-management/agent-lifecycle.md` removed `SimpleOneForOne` extension from canonical `RestartPolicy`
+   - Conflicting local `RestartPolicy` struct renamed to `RestartLimitPolicy`
+   - Conflicting local `RestartPolicyManager` renamed to `RestartLimitManager`
+
+4. **`type-definitions.md` missing canonical core types** — **Resolved**
+   - Added canonical definitions for IDs, `MessagePriority`, `AgentState`, `AgentAvailability`,
+     `AgentType`, `RestartPolicy`, `RestartScope`, and `SupervisionStrategy`
+
+5. **Tool-trait duplication/inconsistency** — **Resolved**
+   - `module-organization-type-system.md` explicitly marked as canonical Tool trait signature source
+   - `system-integration.md` Tool trait signature aligned (`capabilities`, `tool_id`, `version`)
 
 ## Per-File Status
 
@@ -28,7 +65,7 @@ Five files are correctly marked OBSOLETE. No stale absolute filesystem paths wer
 |------|--------|-------|
 | `system-architecture.md` | validated | MSRV 1.88.0, tokio 1.49.0, 1 broken link (./CLAUDE.md) |
 | `component-architecture.md` | validated | 5 broken links (./CLAUDE.md, README.md refs to other domains) |
-| `type-definitions.md` | validated | Canonical SupervisionStrategy as struct; MSRV 1.88.0; MessagePriority 0-4 |
+| `type-definitions.md` | updated | Added canonical Phase 1.1 core types: IDs, MessagePriority 0-4, AgentState, AgentAvailability, AgentType, RestartPolicy, RestartScope, SupervisionStrategy |
 | `dependency-specifications.md` | validated | async-nats 0.46.0, all versions match VERSION_REFERENCE.md |
 | `async-patterns.md` | updated | Consolidated with async-patterns-detailed.md; SupervisionStrategy enum → RestartPolicy; 14-section TOC; navigation breadcrumbs added; CLAUDE.md links fixed |
 | `async-patterns-detailed.md` | updated | Replaced with redirect notice pointing to consolidated async-patterns.md |
@@ -39,12 +76,12 @@ Five files are correctly marked OBSOLETE. No stale absolute filesystem paths wer
 | `integration-implementation.md` | validated | References `claude_cli_framework` feature (line 935) -- should be generalized |
 | `implementation-guidelines.md` | updated | SupervisionStrategy::RestartTransient → RestartScope::Transient; CLAUDE.md links fixed |
 | `implementation-config.md` | validated | Clean, all links valid within domain |
-| `coding-standards.md` | validated | Shows `enum SupervisionStrategy {OneForOne, OneForAll, RestForOne}` as example -- acceptable as naming convention example |
-| `module-organization-type-system.md` | validated | async-nats 0.46, priority range 0-4 validated |
+| `coding-standards.md` | updated | Naming example now uses canonical `RestartPolicy` enum to avoid SupervisionStrategy enum/struct confusion |
+| `module-organization-type-system.md` | updated | Marked canonical Tool trait signature source; supervision module comment aligned to struct+policy model |
 | `tokio-runtime.md` | validated | tokio 1.49.0, MSRV 1.88.0, 2 broken links (./CLAUDE.md) |
 | `runtime-and-errors.md` | validated | tokio 1.49.0, 1 broken link |
 | `monitoring-and-health.md` | validated | All internal links valid |
-| `system-integration.md` | validated | Security section comprehensive, no version issues |
+| `system-integration.md` | updated | Tool trait snippet aligned with canonical signature (`execute`, `schema`, `capabilities`, `tool_id`, `version`) |
 | `claude-cli-integration.md` | obsolete | Correctly marked OBSOLETE |
 | `claude-code-cli-technical-analysis.md` | obsolete | Correctly marked OBSOLETE |
 
@@ -53,7 +90,7 @@ Five files are correctly marked OBSOLETE. No stale absolute filesystem paths wer
 | File | Status | Notes |
 |------|--------|-------|
 | `agent-orchestration.md` | validated | SupervisionStrategy as struct (matches canonical); priority 0-4; async-nats 0.46.0; Claude-CLI sections remain (sections 10.4, 13) |
-| `agent-lifecycle.md` | validated | SupervisionStrategy as struct (matches canonical); RestartPolicy aligned; 8 broken links |
+| `agent-lifecycle.md` | updated | Removed `SimpleOneForOne` from canonical RestartPolicy; renamed conflicting local restart-limiter types |
 | `agent-communication.md` | validated | Priority 0-4 standardized; async-nats 0.46.0 verified |
 | `agent-integration.md` | validated | async-nats 0.46 Bytes API; priority 0-4; 1 broken link note |
 | `agent-operations.md` | validated | RestartPolicy naming confirmed |
@@ -77,9 +114,9 @@ Five files are correctly marked OBSOLETE. No stale absolute filesystem paths wer
 | File | Status | Notes |
 |------|--------|-------|
 | `transport-core.md` | validated | async-nats 0.46 reference; all internal links valid |
-| `transport-layer-specifications.md` | validated | Priority 0-4 in JSON schemas; Claude CLI hook subject taxonomy remains |
-| `nats-transport.md` | validated | async-nats 0.46.0 thoroughly updated; MessagePriority enum 0-4; Claude CLI stream config remains; 3 broken links (security files) |
-| `grpc-transport.md` | updated | Priority 0-4 range documented; gRPC Status → FrameworkError mapping added; 10+ broken links fixed |
+| `transport-layer-specifications.md` | updated | gRPC/proto status enum renamed `AgentAvailability` to avoid collision with lifecycle `AgentState` |
+| `nats-transport.md` | updated | Agent status enum renamed `AgentAvailability`; MessagePriority remains canonical 0-4 |
+| `grpc-transport.md` | updated | gRPC status enum renamed `AgentAvailability`; Priority 0-4 range and Status→FrameworkError mapping retained |
 | `http-transport.md` | updated | "Claude-Flow" → "Mister Smith"; Axum 0.8 path params fixed; WebSocket Utf8Bytes migration |
 
 ### Security (7 files)
@@ -117,7 +154,7 @@ Five files are correctly marked OBSOLETE. No stale absolute filesystem paths wer
 | File | Status | Notes |
 |------|--------|-------|
 | `testing-framework.md` | validated | Model-agnostic note added; 1 broken link (CLAUDE.md) |
-| `test-schemas.md` | updated | `MockClaudeCliService` → `MockLlmCliService`; `AgentType` → `TestAgentRole`; broken links fixed |
+| `test-schemas.md` | updated | `MessagePriority` corrected to canonical five-level enum with discriminants; existing `MockLlmCliService`/`TestAgentRole` updates retained |
 
 ### Research (3 files -- all OBSOLETE)
 
@@ -223,7 +260,7 @@ Fully standardized to 0-4 across all target files:
 - `data-persistence.md` -- `CHECK (priority BETWEEN 0 AND 4)`
 - `nats-transport.md` -- `MessagePriority` enum {Critical=0, High=1, Normal=2, Low=3, Bulk=4}
 - `transport-layer-specifications.md` -- JSON schema min 0, max 4
-- `test-schemas.md` -- `MessagePriority` enum {Critical, High, Normal, Low, Bulk}
+- `test-schemas.md` -- `MessagePriority` enum {Critical=0, High=1, Normal=2, Low=3, Bulk=4}
 - `storage-patterns.md` -- `INTEGER DEFAULT 0` (unbounded in SQL but consistent with usage)
 
 **No remaining 0-9 or 1-10 priority scales found.** The priority scale audit passes.
@@ -265,7 +302,7 @@ No references to `/Users/mac-main/`, `/Users/matthewmaggio/`, or other absolute 
 1. **Agent Spawn** (`agent-lifecycle.md` -> `agent-orchestration.md`):
    - `AgentType` enum consistent between files (9 variants)
    - `SupervisionStrategy` struct consistent between files
-   - `AgentId` is `Uuid` type in both files
+   - `AgentId` semantics are canonicalized in `type-definitions.md` (UUID-backed), with wire-format serialization represented as strings in transport-facing examples
 
 2. **Communication** (`agent-communication.md` -> `nats-transport.md`):
    - Message envelope uses `priority: u8` with range 0-4 -- consistent

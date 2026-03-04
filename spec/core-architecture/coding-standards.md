@@ -55,7 +55,7 @@ pub struct ActorSystem;
 pub struct SupervisionTree;
 
 // ✅ Good - Enums
-pub enum SupervisionStrategy {
+pub enum RestartPolicy {
     OneForOne,
     OneForAll,
     RestForOne,

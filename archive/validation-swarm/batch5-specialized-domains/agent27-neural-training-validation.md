@@ -138,7 +138,7 @@ neural_architecture:
 
 **Hook Integration**:
 ```bash
-npx ruv-swarm hook pre-task \
+npx swarm-runner hook pre-task \
   --description "MS Framework implementation" \
   --auto-spawn-agents true \
   --max-agents 60
@@ -146,8 +146,8 @@ npx ruv-swarm hook pre-task \
 
 **State Management**:
 ```bash
-npx ruv-swarm neural save ms-framework-trained.json
-npx ruv-swarm neural load ms-framework-trained.json
+npx swarm-runner neural save ms-framework-trained.json
+npx swarm-runner neural load ms-framework-trained.json
 ```
 
 ### 4.2 Serving Infrastructure ✅

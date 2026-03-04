@@ -204,7 +204,7 @@ The framework provides excellent integration capabilities:
 
 ```rust
 // Universal abstractions validated
-UniversalAgent: Bridges ms-framework and ruv-swarm
+UniversalAgent: Bridges multiple framework backends
 UniversalTask: Unifies execution models
 UniversalMessage: Common communication protocol
 UniversalTransport: Protocol abstraction

@@ -124,7 +124,7 @@ src/
 │   ├── tree.rs             # SupervisionTree architecture
 │   ├── supervisor.rs       # Supervisor trait and node implementation
 │   ├── failure_detector.rs # FailureDetector with phi accrual
-│   └── strategies.rs       # SupervisionStrategy enumeration
+│   └── strategies.rs       # RestartPolicy/RestartScope + SupervisionStrategy config
 ├── events/                  # Event-driven architecture
 │   ├── mod.rs               # Module documentation and exports
 │   ├── bus.rs              # EventBus implementation
@@ -393,7 +393,7 @@ pub trait Supervisor: Send + Sync + 'static {
     fn supervisor_id(&self) -> NodeId;
 }
 
-/// Universal tool interface with schema validation
+/// Canonical tool interface (source of truth for Tool trait signatures)
 #[async_trait]
 pub trait Tool: Send + Sync + 'static {
     async fn execute(&self, params: Value) -> Result<Value, ToolError>;

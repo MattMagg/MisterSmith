@@ -9,7 +9,8 @@ priority: high
 ## NATS Transport Specifications
 
 > **Source**: Extracted from `transport-layer-specifications.md` (Sections 2, 12)
-> **Canonical Reference**: See `/tech-framework.md` for authoritative technology stack specifications
+> **Canonical Reference**: See `../../VERSION_REFERENCE.md` and
+> `../core-architecture/dependency-specifications.md` for authoritative technology stack versions.
 
 ## Technical Overview
 
@@ -44,9 +45,9 @@ uuid = { version = "1.0", features = ["v4"] }
 
 ### Security Integration
 
-- **Authentication**: `../security/authentication.md#nats-auth`
-- **Authorization**: `../security/authorization.md#subject-permissions`
-- **TLS Configuration**: `../security/tls-configuration.md#nats-tls`
+- **Authentication**: `../security/authentication-specifications.md#nats-auth`
+- **Authorization**: `../security/authorization-specifications.md#subject-permissions`
+- **TLS Configuration**: `../security/security-integration.md#nats-tls`
 
 ### Data Management Integration
 
@@ -505,7 +506,7 @@ pub enum CommandType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentStatus {
     pub agent_id: String,
-    pub status: AgentState,
+    pub status: AgentAvailability,
     pub timestamp: DateTime<Utc>,
     pub capacity: f64, // 0.0 to 1.0
     pub current_tasks: u32,
@@ -517,7 +518,7 @@ pub struct AgentStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AgentState {
+pub enum AgentAvailability {
     Idle,
     Busy,
     Error,
@@ -1424,9 +1425,9 @@ impl NatsConnectionManager {
 
 ### Security Integration
 
-- **[Authentication](../security/authentication.md)** - NATS authentication patterns
-- **[Authorization](../security/authorization.md)** - Subject-based permissions
-- **[TLS Configuration](../security/tls-configuration.md)** - Secure NATS connections
+- **[Authentication](../security/authentication-specifications.md)** - NATS authentication patterns
+- **[Authorization](../security/authorization-specifications.md)** - Subject-based permissions
+- **[TLS Configuration](../security/security-integration.md)** - Secure NATS connections
 
 ### Data Management Integration
 

@@ -258,7 +258,7 @@ message CommandResponse {
 
 message AgentStatus {
   string agent_id = 1;
-  AgentState state = 2;
+  AgentAvailability availability = 2;
   google.protobuf.Timestamp timestamp = 3;
   float capacity = 4;
   int32 current_tasks = 5;
@@ -310,8 +310,8 @@ enum CommandType {
   SHUTDOWN = 6;
 }
 
-enum AgentState {
-  AGENT_STATE_UNSPECIFIED = 0;
+enum AgentAvailability {
+  AGENT_AVAILABILITY_UNSPECIFIED = 0;
   IDLE = 1;
   BUSY = 2;
   ERROR = 3;

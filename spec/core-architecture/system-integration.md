@@ -459,10 +459,15 @@ pub struct ToolBus {
     permissions: HashMap<AgentId, Vec<ToolId>>
 }
 
+/// Keep this signature aligned with the canonical Tool trait in
+/// module-organization-type-system.md.
 #[async_trait]
-pub trait Tool: Send + Sync {
+pub trait Tool: Send + Sync + 'static {
     async fn execute(&self, params: Value) -> Result<Value, ToolError>;
     fn schema(&self) -> ToolSchema;
+    fn capabilities(&self) -> ToolCapabilities;
+    fn tool_id(&self) -> ToolId;
+    fn version(&self) -> semver::Version;
 }
 
 // Extension mechanism

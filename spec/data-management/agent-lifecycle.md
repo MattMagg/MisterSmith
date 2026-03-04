@@ -16,7 +16,7 @@ tags:
 
 > **Dependency versions**: tokio 1.49+, async-nats 0.46.0, MSRV 1.88.0. See [VERSION_REFERENCE.md](../../VERSION_REFERENCE.md) for full matrix.
 
-> **SupervisionStrategy alignment**: This file's `SupervisionStrategy` struct and `RestartPolicy` enum are aligned with the canonical definitions in [type-definitions.md](../core-architecture/type-definitions.md). The `RestartPolicy` enum uses `OneForOne`, `OneForAll`, `RestForOne` (matching the canonical definition), plus `SimpleOneForOne` as a lifecycle-specific extension.
+> **SupervisionStrategy alignment**: This file's `SupervisionStrategy` struct and `RestartPolicy` enum are aligned with the canonical definitions in [type-definitions.md](../core-architecture/type-definitions.md). `RestartPolicy` uses `OneForOne`, `OneForAll`, `RestForOne`.
 
 ## Executive Summary
 
@@ -1201,14 +1201,12 @@ impl RoutingStrategy for RoundRobinStrategy {
 ```rust
 /// Restart policy — aligned with type-definitions.md canonical definition.
 /// Note: type-definitions.md uses `RestartPolicy` (not `RestartStrategy`),
-/// and `OneForAll` (not `AllForOne`). `SimpleOneForOne` is not in the
-/// canonical definition but is retained here as a lifecycle-specific extension.
+/// and `OneForAll` (not `AllForOne`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RestartPolicy {
     OneForOne,       // Restart only failed agent
     OneForAll,       // Restart all children when one fails
     RestForOne,      // Restart failed agent and all started after it
-    SimpleOneForOne, // Dynamic supervisor for similar agents (lifecycle extension)
 }
 
 /// Supervision strategy configuration — aligned with type-definitions.md canonical definition.
@@ -1345,9 +1343,6 @@ impl SupervisorNode {
             },
             RestartPolicy::RestForOne => {
                 self.restart_child_and_subsequent(agent_id, error).await
-            },
-            RestartPolicy::SimpleOneForOne => {
-                self.restart_child(agent_id, error).await
             },
         }
     }
@@ -1558,9 +1553,9 @@ impl SupervisorNode {
 ### 2.4 Simple Restart Logic
 
 ```rust
-/// Restart policy configuration
+/// Restart limiter configuration (distinct from supervision RestartPolicy enum)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestartPolicy {
+pub struct RestartLimitPolicy {
     pub max_restarts: u32,
     pub time_window: Duration,
     pub cooldown_period: Duration,
@@ -1568,14 +1563,14 @@ pub struct RestartPolicy {
 }
 
 /// Restart policy manager
-pub struct RestartPolicyManager {
-    policy: RestartPolicy,
+pub struct RestartLimitManager {
+    policy: RestartLimitPolicy,
     restart_counts: Arc<RwLock<HashMap<AgentId, Vec<SystemTime>>>>,
     escalation_counts: Arc<RwLock<HashMap<AgentId, u32>>>,
 }
 
-impl RestartPolicyManager {
-    pub fn new(policy: RestartPolicy) -> Self {
+impl RestartLimitManager {
+    pub fn new(policy: RestartLimitPolicy) -> Self {
         Self {
             policy,
             restart_counts: Arc::new(RwLock::new(HashMap::new())),
@@ -2217,7 +2212,7 @@ impl StateRecovery {
 /// Coordinated restart with supervision integration
 struct RestartCoordinator {
     supervisor_ref: Arc<dyn Supervisor>,
-    restart_policy: RestartPolicy,
+    restart_limits: RestartLimitManager,
     resource_manager: ResourceManager,
     notification_service: NotificationService,
 }
@@ -2228,7 +2223,7 @@ impl RestartCoordinator {
         self.supervisor_ref.notify_restart_intent(agent_id, &reason).await?;
         
         // Check restart policy
-        if !self.restart_policy.should_restart(agent_id) {
+        if !self.restart_limits.should_restart(agent_id).await {
             return Err(RestartError::PolicyViolation("Restart limit exceeded".into()));
         }
         
@@ -2239,7 +2234,7 @@ impl RestartCoordinator {
         let context = RestartContext {
             agent_id: agent_id.clone(),
             reason,
-            attempt_number: self.restart_policy.get_restart_count(agent_id),
+            attempt_number: self.restart_limits.get_restart_count(agent_id),
             resources,
             timestamp: SystemTime::now(),
         };

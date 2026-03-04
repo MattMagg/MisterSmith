@@ -1,12 +1,12 @@
 # Unified Type System Definitions
 
 **Framework Component**: Core Architecture  
-**Target**: Complete type system for ms-framework with ruv-swarm integration compatibility  
+**Target**: Complete type system for ms-framework with multi-backend integration compatibility  
 **Agent**: Agent 17 - Type System & Definitions Specialist
 
 ## Executive Summary
 
-This document defines a comprehensive type system that unifies ms-framework with ruv-swarm integration capabilities.
+This document defines a comprehensive type system that unifies ms-framework with multi-backend integration capabilities.
 The design resolves critical compatibility conflicts identified in Phase 1 analysis while maintaining type safety, performance, and architectural coherence.
 The type system uses universal abstractions, adapter patterns, and namespace isolation to enable seamless interoperability between framework components.
 
@@ -45,6 +45,114 @@ The type system shows sophisticated design patterns including zero-cost abstract
 11. [Type System Integration Examples](#10-type-system-integration-examples)
 12. [Performance and Safety Considerations](#11-performance-and-safety-considerations)
 
+## Canonical Core Types (Phase 1.1)
+
+The definitions in this section are the canonical source for roadmap Phase 1.1 and all cross-domain references.
+If examples later in this document use different names for integration demonstrations, this section takes precedence.
+
+```rust
+use std::time::Duration;
+use thiserror::Error;
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AgentId(pub Uuid);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TaskId(pub Uuid);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct MessageId(pub Uuid);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ToolId(pub Uuid);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum MessagePriority {
+    Critical = 0,
+    High = 1,
+    Normal = 2,
+    Low = 3,
+    Bulk = 4,
+}
+
+/// Lifecycle state machine for Phase 7 agent lifecycle management.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AgentState {
+    Initializing,
+    Running,
+    Paused,
+    Stopping,
+    Terminated,
+    Error,
+    Restarting,
+}
+
+/// Transport/runtime availability signal for status channels and heartbeats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AgentAvailability {
+    Idle,
+    Busy,
+    Error,
+    Offline,
+    Starting,
+    Stopping,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AgentType {
+    Supervisor,
+    Worker,
+    Coordinator,
+    Monitor,
+    Planner,
+    Executor,
+    Critic,
+    Router,
+    Memory,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RestartPolicy {
+    OneForOne,
+    OneForAll,
+    RestForOne,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RestartScope {
+    Permanent,
+    Transient,
+    Temporary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SupervisionStrategy {
+    pub restart_policy: RestartPolicy,
+    pub max_failures: u32,
+    pub failure_window: Duration,
+    pub escalation_policy: EscalationPolicy,
+    pub backoff_strategy: BackoffStrategy,
+}
+
+pub type FrameworkResult<T> = Result<T, SystemError>;
+
+#[derive(Debug, Error)]
+pub enum SystemError {
+    #[error("configuration error: {0}")]
+    Configuration(String),
+    #[error("runtime error: {0}")]
+    Runtime(String),
+    #[error("transport error: {0}")]
+    Transport(String),
+    #[error("security error: {0}")]
+    Security(String),
+    #[error("persistence error: {0}")]
+    Persistence(String),
+}
+```
+
 ## Type System Overview
 
 ### Core Type Hierarchy
@@ -74,7 +182,7 @@ The type system shows sophisticated design patterns including zero-cost abstract
 │  ┌────────────────┬─────────────────┬────────────────────┐         │
 │  │ Adapters       │ Bridges         │ Translators        │         │
 │  │ - MsAdapter    │ - MessageBridge │ - TypeTranslator   │         │
-│  │ - RuvAdapter   │ - StateBridge   │ - MessageTranslator│         │
+│  │ - SecondaryAdapter │ - StateBridge │ - MessageTranslator│       │
 │  │ - NativeAdapter│ - ConfigBridge  │ - ErrorTranslator  │         │
 │  └────────────────┴─────────────────┴────────────────────┘         │
 │                                                                      │
@@ -119,14 +227,14 @@ The type system shows sophisticated design patterns including zero-cost abstract
 ┌─────────────────────────────────────────────────────────────┐
 │                    Adapter Layer                            │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────┐ │
-│  │ MsFramework     │  │ RuvSwarm        │  │ Integration  │ │
+│  │ MsFramework     │  │ SecondaryBackend │  │ Integration  │ │
 │  │ Adapters        │  │ Adapters        │  │ Bridges      │ │
 │  └─────────────────┘  └─────────────────┘  └──────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
 │              Framework-Specific Implementations             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────┐ │
-│  │ Ms-Framework    │  │ Ruv-Swarm       │  │ External     │ │
+│  │ Ms-Framework    │  │ Secondary Backend│  │ External     │ │
 │  │ Native Types    │  │ Native Types    │  │ Integrations │ │
 │  └─────────────────┘  └─────────────────┘  └──────────────┘ │
 └─────────────────────────────────────────────────────────────┘
@@ -151,8 +259,8 @@ pub use universal::{
 
 // Adapter re-exports
 pub use adapters::{
-    MsAgentAdapter, RuvAgentAdapter, MsTaskAdapter, RuvTaskAdapter,
-    MsTransportAdapter, RuvTransportAdapter
+    MsAgentAdapter, SecondaryAgentAdapter, MsTaskAdapter, SecondaryTaskAdapter,
+    MsTransportAdapter, SecondaryTransportAdapter
 };
 
 // Bridge re-exports  
@@ -166,7 +274,7 @@ pub use bridges::{
 ### 2.1 Core Agent Abstraction
 
 ```rust
-/// Universal agent interface resolving ms-framework/ruv-swarm conflicts
+/// Universal agent interface resolving multi-backend integration conflicts
 /// VALIDATION: Complete trait hierarchy with 98% coverage and proper Send + Sync bounds
 #[async_trait]
 pub trait UniversalAgent: Send + Sync + 'static {
@@ -207,7 +315,7 @@ pub trait UniversalAgent: Send + Sync + 'static {
 
 /// Example: Concrete UniversalAgent Implementation
 /// This demonstrates how to implement a universal agent that can work
-/// across both ms-framework and ruv-swarm environments
+/// across both primary and secondary backend environments
 pub struct DataAnalysisAgent {
     id: AgentId,
     role: AgentRole,
@@ -302,7 +410,7 @@ pub struct AgentCapabilities {
     pub communication_protocols: Vec<ProtocolSupport>,
 }
 
-/// Cognitive style classification from ruv-swarm
+/// Cognitive style classification from the secondary backend model
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CognitiveStyle {
     Convergent,     // Focused, analytical processing
@@ -669,7 +777,7 @@ pub enum TaskType {
 /// Universal task executor with multi-framework support
 pub struct UniversalTaskExecutor {
     ms_executor: Option<Arc<ms_framework::TaskExecutor>>,
-    ruv_executor: Option<Arc<ruv_swarm::TaskExecutor>>,
+    secondary_executor: Option<Arc<secondary_backend::TaskExecutor>>,
     thread_pool: ThreadPool,
     scheduler: TaskScheduler,
     metrics: Arc<dyn MetricsCollector>,
@@ -691,12 +799,12 @@ impl UniversalTaskExecutor {
                     .submit(adapter).await?;
                 Ok(TaskHandle::from_ms_handle(handle))
             },
-            ExecutorType::RuvSwarm => {
-                let adapter = RuvTaskAdapter::new(task);
-                let handle = self.ruv_executor.as_ref()
+            ExecutorType::SecondaryBackend => {
+                let adapter = SecondaryTaskAdapter::new(task);
+                let handle = self.secondary_executor.as_ref()
                     .ok_or(ExecutionError::ExecutorNotAvailable)?
                     .submit(adapter).await?;
-                Ok(TaskHandle::from_ruv_handle(handle))
+                Ok(TaskHandle::from_secondary_handle(handle))
             },
             ExecutorType::Native => {
                 let handle = self.execute_native(task).await?;
@@ -709,7 +817,7 @@ impl UniversalTaskExecutor {
     fn select_executor(&self, requirements: &ExecutionRequirements) -> Result<ExecutorType, ExecutionError> {
         // Selection logic based on requirements and executor capabilities
         match (requirements.isolation_level, requirements.cpu_cores) {
-            (IsolationLevel::Process, _) => Ok(ExecutorType::RuvSwarm),
+            (IsolationLevel::Process, _) => Ok(ExecutorType::SecondaryBackend),
             (IsolationLevel::Thread, Some(cores)) if cores > 4 => Ok(ExecutorType::MsFramework),
             (IsolationLevel::Async, _) => Ok(ExecutorType::Native),
             _ => Ok(ExecutorType::MsFramework), // Default
@@ -726,7 +834,7 @@ pub struct TaskHandle<T> {
 
 enum TaskHandleInner<T> {
     MsFramework(ms_framework::TaskHandle<T>),
-    RuvSwarm(ruv_swarm::TaskHandle<T>),
+    SecondaryBackend(secondary_backend::TaskHandle<T>),
     Native(NativeTaskHandle<T>),
 }
 
@@ -740,7 +848,7 @@ where T: Send + 'static
             TaskHandleInner::MsFramework(handle) => {
                 Pin::new(handle).poll(cx).map_err(TaskError::from)
             },
-            TaskHandleInner::RuvSwarm(handle) => {
+            TaskHandleInner::SecondaryBackend(handle) => {
                 Pin::new(handle).poll(cx).map_err(TaskError::from)
             },
             TaskHandleInner::Native(handle) => {
@@ -1053,7 +1161,7 @@ impl StateBridge {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StateStrategy {
     Centralized,    // ms-framework blackboard pattern
-    Distributed,    // ruv-swarm distributed state
+    Distributed,    // secondary-backend distributed state
     Hybrid,         // Best of both worlds
 }
 
@@ -1215,7 +1323,8 @@ pub trait UniversalSupervisor: Send + Sync + 'static {
     async fn handle_failure(&self, child_id: &str, error: &dyn std::error::Error) -> SupervisionDecision;
     
     /// Get supervision strategy
-    fn supervision_strategy(&self) -> SupervisionStrategy;
+    /// (illustrative type for this section; canonical definition is in Phase 1.1).
+    fn supervision_strategy(&self) -> ExampleSupervisionStrategy;
     
     /// Get current children
     async fn children(&self) -> Vec<ChildInfo>;
@@ -1271,9 +1380,9 @@ pub enum SupervisionDecision {
     Custom(String),
 }
 
-/// Supervision strategy configuration
+/// Supervision strategy configuration (illustrative alias for this section).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SupervisionStrategy {
+pub struct ExampleSupervisionStrategy {
     pub restart_policy: RestartPolicy,
     pub max_failures: u32,
     pub failure_window: Duration,
@@ -1285,7 +1394,7 @@ pub struct SupervisionStrategy {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SupervisionModel {
     Hierarchical,   // ms-framework style supervision trees
-    Flat,           // ruv-swarm style flat coordination
+    Flat,           // secondary-backend style flat coordination
     Hybrid,         // Intelligent selection based on context
 }
 ```
@@ -1330,22 +1439,22 @@ where A: ms_framework::Agent + Send + Sync + 'static
     // ... other method implementations
 }
 
-/// Ruv-swarm agent adapter
-pub struct RuvAgentAdapter<A> 
-where A: ruv_swarm::Agent
+/// Secondary backend agent adapter
+pub struct SecondaryAgentAdapter<A> 
+where A: secondary_backend::Agent
 {
     inner: A,
     capabilities: AgentCapabilities,
     context: StandardAgentContext,
 }
 
-impl<A> UniversalAgent for RuvAgentAdapter<A>
-where A: ruv_swarm::Agent + Send + Sync + 'static
+impl<A> UniversalAgent for SecondaryAgentAdapter<A>
+where A: secondary_backend::Agent + Send + Sync + 'static
 {
     type Input = A::Input;
     type Output = A::Output;
     type State = serde_json::Value; // Generic state representation
-    type Error = ruv_swarm::Error;
+    type Error = secondary_backend::Error;
     type Context = StandardAgentContext;
     
     async fn process(&self, input: Self::Input) -> Result<Self::Output, Self::Error> {
@@ -1450,7 +1559,7 @@ impl CompatibilityLayer {
 /// Feature flag management for optional functionality
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureFlags {
-    pub ruv_swarm_integration: bool,
+    pub secondary_backend_integration: bool,
     pub wasm_support: bool,
     pub javascript_bindings: bool,
     pub cognitive_routing: bool,
@@ -1463,7 +1572,7 @@ pub struct FeatureFlags {
 impl FeatureFlags {
     pub fn detect_runtime_features() -> Self {
         Self {
-            ruv_swarm_integration: cfg!(feature = "ruv-swarm"),
+            secondary_backend_integration: cfg!(feature = "secondary-backend"),
             wasm_support: cfg!(feature = "wasm"),
             javascript_bindings: cfg!(feature = "js-bindings"),
             cognitive_routing: cfg!(feature = "cognitive-routing"),
@@ -1490,11 +1599,11 @@ impl ResourceAllocationStrategy {
     /// Allocate ports avoiding conflicts
     pub async fn allocate_ports(&self, service_count: usize) -> Result<Vec<u16>, AllocationError> {
         match &self.port_allocation {
-            PortAllocationConfig::Fixed { ms_ports, ruv_ports } => {
+            PortAllocationConfig::Fixed { primary_ports, secondary_ports } => {
                 let mut allocated = Vec::new();
                 
-                // Ensure no conflicts between ms-framework and ruv-swarm ports
-                for port in ms_ports.iter().chain(ruv_ports.iter()) {
+                // Ensure no conflicts between primary and secondary backend ports
+                for port in primary_ports.iter().chain(secondary_ports.iter()) {
                     if self.is_port_available(*port).await? {
                         allocated.push(*port);
                         if allocated.len() >= service_count {
@@ -1523,8 +1632,8 @@ impl ResourceAllocationStrategy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PortAllocationConfig {
     Fixed { 
-        ms_ports: Vec<u16>, 
-        ruv_ports: Vec<u16> 
+        primary_ports: Vec<u16>, 
+        secondary_ports: Vec<u16> 
     },
     Dynamic { 
         start_range: u16, 
@@ -1549,7 +1658,7 @@ pub async fn initialize_unified_system() -> Result<UnifiedFramework, Initializat
             format: ConfigurationFormat::Toml 
         },
         ConfigurationSource::File { 
-            path: "config/ruv-swarm.toml".into(), 
+            path: "config/secondary-backend.toml".into(), 
             format: ConfigurationFormat::Toml 
         },
         ConfigurationSource::Environment { prefix: Some("MS_".to_string()) },
@@ -1596,23 +1705,30 @@ pub struct UnifiedFramework {
     resource_allocator: ResourceAllocationStrategy,
 }
 
+/// Integration adapter selector for mixed-framework deployments.
+pub enum FrameworkAdapterKind {
+    MsFramework,
+    SecondaryBackend,
+    Universal,
+}
+
 impl UnifiedFramework {
     /// Create agent with automatic adapter selection
-    pub async fn create_agent<A>(&self, agent_type: AgentType, config: AgentConfig) -> Result<Box<dyn UniversalAgent>, AgentError>
+    pub async fn create_agent<A>(&self, agent_type: FrameworkAdapterKind, config: AgentConfig) -> Result<Box<dyn UniversalAgent>, AgentError>
     where A: Send + Sync + 'static
     {
         match agent_type {
-            AgentType::MsFramework => {
+            FrameworkAdapterKind::MsFramework => {
                 let ms_agent = ms_framework::create_agent::<A>(config).await?;
                 let adapter = MsAgentAdapter::new(ms_agent, self.create_context().await?);
                 Ok(Box::new(adapter))
             },
-            AgentType::RuvSwarm => {
-                let ruv_agent = ruv_swarm::create_agent::<A>(config).await?;
-                let adapter = RuvAgentAdapter::new(ruv_agent, self.create_context().await?);
+            FrameworkAdapterKind::SecondaryBackend => {
+                let secondary_agent = secondary_backend::create_agent::<A>(config).await?;
+                let adapter = SecondaryAgentAdapter::new(secondary_agent, self.create_context().await?);
                 Ok(Box::new(adapter))
             },
-            AgentType::Universal => {
+            FrameworkAdapterKind::Universal => {
                 // Create native universal agent
                 let agent = NativeUniversalAgent::new(config, self.create_context().await?);
                 Ok(Box::new(agent))
@@ -1626,7 +1742,7 @@ impl UnifiedFramework {
     {
         let executor = UniversalTaskExecutor::new()
             .with_ms_executor(self.config.get("executors.ms_framework")?)
-            .with_ruv_executor(self.config.get("executors.ruv_swarm")?)
+            .with_secondary_executor(self.config.get("executors.secondary_backend")?)
             .build().await?;
             
         executor.submit(task).await
@@ -1786,7 +1902,7 @@ mod integration_tests {
 
 ## Summary
 
-This unified type system provides a comprehensive solution for integrating ms-framework with ruv-swarm while resolving all identified compatibility conflicts.
+This unified type system provides a comprehensive solution for multi-backend integration while resolving all identified compatibility conflicts.
 Validation by Agent 6 confirms a **96.5% implementation readiness score** with exceptional type safety and performance characteristics.
 
 The design features:
@@ -1820,7 +1936,7 @@ The design features:
 - Modular integration layer supporting incremental adoption
 - Feature flags for optional functionality
 
-The type system enables seamless interoperability between framework components while maintaining the architectural integrity and performance characteristics of both ms-framework and ruv-swarm.
+The type system enables seamless interoperability between framework components while maintaining architectural integrity and performance characteristics across supported backends.
 
 **Validation Evidence Base**:
 

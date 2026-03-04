@@ -6,8 +6,8 @@ A multi-agent orchestration framework for distributed AI systems, built on Rust 
 
 | Phase | Status |
 |-------|--------|
-| Specification | Complete — 65+ files across 8 domains |
-| Validation | Complete — 60-agent assessment, 82/100 readiness score |
+| Specification | Complete — 66 files across 8 domains |
+| Validation | Complete — final readiness 95/100 (Generated 2026-03-03, roadmap reconciliation addendum 2026-03-04) |
 | Implementation | Not started |
 
 ## Architecture
@@ -24,26 +24,23 @@ Mister Smith coordinates distributed AI agents through three core subsystems:
 
 | Component | Spec Version | Purpose |
 |-----------|-------------|---------|
-| Runtime | Tokio 1.38 | Async foundation |
-| Messaging | async-nats 0.34* | Agent communication |
-| HTTP | Axum 0.8 | External API |
-| gRPC | Tonic 0.11 | Internal RPC |
+| Runtime | Tokio 1.49.0 (validated baseline) | Async foundation |
+| Messaging | async-nats 0.46.0 | Agent communication |
+| HTTP | Axum 0.8.8 | External API |
+| gRPC | Tonic 0.14.5 | Internal RPC |
 | Storage | PostgreSQL + Redis | Persistence + caching |
 | Security | JWT, TLS 1.3, mTLS | Authentication + encryption |
 | Deployment | Kubernetes | Orchestration |
 
-*async-nats is now at 0.46.0 — specs need version reconciliation before implementation.
+## Current Residual Risks (Non-Blocking)
 
-## Known Critical Gaps
+From `VALIDATION_REPORT.md` (Generated 2026-03-03; addendum 2026-03-04), critical and high-priority issues are resolved.
+Remaining low-priority items:
 
-From the 60-agent validation (see `archive/validation-report.md`):
-
-1. **Supervision trees** — Exist only as pseudocode; 0% implementation-ready
-2. **Agent orchestration** — 47% readiness; coordination patterns underspecified
-3. **Production safety** — 65/100; critical blockers in fault tolerance paths
-4. **Kubernetes deployment** — Gaps in orchestration-specific configuration
-5. **Cross-domain integration** — Compound gaps between security and transport layers
-6. **Resource management** — Backpressure handling needs concrete specification
+1. Some links in OBSOLETE docs or planned-but-not-yet-created docs still resolve incompletely
+2. A few informational `tech-framework.md` breadcrumbs remain in legacy content
+3. Security-policy field naming (`priority`) can be confused with message-priority semantics
+4. Minor style differences remain in selected data-integration examples
 
 ## Documentation
 
@@ -55,8 +52,11 @@ From the 60-agent validation (see `archive/validation-report.md`):
 | Message schemas | [`spec/data-management/message-schemas.md`](spec/data-management/message-schemas.md) |
 | Transport layer | [`spec/transport/transport-layer-specifications.md`](spec/transport/transport-layer-specifications.md) |
 | Security framework | [`spec/security/security-framework.md`](spec/security/security-framework.md) |
+| Build roadmap | [`ROADMAP.md`](ROADMAP.md) |
+| Roadmap phase docs | [`plans/roadmap-phases/`](plans/roadmap-phases/) |
 | Implementation plans | [`plans/IMPLEMENTATION_PLANNING_TRACKER.md`](plans/IMPLEMENTATION_PLANNING_TRACKER.md) |
-| Validation report | [`archive/validation-report.md`](archive/validation-report.md) |
+| Validation report | [`VALIDATION_REPORT.md`](VALIDATION_REPORT.md) |
+| Version baseline | [`VERSION_REFERENCE.md`](VERSION_REFERENCE.md) |
 
 ## Design Principles
 

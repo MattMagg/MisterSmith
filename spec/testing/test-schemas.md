@@ -222,11 +222,13 @@ pub enum MessageType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[repr(u8)]
 pub enum MessagePriority {
-    Critical,
-    High,
-    Normal,
-    Low,
+    Critical = 0,
+    High = 1,
+    Normal = 2,
+    Low = 3,
+    Bulk = 4,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

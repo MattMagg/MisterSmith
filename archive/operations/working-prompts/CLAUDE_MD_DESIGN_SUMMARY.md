@@ -96,4 +96,4 @@ The instruction system succeeds when:
 
 ## Remember
 
-These instructions are designed to prevent the "ruv-FANN problem" - building complex theoretical systems that never actually work. By enforcing foundation-first development with verification at every step, MisterSmith can avoid the over-engineering trap that plagues many AI/LLM projects.
+These instructions are designed to prevent the "integration-overfitting problem" - building complex theoretical systems that never actually work. By enforcing foundation-first development with verification at every step, MisterSmith can avoid the over-engineering trap that plagues many AI/LLM projects.

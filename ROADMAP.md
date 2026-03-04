@@ -28,6 +28,7 @@ The type system that every other crate imports. Define it once, get it right —
 - `Result<T>` type alias
 - `MessagePriority` enum (Critical=0 through Bulk=4)
 - `AgentState` enum (Initializing, Running, Paused, Stopping, Terminated, Error, Restarting)
+- `AgentAvailability` enum (Idle, Busy, Error, Offline, Starting, Stopping) for transport status/heartbeat channels
 - `AgentType` enum (Supervisor, Worker, Coordinator, Monitor, Planner, Executor, Critic, Router, Memory)
 
 **References**:
@@ -53,6 +54,7 @@ Abstract contracts that define the framework's extension points. These are trait
 - [component-architecture.md](spec/core-architecture/component-architecture.md) — component hierarchy and trait relationships
 - [integration-contracts.md](spec/core-architecture/integration-contracts.md) — trait-based contracts between subsystems
 - [async-patterns.md](spec/core-architecture/async-patterns.md) — Actor trait definition (Section 3)
+- [module-organization-type-system.md](spec/core-architecture/module-organization-type-system.md) — canonical `Tool`/`Agent`/`Resource` trait signatures
 
 **Depends on**: 1.1 (types referenced in trait signatures)
 **Produces**: Trait definitions consumed by every implementation crate
@@ -74,6 +76,7 @@ Typed configuration loading, validation, and hot-reload support.
 **Produces**: `mister-smith-config` crate
 
 > **Gate 1**: Core types compile. Trait definitions compile. Configuration loads and validates. No runtime behavior yet — this is all compile-time structure. Run `cargo build -p mister-smith-core` and `cargo build -p mister-smith-config` cleanly.
+> Validation checklist: [Phase 1 Deep Dive](plans/roadmap-phases/phase-1-foundation.md).
 
 ---
 
@@ -163,6 +166,7 @@ Generic connection pooling and resource lifecycle. Used by transport, persistenc
 **Produces**: `mister-smith-resources` crate
 
 > **Gate 2**: The runtime starts, shuts down gracefully, and reports health. Events flow through the bus. Metrics are collected. You can write `#[tokio::test]` tests that exercise the async patterns. No actors, no agents, no external I/O yet.
+> Validation checklist: [Phase 2 Deep Dive](plans/roadmap-phases/phase-2-runtime-and-async-infrastructure.md).
 
 ---
 
@@ -207,6 +211,7 @@ The fault tolerance layer. Supervisors form a tree; when a child fails, the supe
 **Produces**: `mister-smith-supervision` crate
 
 > **Gate 3**: Actors can be spawned, communicate via mailboxes, and be supervised. A failing actor triggers its supervisor's restart policy. Supervision trees can be composed hierarchically. This is the architectural proof point — if supervision works, the framework's concurrency model is sound.
+> Validation checklist: [Phase 3 Deep Dive](plans/roadmap-phases/phase-3-actor-system-and-supervision.md).
 
 ---
 
@@ -254,6 +259,7 @@ The primary inter-agent communication layer. This is the most critical transport
 The concrete message types that flow through the transport layer. Defined as Rust structs with serde derives.
 
 - Core messages: TaskAssignment, TaskResult, AgentHeartbeat, SystemEvent
+- Status messages use `AgentAvailability` (transport presence/capacity), not lifecycle `AgentState`
 - Workflow messages: WorkflowStart, StepComplete, WorkflowResult
 - System messages: AgentSpawn, AgentTerminate, ConfigUpdate
 - LLM backend integration messages
@@ -274,13 +280,13 @@ External REST API for management, monitoring, and client integration.
 
 - Axum 0.8 router and handlers
 - WebSocket support for streaming
-- Middleware: auth, rate limiting, request ID tracking
+- Middleware: rate limiting, request ID tracking, and security hooks (auth enforced in Phase 5)
 - OpenAPI-compatible endpoint structure
 
 **References**:
 - [http-transport.md](spec/transport/http-transport.md) — Axum handlers, routing, middleware
 
-**Depends on**: 4.1, Phase 5.1 (auth middleware needs security)
+**Depends on**: 4.1 (transport contract and envelope)
 **Produces**: HTTP API server
 
 ### 4.5 gRPC Transport
@@ -295,10 +301,16 @@ High-performance inter-service communication for service mesh deployments.
 **References**:
 - [grpc-transport.md](spec/transport/grpc-transport.md) — Tonic patterns, protobuf schemas, error mapping
 
-**Depends on**: 4.1, Phase 5.1 (mTLS needs security)
+**Depends on**: 4.1 (service definitions and transport contracts)
 **Produces**: gRPC service layer
 
-> **Gate 4**: Agents can communicate over NATS. Messages serialize, route, and deserialize correctly. A basic integration test sends a TaskAssignment through NATS and receives a TaskResult back. HTTP and gRPC endpoints accept requests. JetStream stores durable messages.
+> **Gate 4**: Agents can communicate over NATS. Messages serialize, route, and deserialize
+> correctly. A basic integration test sends a TaskAssignment through NATS and receives a
+> TaskResult back. HTTP and gRPC endpoints accept requests with pluggable security middleware
+> points ready for Phase 5 enforcement. JetStream stores durable messages. Transport status
+> channels use `AgentAvailability` semantics (idle/busy/offline), while lifecycle control uses
+> Phase 7 `AgentState`.
+> Validation checklist: [Phase 4 Deep Dive](plans/roadmap-phases/phase-4-transport-and-messaging.md).
 
 ---
 
@@ -356,6 +368,7 @@ Encrypted transport and mutual TLS for agent-to-agent communication.
 **Produces**: `mister-smith-security` crate (TLS configs consumed by transport)
 
 > **Gate 5**: Agents authenticate with JWT tokens. Authorization middleware rejects unauthorized requests. NATS connections use mTLS. HTTP and gRPC endpoints enforce auth. Security is now wired into all transport paths.
+> Validation checklist: [Phase 5 Deep Dive](plans/roadmap-phases/phase-5-security.md).
 
 ---
 
@@ -412,6 +425,7 @@ CRUD patterns, transactions, and event sourcing that sit on top of the storage b
 **Produces**: Persistence layer consumed by the agent system
 
 > **Gate 6**: Agent state persists across restarts. Task history is queryable. JetStream KV provides distributed coordination. Database migrations run cleanly.
+> Validation checklist: [Phase 6 Deep Dive](plans/roadmap-phases/phase-6-persistence-and-state.md).
 
 ---
 
@@ -505,6 +519,7 @@ The 9 concrete agent types, each with domain-specific behavior.
 **Produces**: `mister-smith-agents` crate — the complete agent system
 
 > **Gate 7**: A multi-agent team can be spawned: a Coordinator decomposes a task, assigns subtasks to Workers via NATS, Workers execute and report results, a Supervisor restarts any Worker that fails, and results aggregate back to the Coordinator. This is the end-to-end proof of the framework.
+> Validation checklist: [Phase 7 Deep Dive](plans/roadmap-phases/phase-7-agent-system.md).
 
 ---
 
@@ -564,6 +579,7 @@ Container images, Kubernetes manifests, and deployment configuration.
 **Produces**: Deployable artifacts
 
 > **Gate 8**: The framework runs as a containerized service. Health probes respond. Traces appear in the collector. Metrics are scraped. Graceful shutdown completes without message loss. The system is production-ready.
+> Validation checklist: [Phase 8 Deep Dive](plans/roadmap-phases/phase-8-operations-and-production-readiness.md).
 
 ---
 
@@ -639,22 +655,33 @@ Detailed implementation plans exist for the first batch (core architecture):
 | [agent16 — Data Flow](plans/batch2-data-management/agent16-data-flow-integration-implementation.md) | Phase 6.3 |
 | [Planning Tracker](plans/IMPLEMENTATION_PLANNING_TRACKER.md) | Overall status |
 
+## Phase Deep-Dive Documents
+
+- [Phase 1 — Foundation](plans/roadmap-phases/phase-1-foundation.md)
+- [Phase 2 — Runtime and Async Infrastructure](plans/roadmap-phases/phase-2-runtime-and-async-infrastructure.md)
+- [Phase 3 — Actor System and Supervision](plans/roadmap-phases/phase-3-actor-system-and-supervision.md)
+- [Phase 4 — Transport and Messaging](plans/roadmap-phases/phase-4-transport-and-messaging.md)
+- [Phase 5 — Security](plans/roadmap-phases/phase-5-security.md)
+- [Phase 6 — Persistence and State](plans/roadmap-phases/phase-6-persistence-and-state.md)
+- [Phase 7 — Agent System](plans/roadmap-phases/phase-7-agent-system.md)
+- [Phase 8 — Operations and Production Readiness](plans/roadmap-phases/phase-8-operations-and-production-readiness.md)
+
 ## Technology Stack
 
 | Component | Version | Phase | Notes |
 |-----------|---------|-------|-------|
 | Rust | 1.88.0 (MSRV) | All | Driven by async-nats 0.46 |
-| Tokio | 1.49.0 | 2+ | Runtime foundation |
+| Tokio | 1.49.0 | 2+ | Runtime foundation (validated baseline; 1.50.0 available upstream) |
 | async-nats | 0.46.0 | 4+ | Feature-gated: jetstream, kv, object-store, service |
-| Axum | 0.8 | 4.4 | HTTP transport |
-| Tonic | 0.14 | 4.5 | gRPC transport |
-| sqlx | 0.8+ | 6.1 | PostgreSQL async driver |
-| jsonwebtoken | 10 | 5.1 | JWT with aws_lc_rs backend |
-| rustls | 0.23 | 5.3 | TLS implementation |
+| Axum | 0.8.8 | 4.4 | HTTP transport |
+| Tonic | 0.14.5 | 4.5 | gRPC transport |
+| sqlx | 0.8.6 | 6.1 | PostgreSQL async driver |
+| jsonwebtoken | 10.3.0 | 5.1 | JWT with aws_lc_rs backend |
+| rustls | 0.23.37 | 5.3 | TLS implementation |
 | serde | 1.0.228 | All | Serialization |
 | thiserror | 1.0.69 | 1.1 | Error derives (staying on 1.x) |
-| tracing | 0.1.41 | 8.1 | Structured logging |
-| opentelemetry | 0.31 | 8.1 | Distributed tracing |
+| tracing | 0.1.44 | 8.1 | Structured logging |
+| opentelemetry | 0.31.0 | 8.1 | Distributed tracing |
 
 See [VERSION_REFERENCE.md](VERSION_REFERENCE.md) for the complete version matrix and migration notes.
 See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) for specification readiness assessment (95/100).

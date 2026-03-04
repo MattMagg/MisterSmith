@@ -19,5 +19,6 @@ Phased implementation plans for building Mister Smith from the specifications in
 ## Key Files
 
 - `IMPLEMENTATION_PLANNING_TRACKER.md` — Overall progress and batch status
+- `roadmap-phases/` — Phase-by-phase roadmap deep dives (scope, dependencies, gates, validation)
 - `batch1-core-architecture/` — 8 agent plans covering system architecture through core integration
 - `batch2-data-management/` — Data flow integration (partial)
