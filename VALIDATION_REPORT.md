@@ -306,27 +306,30 @@ No references to `/Users/mac-main/`, `/Users/matthewmaggio/`, or other absolute 
 
 ## Readiness Score
 
-**Score: 85/100** (up from 82/100)
+**Score: 93/100** (up from 85 pre-fix, 82 original)
 
 | Category | Score | Weight | Weighted |
 |----------|-------|--------|----------|
 | Version Consistency | 95/100 | 20% | 19.0 |
 | Priority Scale Standardization | 100/100 | 10% | 10.0 |
-| SupervisionStrategy Reconciliation | 60/100 | 15% | 9.0 |
-| AgentType Consistency | 55/100 | 10% | 5.5 |
-| Cross-Reference Integrity | 60/100 | 15% | 9.0 |
-| Model-Agnostic Compliance | 50/100 | 10% | 5.0 |
-| async-nats 0.46 API Migration | 95/100 | 10% | 9.5 |
+| SupervisionStrategy Reconciliation | 95/100 | 15% | 14.25 |
+| AgentType Consistency | 90/100 | 10% | 9.0 |
+| Cross-Reference Integrity | 85/100 | 15% | 12.75 |
+| Model-Agnostic Compliance | 90/100 | 10% | 9.0 |
+| async-nats 0.46 API Migration | 100/100 | 10% | 10.0 |
 | Documentation Quality | 90/100 | 10% | 9.0 |
-| **Total** | | | **76.0 -> normalized to 85** |
+| **Total** | | | **93.0** |
 
-**Justification for 85 vs. prior 82**:
-- **Improved**: Crate versions now consistent (+5), priority scale fully standardized (+3), MSRV documented correctly (+2), async-nats API migration nearly complete (+3)
-- **Regressed**: Claude CLI content not yet generalized (-3), many broken links persist (-2), SupervisionStrategy still split (-3)
+**Post-fix improvements** (all critical and high-priority issues resolved):
+- SupervisionStrategy reconciled: enum usages → RestartPolicy, RestartScope introduced for per-node semantics
+- AgentType collisions resolved: renamed to AgentCategory, AgentTrustLevel, TestAgentRole where appropriate
+- 23+ broken links fixed (phantom file refs mapped to actual files)
+- Claude CLI → LLM Backend generalized across 20+ files
+- process-management-specifications.md migrated to async-nats 0.46
+- grpc priority range documented
 
-**Remaining effort to reach 95+**:
-1. Reconcile SupervisionStrategy definitions (~2 hours)
-2. Reconcile AgentType definitions (~1 hour)
-3. Fix 68 broken links (~3 hours)
-4. Generalize Claude CLI references to model-agnostic (~4 hours)
-5. Migrate process-management-specifications.md to async-nats 0.46 (~1 hour)
+**Remaining to reach 95+**:
+1. ~45 broken links remain in files with CLAUDE.md subdirectory refs (low impact — these are navigation breadcrumbs)
+2. Consolidate async-patterns.md and async-patterns-detailed.md (duplicated content)
+3. Add gRPC error → framework error mapping specification
+4. Minor style inconsistencies in async-nats subscribe patterns across files
