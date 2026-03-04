@@ -1,0 +1,2 @@
+test -s /Users/matthewmaggio/Mister-Smith/docs/phase1-phase2-spec-audit.md
+npx markdownlint-cli2 'specs/001-phase1-foundation/*.md' 'specs/001-phase1-foundation/contracts/*.md' 'specs/001-phase1-foundation/checklists/*.md' 'specs/002-phase2-runtime-async/*.md' 'specs/002-phase2-runtime-async/contracts/*.md' 'specs/002-phase2-runtime-async/checklists/*.md' 'docs/phase1-phase2-spec-audit.md' --config .markdownlint.json

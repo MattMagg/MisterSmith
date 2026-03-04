@@ -81,3 +81,14 @@ A multi-agent validation operation assessed the framework (see `VALIDATION_REPOR
 - **Documentation quality**: 97/100
 - **Critical gaps resolved**: Version alignment, type reconciliation, terminology generalization
 - **Remaining risk**: Supervision trees (pseudocode → production Rust is the hardest phase)
+
+## Available Apps (via Rube MCP)
+
+The following apps are connected and available for use. Select the most appropriate app or tool based on the task at hand.
+
+| App | Description |
+|-----|-------------|
+| **Context7 MCP** | Fetches up-to-date, version-specific documentation and code examples directly into the prompt. Use when you need accurate library/framework docs or API references. |
+| **GitHub** | Code hosting and version control platform. Use for managing repositories, creating/reviewing pull requests, tracking issues, and CI/CD workflows. |
+| **Mem0** | Self-improving memory layer for LLM applications. Use for persisting, retrieving, and managing long-term memory across agent sessions and conversations. |
+| **Tavily** | AI-optimized search and data retrieval. Use for quickly searching the web or filtering relevant information from documents and databases. Load the Tavily-best-practices skill whenever you need to use Tavily > .claude/skills/tavily-best-practices |

@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["IN_PROGRESS", "BLOCKED", "COMPLETE"]
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "next_step": {
+      "type": "string",
+      "minLength": 1
+    },
+    "no_change_justification": {
+      "type": ["string", "null"]
+    },
+    "completion_promise": {
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "status",
+    "evidence",
+    "next_step",
+    "no_change_justification",
+    "completion_promise"
+  ],
+  "additionalProperties": false
+}
