@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-Phase 1 tasks are well-structured with accurate spec references and correct dependency ordering. Phase 2 tasks have solid coverage but contain **3 CRITICAL** and **4 HIGH** severity issues that will cause implementation failures if not addressed before coding begins.
+Phase 1 tasks are well-structured with accurate spec references and correct dependency ordering. Phase 2 tasks have solid coverage but contained **3 CRITICAL** and **4 HIGH** severity issues. **All 3 CRITICAL and 3 of 4 HIGH issues have been resolved** — see Resolution Status below.
 
 | Category | Phase 1 | Phase 2 |
 |----------|---------|---------|
@@ -239,20 +239,25 @@ The Phase 1 and Phase 2 checklists (25 + 28 = 53 items) identify several of the 
 
 ## VI. Recommendations
 
-### Before Starting Phase 1 Implementation
+### Resolution Status
 
-1. Add `semver = "1.0"` and `serde_json` to workspace dependencies in T001
-2. Resolve `TransportError` vs `NetworkError` naming in T045
-3. Decide on `Cargo.lock` policy for library workspace (T008 says commit — unconventional for libraries)
+All CRITICAL and most HIGH issues have been resolved in the task files:
 
-### Before Starting Phase 2 Implementation
+| Issue | Resolution | Status |
+|-------|-----------|--------|
+| C1: Duplicate error types | T014 now re-exports from core instead of redefining | ✅ Fixed |
+| C2: Duplicate RuntimeConfig | Merged all fields into Phase 1 T048; Phase 2 adds extension methods only | ✅ Fixed |
+| C3: Circular monitoring↔events | `EventPublisher` trait added to core (T045b); events crate no longer depends on monitoring | ✅ Fixed |
+| H1: TaskPriority inverted ordering | T103 aligned to Critical=0 matching MessagePriority | ✅ Fixed |
+| H2: Two HealthCheck traits | Not yet resolved — needs spec reconciliation | ⚠️ Open |
+| H3: Two metrics systems | Not yet resolved — needs bridging task | ⚠️ Open |
+| H4: Missing semver crate | Added to T001 and T002 | ✅ Fixed |
+| M1: Misleading [P] markers | Documented but not changed | ℹ️ Accepted |
+| M2: Missing tracing init | Added to T024 (RuntimeManager::initialize) | ✅ Fixed |
+| M3: TransportError gap | T045 now uses NetworkError | ✅ Fixed |
+| Spec ref swaps | T103 and T018 (was T020) line references corrected | ✅ Fixed |
 
-1. **[BLOCKING]** Resolve C1: Replace T014-T015 with re-exports from core
-2. **[BLOCKING]** Resolve C2: Merge or namespace the two `RuntimeConfig` definitions
-3. **[BLOCKING]** Resolve C3: Break circular monitoring↔events dependency
-4. Fix spec reference label swaps (T103, T020)
-5. Align or document TaskPriority vs MessagePriority ordering (H1)
-6. Add tracing initialization task (M2)
+### Remaining Open Items
 7. Add metrics bridge task (H3)
 
 ### Implementation Order Recommendation

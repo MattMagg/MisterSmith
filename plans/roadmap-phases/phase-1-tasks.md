@@ -16,11 +16,12 @@
 
 **Purpose**: Create the Cargo workspace, crate scaffolding, and CI configuration. No Rust logic yet.
 
-- [ ] T001 Create workspace root `Cargo.toml` with resolver 2, workspace members `crates/mister-smith-core` and `crates/mister-smith-config`, workspace-level package metadata (edition 2021, rust-version 1.88, license MIT OR Apache-2.0), and `[workspace.dependencies]` section pinning: thiserror 1.0.69, serde 1.0.228 (features: derive), serde_json 1.0.149, uuid 1.11.0 (features: v4, serde), async-trait 0.1.83, toml 0.8, std::time::Duration (stdlib) — `Cargo.toml`
+- [ ] T001 Create workspace root `Cargo.toml` with resolver 2, workspace members `crates/mister-smith-core` and `crates/mister-smith-config`, workspace-level package metadata (edition 2021, rust-version 1.88, license MIT OR Apache-2.0), and `[workspace.dependencies]` section pinning: thiserror 1.0.69, serde 1.0.228 (features: derive), serde_json 1.0.149, uuid 1.11.0 (features: v4, serde), async-trait 0.1.83, semver 1.0, toml 0.8, std::time::Duration (stdlib) — `Cargo.toml`
   - Spec trace: `ROADMAP.md` (Crate Map), `VERSION_REFERENCE.md`
 
-- [ ] T002 [P] Create `crates/mister-smith-core/Cargo.toml` with `[package]` (name, version 0.1.0, edition.workspace, rust-version.workspace) and `[dependencies]` referencing workspace deps: thiserror, serde, uuid, async-trait — `crates/mister-smith-core/Cargo.toml`
+- [ ] T002 [P] Create `crates/mister-smith-core/Cargo.toml` with `[package]` (name, version 0.1.0, edition.workspace, rust-version.workspace) and `[dependencies]` referencing workspace deps: thiserror, serde, serde_json, uuid, async-trait, semver — `crates/mister-smith-core/Cargo.toml`
   - Spec trace: `spec/core-architecture/runtime-and-errors.md` (Dependencies section)
+  - **Note**: `serde_json` needed for Tool trait params/results; `semver` needed for Tool::version()
 
 - [ ] T003 [P] Create `crates/mister-smith-config/Cargo.toml` with `[package]` and `[dependencies]` referencing workspace deps: serde, toml, thiserror, plus `mister-smith-core = { path = "../mister-smith-core" }` — `crates/mister-smith-config/Cargo.toml`
   - Spec trace: `spec/core-architecture/implementation-config.md` (Dependencies)
@@ -213,12 +214,16 @@
   - Spec trace: `spec/core-architecture/module-organization-type-system.md:384-394`
   - Depends on: T038 (SupervisionStrategy), T034 (RestartPolicy), T036 (EscalationPolicy), T009 (AgentId)
 
-- [ ] T045 Implement `Transport` trait with `#[async_trait]`: associated types `Message: Send + Sync + Serialize + DeserializeOwned + 'static`, `Subscription: Send + 'static`, `ConnectionInfo: Send + Sync + 'static`; methods `async fn send(&self, destination: &str, message: Self::Message) -> Result<(), TransportError>`, `async fn broadcast(&self, topic: &str, message: Self::Message) -> Result<(), TransportError>`, `async fn subscribe(&self, pattern: &str) -> Result<Self::Subscription, TransportError>`, `async fn request_response(&self, destination: &str, message: Self::Message, timeout: Duration) -> Result<Self::Message, TransportError>`, `async fn connect(&mut self, config: &TransportConfig) -> Result<Self::ConnectionInfo, TransportError>`, `async fn disconnect(&mut self) -> Result<(), TransportError>`, `fn connection_status(&self) -> ConnectionStatus`. Define `ConnectionStatus` enum: Connected, Disconnected, Reconnecting. Define placeholder `TransportConfig` struct — `crates/mister-smith-core/src/traits.rs`
+- [ ] T045 Implement `Transport` trait with `#[async_trait]`: associated types `Message: Send + Sync + Serialize + DeserializeOwned + 'static`, `Subscription: Send + 'static`, `ConnectionInfo: Send + Sync + 'static`; methods `async fn send(&self, destination: &str, message: Self::Message) -> Result<(), NetworkError>`, `async fn broadcast(&self, topic: &str, message: Self::Message) -> Result<(), NetworkError>`, `async fn subscribe(&self, pattern: &str) -> Result<Self::Subscription, NetworkError>`, `async fn request_response(&self, destination: &str, message: Self::Message, timeout: Duration) -> Result<Self::Message, NetworkError>`, `async fn connect(&mut self, config: &TransportConfig) -> Result<Self::ConnectionInfo, NetworkError>`, `async fn disconnect(&mut self) -> Result<(), NetworkError>`, `fn connection_status(&self) -> ConnectionStatus`. Define `ConnectionStatus` enum: Connected, Disconnected, Reconnecting. Define placeholder `TransportConfig` struct — `crates/mister-smith-core/src/traits.rs`
   - Spec trace: `spec/core-architecture/integration-contracts.md:200-214`
-  - Depends on: T026 (NetworkError — used indirectly via TransportError which is a variant)
-  - **Note**: `TransportError` is already defined in T017–T027 chain. `TransportConfig` is a minimal placeholder; full definition in Phase 4.
+  - Depends on: T026 (NetworkError)
+  - **Note**: Uses `NetworkError` from the error hierarchy (not a separate `TransportError`). `TransportConfig` is a minimal placeholder; full definition in Phase 4.
 
-- [ ] T046 Wire up all trait re-exports in `crates/mister-smith-core/src/lib.rs`: pub use traits::{Actor, Agent, Tool, Resource, Supervisor, Transport}; pub use ids::{AgentId, TaskId, MessageId, ToolId}; pub use enums::{MessagePriority, AgentState, AgentAvailability, AgentType}; pub use supervision::{RestartPolicy, RestartScope, SupervisionStrategy, EscalationPolicy, BackoffStrategy}; pub use error::{SystemError, FrameworkResult, ErrorSeverity, RecoveryStrategy, ...all sub-errors} — `crates/mister-smith-core/src/lib.rs`
+- [ ] T045b Implement `EventPublisher` trait with `#[async_trait]` in `crates/mister-smith-core/src/traits.rs`: `pub trait EventPublisher: Send + Sync + 'static { async fn publish(&self, event: SystemEvent) -> Result<(), EventError>; }`. This trait breaks the circular dependency between monitoring and events crates — `HealthMonitor` takes `Option<Arc<dyn EventPublisher>>`, `EventBus` implements it. Define a minimal forward-declaration `SystemEvent` struct in core if needed, or use `serde_json::Value` as the event payload type to avoid pulling full event types into core. — `crates/mister-smith-core/src/traits.rs`
+  - Spec trace: audit-report.md C3 (circular dependency resolution)
+  - Depends on: T022 (EventError)
+
+- [ ] T046 Wire up all trait re-exports in `crates/mister-smith-core/src/lib.rs`: pub use traits::{Actor, Agent, Tool, Resource, Supervisor, Transport, EventPublisher}; pub use ids::{AgentId, TaskId, MessageId, ToolId}; pub use enums::{MessagePriority, AgentState, AgentAvailability, AgentType}; pub use supervision::{RestartPolicy, RestartScope, SupervisionStrategy, EscalationPolicy, BackoffStrategy}; pub use error::{SystemError, FrameworkResult, ErrorSeverity, RecoveryStrategy, ...all sub-errors} — `crates/mister-smith-core/src/lib.rs`
   - Depends on: all Phase 2, 3, 4 tasks
 
 - [ ] T047 Verify all traits compile with a test module containing dummy struct implementations (e.g., `struct MockActor;` implementing `Actor` trait to confirm the trait is implementable) — `crates/mister-smith-core/tests/trait_compilation_tests.rs`
@@ -247,8 +252,9 @@
 
 ### Config Types
 
-- [ ] T048 Implement `RuntimeConfig` struct: worker_threads (Option<usize>), blocking_threads (usize, default 512), max_memory (usize, default 0), thread_stack_size (Option<usize>). Derives: Debug, Clone, Serialize, Deserialize. Implement `Default` — `crates/mister-smith-config/src/types.rs`
-  - Spec trace: `spec/core-architecture/implementation-config.md:41-56`, `spec/core-architecture/runtime-and-errors.md:319-342`
+- [ ] T048 Implement `RuntimeConfig` struct (single canonical definition — consumed by both config loading and Tokio runtime builder): worker_threads (Option<usize>), blocking_threads (usize, default 512), max_memory (usize, default 0), thread_stack_size (Option<usize>), thread_keep_alive (Duration, default 60s), enable_all (bool, default true), enable_time (bool, default true), enable_io (bool, default true). Derives: Debug, Clone, Serialize, Deserialize. Implement `Default`. The Tokio-specific fields (`thread_keep_alive`, `enable_*`) have `#[serde(default)]` so existing TOML configs without them still work. — `crates/mister-smith-config/src/types.rs`
+  - Spec trace: `spec/core-architecture/implementation-config.md:41-56`, `spec/core-architecture/runtime-and-errors.md:319-342`, `spec/core-architecture/tokio-runtime.md:203-226`
+  - **Note**: This is the SINGLE `RuntimeConfig` definition. Phase 2's `mister-smith-runtime` crate re-uses this struct (adds `build_runtime()` and preset constructors as extension methods via `impl RuntimeConfig` in the runtime crate). No duplicate `RuntimeConfig` in Phase 2.
 
 - [ ] T049 [P] Implement `SupervisionConfig` struct: max_restart_attempts (u32, default 3), restart_window (Duration, default 60s), escalation_timeout (Duration, default 30s). Derives: Debug, Clone, Serialize, Deserialize. Implement `Default` — `crates/mister-smith-config/src/types.rs`
   - Spec trace: `spec/core-architecture/implementation-config.md:58-74`

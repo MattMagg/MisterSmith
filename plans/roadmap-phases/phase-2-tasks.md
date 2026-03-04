@@ -20,7 +20,8 @@
 - [ ] T001 Add 5 new crate members to root `Cargo.toml` workspace: `mister-smith-runtime`, `mister-smith-monitoring`, `mister-smith-events`, `mister-smith-async`, `mister-smith-resources`
 - [ ] T002 [P] Scaffold `mister-smith-runtime/Cargo.toml` with dependencies: tokio (full), serde, serde_json, thiserror, uuid, num_cpus, tracing, metrics, mister-smith-core, mister-smith-config
 - [ ] T003 [P] Scaffold `mister-smith-monitoring/Cargo.toml` with dependencies: tokio, async-trait, serde, serde_json, thiserror, tracing, metrics, metrics-exporter-prometheus, mister-smith-core, mister-smith-runtime
-- [ ] T004 [P] Scaffold `mister-smith-events/Cargo.toml` with dependencies: tokio (sync, time), async-trait, serde, serde_json, thiserror, uuid, tracing, mister-smith-core, mister-smith-monitoring
+- [ ] T004 [P] Scaffold `mister-smith-events/Cargo.toml` with dependencies: tokio (sync, time), async-trait, serde, serde_json, thiserror, uuid, tracing, mister-smith-core
+  - **Note**: Events crate does NOT depend on mister-smith-monitoring (avoids circular dependency). Metrics recording uses a trait callback (`MetricsRecorder`) injected at construction, not a direct MetricsCollector reference. Monitoring depends on events (one-way), not the reverse.
 - [ ] T005 [P] Scaffold `mister-smith-async/Cargo.toml` with dependencies: tokio (sync, time, task), futures, async-trait, serde, serde_json, thiserror, uuid, tracing, crossbeam, parking_lot, mister-smith-core, mister-smith-runtime, mister-smith-monitoring
 - [ ] T006 [P] Scaffold `mister-smith-resources/Cargo.toml` with dependencies: tokio (sync, time), async-trait, serde, thiserror, tracing, mister-smith-core, mister-smith-config, mister-smith-monitoring
 - [ ] T007 [P] Create `mister-smith-runtime/src/lib.rs` with module declarations (runtime, metrics, tuning, scheduling, error)
@@ -41,25 +42,28 @@
 
 **Checkpoint**: Runtime starts, runs, and shuts down gracefully. `RuntimePerformanceMonitor` collects Tokio metrics. `#[tokio::test]` tests pass.
 
-### Error Types
+### Error Types (re-export from core)
 
-- [ ] T014 Implement `RuntimeError` enum in `mister-smith-runtime/src/error.rs`: BuildFailed(io::Error), StartupFailed(String), ShutdownFailed(String), ConfigurationInvalid(String) -- per `tokio-runtime.md` line 112-122
-- [ ] T015 Implement `ErrorSeverity` enum (Low, Medium, High, Critical) and `RecoveryStrategy` enum (Retry, Restart, Escalate, Reload, CircuitBreaker, Failover, Ignore) in `mister-smith-runtime/src/error.rs` -- per `tokio-runtime.md` line 125-142
+- [ ] T014 Re-export error types from `mister-smith-core` in `mister-smith-runtime/src/error.rs`: `pub use mister_smith_core::error::{RuntimeError, ErrorSeverity, RecoveryStrategy, SystemError};` — Do NOT redefine these types. Phase 1 `mister-smith-core` is the single canonical source.
+  - Spec trace: `spec/core-architecture/runtime-and-errors.md` lines 98-107 (RuntimeError), 246-263 (ErrorSeverity, RecoveryStrategy)
+  - **Note**: If runtime-specific errors beyond the core `RuntimeError` are needed, define them as a separate `RuntimeInternalError` enum, not by redefining `RuntimeError`.
 
-### Runtime Configuration
+### Runtime Configuration (extend Phase 1's RuntimeConfig)
 
-- [ ] T016 Implement `RuntimeConfig` struct in `mister-smith-runtime/src/config.rs` with Serialize/Deserialize: worker_threads, max_blocking_threads, thread_keep_alive, thread_stack_size, enable_all, enable_time, enable_io -- per `tokio-runtime.md` line 203-226
-- [ ] T017 Implement `RuntimeConfig::default()` with DEFAULT_WORKER_THREADS, DEFAULT_MAX_BLOCKING_THREADS (512), DEFAULT_THREAD_KEEP_ALIVE (60s), DEFAULT_THREAD_STACK_SIZE (2MB) -- per `tokio-runtime.md` line 193-197, 214-226
-- [ ] T018 [P] Implement preset constructors `RuntimeConfig::cpu_bound()`, `io_bound()`, `high_throughput()` -- per `tokio-runtime.md` line 229-260
-- [ ] T019 Implement `RuntimeConfig::build_runtime()` -> `Result<Runtime, RuntimeError>` using `tokio::runtime::Builder::new_multi_thread()` -- per `tokio-runtime.md` line 262-289
-- [ ] T020 Implement `WorkloadType` enum and `RuntimeBestPractices::optimal_worker_threads()` in `mister-smith-runtime/src/tuning.rs` -- per `tokio-runtime.md` line 819-825, 869-875
+- [ ] T015 Define DEFAULT constants in `mister-smith-runtime/src/config.rs`: `DEFAULT_WORKER_THREADS` (num_cpus::get()), `DEFAULT_MAX_BLOCKING_THREADS` (512), `DEFAULT_THREAD_KEEP_ALIVE` (60s), `DEFAULT_THREAD_STACK_SIZE` (2MB), `DEFAULT_SHUTDOWN_TIMEOUT` (30s) -- per `tokio-runtime.md` line 193-197
+  - **Note**: The `RuntimeConfig` struct itself is defined in Phase 1's `mister-smith-config` crate (T048). Phase 2 adds behavior (preset constructors, build_runtime) as extension methods.
+- [ ] T016 Implement preset constructors as `impl RuntimeConfig` extension methods in `mister-smith-runtime/src/config.rs`: `cpu_bound()`, `io_bound()`, `high_throughput()` — these return a `RuntimeConfig` with tuned defaults for each workload -- per `tokio-runtime.md` line 229-260
+  - Depends on: Phase 1 T048 (RuntimeConfig struct)
+- [ ] T017 Implement `RuntimeConfig::build_runtime()` -> `Result<Runtime, RuntimeError>` using `tokio::runtime::Builder::new_multi_thread()` in `mister-smith-runtime/src/config.rs` -- per `tokio-runtime.md` line 262-289
+- [ ] T018 Implement `WorkloadType` enum (per `tokio-runtime.md` line 869-875) and `RuntimeBestPractices::optimal_worker_threads()` (per `tokio-runtime.md` line 819-825) in `mister-smith-runtime/src/tuning.rs`
 - [ ] T021 [P] Implement `RuntimeTuning` with websocket_server_config(), data_pipeline_config(), agent_system_config() in `mister-smith-runtime/src/tuning.rs` -- per `tokio-runtime.md` line 508-546
 
 ### Runtime Manager Core
 
 - [ ] T022 Implement `RuntimeManager` struct in `mister-smith-runtime/src/manager.rs` -- Arc<Runtime>, shutdown_signal (AtomicBool), task handles (Vec<JoinHandle<()>>). NOTE: Do NOT include HealthMonitor, MetricsCollector, SupervisionTree, EventBus as direct fields -- those are injected later via builder pattern or setter methods to avoid circular crate dependencies. Per `tokio-runtime.md` line 308-316, adapted for Phase 2 layering.
 - [ ] T023 Implement `RuntimeManager::builder()` pattern returning a `RuntimeManagerBuilder` that accepts optional health_monitor, metrics_collector handles via trait objects or Arc<dyn Trait>
-- [ ] T024 Implement `RuntimeManager::initialize(config: RuntimeConfig)` -> `Result<Self, RuntimeError>` -- builds Tokio runtime, creates shutdown signal -- per `tokio-runtime.md` line 319-336
+- [ ] T024 Implement `RuntimeManager::initialize(config: RuntimeConfig)` -> `Result<Self, RuntimeError>` -- builds Tokio runtime, creates shutdown signal, initializes tracing subscriber from config -- per `tokio-runtime.md` line 319-336
+  - **Includes tracing setup**: Initialize `tracing_subscriber` with `EnvFilter` from `MonitoringConfig.log_level` (default: "info"). Use `tracing_subscriber::fmt()` with JSON output layer. This is the single global tracing initialization point — all other crates use `tracing::info!()` etc. without setup.
 - [ ] T025 Implement `RuntimeManager::start_system()` -- spawns signal handler task, logs startup. Health/metrics/supervision task spawning deferred to wiring phase -- per `tokio-runtime.md` line 338-382
 - [ ] T026 Implement `RuntimeManager::graceful_shutdown()` -- sets shutdown signal, joins task handles, calls `runtime.shutdown_timeout(DEFAULT_SHUTDOWN_TIMEOUT)` -- per `tokio-runtime.md` line 384-411
 - [ ] T027 Implement signal handler (SIGTERM, SIGINT) as async fn using `tokio::signal::unix` -- per `tokio-runtime.md` line 414-430
@@ -104,8 +108,9 @@
 ### Health Check Trait and Monitor
 
 - [ ] T043 Implement `HealthCheck` async trait in `mister-smith-monitoring/src/health.rs`: check(), component_id(), check_interval() -- per `monitoring-and-health.md` line 83-88
-- [ ] T044 Implement `HealthMonitor` struct in `mister-smith-monitoring/src/health.rs`: check_interval, health_checks (RwLock<Vec<Box<dyn HealthCheck>>>), status_cache (RwLock<HashMap<ComponentId, HealthStatus>>), event_bus (Option<Arc<...>>) -- per `monitoring-and-health.md` line 90-105
-- [ ] T045 Implement `HealthMonitor::new()`, `with_event_bus()`, `register_check()` -- per `monitoring-and-health.md` line 98-115
+- [ ] T044 Implement `HealthMonitor` struct in `mister-smith-monitoring/src/health.rs`: check_interval, health_checks (RwLock<Vec<Box<dyn HealthCheck>>>), status_cache (RwLock<HashMap<ComponentId, HealthStatus>>), event_publisher (Option<Arc<dyn EventPublisher>>) -- per `monitoring-and-health.md` line 90-105
+  - **Note**: Uses `EventPublisher` trait from `mister-smith-core` (Phase 1 T045b), NOT a direct `EventBus` reference. This breaks the circular dependency between monitoring and events crates. `EventBus` implements `EventPublisher` and is injected at wiring time.
+- [ ] T045 Implement `HealthMonitor::new()`, `with_event_publisher(publisher: Arc<dyn EventPublisher>)`, `register_check()` -- per `monitoring-and-health.md` line 98-115
 - [ ] T046 Implement `HealthMonitor::run()` loop: check interval, perform_health_checks(), respect shutdown signal -- per `monitoring-and-health.md` line 117-122
 - [ ] T047 Implement `HealthMonitor::perform_health_checks()` -- iterates checks, updates status cache, publishes health events to event bus if status changed -- per `monitoring-and-health.md` line 124-166
 - [ ] T048 Implement `HealthMonitor::get_status()`, `get_all_statuses()`, `is_system_healthy()` -- per `monitoring-and-health.md` line 174-188
@@ -181,7 +186,7 @@
 
 ### Event Bus
 
-- [ ] T081 Implement `EventBus` struct in `mister-smith-events/src/bus.rs`: subscribers (RwLock<HashMap<TypeId, Vec<Arc<dyn EventHandler>>>>), event_queue (Mutex<VecDeque<SystemEvent>>), broadcast_sender (broadcast::Sender<SystemEvent>), event_store (Option<Arc<dyn EventStore>>), metrics_collector -- per `supervision-and-events.md` line 597-603
+- [ ] T081 Implement `EventBus` struct in `mister-smith-events/src/bus.rs`: subscribers (RwLock<HashMap<TypeId, Vec<Arc<dyn EventHandler>>>>), event_queue (Mutex<VecDeque<SystemEvent>>), broadcast_sender (broadcast::Sender<SystemEvent>), event_store (Option<Arc<dyn EventStore>>). Implement `EventPublisher` trait from `mister-smith-core` for `EventBus` so that monitoring can publish events through the trait interface without depending on the events crate directly. -- per `supervision-and-events.md` line 597-603
 - [ ] T082 Implement `EventBus::new()` with configurable broadcast channel capacity (default 10,000) -- per `supervision-and-events.md` line 606-616
 - [ ] T083 Implement `EventBus::with_event_store()` builder method -- per `supervision-and-events.md` line 618-621
 - [ ] T084 Implement `EventBus::publish()` -- record metrics, persist to store, enqueue, broadcast, process subscribers -- per `supervision-and-events.md` line 623-648
@@ -228,7 +233,8 @@
 
 ### Task Types
 
-- [ ] T103 Implement `TaskId(Uuid)` newtype, `TaskPriority` enum (Low=0, Normal=1, High=2, Critical=3), `TaskError` enum in `mister-smith-async/src/task.rs` -- per `async-patterns.md` line 103-119, 130-145
+- [ ] T103 Implement `TaskId(Uuid)` newtype (per `async-patterns.md` line 130-137), `TaskPriority` enum with `#[repr(u8)]` Critical=0, High=1, Normal=2, Low=3 (per `async-patterns.md` line 139-145, **aligned with MessagePriority ordering**), and `TaskError` enum (per `async-patterns.md` line 103-119) in `mister-smith-async/src/task.rs`
+  - **Note**: TaskPriority discriminants are aligned with MessagePriority (Critical=0 is highest). The spec defines Low=0 ascending, but this conflicts with MessagePriority's Critical=0 descending convention. We use Critical=0 for consistency across the framework.
 - [ ] T104 Implement `ErrorStrategy` enum (StopOnError, LogAndContinue, RetryWithBackoff, CircuitBreaker) -- per `async-patterns.md` line 122-128
 - [ ] T105 Implement `RetryPolicy` struct (max_attempts, base_delay, max_delay, backoff_multiplier) with Default, for_database(), for_network() presets -- per `async-patterns.md` line 148-186
 - [ ] T106 Implement `AsyncTask` async trait: execute(), priority(), timeout(), retry_policy(), task_id() -- per `async-patterns.md` line 233-252
@@ -375,7 +381,7 @@
 Phase 1 (Setup)     -- no dependencies, start immediately
 Phase 2 (Runtime)   -- depends on Phase 1 completion
 Phase 3 (Monitor)   -- depends on Phase 2 (runtime must exist for async health checks)
-Phase 4 (Events)    -- depends on Phase 2 (runtime) and Phase 3 (events emit metrics)
+Phase 4 (Events)    -- depends on Phase 2 (runtime). NO dependency on Phase 3 (monitoring) — circular dependency broken via EventPublisher trait injection (Phase 1 T045b)
 Phase 5 (Async)     -- depends on Phase 2 (runtime) and Phase 3 (monitoring)
 Phase 6 (Resources) -- depends on Phase 3 (health integration) and Phase 1 config
 Phase 7 (Integ.)    -- depends on all above phases
@@ -395,7 +401,7 @@ Within each phase, tasks marked [P] can run in parallel:
 ### Critical Path
 
 ```
-T001 (workspace) -> T002 (runtime crate) -> T014 (errors) -> T016 (config) -> T019 (build_runtime)
+T001 (workspace) -> T002 (runtime crate) -> T014 (re-export errors) -> T015 (constants) -> T017 (build_runtime)
   -> T022 (RuntimeManager) -> T024 (initialize) -> T025 (start) -> T026 (shutdown)
     -> T030 (perf monitor) -> T037 (lifecycle test)
       -> T043 (HealthCheck) -> T044 (HealthMonitor) -> T046 (run loop)
