@@ -697,7 +697,9 @@ pub enum ComparisonOperator {
 > **Validation Enhancement**: For distributed scenarios, consider implementing consensus mechanisms for state transitions to ensure consistency across nodes.
 
 /// Agent lifecycle state transition rules
+
 # [derive(Debug, Clone, Serialize, Deserialize)]
+
 pub struct StateTransitionRules {
     pub allowed_transitions: HashMap<AgentState, Vec<AgentState>>,
     pub transition_conditions: HashMap<(AgentState, AgentState), Vec<TransitionCondition>>,
@@ -705,7 +707,9 @@ pub struct StateTransitionRules {
 }
 
 /// Transition condition definition
+
 # [derive(Debug, Clone, Serialize, Deserialize)]
+
 pub struct TransitionCondition {
     pub condition_type: ConditionType,
     pub parameters: HashMap<String, serde_json::Value>,
@@ -713,7 +717,9 @@ pub struct TransitionCondition {
 }
 
 /// Condition types for state transitions
+
 # [derive(Debug, Clone, Serialize, Deserialize)]
+
 pub enum ConditionType {
     ResourceAvailable,
     DependencyReady,
@@ -733,7 +739,9 @@ pub struct AgentLifecycle {
 }
 
 /// Complete agent state information
+
 # [derive(Debug, Clone, Serialize, Deserialize)]
+
 pub struct AgentStateInfo {
     pub current_state: AgentState,
     pub previous_state: Option<AgentState>,
@@ -743,7 +751,9 @@ pub struct AgentStateInfo {
 }
 
 /// State transition record
+
 # [derive(Debug, Clone, Serialize, Deserialize)]
+
 pub struct StateTransition {
     pub from_state: AgentState,
     pub to_state: AgentState,
@@ -755,7 +765,9 @@ pub struct StateTransition {
 }
 
 /// State consensus manager trait
+
 # [async_trait::async_trait]
+
 pub trait StateConsensusManager: Send + Sync {
     async fn propose_transition(
         &self,
@@ -766,7 +778,9 @@ pub trait StateConsensusManager: Send + Sync {
 }
 
 /// Consensus result
+
 # [derive(Debug, Clone, Serialize, Deserialize)]
+
 pub struct ConsensusResult {
     pub approved: bool,
     pub votes: Vec<Vote>,
@@ -774,7 +788,9 @@ pub struct ConsensusResult {
 }
 
 /// Vote in consensus process
+
 # [derive(Debug, Clone, Serialize, Deserialize)]
+
 pub struct Vote {
     pub voter_id: String,
     pub approval: bool,
@@ -783,7 +799,9 @@ pub struct Vote {
 }
 
 /// State observer trait
+
 # [async_trait::async_trait]
+
 pub trait StateObserver: Send + Sync {
     async fn on_state_change(&self, transition: &StateTransition) -> Result<(), AgentError>;
 }

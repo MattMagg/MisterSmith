@@ -475,6 +475,7 @@ impl HookBridge {
 ```
 
 > **Migration note**: The original spec mapped 5 hook types (`startup`, `pre_task`, `post_task`, `on_error`, `on_file_change`). Claude Code has since expanded to 14+ hook events with different naming. The `HookType` enum must be updated to reflect the current Claude Code hook event names listed above. Additionally, Claude Code hooks now support three handler types: `command`, `prompt`, and `agent` (not just `command`).
+
 ```
 
 ### 2. Resource Management
