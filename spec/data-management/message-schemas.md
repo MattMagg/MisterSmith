@@ -22,7 +22,7 @@ to enable type-safe, performant agent communication.
 4. [Workflow Orchestration Messages](#4-workflow-orchestration-messages)
    - [Workflow Coordination Message](#41-workflow-coordination-message)
    - [Workflow State Synchronization Message](#42-workflow-state-synchronization-message)
-5. [Claude CLI Integration Messages](#5-claude-cli-integration-messages)
+5. [LLM Backend Integration Messages](#5-llm-backend-integration-messages)
    - [Hook Event Message](#51-hook-event-message)
    - [Hook Response Message](#52-hook-response-message)
 6. [System Operation Messages](#6-system-operation-messages)
@@ -1066,17 +1066,17 @@ Schema for synchronizing workflow state across agents.
 }
 ```
 
-## 5. Claude CLI Integration Messages
+## 5. LLM Backend Integration Messages
 
 ### 5.1 Hook Event Message
 
-Schema for Claude CLI hook events and integration points.
+Schema for LLM backend hook events and integration points.
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.mister-smith.dev/hook-event.json",
-  "title": "Claude CLI Hook Event Message",
+  "title": "LLM Backend Hook Event Message",
   "allOf": [
     { "$ref": "base-message.json" }
   ],
@@ -1110,11 +1110,11 @@ Schema for Claude CLI hook events and integration points.
             "session_id": {
               "type": "string",
               "format": "uuid",
-              "description": "Claude CLI session identifier"
+              "description": "LLM backend session identifier"
             },
             "model": {
               "type": "string",
-              "description": "Claude model being used"
+              "description": "LLM model identifier"
             },
             "start_time": {
               "type": "string",
@@ -1231,13 +1231,13 @@ Schema for Claude CLI hook events and integration points.
 
 ### 5.2 Hook Response Message
 
-Schema for responding to Claude CLI hook events.
+Schema for responding to LLM backend hook events.
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.mister-smith.dev/hook-response.json",
-  "title": "Claude CLI Hook Response Message",
+  "title": "LLM Backend Hook Response Message",
   "allOf": [
     { "$ref": "base-message.json" }
   ],
@@ -1985,18 +1985,18 @@ Schema definitions for NATS subject patterns and routing rules:
         }
       }
     },
-    "cli_subjects": {
+    "llm_subjects": {
       "type": "object",
       "properties": {
         "hooks": {
           "type": "string",
-          "pattern": "^cli\\.hooks\\.(startup|pre_task|post_task|on_error|on_file_change)\\.[a-zA-Z0-9_-]+$",
-          "example": "cli.hooks.pre_task.analyzer-001"
+          "pattern": "^llm\\.hooks\\.(startup|pre_task|post_task|on_error|on_file_change)\\.[a-zA-Z0-9_-]+$",
+          "example": "llm.hooks.pre_task.analyzer-001"
         },
         "responses": {
           "type": "string",
-          "pattern": "^cli\\.responses\\.[a-zA-Z0-9_-]+$",
-          "example": "cli.responses.analyzer-001"
+          "pattern": "^llm\\.responses\\.[a-zA-Z0-9_-]+$",
+          "example": "llm.responses.analyzer-001"
         }
       }
     }

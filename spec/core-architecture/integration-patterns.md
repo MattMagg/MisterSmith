@@ -885,8 +885,11 @@ use uuid::Uuid;
 // Core framework types
 pub type AgentId = Uuid;
 
+/// Deployment category for agents. Distinct from the canonical AgentType enum
+/// (Supervisor, Worker, Coordinator, etc.) which describes agent *roles*.
+/// AgentCategory describes the deployment context in which an agent operates.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AgentType {
+pub enum AgentCategory {
     System,
     User,
     Background,
@@ -900,12 +903,15 @@ pub enum HealthStatus {
     Unhealthy { error: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SupervisionStrategy {
+// Restart policy determines which siblings restart when a child fails.
+// See type-definitions.md for the canonical SupervisionStrategy struct.
+// Note: SimpleOneForOne (dynamic child spawning) is a supervisor *mode*,
+// not a restart policy — handle via supervisor configuration instead.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum RestartPolicy {
     OneForOne,
     OneForAll,
     RestForOne,
-    SimpleOneForOne,
 }
 
 // Event error types with data flow validation
@@ -1107,7 +1113,7 @@ impl Event for SystemEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AgentEvent {
-    Started { agent_id: AgentId, agent_type: AgentType },
+    Started { agent_id: AgentId, agent_category: AgentCategory },
     Stopped { agent_id: AgentId, reason: String },
     ProcessingStarted { agent_id: AgentId, task_id: Uuid },
     ProcessingCompleted { agent_id: AgentId, task_id: Uuid, duration: Duration },
@@ -1161,7 +1167,7 @@ pub enum DataEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SupervisionEvent {
-    SupervisorStarted { supervisor_id: String, strategy: SupervisionStrategy },
+    SupervisorStarted { supervisor_id: String, restart_policy: RestartPolicy },
     SupervisorStopped { supervisor_id: String, reason: String },
     ChildAdded { supervisor_id: String, child_id: String, child_type: String },
     ChildRemoved { supervisor_id: String, child_id: String, reason: String },

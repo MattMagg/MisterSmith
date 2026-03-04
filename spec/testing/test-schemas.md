@@ -2,7 +2,7 @@
 
 **Technical Test Data Structures and Configuration Schemas**
 
-*Cross-references: [Test Framework](testing-framework.md) | [Test Configuration](test-configuration.md) | [Message Schemas](../data-management/message-schemas.md) | [Agent Domains](../agent-domains/)*
+*Cross-references: [Test Framework](testing-framework.md) | [Message Schemas](../data-management/message-schemas.md) | [Agent Domains](../agent-domains/)*
 
 ## VALIDATION STATUS
 
@@ -19,8 +19,8 @@
 - Confirmed `proptest` patterns (`prop_compose!`, `proptest!` macros) are current (proptest 1.10.0)
 - Fixed non-idiomatic Rust enum variants: `SecurityAudit` -> `SecurityAudit`, `PerformanceAnalysis` -> `PerformanceAnalysis` in `TaskType` enum
 - Noted `AgentStatus` discrepancy: this file uses `[Created, Starting, Running, Paused, Stopping, Stopped, Failed, Unknown]` while `message-schemas.md` uses `["initializing", "idle", "busy", "paused", "error", "stopping", "terminated"]`. These represent different layers — the test schemas define implementation-level states, while message schemas define wire-format states. Implementation should map between them
-- Noted `AgentType` discrepancy: this file uses domain-role types `[Analyst, Architect, Engineer, ...]` while `message-schemas.md` uses communication-level types `["supervisor", "worker", "coordinator", ...]`. These are complementary — domain roles and communication roles are orthogonal classifications
-- Marked Claude CLI mock service section with model-agnostic note
+- Renamed `AgentType` to `TestAgentRole` to avoid collision with the canonical `AgentType` enum in `agent-orchestration.md`. This file uses domain-role types `[Analyst, Architect, Engineer, ...]` while `message-schemas.md` uses communication-level types `["supervisor", "worker", "coordinator", ...]`. These are complementary -- domain roles and communication roles are orthogonal classifications
+- Renamed Claude CLI mock service types to model-agnostic LLM backend types (MockLlmCliService, LlmCommand, LlmResponse, LlmError)
 
 ## SCHEMA VALIDATION FRAMEWORK
 
@@ -119,7 +119,7 @@ pub enum Constraint {
 }
 ```
 
-*Cross-references: [Test Framework](test-framework.md) | [Message Framework](../data-management/message-framework.md) | [Agent Communication](../data-management/agent-communication.md)*
+*Cross-references: [Test Framework](testing-framework.md) | [Message Framework](../data-management/message-framework.md) | [Agent Communication](../data-management/agent-communication.md)*
 
 ## TEST CASE DATA STRUCTURES
 
@@ -133,7 +133,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TestAgent {
     pub id: String,
-    pub agent_type: AgentType,
+    pub agent_type: TestAgentRole,
     pub configuration: TestAgentConfig,
     pub status: AgentStatus,
     pub created_at: DateTime<Utc>,
@@ -153,7 +153,7 @@ pub struct TestAgentConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum AgentType {
+pub enum TestAgentRole {
     Analyst,
     Architect,
     Engineer,
@@ -361,7 +361,7 @@ impl AgentTestFixtures {
     pub fn minimal_agent() -> TestAgent {
         TestAgent {
             id: "test-agent-minimal".to_string(),
-            agent_type: AgentType::Tester,
+            agent_type: TestAgentRole::Tester,
             configuration: TestAgentConfig {
                 max_memory_mb: 128,
                 timeout_seconds: 30,
@@ -381,7 +381,7 @@ impl AgentTestFixtures {
     pub fn analyst_agent() -> TestAgent {
         TestAgent {
             id: "test-agent-analyst".to_string(),
-            agent_type: AgentType::Analyst,
+            agent_type: TestAgentRole::Analyst,
             configuration: TestAgentConfig {
                 max_memory_mb: 512,
                 timeout_seconds: 300,
@@ -416,7 +416,7 @@ impl AgentTestFixtures {
     pub fn architect_agent() -> TestAgent {
         TestAgent {
             id: "test-agent-architect".to_string(),
-            agent_type: AgentType::Architect,
+            agent_type: TestAgentRole::Architect,
             configuration: TestAgentConfig {
                 max_memory_mb: 1024,
                 timeout_seconds: 600,
@@ -451,7 +451,7 @@ impl AgentTestFixtures {
     pub fn failed_agent() -> TestAgent {
         TestAgent {
             id: "test-agent-failed".to_string(),
-            agent_type: AgentType::Engineer,
+            agent_type: TestAgentRole::Engineer,
             configuration: TestAgentConfig::default(),
             status: AgentStatus::Failed,
             created_at: Utc::now() - chrono::Duration::minutes(10),
@@ -832,7 +832,7 @@ pub trait TestFixtureGenerator<T> {
 #[derive(TestFixtureGenerator)]
 pub struct Agent {
     pub id: String,
-    pub agent_type: AgentType,
+    pub agent_type: TestAgentRole,
     pub status: AgentStatus,
     // ... other fields
 }
@@ -878,7 +878,7 @@ pub fn test_schema_evolution(evolution: &SchemaEvolutionTest) -> EvolutionTestRe
 }
 ```
 
-*Cross-references: [Test Configuration](test-configuration.md) | [Agent Lifecycle](../data-management/agent-lifecycle.md) | [System Testing](../testing/) | [Message Framework](../data-management/message-framework.md)*
+*Cross-references: [Agent Lifecycle](../data-management/agent-lifecycle.md) | [System Testing](../testing/) | [Message Framework](../data-management/message-framework.md)*
 
 ## ADVANCED MOCK PATTERNS
 
@@ -1151,17 +1151,17 @@ impl DatabaseService for MockDatabaseService {
 
 ### Mock LLM Backend Service
 
-> **Note**: Mister Smith is model-agnostic. This mock was originally written for Claude CLI integration but applies to any LLM backend. Rename `ClaudeCliService`, `ClaudeCommand`, `ClaudeResponse`, and `ClaudeError` to your concrete backend types (e.g., `LlmBackendService`, `LlmCommand`, `LlmResponse`, `LlmError`).
+> **Note**: Mister Smith is model-agnostic. This mock service applies to any LLM backend (Claude, GPT, Gemini, open-source models, etc.). Concrete implementations should adapt `LlmCliService`, `LlmCommand`, `LlmResponse`, and `LlmError` to the specific backend being integrated.
 
 ```rust
-pub struct MockClaudeCliService {
-    responses: HashMap<String, ClaudeResponse>,
+pub struct MockLlmCliService {
+    responses: HashMap<String, LlmResponse>,
     call_count: Arc<Mutex<u32>>,
     execution_delay: Duration,
     should_fail: bool,
 }
 
-impl MockClaudeCliService {
+impl MockLlmCliService {
     pub fn new() -> Self {
         Self {
             responses: HashMap::new(),
@@ -1170,49 +1170,49 @@ impl MockClaudeCliService {
             should_fail: false,
         }
     }
-    
-    pub fn with_response(mut self, command: &str, response: ClaudeResponse) -> Self {
+
+    pub fn with_response(mut self, command: &str, response: LlmResponse) -> Self {
         self.responses.insert(command.to_string(), response);
         self
     }
-    
+
     pub fn with_delay(mut self, delay: Duration) -> Self {
         self.execution_delay = delay;
         self
     }
-    
+
     pub fn with_failure(mut self) -> Self {
         self.should_fail = true;
         self
     }
-    
+
     pub fn call_count(&self) -> u32 {
         *self.call_count.lock().unwrap()
     }
 }
 
 #[async_trait]
-impl ClaudeCliService for MockClaudeCliService {
-    async fn execute_command(&self, command: &ClaudeCommand) -> Result<ClaudeResponse, ClaudeError> {
+impl LlmCliService for MockLlmCliService {
+    async fn execute_command(&self, command: &LlmCommand) -> Result<LlmResponse, LlmError> {
         // Increment call count
         {
             let mut count = self.call_count.lock().unwrap();
             *count += 1;
         }
-        
+
         // Simulate execution delay
         tokio::time::sleep(self.execution_delay).await;
-        
+
         // Check if should fail
         if self.should_fail {
-            return Err(ClaudeError::ExecutionFailed("Mock failure".to_string()));
+            return Err(LlmError::ExecutionFailed("Mock failure".to_string()));
         }
-        
+
         // Return predefined response or default
         let command_key = format!("{:?}", command);
         Ok(self.responses.get(&command_key)
             .cloned()
-            .unwrap_or_else(|| ClaudeResponse::default()))
+            .unwrap_or_else(|| LlmResponse::default()))
     }
 }
 ```
@@ -1461,7 +1461,7 @@ pub fn execute_schema_test(schema: &TestSchema) -> TestResult {
 }
 ```
 
-*Cross-references: [Test Framework](test-framework.md) | [Performance Testing](../operations/performance-testing.md) | [Security Testing](../security/security-testing.md)*
+*Cross-references: [Test Framework](testing-framework.md) | [Performance Testing](../operations/performance-testing.md) | [Security Testing](../security/security-testing.md)*
 
 ## CONTINUOUS INTEGRATION TEST SUITES
 
@@ -1790,4 +1790,4 @@ Technical validation components:
 
 *Test Schemas - Technical data structures for multi-agent testing framework*
 *Complete test fixtures, mock services, and CI/CD integration specifications*
-*See also: [Test Framework](test-framework.md) | [Component Architecture](../core-architecture/component-architecture.md) | [System Integration](../core-architecture/system-integration.md)*
+*See also: [Test Framework](testing-framework.md) | [Component Architecture](../core-architecture/component-architecture.md) | [System Integration](../core-architecture/system-integration.md)*

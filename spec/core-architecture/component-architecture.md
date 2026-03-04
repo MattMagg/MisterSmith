@@ -8,7 +8,7 @@
 
 ## Navigation
 
-[← Back to Core Architecture](./CLAUDE.md) | [System Architecture](./system-architecture.md) | [Supervision Trees](./supervision-trees.md) | [Integration Patterns →](./integration-patterns.md)
+[← Back to Specifications](../CLAUDE.md) | [System Architecture](./system-architecture.md) | [Supervision Trees](./supervision-trees.md) | [Integration Patterns →](./integration-patterns.md)
 
 ---
 
@@ -762,10 +762,10 @@ impl CircuitBreaker {
 
 ### Related Architecture Documents
 
-- [Data Management](../data-management/README.md) - Full data layer documentation
-- [Security Framework](../security/README.md) - Security implementation
-- [Transport Layer](../transport/README.md) - Communication protocols
-- [Operations Guide](../operations/README.md) - Deployment patterns
+- [Data Management](../data-management/) - Full data layer documentation
+- [Security Framework](../security/) - Security implementation
+- [Transport Layer](../transport/) - Communication protocols
+- [Operations Guide](../operations/) - Deployment patterns
 
 ### External References
 

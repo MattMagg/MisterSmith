@@ -836,6 +836,6 @@ This file is part of the Message Schema Documentation suite:
 - **Storage**: [Persistence Operations](./persistence-operations.md), [Storage Patterns](./storage-patterns.md)
 - **Transport**: [NATS Transport](../transport/nats-transport.md), [gRPC Transport](../transport/grpc-transport.md)
 
-For the complete framework documentation, see the [Data Management Index](./CLAUDE.md).
+For the complete framework documentation, see the [Specifications Index](../CLAUDE.md).
 
 *Message Schema Definitions v1.0.0 - Mister Smith AI Agent Framework*

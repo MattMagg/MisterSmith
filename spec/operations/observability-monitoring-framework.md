@@ -33,16 +33,16 @@ This document provides implementation patterns and technical specifications for 
 
 **Core Architecture**:
 
-- **[System Integration](../core-architecture/system-integration.md)** - Component integration patterns
+- **[System Integration](../core-architecture/system-integration.md)** - Component integration patterns (cross-system integration strategies)
 - **[Supervision Trees](../core-architecture/supervision-trees.md)** - Agent supervision and error handling
 - **[Tokio Runtime](../core-architecture/tokio-runtime.md)** - Async runtime configuration
 - **[Component Architecture](../core-architecture/component-architecture.md)** - Agent component structure
 
 **Operations**:
 
-- **[Deployment Configuration](../operations/deployment-configuration.md)** - Infrastructure setup and deployment patterns
-- **[Process Management](../operations/process-management.md)** - Agent lifecycle and supervision patterns
-- **[Container Orchestration](../operations/container-orchestration.md)** - Docker and Kubernetes deployment
+- **[Deployment Architecture](./deployment-architecture-specifications.md)** - Infrastructure setup and deployment patterns
+- **[Process Management](./process-management-specifications.md)** - Agent lifecycle and supervision patterns
+- **[Configuration Deployment](./configuration-deployment-specifications.md)** - Configuration and deployment specifications
 
 **Data Management**:
 
@@ -52,8 +52,8 @@ This document provides implementation patterns and technical specifications for 
 
 **Transport & Security**:
 
-- **[NATS Integration](../transport/nats-integration.md)** - Message transport configuration
-- **[Authentication](../security/authentication.md)** - Agent authentication patterns
+- **[NATS Transport](../transport/nats-transport.md)** - Message transport configuration
+- **[Authentication](../security/authentication-specifications.md)** - Agent authentication patterns
 
 ### 1. Architecture Overview
 
@@ -672,13 +672,13 @@ PATTERN TraceLayers:
         preserve_baggage_items()
 ```
 
-#### 3.5 Claude-CLI Parallel Agent Tracing Pattern
+#### 3.5 LLM Backend Parallel Agent Tracing Pattern
 
 ```rust
-PATTERN ClaudeCLIParallelTracing:
+PATTERN LLMBackendParallelTracing:
     PARALLEL_AGENT_INSTRUMENTATION:
         # Handle multiple internal agents sharing one PID
-        create_root_span(claude_cli_process_id)
+        create_root_span(llm_backend_process_id)
 
         FOR each_internal_agent IN parallel_agents:
             create_child_span(internal_agent_id)
@@ -694,7 +694,7 @@ PATTERN ClaudeCLIParallelTracing:
         # Multiple internal agents share PID but need separate traces
         span_attributes:
             agent_internal_id: "unique_identifier_per_internal_agent"
-            process_id: "shared_claude_cli_pid"
+            process_id: "shared_llm_backend_pid"
             parallel_execution_id: "batch_identifier"
             agent_role: "task_agent" | "patch_agent"
 
@@ -705,7 +705,7 @@ PATTERN ClaudeCLIParallelTracing:
         correlation_key: "parallel_execution_batch_id"
 ```
 
-#### 3.6 Claude-CLI Hook System Tracing Pattern
+#### 3.6 LLM Backend Hook System Tracing Pattern
 
 ```rust
 PATTERN HookSystemTracing:
@@ -1568,29 +1568,29 @@ message_queue_depth{queue_name="task_assignments",broker="nats"} 8
 message_delivery_failures_total{failure_reason="timeout",transport="nats"} 12
 ```
 
-#### 15.1.4 Claude-CLI Integration Metrics
+#### 15.1.4 LLM Backend Integration Metrics
 
 ```prometheus
-# HELP claude_cli_processes_total Number of Claude CLI processes spawned
-# TYPE claude_cli_processes_total counter
-claude_cli_processes_total{command_type="parallel_agents",batch_size="5"} 45
+# HELP llm_backend_processes_total Number of LLM Backend processes spawned
+# TYPE llm_backend_processes_total counter
+llm_backend_processes_total{command_type="parallel_agents",batch_size="5"} 45
 
-# HELP claude_cli_parallel_agents_active Current number of parallel internal agents
-# TYPE claude_cli_parallel_agents_active gauge
-claude_cli_parallel_agents_active{batch_id="batch-123",process_id="12345"} 5
+# HELP llm_backend_parallel_agents_active Current number of parallel internal agents
+# TYPE llm_backend_parallel_agents_active gauge
+llm_backend_parallel_agents_active{batch_id="batch-123",process_id="12345"} 5
 
-# HELP claude_cli_hook_executions_total Number of hook executions
-# TYPE claude_cli_hook_executions_total counter
-claude_cli_hook_executions_total{hook_type="post_task",hook_name="validation",status="success"} 234
+# HELP llm_backend_hook_executions_total Number of hook executions
+# TYPE llm_backend_hook_executions_total counter
+llm_backend_hook_executions_total{hook_type="post_task",hook_name="validation",status="success"} 234
 
-# HELP claude_cli_hook_duration_seconds Hook execution duration
-# TYPE claude_cli_hook_duration_seconds histogram
-claude_cli_hook_duration_seconds_bucket{hook_type="pre_task",hook_name="setup",le="0.1"} 45
-claude_cli_hook_duration_seconds_bucket{hook_type="pre_task",hook_name="setup",le="0.5"} 67
-claude_cli_hook_duration_seconds_bucket{hook_type="pre_task",hook_name="setup",le="1.0"} 78
-claude_cli_hook_duration_seconds_bucket{hook_type="pre_task",hook_name="setup",le="+Inf"} 80
-claude_cli_hook_duration_seconds_sum{hook_type="pre_task",hook_name="setup"} 23.45
-claude_cli_hook_duration_seconds_count{hook_type="pre_task",hook_name="setup"} 80
+# HELP llm_backend_hook_duration_seconds Hook execution duration
+# TYPE llm_backend_hook_duration_seconds histogram
+llm_backend_hook_duration_seconds_bucket{hook_type="pre_task",hook_name="setup",le="0.1"} 45
+llm_backend_hook_duration_seconds_bucket{hook_type="pre_task",hook_name="setup",le="0.5"} 67
+llm_backend_hook_duration_seconds_bucket{hook_type="pre_task",hook_name="setup",le="1.0"} 78
+llm_backend_hook_duration_seconds_bucket{hook_type="pre_task",hook_name="setup",le="+Inf"} 80
+llm_backend_hook_duration_seconds_sum{hook_type="pre_task",hook_name="setup"} 23.45
+llm_backend_hook_duration_seconds_count{hook_type="pre_task",hook_name="setup"} 80
 ```
 
 ### 15.2 OpenTelemetry Tracing Schema
@@ -2228,23 +2228,23 @@ groups:
       summary: "Multiple active clusters detected (split brain)"
       description: "Detected {{ $value }} separate cluster formations, indicating split brain scenario"
 
-  # Claude CLI integration alerts
-  - alert: ClaudeCLIProcessFailures
-    expr: rate(claude_cli_processes_failed_total[5m]) > 0.1
+  # LLM Backend integration alerts
+  - alert: LLMBackendProcessFailures
+    expr: rate(llm_backend_processes_failed_total[5m]) > 0.1
     for: 3m
     labels:
       severity: critical
-      component: claude_cli
+      component: llm_backend
     annotations:
-      summary: "Claude CLI process failures detected"
-      description: "{{ $value }} Claude CLI process failures per second"
+      summary: "LLM Backend process failures detected"
+      description: "{{ $value }} LLM Backend process failures per second"
 
   - alert: HookExecutionFailures
-    expr: rate(claude_cli_hook_executions_total{status="failure"}[5m]) > 0.05
+    expr: rate(llm_backend_hook_executions_total{status="failure"}[5m]) > 0.05
     for: 5m
     labels:
       severity: warning
-      component: claude_cli
+      component: llm_backend
     annotations:
       summary: "High hook execution failure rate"
       description: "Hook failure rate: {{ $value }} failures per second"

@@ -55,7 +55,8 @@ use uuid::Uuid;
 use async_trait::async_trait;
 use std::time::{Duration, Instant, SystemTime};
 use tracing::{info, warn, error};
-use crate::errors::{SupervisionError, SupervisionStrategy};
+use crate::errors::SupervisionError;
+use crate::supervision::{RestartPolicy, EscalationPolicy};
 use crate::metrics::MetricsCollector;
 
 // Supervision tree - CRITICAL IMPLEMENTATION REQUIRED
@@ -64,7 +65,7 @@ pub struct SupervisionTree {
     node_registry: Arc<RwLock<HashMap<NodeId, SupervisorNode>>>,
     failure_detector: Arc<FailureDetector>,
     // NOTE: Wrapped in RwLock to allow mutation via &self in async contexts
-    restart_policies: Arc<RwLock<HashMap<NodeType, RestartPolicy>>>,
+    restart_policies: Arc<RwLock<HashMap<NodeType, NodeRestartPolicy>>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -79,12 +80,25 @@ pub enum NodeType {
 }
 
 #[derive(Debug, Clone)]
-pub struct RestartPolicy {
-    pub strategy: SupervisionStrategy,
+pub struct NodeRestartPolicy {
+    pub restart_scope: RestartScope,
     pub max_restarts: u32,
     pub time_window: Duration,
     pub restart_delay: Duration,
     pub backoff_multiplier: f64,
+}
+
+/// Per-node restart scope: determines whether a specific child should restart at all.
+/// This is distinct from RestartPolicy (OneForOne/OneForAll/RestForOne) which determines
+/// *which siblings* restart on failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestartScope {
+    /// Always restart on failure
+    Permanent,
+    /// Restart only on abnormal termination (non-zero exit)
+    Transient,
+    /// Never restart — failure is expected/acceptable
+    Temporary,
 }
 
 #[derive(Debug)]
@@ -121,25 +135,25 @@ impl SupervisionTree {
         }
     }
 
-    fn default_policies() -> HashMap<NodeType, RestartPolicy> {
+    fn default_policies() -> HashMap<NodeType, NodeRestartPolicy> {
         let mut policies = HashMap::new();
-        
-        policies.insert(NodeType::Worker, RestartPolicy {
-            strategy: SupervisionStrategy::RestartTransient,
+
+        policies.insert(NodeType::Worker, NodeRestartPolicy {
+            restart_scope: RestartScope::Transient,  // Workers restart only on abnormal termination
             max_restarts: 3,
             time_window: Duration::from_secs(60),
             restart_delay: Duration::from_millis(100),
             backoff_multiplier: 2.0,
         });
-        
-        policies.insert(NodeType::Supervisor, RestartPolicy {
-            strategy: SupervisionStrategy::RestartPermanent,
+
+        policies.insert(NodeType::Supervisor, NodeRestartPolicy {
+            restart_scope: RestartScope::Permanent,  // Supervisors always restart
             max_restarts: 5,
             time_window: Duration::from_secs(300),
             restart_delay: Duration::from_secs(1),
             backoff_multiplier: 1.5,
         });
-        
+
         policies
     }
     
@@ -163,7 +177,7 @@ impl SupervisionTree {
         &self,
         parent_id: NodeId,
         node_type: NodeType,
-        restart_policy: Option<RestartPolicy>,
+        restart_policy: Option<NodeRestartPolicy>,
     ) -> Result<NodeId, SupervisionError> {
         let node_id = NodeId(Uuid::new_v4());
         
@@ -203,25 +217,24 @@ impl SupervisionTree {
                 .get(&node.node_type)
                 .ok_or_else(|| SupervisionError::StrategyFailed("No restart policy found".into()))?;
                 
-            match policy.strategy {
-                SupervisionStrategy::RestartPermanent => {
+            match policy.restart_scope {
+                RestartScope::Permanent => {
                     self.restart_node(node_id, policy).await?;
                 }
-                SupervisionStrategy::RestartTransient => {
+                RestartScope::Transient => {
                     if self.should_restart(&node, policy) {
                         self.restart_node(node_id, policy).await?;
                     }
                 }
-                SupervisionStrategy::RestartTemporary => {
+                RestartScope::Temporary => {
                     // Don't restart temporary nodes
                     warn!("Temporary node {} failed, not restarting", node_id.0);
                 }
-                SupervisionStrategy::EscalateToParent => {
-                    if let Some(parent_id) = &node.parent_id {
-                        self.escalate_failure(parent_id.clone()).await?;
-                    }
-                }
             }
+
+            // Escalation is handled separately via EscalationPolicy on the
+            // SupervisionStrategy struct, not as a restart scope variant.
+            // If max_restarts exceeded, the supervisor escalates to its parent.
         }
         
         Ok(())
@@ -346,17 +359,16 @@ impl RootSupervisor {
 
 **NOTE**: The following section contains pseudocode patterns that need to be implemented.
 
-> **Terminology note**: The pseudocode below uses Erlang/OTP strategy names (`OneForOne`, `OneForAll`, `RestForOne`, `Escalate`) for the tree-level restart coordination strategy. The Rust implementation above uses child-level restart semantics (`RestartPermanent`, `RestartTransient`, `RestartTemporary`, `EscalateToParent`) for per-node restart decisions. Both concepts are needed: the tree-level strategy determines *which siblings* restart on failure, while the child-level policy determines *whether* a specific child should restart at all. During implementation, unify these into a two-tier `SupervisionStrategy` enum.
+> **Terminology note**: The canonical `SupervisionStrategy` struct (see `type-definitions.md`) contains a `restart_policy: RestartPolicy` field (`OneForOne`/`OneForAll`/`RestForOne`) that determines *which siblings* restart on failure, and a separate `escalation_policy: EscalationPolicy` for failure propagation. The Rust implementation above uses per-node `RestartScope` (`Permanent`/`Transient`/`Temporary`) to determine *whether* a specific child should restart at all. Both concepts coexist: the tree-level `RestartPolicy` coordinates sibling restarts, while the node-level `RestartScope` gates individual node restarts.
 
 ```
 TRAIT Supervisor {
     TYPE Child
-    
+
     ASYNC FUNCTION supervise(&self, children: Vec<Self::Child>) -> SupervisionResult
-    FUNCTION supervision_strategy() -> SupervisionStrategy
     FUNCTION restart_policy() -> RestartPolicy
     FUNCTION escalation_policy() -> EscalationPolicy
-    
+
     // Hub-and-Spoke pattern with central routing logic
     ASYNC FUNCTION route_task(&self, task: Task) -> AgentId {
         // Central routing logic
@@ -380,25 +392,23 @@ STRUCT SupervisorNode {
 
 IMPL SupervisorNode {
     ASYNC FUNCTION handle_child_failure(&self, child_id: ChildId, error: ChildError) -> SupervisionDecision {
-        strategy = self.supervision_strategy()
-        
-        MATCH strategy {
-            SupervisionStrategy::OneForOne => {
+        policy = self.restart_policy()
+
+        MATCH policy {
+            RestartPolicy::OneForOne => {
                 self.restart_child(child_id).await?
                 RETURN SupervisionDecision::Handled
             },
-            SupervisionStrategy::OneForAll => {
+            RestartPolicy::OneForAll => {
                 self.restart_all_children().await?
                 RETURN SupervisionDecision::Handled
             },
-            SupervisionStrategy::RestForOne => {
+            RestartPolicy::RestForOne => {
                 self.restart_child_and_siblings(child_id).await?
                 RETURN SupervisionDecision::Handled
             },
-            SupervisionStrategy::Escalate => {
-                RETURN SupervisionDecision::Escalate(error)
-            }
         }
+        // Escalation handled via EscalationPolicy, not as a restart variant
     }
     
     ASYNC FUNCTION restart_child(&self, child_id: ChildId) -> Result<()> {

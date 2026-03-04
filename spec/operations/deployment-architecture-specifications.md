@@ -458,13 +458,13 @@ PATTERN ConfigurationHierarchy:
             feature_toggles()
 ```
 
-#### 4.3 Claude-CLI Configuration Pattern
+#### 4.3 LLM Backend Configuration Pattern
 
 ```rust
-PATTERN ClaudeCLIConfiguration:
+PATTERN LLMBackendConfiguration:
     PARALLEL_EXECUTION_SETTINGS:
         environment_variables:
-            CLAUDE_PARALLEL_DEFAULT: "default_fan_out_per_task_plan"
+            LLM_PARALLEL_DEFAULT: "default_fan_out_per_task_plan"
             # Controls default number of parallel agents spawned
             # when --parallel flag is not explicitly specified
 
@@ -1639,11 +1639,11 @@ AGENT_TYPE=orchestrator|worker|messaging
 AGENT_TIER=minimal|standard|premium
 AGENT_ID=${POD_NAME}  # Auto-populated in Kubernetes
 
-# Claude CLI Integration
-CLAUDE_PARALLEL_DEFAULT=4
-CLAUDE_PARALLEL_MAX_AGENTS=50
-CLAUDE_PARALLEL_CPU_BUDGET="4.0"
-CLAUDE_PARALLEL_MEMORY_BUDGET="4Gi"
+# LLM Backend Integration
+LLM_PARALLEL_DEFAULT=4
+LLM_PARALLEL_MAX_AGENTS=50
+LLM_PARALLEL_CPU_BUDGET="4.0"
+LLM_PARALLEL_MEMORY_BUDGET="4Gi"
 
 # Messaging Configuration
 NATS_URL=nats://nats.mister-smith-system:4222

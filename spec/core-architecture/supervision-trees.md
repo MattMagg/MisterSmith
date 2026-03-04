@@ -132,7 +132,6 @@ trait Supervisor: Send + Sync {
     type Child: Send + Sync;
 
     async fn supervise(&self, children: Vec<Self::Child>) -> SupervisionResult;
-    fn supervision_strategy(&self) -> SupervisionStrategy;
     fn restart_policy(&self) -> RestartPolicy;
     fn escalation_policy(&self) -> EscalationPolicy;
 
@@ -159,31 +158,29 @@ struct SupervisorNode {
 }
 
 impl SupervisorNode {
-    // Handle child process failures based on supervision strategy
+    // Handle child process failures based on restart policy
     async fn handle_child_failure(&self, child_id: ChildId, error: ChildError) -> SupervisionDecision {
-        let strategy = self.supervision_strategy();
-        
-        match strategy {
-            SupervisionStrategy::OneForOne => {
+        let policy = self.restart_policy();
+
+        match policy {
+            RestartPolicy::OneForOne => {
                 // Restart only the failed child
                 self.restart_child(child_id).await?;
                 SupervisionDecision::Handled
             },
-            SupervisionStrategy::OneForAll => {
+            RestartPolicy::OneForAll => {
                 // Restart all children when one fails
                 self.restart_all_children().await?;
                 SupervisionDecision::Handled
             },
-            SupervisionStrategy::RestForOne => {
+            RestartPolicy::RestForOne => {
                 // Restart failed child and all started after it
                 self.restart_child_and_siblings(child_id).await?;
                 SupervisionDecision::Handled
             },
-            SupervisionStrategy::Escalate => {
-                // Propagate failure to parent supervisor
-                SupervisionDecision::Escalate(error)
-            }
         }
+        // Note: Escalation is handled separately via EscalationPolicy,
+        // not as a restart policy variant. See type-definitions.md.
     }
     
     // Restart a single child process with policy enforcement
@@ -907,21 +904,21 @@ fn setup_agent_supervision() -> SupervisionTree {
     
     // Root supervisor: restarts all on critical failure
     let mut root = RootSupervisor::new(
-        SupervisionStrategy::OneForAll
+        RestartPolicy::OneForAll
     );
-    
+
     // Research agent supervisor: isolated failures
     let research_supervisor = AgentSupervisor::new(
         "research",
-        SupervisionStrategy::OneForOne,
-        RestartPolicy::exponential_backoff()
+        RestartPolicy::OneForOne,
+        BackoffStrategy::exponential_backoff()
     );
-    
+
     // Code agent supervisor: limited restart attempts
     let code_supervisor = AgentSupervisor::new(
-        "code", 
-        SupervisionStrategy::OneForOne,
-        RestartPolicy::max_restarts(3)
+        "code",
+        RestartPolicy::OneForOne,
+        BackoffStrategy::max_restarts(3)
     );
     
     // Construct supervision hierarchy
@@ -1232,18 +1229,23 @@ fn setup_supervision() {
     // Configure component-specific supervision
     let policies = SupervisionPolicyBuilder::new()
         .for_component(
-            ComponentType::EventBus, 
-            SupervisionStrategy::OneForOne
+            ComponentType::EventBus,
+            RestartPolicy::OneForOne
         )
         .for_component(
-            ComponentType::ResourceManager, 
-            SupervisionStrategy::RestForOne
+            ComponentType::ResourceManager,
+            RestartPolicy::RestForOne
         )
         .for_component(
-            ComponentType::ConfigManager, 
-            SupervisionStrategy::Escalate
+            ComponentType::ConfigManager,
+            // ConfigManager failures escalate rather than restart locally
+            RestartPolicy::OneForOne,
+        )
+        .with_escalation(
+            ComponentType::ConfigManager,
+            EscalationPolicy::Escalate
         );
-    
+
     supervision_tree.apply_policies(policies);
 }
 ```

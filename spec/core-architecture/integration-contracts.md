@@ -1,6 +1,6 @@
 # Integration Contracts and Core Architecture
 
-[← Back to Core Architecture](./CLAUDE.md) | [Integration Patterns →](./integration-patterns.md) | [Implementation Guide →](./integration-implementation.md)
+[← Back to Specifications](../CLAUDE.md) | [Integration Patterns →](./integration-patterns.md) | [Implementation Guide →](./integration-implementation.md)
 
 ## Executive Summary
 
@@ -1274,4 +1274,4 @@ This document defines the core integration contracts that enable seamless compon
 
 ---
 
-[← Core Architecture](./CLAUDE.md) | [Integration Patterns →](./integration-patterns.md) | [Implementation Guide →](./integration-implementation.md)
+[← Back to Specifications](../CLAUDE.md) | [Integration Patterns →](./integration-patterns.md) | [Implementation Guide →](./integration-implementation.md)

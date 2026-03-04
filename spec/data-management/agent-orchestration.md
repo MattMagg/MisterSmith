@@ -1348,7 +1348,7 @@ impl Blackboard {
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mister-smith.ai/schemas/hook-message",
-  "title": "Claude-CLI Hook Integration Message",
+  "title": "LLM Backend Hook Integration Message",
   "allOf": [
     { "$ref": "https://mister-smith.ai/schemas/base-message" }
   ],
@@ -2466,19 +2466,19 @@ struct SmartAgent {
 }
 ```
 
-### 10.4 Claude-CLI Parallel Execution Integration
+### 10.4 LLM Backend Parallel Execution Integration
 
-Support for Claude-CLI's built-in parallel execution capabilities through Task tool coordination:
+Support for the LLM backend's parallel execution capabilities through Task tool coordination:
 
 ```rust
-// Enhanced Claude-CLI parallel execution pattern
-struct ClaudeTaskOutputParser {
+// Enhanced LLM backend parallel execution pattern
+struct LlmTaskOutputParser {
     task_regex: Regex,
     nats_client: async_nats::Client,
     metrics: ParallelExecutionMetrics,
 }
 
-impl ClaudeTaskOutputParser {
+impl LlmTaskOutputParser {
     fn new(nats_client: async_nats::Client) -> Self {
         let task_regex = Regex::new(r"● Task\((?:Patch Agent )?(\d+|[^)]+)\)").unwrap();
 
@@ -2489,7 +2489,7 @@ impl ClaudeTaskOutputParser {
         }
     }
 
-    // Parse multiple Claude-CLI task output formats
+    // Parse multiple LLM backend task output formats
     fn parse_task_output(&self, line: &str) -> Option<TaskInfo> {
         if let Some(caps) = self.task_regex.captures(line) {
             let task_identifier = caps.get(1).unwrap().as_str();
@@ -2540,21 +2540,21 @@ struct TaskOutputEvent {
 **Parallel Coordination Patterns:**
 
 ```rust
-// Multi-agent coordination using Claude-CLI Task tool
+// Multi-agent coordination using LLM backend Task tool
 impl AgentOrchestrator {
-    async fn coordinate_parallel_claude_tasks(&mut self, tasks: Vec<TaskRequest>) -> Result<Vec<TaskResult>, CoordinationError> {
-        // Build parallel task prompt for Claude-CLI
+    async fn coordinate_parallel_llm_tasks(&mut self, tasks: Vec<TaskRequest>) -> Result<Vec<TaskResult>, CoordinationError> {
+        // Build parallel task prompt for LLM backend
         let parallel_prompt = self.build_parallel_task_prompt(&tasks)?;
 
-        // Spawn Claude-CLI agent with task coordination
-        let claude_agent_id = self.spawn_claude_cli_agent(SpawnRequest {
+        // Spawn LLM backend agent with task coordination
+        let llm_agent_id = self.spawn_llm_backend_agent(SpawnRequest {
             prompt: parallel_prompt,
             max_concurrent_tasks: tasks.len(),
             coordination_mode: CoordinationMode::Parallel,
         }).await?;
 
         // Monitor parallel task execution
-        let task_results = self.monitor_parallel_execution(claude_agent_id, tasks.len()).await?;
+        let task_results = self.monitor_parallel_execution(llm_agent_id, tasks.len()).await?;
 
         Ok(task_results)
     }
@@ -2572,7 +2572,7 @@ impl AgentOrchestrator {
         ))
     }
 
-    async fn monitor_parallel_execution(&self, claude_agent_id: AgentId, expected_tasks: usize) -> Result<Vec<TaskResult>, MonitoringError> {
+    async fn monitor_parallel_execution(&self, llm_agent_id: AgentId, expected_tasks: usize) -> Result<Vec<TaskResult>, MonitoringError> {
         let mut task_results = Vec::new();
         let mut completed_tasks = 0;
 
@@ -2599,7 +2599,7 @@ impl AgentOrchestrator {
 
 **Key Integration Points:**
 
-- **Task Tool Integration**: Leverages Claude-CLI's built-in Task tool for parallel execution
+- **Task Tool Integration**: Leverages the LLM backend's built-in Task tool for parallel execution
 - **Output Pattern Recognition**: Handles both `Task(Patch Agent <n>)` and `Task(Description)` formats
 - **NATS Subject Routing**: Routes to `agents.{id}.output` and `tasks.{name}.output` subjects
 - **Supervision Compatibility**: Integrates with existing Tokio supervision trees
@@ -2724,11 +2724,11 @@ struct EventBus {
 }
 ```
 
-## 13. Claude-CLI Hook System Integration
+## 13. LLM Backend Hook System Integration
 
 **✅ VALIDATION STRENGTH**: Well-designed hook system and task output parsing patterns.
 
-**⚠️ VALIDATION NOTE [Team Alpha]**: While Claude-CLI integration is well-documented, ensure SystemCore wiring specifications are completed before implementation.
+**⚠️ VALIDATION NOTE [Team Alpha]**: While LLM backend integration is well-documented, ensure SystemCore wiring specifications are completed before implementation.
 
 ### 13.1 Hook Shim Pattern
 
@@ -2833,7 +2833,7 @@ struct HookResponse {
 // Integration with existing agent supervision
 impl Supervisor {
     async fn setup_hook_integration(&self) -> Result<()> {
-        // Subscribe to hook events from Claude-CLI
+        // Subscribe to hook events from LLM backend
         let startup_sub = self.nats_client.subscribe("control.startup").await?;
         let file_change_sub = self.nats_client.subscribe("ctx.*.file_change").await?;
 
@@ -2846,9 +2846,9 @@ impl Supervisor {
 
     async fn process_startup_hooks(&self, mut subscriber: Subscriber) {
         while let Some(msg) = subscriber.next().await {
-            // Record CLI version and capabilities
+            // Record LLM backend version and capabilities
             let startup_info: StartupInfo = serde_json::from_slice(&msg.payload).unwrap();
-            self.record_cli_capabilities(startup_info).await;
+            self.record_llm_backend_capabilities(startup_info).await;
         }
     }
 
@@ -3452,7 +3452,7 @@ GROUP BY a.agent_id, a.agent_type, a.current_state, a.restart_count, a.error_cou
 - Agent type definitions and role specifications
 - Database schema design and indexing (with fixes)
 - Basic message validation frameworks
-- Claude-CLI integration patterns
+- LLM backend integration patterns
 - State machine definitions
 
 ### Blocked for Implementation ❌

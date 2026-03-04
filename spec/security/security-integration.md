@@ -607,8 +607,8 @@ pub struct HookSecurityConfig {
 impl Default for HookSecurityConfig {
     fn default() -> Self {
         Self {
-            execution_user: "claude-hook-runner".to_string(),
-            execution_group: "claude-hooks".to_string(),
+            execution_user: "hook-runner".to_string(),
+            execution_group: "ms-hooks".to_string(),
             sandbox_base_dir: PathBuf::from("/tmp/mister-smith-hooks"),
             max_execution_time_seconds: 30,
             max_memory_mb: 128,
@@ -626,7 +626,7 @@ impl Default for HookSecurityConfig {
                 PathBuf::from("/etc"),
                 PathBuf::from("/root"),
                 PathBuf::from("/home"),
-                PathBuf::from("/var/lib/claude-hooks/.ssh"),
+                PathBuf::from("/var/lib/ms-hooks/.ssh"),
                 PathBuf::from("/proc"),
                 PathBuf::from("/sys"),
             ],
@@ -825,7 +825,7 @@ impl HookSecurityManager {
             .arg("systemd-run")
             .arg("--user")
             .arg("--scope")
-            .arg("--slice=claude-hooks.slice")
+            .arg("--slice=ms-hooks.slice")
             .arg(format!("--property=MemoryMax={}M", self.config.max_memory_mb))
             .arg(format!("--property=TasksMax={}", self.config.max_processes))
             .arg("--property=PrivateNetwork=true")
@@ -965,8 +965,8 @@ mod tests {
 # hook_security_config.yml
 hook_security:
   # User and group for hook execution
-  execution_user: claude-hook-runner
-  execution_group: claude-hooks
+  execution_user: hook-runner
+  execution_group: ms-hooks
   
   # Sandbox configuration
   sandbox_base_dir: /tmp/mister-smith-hooks
@@ -1001,7 +1001,7 @@ hook_security:
       - /etc
       - /root
       - /home
-      - /var/lib/claude-hooks/.ssh
+      - /var/lib/ms-hooks/.ssh
       - /proc
       - /sys
       - /dev
@@ -1100,7 +1100,7 @@ hook_security:
   
   # Systemd integration
   systemd:
-    slice_name: claude-hooks.slice
+    slice_name: ms-hooks.slice
     service_properties:
       MemoryAccounting: true
       CPUAccounting: true

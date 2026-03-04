@@ -8,7 +8,7 @@ tags:
 
 ## Tokio Runtime Architecture
 
-**Navigation**: [Home](../../README.md) > [Core Architecture](./CLAUDE.md) > Tokio Runtime Architecture
+**Navigation**: [Home](../../README.md) > [Core Architecture](../CLAUDE.md) > Tokio Runtime Architecture
 
 **Quick Links**: [Async Patterns](async-patterns.md) | [Supervision Trees](supervision-trees.md) | [Component Architecture](component-architecture.md)
 
@@ -1009,7 +1009,7 @@ This module references the following components from other modules in the framew
 
 ## Navigation
 
-- **Up**: [Core Architecture](./CLAUDE.md)
+- **Up**: [Core Architecture](../CLAUDE.md)
 - **Previous**: [Component Architecture](component-architecture.md)
 - **Next**: [Async Patterns](async-patterns.md)
 - **Related**: [Supervision Trees](supervision-trees.md)

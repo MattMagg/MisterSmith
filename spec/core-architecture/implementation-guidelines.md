@@ -533,7 +533,7 @@ pub struct SupervisionSettings {
     pub max_restart_attempts: u32,
     pub restart_window: Duration,
     pub escalation_timeout: Duration,
-    pub strategy: SupervisionStrategy,
+    pub restart_policy: RestartPolicy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -557,7 +557,7 @@ impl Default for AgentConfig {
                 max_restart_attempts: 3,
                 restart_window: Duration::from_secs(60),
                 escalation_timeout: Duration::from_secs(10),
-                strategy: SupervisionStrategy::RestartTransient,
+                restart_policy: RestartPolicy::OneForOne,  // Default: restart only the failed child
             },
             monitoring: MonitoringSettings {
                 health_check_interval: Duration::from_secs(30),

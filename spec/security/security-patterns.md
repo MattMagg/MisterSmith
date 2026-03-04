@@ -952,7 +952,7 @@ security:
 // Hook execution with privilege isolation
 function execute_hook_safely(hook_script, payload):
     // Ensure hook runs under non-root user
-    execution_user = get_non_privileged_user()  // e.g., "claude-hook-runner"
+    execution_user = get_non_privileged_user()  // e.g., "hook-runner"
 
     // Create isolated execution environment
     sandbox_config = {
@@ -983,18 +983,18 @@ function execute_hook_safely(hook_script, payload):
 // User privilege management
 function setup_hook_user():
     // Create dedicated user for hook execution
-    create_user("claude-hook-runner", {
-        home_directory: "/var/lib/claude-hooks",
+    create_user("hook-runner", {
+        home_directory: "/var/lib/ms-hooks",
         shell: "/bin/bash",
-        groups: ["claude-hooks"],
+        groups: ["ms-hooks"],
         no_login: false,
         system_user: true
     })
 
     // Set up hook directory permissions
-    set_directory_permissions("/var/lib/claude-hooks", {
-        owner: "claude-hook-runner",
-        group: "claude-hooks",
+    set_directory_permissions("/var/lib/ms-hooks", {
+        owner: "hook-runner",
+        group: "ms-hooks",
         permissions: "750"
     })
 ```
@@ -1003,7 +1003,7 @@ function setup_hook_user():
 
 ```yaml
 hook_security:
-  execution_user: claude-hook-runner
+  execution_user: hook-runner
   sandbox_directory: /tmp/hook-sandbox
   resource_limits:
     max_memory_mb: 128
@@ -1023,7 +1023,7 @@ hook_security:
       - /etc
       - /root
       - /home
-      - /var/lib/claude-hooks/.ssh
+      - /var/lib/ms-hooks/.ssh
 
   network_isolation:
     allow_outbound: false
@@ -1040,8 +1040,8 @@ hook_security:
 function validate_hook_script(script_path):
     // Check file permissions
     file_info = get_file_info(script_path)
-    if file_info.owner != "claude-hook-runner":
-        return error("Hook script must be owned by claude-hook-runner")
+    if file_info.owner != "hook-runner":
+        return error("Hook script must be owned by hook-runner")
 
     if file_info.permissions & WORLD_WRITABLE:
         return error("Hook script cannot be world-writable")
@@ -1069,7 +1069,7 @@ function validate_hook_script(script_path):
 // Hook directory security
 function secure_hook_directory(hook_dir):
     // Ensure proper ownership and permissions
-    set_ownership(hook_dir, "claude-hook-runner", "claude-hooks")
+    set_ownership(hook_dir, "hook-runner", "ms-hooks")
     set_permissions(hook_dir, "750")  // rwxr-x---
 
     // Validate all hook scripts

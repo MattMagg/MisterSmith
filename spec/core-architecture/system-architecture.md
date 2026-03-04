@@ -8,7 +8,7 @@
 
 ## Navigation
 
-[← Back to Core Architecture](./CLAUDE.md) | [Runtime & Errors →](./runtime-and-errors.md)
+[← Back to Specifications](../CLAUDE.md) | [Runtime & Errors →](./runtime-and-errors.md)
 
 ---
 

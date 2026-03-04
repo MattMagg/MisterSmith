@@ -2758,7 +2758,7 @@ Before production deployment, ensure:
 ### Related Framework Documents
 
 - **Hybrid Storage Partner**: [JetStream KV Storage](./jetstream-kv.md) - Fast-access cache layer and hybrid storage patterns
-- **Data Management Hub**: [Data Management Directory](./CLAUDE.md) - Complete data management navigation
+- **Data Management Hub**: [Specifications Index](../CLAUDE.md) - Complete data management navigation
 - **Transport Layer**: [NATS Transport](../transport/nats-transport.md) - Message passing integration
 - **Core Architecture**: [System Integration](../core-architecture/system-integration.md) - Overall system design patterns
 - **Operations Guide**: [Operations Directory](../operations/) - Deployment and monitoring procedures
@@ -2781,7 +2781,7 @@ Before production deployment, ensure:
 ### Bidirectional Navigation
 
 - [← JetStream KV Storage](./jetstream-kv.md) - Cache layer implementation
-- [← Back to Data Management](./CLAUDE.md) - Directory navigation
+- [← Back to Specifications](../CLAUDE.md) - Directory navigation
 - [→ Storage Patterns](./storage-patterns.md) - Additional storage strategies
 - [→ Connection Management](./connection-management.md) - Connection handling details
 

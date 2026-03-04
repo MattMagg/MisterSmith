@@ -1,6 +1,6 @@
 # System Message Schemas
 
-## Technical Specifications for Claude CLI Integration and System Operations
+## Technical Specifications for LLM Backend Integration and System Operations
 
 **🔍 AGENT OPTIMIZATION STATUS**
 
@@ -8,42 +8,42 @@
 - **Optimization Date**: 2025-07-07
 - **Target**: Remove business content, enhance framework integration
 - **Status**: OPTIMIZING
-- **Focus**: CLI integration patterns, system operation schemas, routing specifications
+- **Focus**: LLM backend integration patterns, system operation schemas, routing specifications
 
-**Purpose**: This document defines technical message schemas for Claude CLI integration, system operations, and NATS-based message routing within the Mister Smith AI Agent Framework.
+**Purpose**: This document defines technical message schemas for LLM backend integration, system operations, and NATS-based message routing within the Mister Smith AI Agent Framework.
 
 ## Overview
 
 This file contains schemas for:
 
-- **Claude CLI Integration Messages** - Hook events and responses for CLI integration
+- **LLM Backend Integration Messages** - Hook events and responses for LLM CLI integration
 - **System Operation Messages** - System alerts and health monitoring
 - **Message Routing and Addressing** - NATS subject patterns and routing rules
 
-These schemas enable seamless integration with Claude CLI and provide comprehensive system monitoring capabilities. They build upon:
+These schemas enable seamless integration with any LLM backend and provide comprehensive system monitoring capabilities. They build upon:
 
 - [Foundation schemas](./core-message-schemas.md#foundation-schemas) for basic message structure
 - [Workflow coordination](./workflow-message-schemas.md#workflow-orchestration-messages) for multi-agent operations
 - [Message framework](./message-framework.md) for validation and routing patterns
 
-## 5. Claude CLI Integration Messages
+## 5. LLM Backend Integration Messages
 
 ### 5.1 Hook Event Message
 
-Schema for Claude CLI hook events and integration points. Hook events integrate with:
+Schema for LLM backend hook events and integration points. Hook events integrate with:
 
 - [Agent command messages](./core-message-schemas.md#agent-command-message) for tool execution
 - [Task assignment workflows](./workflow-message-schemas.md#task-assignment-message) for parallel agent spawning
 - [Agent registration](./core-message-schemas.md#agent-registration-message) for capability-based spawning
 - [Workflow coordination](./workflow-message-schemas.md#workflow-coordination-message) for multi-agent orchestration
 
-For implementation details, see [Agent Integration](./agent-integration.md) and [CLI research](../research/claude-cli-integration/).
+For implementation details, see [Agent Integration](./agent-integration.md).
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.mister-smith.dev/hook-event.json",
-  "title": "Claude CLI Hook Event Message",
+  "title": "LLM Backend Hook Event Message",
   "allOf": [
     { "$ref": "base-message.json" }
   ],
@@ -77,11 +77,11 @@ For implementation details, see [Agent Integration](./agent-integration.md) and 
             "session_id": {
               "type": "string",
               "format": "uuid",
-              "description": "Claude CLI session identifier"
+              "description": "LLM backend session identifier"
             },
             "model": {
               "type": "string",
-              "description": "Claude model being used"
+              "description": "LLM model identifier"
             },
             "start_time": {
               "type": "string",
@@ -198,12 +198,12 @@ For implementation details, see [Agent Integration](./agent-integration.md) and 
 
 ### 5.2 Hook Response Message
 
-Schema for responding to Claude CLI hook events. Hook responses coordinate with:
+Schema for responding to LLM backend hook events. Hook responses coordinate with:
 
 - [Agent status updates](./core-message-schemas.md#agent-status-update-message) for spawned agent reporting
 - [Task result messages](./workflow-message-schemas.md#task-result-message) for parallel execution results
 - [System health checks](./system-message-schemas.md#system-health-check-message) for infrastructure validation
-- [Message transformation](./message-framework.md#message-transformation-patterns) for CLI response formatting
+- [Message transformation](./message-framework.md#message-transformation-patterns) for LLM response formatting
 
 See [Agent Operations](./agent-operations.md) for response handling patterns.
 
@@ -211,7 +211,7 @@ See [Agent Operations](./agent-operations.md) for response handling patterns.
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.mister-smith.dev/hook-response.json",
-  "title": "Claude CLI Hook Response Message",
+  "title": "LLM Backend Hook Response Message",
   "allOf": [
     { "$ref": "base-message.json" }
   ],
@@ -598,7 +598,7 @@ Schema definitions for NATS subject patterns and routing rules. Routing patterns
 - [Agent communication](./core-message-schemas.md#agent-communication-messages) via agent-specific subjects
 - [Task distribution](./workflow-message-schemas.md#task-management-messages) through task-based routing
 - [System monitoring](./system-message-schemas.md#system-operation-messages) with severity-based subjects
-- [CLI integration](./system-message-schemas.md#claude-cli-integration-messages) using hook-specific patterns
+- [LLM backend integration](./system-message-schemas.md#llm-backend-integration-messages) using hook-specific patterns
 
 For transport implementation, see [NATS Transport](../transport/nats-transport.md) and [Transport Core](../transport/transport-core.md).
 
@@ -664,18 +664,18 @@ For transport implementation, see [NATS Transport](../transport/nats-transport.m
         }
       }
     },
-    "cli_subjects": {
+    "llm_subjects": {
       "type": "object",
       "properties": {
         "hooks": {
           "type": "string",
-          "pattern": "^cli\\.hooks\\.(startup|pre_task|post_task|on_error|on_file_change)\\.[a-zA-Z0-9_-]+$",
-          "example": "cli.hooks.pre_task.analyzer-001"
+          "pattern": "^llm\\.hooks\\.(startup|pre_task|post_task|on_error|on_file_change)\\.[a-zA-Z0-9_-]+$",
+          "example": "llm.hooks.pre_task.analyzer-001"
         },
         "responses": {
           "type": "string",
-          "pattern": "^cli\\.responses\\.[a-zA-Z0-9_-]+$",
-          "example": "cli.responses.analyzer-001"
+          "pattern": "^llm\\.responses\\.[a-zA-Z0-9_-]+$",
+          "example": "llm.responses.analyzer-001"
         }
       }
     }
@@ -691,7 +691,7 @@ Correlation strategies integrate with [Message Framework](./message-framework.md
 {
   "correlation_strategies": {
     "hook_event_response": {
-      "pattern": "Correlate CLI hook events with agent responses using correlation_id",
+      "pattern": "Correlate LLM backend hook events with agent responses using correlation_id",
       "timeout_handling": "30-second timeout with exponential backoff (1s, 2s, 4s)",
       "correlation_storage": "In-memory LRU cache with 1-hour TTL",
       "implementation": "CorrelationTracker from message-framework.md",
@@ -702,7 +702,7 @@ Correlation strategies integrate with [Message Framework](./message-framework.md
       ]
     },
     "session_tracking": {
-      "pattern": "Track CLI session lifecycle using session_id across all messages",
+      "pattern": "Track LLM backend session lifecycle using session_id across all messages",
       "state_tracking": "Session state in distributed cache",
       "cleanup": "Automatic session cleanup after 24 hours of inactivity",
       "span_generation": "16-character hex span IDs for distributed tracing"
@@ -727,7 +727,7 @@ Correlation strategies integrate with [Message Framework](./message-framework.md
 
 System message correlation uses these [Message Framework](./message-framework.md) components:
 
-- **CorrelationContext**: Session and trace tracking for CLI operations
+- **CorrelationContext**: Session and trace tracking for LLM backend operations
 - **CorrelationTracker**: Automatic cleanup and chain management
 - **ContentRouter**: Route messages based on correlation metadata
 - **EventAggregator**: Aggregate system health data by correlation attributes
@@ -746,7 +746,7 @@ For implementation patterns, see [Message Framework Correlation Logic](./message
 
 ### System Integration Points
 
-- **CLI Hooks**: Connect tool execution to agent spawning and coordination
+- **LLM Hooks**: Connect tool execution to agent spawning and coordination
 - **Health Monitoring**: Link agent status to system alerts and infrastructure metrics
 - **Message Routing**: Enable transport-agnostic communication patterns
 - **Error Handling**: Provide comprehensive error reporting and recovery
@@ -763,12 +763,12 @@ This file is part of the Message Schema Documentation suite:
 
 1. [Core Message Schemas](./core-message-schemas.md) - Foundation schemas and agent communication
 2. [Workflow Message Schemas](./workflow-message-schemas.md) - Task management and workflow orchestration
-3. **[System Message Schemas](./system-message-schemas.md)** - Claude CLI integration and system operations *(current file)*
+3. **[System Message Schemas](./system-message-schemas.md)** - LLM backend integration and system operations *(current file)*
 4. [Message Framework](./message-framework.md) - Validation, serialization, and framework specifications
 
 ### Quick Access
 
-- **CLI Integration**: [Hook Events](#51-hook-event-message), [Hook Responses](#52-hook-response-message)
+- **LLM Backend Integration**: [Hook Events](#51-hook-event-message), [Hook Responses](#52-hook-response-message)
 - **System Operations**: [System Alerts](#61-system-alert-message), [Health Checks](#62-system-health-check-message)
 - **Message Routing**: [NATS Patterns](#91-nats-subject-pattern-schemas), [Correlation](#92-message-correlation-strategies)
 - **Agent Operations**: [Agent Communication](./agent-communication.md), [Agent Integration](./agent-integration.md)

@@ -932,7 +932,7 @@ compatibility_matrix:
     target: 85
     measurement: config_validation_plus_health_check
     
-  claude_cli_framework:
+  llm_cli_framework:
     current: 58
     target: 87
     measurement: process_isolation_plus_security_validation

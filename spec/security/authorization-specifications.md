@@ -1806,9 +1806,9 @@ This authorization specification provides a complete technical blueprint for imp
 
 - **[Authentication Implementation](authentication-implementation.md)** - JWT token validation and certificate management
 - **[Security Framework](security-framework.md)** - Foundational security architecture
-- **[Audit Framework](audit-framework.md)** - Security event logging and monitoring
+- **[Security Patterns](security-patterns.md)** - Security event logging and monitoring
 - **[Message Framework](../data-management/message-framework.md)** - Secure message handling
-- **[Transport Security](../transport/security.md)** - Communication security protocols
+- **[Transport Security](../security/security-integration.md)** - Communication security protocols
 
 ### Cross-References
 
@@ -1821,7 +1821,7 @@ This authorization specification provides a complete technical blueprint for imp
 
 #### Framework Integration
 
-- **[Transport Security](../transport/security.md)** - Transport layer security protocols
+- **[Transport Security](../security/security-integration.md)** - Transport layer security protocols
 - **[NATS Transport](../transport/nats-transport.md)** - NATS messaging security
 - **[Data Management](../data-management/)** - Secure data handling patterns
 - **[Agent Communication](../data-management/agent-communication.md)** - Secure agent messaging

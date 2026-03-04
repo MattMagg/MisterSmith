@@ -1416,7 +1416,7 @@ groups:
 #### Transport Security
 
 - **[NATS Transport](../transport/nats-transport.md)** - Secure messaging protocols
-- **[Transport Security](../transport/security.md)** - Communication encryption
+- **[Transport Security](../security/security-integration.md)** - Communication encryption
 
 #### Data Security
 

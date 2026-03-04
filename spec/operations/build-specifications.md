@@ -245,11 +245,11 @@ websockets = ["http-client", "dep:tokio-tungstenite"]
 grpc = ["dep:tonic", "dep:prost"]
 ```
 
-#### 2.2.9 Claude CLI Integration
+#### 2.2.9 LLM Backend Integration
 
 ```toml
-# === CLAUDE CLI INTEGRATION ===
-claude-cli = [
+# === LLM BACKEND INTEGRATION ===
+llm-cli = [
     "dep:async-process",
     "dep:signal-hook",
     "messaging",
@@ -425,8 +425,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "grpc")]
     compile_proto_files()?;
     
-    #[cfg(feature = "claude-cli")]
-    generate_claude_cli_hooks()?;
+    #[cfg(feature = "llm-cli")]
+    generate_llm_cli_hooks()?;
     
     // Platform-specific optimizations
     configure_platform_optimizations()?;
@@ -485,14 +485,14 @@ fn compile_proto_files() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(feature = "claude-cli")]
-fn generate_claude_cli_hooks() -> Result<(), Box<dyn std::error::Error>> {
-    // Generate Claude CLI hook definitions
-    let hooks = include_str!("claude-hooks.toml");
+#[cfg(feature = "llm-cli")]
+fn generate_llm_cli_hooks() -> Result<(), Box<dyn std::error::Error>> {
+    // Generate LLM Backend hook definitions
+    let hooks = include_str!("llm-hooks.toml");
     let generated = generate_hook_code(hooks)?;
-    
+
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
-    std::fs::write(out_dir.join("claude_hooks.rs"), generated)?;
+    std::fs::write(out_dir.join("llm_hooks.rs"), generated)?;
     
     Ok(())
 }
@@ -589,8 +589,8 @@ fn generate_hook_code(hooks_toml: &str) -> Result<String, Box<dyn std::error::Er
     // This would parse the TOML and generate appropriate hook registration code
     Ok(format!(
         r#"
-/// Generated Claude CLI hook definitions
-pub mod claude_hooks {{
+/// Generated LLM Backend hook definitions
+pub mod llm_hooks {{
     use crate::hooks::{{HookRegistry, Hook}};
     
     pub fn register_hooks(registry: &mut HookRegistry) {{
@@ -1724,7 +1724,7 @@ cargo watch -x "build --features dev"
 These build scripts are specifically designed for the MS Framework and include:
 
 1. **Feature Flag Validation**: Ensures compatible feature combinations
-2. **Claude CLI Integration**: Special builds with Claude CLI hooks
+2. **LLM Backend Integration**: Special builds with LLM Backend hooks
 3. **Tier-Based Configurations**: Optimized builds for each deployment tier
 4. **Agent-Specific Optimizations**: Performance tuning for AI agent workloads
 5. **Security Hardening**: Automated security scans and compliance checks

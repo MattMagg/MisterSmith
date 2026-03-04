@@ -431,11 +431,11 @@ MISTER_SMITH_WORKER_CONCURRENCY=4
 MISTER_SMITH_WORKER_TIMEOUT_SECONDS=300
 MISTER_SMITH_WORKER_WORKSPACE_DIR=/app/workspace
 
-# Claude CLI Integration
-MISTER_SMITH_CLAUDE_PARALLEL_DEFAULT=4
-MISTER_SMITH_CLAUDE_PARALLEL_MAX_AGENTS=50
-MISTER_SMITH_CLAUDE_PARALLEL_CPU_BUDGET=4.0
-MISTER_SMITH_CLAUDE_PARALLEL_MEMORY_BUDGET=4Gi
+# LLM Backend Integration
+MISTER_SMITH_LLM_PARALLEL_DEFAULT=4
+MISTER_SMITH_LLM_PARALLEL_MAX_AGENTS=50
+MISTER_SMITH_LLM_PARALLEL_CPU_BUDGET=4.0
+MISTER_SMITH_LLM_PARALLEL_MEMORY_BUDGET=4Gi
 ```
 
 #### 2.3.2 Systemd Drop-ins for Environment-Specific Configuration
@@ -3355,9 +3355,9 @@ mister-smith.local:53 {
 ### 8.4 NATS-Enhanced Discovery
 
 ```rust
-// Enhanced NATS service discovery patterns
+// Enhanced NATS service discovery patterns (async-nats 0.46)
 pub struct ServiceRegistry {
-    nats_client: nats::Connection,
+    nats_client: async_nats::Client,
     services: Arc<RwLock<HashMap<String, ServiceInfo>>>,
 }
 
@@ -3365,30 +3365,54 @@ impl ServiceRegistry {
     pub async fn register_service(&self, info: ServiceInfo) -> Result<()> {
         // Publish service registration
         let subject = format!("services.{}.register", info.service_type);
-        self.nats_client.publish(&subject, &info.to_json()?)?;
-        
+        self.nats_client.publish(subject, Bytes::from(info.to_json()?)).await?;
+
         // Set up heartbeat
-        let heartbeat_subject = format!("services.{}.heartbeat.{}", 
+        let heartbeat_subject = format!("services.{}.heartbeat.{}",
             info.service_type, info.instance_id);
+        let client = self.nats_client.clone();
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(10));
             loop {
                 interval.tick().await;
-                let _ = self.nats_client.publish(&heartbeat_subject, b"alive");
+                let _ = client.publish(heartbeat_subject.clone(), Bytes::from_static(b"alive")).await;
             }
         });
-        
+
         Ok(())
     }
-    
+
     pub async fn discover_services(&self, service_type: &str) -> Vec<ServiceInfo> {
+        // Subscribe to responses, then publish the discovery request.
+        // request_multi() does not exist in async-nats; use subscribe + publish pattern.
+        let reply_subject = format!("_INBOX.{}", uuid::Uuid::new_v4());
+        let mut subscriber = self.nats_client.subscribe(reply_subject.clone()).await
+            .expect("Failed to subscribe to reply subject");
+
         let subject = format!("services.{}.info", service_type);
-        let responses = self.nats_client.request_multi(&subject, b"", 
-            Duration::from_secs(1))?;
-        
-        responses.into_iter()
-            .filter_map(|msg| ServiceInfo::from_json(&msg.data).ok())
-            .collect()
+        let _ = self.nats_client.publish_with_reply(
+            subject, reply_subject, Bytes::new()
+        ).await;
+
+        // Collect responses within a timeout window
+        let mut services = Vec::new();
+        let deadline = tokio::time::sleep(Duration::from_secs(1));
+        tokio::pin!(deadline);
+        loop {
+            tokio::select! {
+                msg = subscriber.next() => {
+                    if let Some(msg) = msg {
+                        if let Ok(info) = ServiceInfo::from_json(&msg.payload) {
+                            services.push(info);
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                _ = &mut deadline => break,
+            }
+        }
+        services
     }
 }
 

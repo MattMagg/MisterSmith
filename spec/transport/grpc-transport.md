@@ -55,8 +55,8 @@ gRPC provides high-performance, cross-language RPC capabilities using Protocol B
 **Related Specifications**:
 
 - For complete transport patterns, see: `transport-layer-specifications.md`
-- For NATS messaging integration, see: `nats-messaging.md`
-- For HTTP/WebSocket protocols, see: `http-websocket-transport.md`
+- For NATS messaging integration, see: `nats-transport.md`
+- For HTTP/WebSocket protocols, see: `http-transport.md`
 
 ## 1. High-Performance gRPC Service Patterns
 
@@ -242,7 +242,7 @@ message CommandRequest {
   string agent_id = 2;
   CommandType command_type = 3;
   google.protobuf.Any payload = 4;
-  int32 priority = 5;
+  int32 priority = 5;  // Valid range: 0 (highest) to 4 (lowest)
   int64 timeout_ms = 6;
   string correlation_id = 7;
   RequestMetadata metadata = 8;
@@ -273,7 +273,7 @@ message TaskAssignment {
   TaskType task_type = 2;
   string assigned_agent = 3;
   google.protobuf.Timestamp deadline = 4;
-  int32 priority = 5;
+  int32 priority = 5;  // Valid range: 0 (highest) to 4 (lowest)
   TaskRequirements requirements = 6;
   google.protobuf.Any task_data = 7;
   repeated string dependencies = 8;
@@ -718,9 +718,9 @@ impl RateLimitInterceptor {
 
 **Security Cross-References**:
 
-- **[Authentication Framework](../security/authentication.md)** - JWT token validation and client certificate management
-- **[Authorization Patterns](../security/authorization.md)** - Permission-based access control and resource authorization
-- **[Transport Security](../security/transport-security.md)** - TLS configuration and certificate lifecycle management
+- **[Authentication Framework](../security/authentication-specifications.md)** - JWT token validation and client certificate management
+- **[Authorization Patterns](../security/authorization-specifications.md)** - Permission-based access control and resource authorization
+- **[Security Framework](../security/security-framework.md)** - TLS configuration and certificate lifecycle management
 
 ## 7. Performance Guidelines
 
@@ -809,15 +809,14 @@ impl Transport for GrpcTransport {
 
 **Security Framework**:
 
-- **[Authentication](../security/authentication.md#jwt-validation)** - JWT token validation patterns
-- **[Authorization](../security/authorization.md#rbac-implementation)** - Role-based access control
-- **[Transport Security](../security/transport-security.md#tls-configuration)** - TLS 1.3 implementation
-- **[Certificate Management](../security/certificate-management.md)** - Certificate rotation and validation
+- **[Authentication](../security/authentication-specifications.md)** - JWT token validation patterns
+- **[Authorization](../security/authorization-specifications.md)** - Role-based access control
+- **[Security Framework](../security/security-framework.md)** - TLS 1.3 implementation and certificate management
 
 **Core Architecture**:
 
 - **[Async Patterns](../core-architecture/async-patterns.md#grpc-integration)** - Tokio runtime integration
-- **[Error Handling](../core-architecture/error-handling.md#grpc-status-codes)** - gRPC error mapping
+- **[Error Handling](../core-architecture/runtime-and-errors.md)** - gRPC error mapping
 - **[Supervision Trees](../core-architecture/supervision-trees.md#transport-supervision)** - gRPC service supervision
 
 **Data Management**:
@@ -851,9 +850,9 @@ impl Transport for GrpcTransport {
 **Required Components**:
 
 - **Connection Pool Manager** - `transport-core.md` Section 7.2
-- **Security Interceptors** - `../security/transport-security.md`
+- **Security Interceptors** - `../security/security-framework.md`
 - **Message Serialization** - `../data-management/message-schemas.md`
-- **Error Handling** - `../core-architecture/error-handling.md`
+- **Error Handling** - `../core-architecture/runtime-and-errors.md`
 - **Async Runtime** - `../core-architecture/tokio-runtime.md`
 
 **Configuration Dependencies**:

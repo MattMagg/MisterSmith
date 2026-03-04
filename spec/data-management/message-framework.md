@@ -29,7 +29,7 @@ This framework provides the foundation for all message schemas:
 
 - [Core message schemas](./core-message-schemas.md) for agent communication
 - [Workflow message schemas](./workflow-message-schemas.md) for task management
-- [System message schemas](./system-message-schemas.md) for CLI integration and monitoring
+- [System message schemas](./system-message-schemas.md) for LLM backend integration and monitoring
 
 For practical implementation, see [Agent Communication](./agent-communication.md) and [Storage Patterns](./storage-patterns.md).
 
@@ -42,7 +42,7 @@ The framework supports multiple validation levels to balance performance and saf
 - [Agent communication messages](./core-message-schemas.md#agent-communication-messages)
 - [Task management messages](./workflow-message-schemas.md#task-management-messages)
 - [System operation messages](./system-message-schemas.md#system-operation-messages)
-- [Claude CLI integration messages](./system-message-schemas.md#claude-cli-integration-messages)
+- [LLM backend integration messages](./system-message-schemas.md#llm-backend-integration-messages)
 
 ```yaml
 validation_levels:
@@ -78,7 +78,7 @@ Standardized error codes for message validation failures. These codes are used a
 - [Agent status reporting](./core-message-schemas.md#agent-status-update-message) for health monitoring
 - [Task result messages](./workflow-message-schemas.md#task-result-message) for execution feedback
 - [System alert messages](./system-message-schemas.md#system-alert-message) for error escalation
-- [Hook response messages](./system-message-schemas.md#hook-response-message) for CLI error handling
+- [Hook response messages](./system-message-schemas.md#hook-response-message) for LLM backend error handling
 
 ```json
 {
@@ -139,7 +139,7 @@ Validation performance optimizations and caching strategies. Optimizations apply
 - High-frequency [agent status updates](./core-message-schemas.md#agent-status-update-message)
 - Batch [task assignment operations](./workflow-message-schemas.md#task-assignment-message)
 - Real-time [system health monitoring](./system-message-schemas.md#system-health-check-message)
-- CLI [hook event processing](./system-message-schemas.md#hook-event-message)
+- LLM backend [hook event processing](./system-message-schemas.md#hook-event-message)
 
 ```rust
 // Example validation configuration in Rust
@@ -175,7 +175,7 @@ JSON serialization standards apply to all framework messages, ensuring consisten
 - [Base message envelopes](./core-message-schemas.md#base-message-envelope) and common types
 - [Workflow coordination](./workflow-message-schemas.md#workflow-coordination-message) and state sync
 - [System monitoring](./system-message-schemas.md#system-health-check-message) and alert data
-- [CLI integration](./system-message-schemas.md#claude-cli-integration-messages) payloads
+- [LLM backend integration](./system-message-schemas.md#llm-backend-integration-messages) payloads
 
 ```json
 {
@@ -261,7 +261,7 @@ Dynamic routing table management for efficient message delivery across:
 - [Agent-to-agent communication](./core-message-schemas.md#agent-communication-messages) pathways
 - [Workflow task distribution](./workflow-message-schemas.md#task-assignment-message) to capable agents
 - [System operation routing](./system-message-schemas.md#system-operation-messages) for monitoring
-- [CLI command routing](./system-message-schemas.md#claude-cli-integration-messages) to handlers
+- [LLM command routing](./system-message-schemas.md#llm-backend-integration-messages) to handlers
 
 ```yaml
 routing_table_schema:
@@ -1086,7 +1086,7 @@ The framework provides comprehensive correlation ID management for tracing messa
 - Request-response pattern tracking across [agent communication](./core-message-schemas.md#agent-communication-messages)
 - Workflow execution tracing in [task management](./workflow-message-schemas.md#task-management-messages)
 - System operation correlation for [monitoring and alerts](./system-message-schemas.md#system-operation-messages)
-- CLI session tracking for [hook events](./system-message-schemas.md#hook-event-message)
+- LLM backend session tracking for [hook events](./system-message-schemas.md#hook-event-message)
 
 ```rust
 use uuid::Uuid;
@@ -1751,7 +1751,7 @@ Automatic message enhancement and metadata injection. Enrichment applies to:
 - [Base message envelopes](./core-message-schemas.md#base-message-envelope) for metadata completion
 - [Task assignments](./workflow-message-schemas.md#task-assignment-message) for capability matching
 - [System alerts](./system-message-schemas.md#system-alert-message) for context injection
-- [CLI hook events](./system-message-schemas.md#hook-event-message) for session context
+- [LLM hook events](./system-message-schemas.md#hook-event-message) for session context
 
 ```json
 {
@@ -1835,7 +1835,7 @@ Versioning strategy applies to all schema families:
 
 - [Core message schemas](./core-message-schemas.md) for foundational compatibility
 - [Workflow schemas](./workflow-message-schemas.md) for task management evolution
-- [System schemas](./system-message-schemas.md) for CLI and monitoring updates
+- [System schemas](./system-message-schemas.md) for LLM backend and monitoring updates
 
 ```json
 {
@@ -1911,7 +1911,7 @@ Central schema registry for version management and discovery. Registry manages:
 
 - [Core schema definitions](./core-message-schemas.md) and common types
 - [Workflow schema versions](./workflow-message-schemas.md) and compatibility
-- [System schema updates](./system-message-schemas.md) and CLI integration
+- [System schema updates](./system-message-schemas.md) and LLM backend integration
 - Cross-reference validation and dependency tracking
 
 ```json
@@ -1946,7 +1946,7 @@ Framework for generating type-safe code from schemas. Code generation supports:
 
 - [Agent communication](./core-message-schemas.md#agent-communication-messages) type safety
 - [Workflow orchestration](./workflow-message-schemas.md#workflow-orchestration-messages) validation
-- [System integration](./system-message-schemas.md#claude-cli-integration-messages) type checking
+- [System integration](./system-message-schemas.md#llm-backend-integration-messages) type checking
 - Cross-language compatibility for multi-agent systems
 
 ```rust
@@ -2002,7 +2002,7 @@ Runtime validation with performance optimization. Integration patterns for:
 - [Agent message validation](./core-message-schemas.md#agent-communication-messages) in communication pipelines
 - [Task message validation](./workflow-message-schemas.md#task-management-messages) in workflow engines
 - [System message validation](./system-message-schemas.md#system-operation-messages) in monitoring systems
-- Real-time validation for [CLI integration](./system-message-schemas.md#claude-cli-integration-messages)
+- Real-time validation for [LLM backend integration](./system-message-schemas.md#llm-backend-integration-messages)
 
 ```rust
 use jsonschema::{JSONSchema, ValidationError};
@@ -2132,7 +2132,7 @@ Security-focused validation rules applied to all message types:
 - [Agent communication](./core-message-schemas.md#agent-communication-messages) input sanitization
 - [Task data](./workflow-message-schemas.md#task-assignment-message) payload validation
 - [System monitoring](./system-message-schemas.md#system-operation-messages) data integrity
-- [CLI integration](./system-message-schemas.md#claude-cli-integration-messages) injection prevention
+- [LLM backend integration](./system-message-schemas.md#llm-backend-integration-messages) injection prevention
 
 ```json
 {
@@ -2175,7 +2175,7 @@ Support for end-to-end encryption and message integrity across:
 - [Agent-to-agent communication](./core-message-schemas.md#agent-communication-messages) security
 - [Workflow coordination](./workflow-message-schemas.md#workflow-coordination-message) protection
 - [System alert](./system-message-schemas.md#system-alert-message) integrity
-- [CLI session](./system-message-schemas.md#claude-cli-integration-messages) encryption
+- [LLM session](./system-message-schemas.md#llm-backend-integration-messages) encryption
 
 ```yaml
 encryption_support:
@@ -2210,7 +2210,7 @@ Strategies for reducing message overhead across all schema types:
 - [Agent status updates](./core-message-schemas.md#agent-status-update-message) compression
 - [Task assignment](./workflow-message-schemas.md#task-assignment-message) payload optimization
 - [System health data](./system-message-schemas.md#system-health-check-message) aggregation
-- [CLI hook events](./system-message-schemas.md#hook-event-message) efficient encoding
+- [LLM hook events](./system-message-schemas.md#hook-event-message) efficient encoding
 
 ```yaml
 size_optimization:
@@ -2248,7 +2248,7 @@ High-performance validation strategies optimized for:
 - High-frequency [agent communication](./core-message-schemas.md#agent-communication-messages)
 - Batch [workflow operations](./workflow-message-schemas.md#workflow-orchestration-messages)
 - Real-time [system monitoring](./system-message-schemas.md#system-operation-messages)
-- Interactive [CLI operations](./system-message-schemas.md#claude-cli-integration-messages)
+- Interactive [LLM operations](./system-message-schemas.md#llm-backend-integration-messages)
 
 ```rust
 // Fast-path validation for critical message types
@@ -2298,11 +2298,11 @@ impl FastPathValidator {
 
 | Framework Component | Core Messages | Workflow Messages | System Messages |
 |-------------------|---------------|-------------------|------------------|
-| **Validation** | ✓ Base envelope, Agent comm | ✓ Task mgmt, Coordination | ✓ CLI hooks, Health checks |
+| **Validation** | ✓ Base envelope, Agent comm | ✓ Task mgmt, Coordination | ✓ LLM hooks, Health checks |
 | **Serialization** | ✓ JSON, Protobuf, MessagePack | ✓ All formats + optimization | ✓ All formats + compression |
 | **Event Correlation** | ✓ Request-response tracking | ✓ Workflow causality chains | ✓ Session correlation, Alert grouping |
-| **Transformation** | ✓ Protocol adaptation | ✓ Workflow state mapping | ✓ CLI response formatting |
-| **Versioning** | ✓ Foundation compatibility | ✓ Task evolution support | ✓ CLI integration updates |
+| **Transformation** | ✓ Protocol adaptation | ✓ Workflow state mapping | ✓ LLM response formatting |
+| **Versioning** | ✓ Foundation compatibility | ✓ Task evolution support | ✓ LLM backend integration updates |
 | **Security** | ✓ Agent auth, encryption | ✓ Task data protection | ✓ System monitoring security |
 | **Performance** | ✓ Agent comm optimization | ✓ Workflow batch processing | ✓ Real-time monitoring |
 
@@ -2321,8 +2321,8 @@ This framework directly supports all message types defined in [System Message Sc
 
 | Message Type | Framework Components Used | Routing Pattern |
 |-------------|---------------------------|-----------------|
-| **[Hook Event Message](./system-message-schemas.md#hook-event-message)** | Validation (essential fields), Correlation (session tracking), Content routing (hook type) | `cli.hooks.{hook_type}.{agent_id}` |
-| **[Hook Response Message](./system-message-schemas.md#hook-response-message)** | Transformation (CLI formatting), Circuit breaker (timeout handling) | `cli.responses.{agent_id}` |
+| **[Hook Event Message](./system-message-schemas.md#hook-event-message)** | Validation (essential fields), Correlation (session tracking), Content routing (hook type) | `llm.hooks.{hook_type}.{agent_id}` |
+| **[Hook Response Message](./system-message-schemas.md#hook-response-message)** | Transformation (LLM response formatting), Circuit breaker (timeout handling) | `llm.responses.{agent_id}` |
 | **[System Alert Message](./system-message-schemas.md#system-alert-message)** | Event correlation (causality tracking), Content routing (severity-based) | `system.alerts.{severity}` |
 | **[System Health Check](./system-message-schemas.md#system-health-check-message)** | Performance optimization (high-frequency), Aggregation (metrics collection) | `system.health.{component}` |
 
@@ -2349,7 +2349,7 @@ pub fn create_hook_routing_rules() -> Vec<ContentRoutingRule> {
                     value: json!("pre_task"),
                 },
             ],
-            destination: "cli.hooks.pre_task".to_string(),
+            destination: "llm.hooks.pre_task".to_string(),
             transformations: vec![
                 Transformation::AddField {
                     path: "routing_metadata.correlation_required".to_string(),
@@ -2387,7 +2387,7 @@ pub fn create_hook_routing_rules() -> Vec<ContentRoutingRule> {
 
 Framework correlation patterns support [system message correlation](./system-message-schemas.md#message-correlation-strategies):
 
-- **Hook Event-Response Correlation**: Track CLI hook lifecycle using correlation_id
+- **Hook Event-Response Correlation**: Track LLM backend hook lifecycle using correlation_id
 - **System Health Monitoring**: Aggregate health check messages by component
 - **Alert Escalation Chains**: Maintain causality links for alert root cause analysis
 
@@ -2397,7 +2397,7 @@ This file is part of the Message Schema Documentation suite:
 
 1. [Core Message Schemas](./core-message-schemas.md) - Foundation schemas and agent communication
 2. [Workflow Message Schemas](./workflow-message-schemas.md) - Task management and workflow orchestration
-3. [System Message Schemas](./system-message-schemas.md) - Claude CLI integration and system operations
+3. [System Message Schemas](./system-message-schemas.md) - LLM backend integration and system operations
 4. **[Message Framework](./message-framework.md)** - Validation, serialization, and framework specifications *(current file)*
 
 ### Technical Implementation

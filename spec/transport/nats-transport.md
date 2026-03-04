@@ -83,7 +83,7 @@ const SUBJECT_PATTERNS: &[&str] = &[
     "system.config.{component}.{action}",
     "system.alerts.{severity}",
     
-    // Claude CLI Integration
+    // LLM Backend Integration
     "cli.startup",
     "cli.hooks.{hook_type}.{agent_id}",
     "cli.responses.{agent_id}",
@@ -131,7 +131,7 @@ const WORKFLOW_ID_PATTERN: &str = r"^workflow-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{
 
 ### Message Format Specifications
 
-#### Claude CLI Hook Integration
+#### LLM Backend Hook Integration
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -611,7 +611,7 @@ lazy_static! {
             "workflow.{workflow_id}.rollback",
         ]);
         
-        // Claude CLI Integration Subjects
+        // LLM Backend Integration Subjects
         templates.insert("cli", vec![
             "cli.startup",
             "cli.hooks.{hook_type}.{agent_id}",
@@ -953,7 +953,7 @@ impl JetStreamManager {
         stream_configs.insert("agent_events".to_string(), Self::agent_events_stream());
         stream_configs.insert("task_lifecycle".to_string(), Self::task_lifecycle_stream());
         stream_configs.insert("system_monitoring".to_string(), Self::system_monitoring_stream());
-        stream_configs.insert("claude_cli_integration".to_string(), Self::claude_cli_stream());
+        stream_configs.insert("llm_cli_integration".to_string(), Self::llm_cli_stream());
         
         // Configure consumers
         consumer_configs.insert("agent_status_monitor".to_string(), Self::agent_status_consumer());
@@ -1038,10 +1038,10 @@ impl JetStreamManager {
         }
     }
 
-    // Claude CLI Integration Stream Configuration
-    fn claude_cli_stream() -> StreamConfig {
+    // LLM Backend Integration Stream Configuration
+    fn llm_cli_stream() -> StreamConfig {
         StreamConfig {
-            name: "claude_cli_integration".to_string(),
+            name: "llm_cli_integration".to_string(),
             subjects: vec!["cli.>".to_string()],
             storage: StorageType::Memory,
             retention: RetentionPolicy::Limits,
@@ -1448,7 +1448,7 @@ impl NatsConnectionManager {
 - **Distributed agent communication**: Pub/sub patterns with subject hierarchies
 - **Event-driven architectures**: Real-time agent coordination
 - **Microservices communication**: Lightweight, cloud-native messaging
-- **Claude CLI integration**: Hook system integration
+- **LLM Backend integration**: Hook system integration
 
 ### When to Use Alternatives
 

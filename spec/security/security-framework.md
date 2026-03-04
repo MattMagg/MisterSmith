@@ -97,14 +97,14 @@ pub struct AgentClaims {
     
     // Agent-specific extensions
     pub agent_id: String,
-    pub agent_type: AgentType,
+    pub agent_trust_level: AgentTrustLevel,
     pub capabilities: Vec<String>,
     pub permissions: Vec<Permission>,
     pub session_id: String,
     pub delegation_chain: Vec<String>,
 }
 
-pub enum AgentType {
+pub enum AgentTrustLevel {
     Autonomous,
     UserAssisted,
     SystemService,
@@ -640,7 +640,7 @@ security:
 // Hook execution with privilege isolation
 function execute_hook_safely(hook_script, payload):
     // Ensure hook runs under non-root user
-    execution_user = get_non_privileged_user()  // e.g., "claude-hook-runner"
+    execution_user = get_non_privileged_user()  // e.g., "hook-runner"
 
     // Create isolated execution environment
     sandbox_config = {
@@ -671,18 +671,18 @@ function execute_hook_safely(hook_script, payload):
 // User privilege management
 function setup_hook_user():
     // Create dedicated user for hook execution
-    create_user("claude-hook-runner", {
-        home_directory: "/var/lib/claude-hooks",
+    create_user("hook-runner", {
+        home_directory: "/var/lib/ms-hooks",
         shell: "/bin/bash",
-        groups: ["claude-hooks"],
+        groups: ["ms-hooks"],
         no_login: false,
         system_user: true
     })
 
     // Set up hook directory permissions
-    set_directory_permissions("/var/lib/claude-hooks", {
-        owner: "claude-hook-runner",
-        group: "claude-hooks",
+    set_directory_permissions("/var/lib/ms-hooks", {
+        owner: "hook-runner",
+        group: "ms-hooks",
         permissions: "750"
     })
 ```
@@ -691,7 +691,7 @@ function setup_hook_user():
 
 ```yaml
 hook_security:
-  execution_user: claude-hook-runner
+  execution_user: hook-runner
   sandbox_directory: /tmp/hook-sandbox
   resource_limits:
     max_memory_mb: 128
@@ -711,7 +711,7 @@ hook_security:
       - /etc
       - /root
       - /home
-      - /var/lib/claude-hooks/.ssh
+      - /var/lib/ms-hooks/.ssh
 
   network_isolation:
     allow_outbound: false
@@ -728,8 +728,8 @@ hook_security:
 function validate_hook_script(script_path):
     // Check file permissions
     file_info = get_file_info(script_path)
-    if file_info.owner != "claude-hook-runner":
-        return error("Hook script must be owned by claude-hook-runner")
+    if file_info.owner != "hook-runner":
+        return error("Hook script must be owned by hook-runner")
 
     if file_info.permissions & WORLD_WRITABLE:
         return error("Hook script cannot be world-writable")
@@ -757,7 +757,7 @@ function validate_hook_script(script_path):
 // Hook directory security
 function secure_hook_directory(hook_dir):
     // Ensure proper ownership and permissions
-    set_ownership(hook_dir, "claude-hook-runner", "claude-hooks")
+    set_ownership(hook_dir, "hook-runner", "ms-hooks")
     set_permissions(hook_dir, "750")  // rwxr-x---
 
     // Validate all hook scripts
@@ -2832,8 +2832,8 @@ pub struct HookSecurityConfig {
 impl Default for HookSecurityConfig {
     fn default() -> Self {
         Self {
-            execution_user: "claude-hook-runner".to_string(),
-            execution_group: "claude-hooks".to_string(),
+            execution_user: "hook-runner".to_string(),
+            execution_group: "ms-hooks".to_string(),
             sandbox_base_dir: PathBuf::from("/tmp/mister-smith-hooks"),
             max_execution_time_seconds: 30,
             max_memory_mb: 128,
@@ -2851,7 +2851,7 @@ impl Default for HookSecurityConfig {
                 PathBuf::from("/etc"),
                 PathBuf::from("/root"),
                 PathBuf::from("/home"),
-                PathBuf::from("/var/lib/claude-hooks/.ssh"),
+                PathBuf::from("/var/lib/ms-hooks/.ssh"),
                 PathBuf::from("/proc"),
                 PathBuf::from("/sys"),
             ],
@@ -3050,7 +3050,7 @@ impl HookSecurityManager {
             .arg("systemd-run")
             .arg("--user")
             .arg("--scope")
-            .arg("--slice=claude-hooks.slice")
+            .arg("--slice=ms-hooks.slice")
             .arg(format!("--property=MemoryMax={}M", self.config.max_memory_mb))
             .arg(format!("--property=TasksMax={}", self.config.max_processes))
             .arg("--property=PrivateNetwork=true")
@@ -3190,8 +3190,8 @@ mod tests {
 # hook_security_config.yml
 hook_security:
   # User and group for hook execution
-  execution_user: claude-hook-runner
-  execution_group: claude-hooks
+  execution_user: hook-runner
+  execution_group: ms-hooks
   
   # Sandbox configuration
   sandbox_base_dir: /tmp/mister-smith-hooks
@@ -3226,7 +3226,7 @@ hook_security:
       - /etc
       - /root
       - /home
-      - /var/lib/claude-hooks/.ssh
+      - /var/lib/ms-hooks/.ssh
       - /proc
       - /sys
       - /dev
@@ -3325,7 +3325,7 @@ hook_security:
   
   # Systemd integration
   systemd:
-    slice_name: claude-hooks.slice
+    slice_name: ms-hooks.slice
     service_properties:
       MemoryAccounting: true
       CPUAccounting: true
@@ -3482,4 +3482,4 @@ impl ComplianceMonitor {
 
 ---
 
-This document provides foundational security patterns for agent implementation. For complete system architecture and advanced patterns, refer to the canonical tech-framework.md.
+This document provides foundational security patterns for agent implementation. For complete system architecture and advanced patterns, refer to the canonical [dependency-specifications.md](../core-architecture/dependency-specifications.md).

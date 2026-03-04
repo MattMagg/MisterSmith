@@ -8,7 +8,7 @@
 
 ## Navigation
 
-[← Back to Core Architecture](./CLAUDE.md) | [System Architecture Overview](./system-architecture.md) | [Async Patterns →](./async-patterns-detailed.md)
+[← Back to Specifications](../CLAUDE.md) | [System Architecture Overview](./system-architecture.md) | [Async Patterns →](./async-patterns-detailed.md)
 
 ---
 

@@ -13,7 +13,7 @@ permalink: ms-framework/transport/http-transport
 
 ## Overview
 
-This document defines HTTP-based transport patterns for agent communication using the Claude-Flow Rust Stack.
+This document defines HTTP-based transport patterns for agent communication using the Mister Smith Rust Stack.
 This module focuses on RESTful APIs, WebSocket communication, and complete HTTP protocol specifications.
 
 HTTP transport provides the foundation for web-compatible agent communication with support for:

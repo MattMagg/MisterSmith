@@ -2705,15 +2705,15 @@ impl SupervisedCodeAgent {
 - **[Agent Operations](agent-operations.md)** - Discovery, workflow management, and operational patterns  
 - **[Agent Integration](agent-integration.md)** - Resource management, tool bus integration, and extension patterns
 - **[Data Persistence](data-persistence.md)** - Agent state storage patterns and data management strategies
-- **[Message Queuing](message-queuing.md)** - Asynchronous message handling and queue management
-- **[State Management](state-management.md)** - Distributed state synchronization and consistency patterns
+- **[Message Framework](message-framework.md)** - Asynchronous message handling and queue management
+- **[Storage Patterns](storage-patterns.md)** - Distributed state synchronization and consistency patterns
 
 #### Core Architecture References
 
 - **[Supervision Trees](../core-architecture/supervision-trees.md)** - Supervision hierarchy patterns and fault tolerance
 - **[Async Patterns](../core-architecture/async-patterns.md)** - Tokio runtime patterns and async task management
 - **[Type Definitions](../core-architecture/type-definitions.md)** - Core type system and trait definitions
-- **[Error Handling](../core-architecture/error-handling.md)** - Comprehensive error management strategies
+- **[Error Handling](../core-architecture/runtime-and-errors.md)** - Comprehensive error management strategies
 
 #### Security Integration
 
@@ -2723,14 +2723,14 @@ impl SupervisedCodeAgent {
 
 #### Operations & Monitoring
 
-- **[Health Monitoring](../operations/health-monitoring.md)** - System health checks and metrics collection
-- **[Performance Monitoring](../operations/performance-monitoring.md)** - Agent performance tracking and optimization
-- **[Deployment Patterns](../operations/deployment-patterns.md)** - Production deployment strategies
+- **[Health Monitoring](../operations/observability-monitoring-framework.md)** - System health checks and metrics collection
+- **[Performance Monitoring](../operations/observability-monitoring-framework.md)** - Agent performance tracking and optimization
+- **[Deployment Patterns](../operations/deployment-architecture-specifications.md)** - Production deployment strategies
 
 #### Transport & Communication
 
-- **[Transport Layer](../transport/transport-layer.md)** - Network communication protocols and patterns
-- **[Message Routing](../transport/message-routing.md)** - Advanced routing strategies and load balancing
+- **[Transport Layer](../transport/transport-layer-specifications.md)** - Network communication protocols and patterns
+- **[Message Routing](../transport/transport-core.md)** - Advanced routing strategies and load balancing
 
 ### Document Status
 
@@ -2751,4 +2751,4 @@ impl SupervisedCodeAgent {
 
 - **← Previous**: [Agent Communication](agent-communication.md) - Message passing and coordination patterns
 - **→ Next**: [Agent Operations](agent-operations.md) - Discovery and workflow management
-- **↑ Parent**: [Data Management](CLAUDE.md) - Data management overview
+- **↑ Parent**: [Data Management](../CLAUDE.md) - Data management overview

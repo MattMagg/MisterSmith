@@ -52,7 +52,7 @@ SUBJECT_HIERARCHY:
     events.{event_type}           # System events
     cmd.{type}.{target}           # Command routing
 
-    # Claude-CLI Hook System Integration
+    # LLM Backend Hook System Integration
     control.startup               # CLI initialization and capabilities
     agent.{id}.pre                # Pre-task hook processing
     agent.{id}.post               # Post-task hook processing
@@ -85,7 +85,7 @@ TOPIC_CONVENTIONS:
     hook.on_file_change.triggered # File change hook execution
 ```
 
-### 2.1.1 Claude CLI Hook Message Formats
+### 2.1.1 LLM Backend Hook Message Formats
 
 ```rust
 HOOK_EVENT_MESSAGE_FORMAT:
@@ -427,7 +427,7 @@ JETSTREAM_STREAMS:
     num_replicas: 3
     duplicate_window: 60  # 1 minute
 
-  claude_cli_integration:
+  llm_cli_integration:
     subjects: ["cli.>"]
     storage: memory
     retention: limits

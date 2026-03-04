@@ -982,7 +982,7 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use crate::errors::{ActorError, SystemError};
-use crate::supervision::SupervisionStrategy;
+use crate::supervision::RestartPolicy;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ActorId(pub Uuid);
@@ -1281,7 +1281,7 @@ impl Dispatcher {
 ///     worker,
 ///     WorkerState::default(),
 ///     supervisor_ref,
-///     SupervisionStrategy::RestartWithBackoff
+///     RestartPolicy::OneForOne,  // Backoff handled by SupervisionStrategy.backoff_strategy field
 /// ).await?;
 /// 
 /// // Use actors
@@ -1295,7 +1295,7 @@ pub struct ActorSystem {
     actors: Arc<Mutex<HashMap<ActorId, ActorRef>>>,
     mailbox_factory: MailboxFactory,
     dispatcher: Dispatcher,
-    supervision_strategy: SupervisionStrategy,
+    default_restart_policy: RestartPolicy,
     shutdown_signal: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -1305,17 +1305,17 @@ impl ActorSystem {
             actors: Arc::new(Mutex::new(HashMap::new())),
             mailbox_factory: MailboxFactory::new(Some(1000)),
             dispatcher: Dispatcher::new(num_cpus::get()),
-            supervision_strategy: SupervisionStrategy::OneForOne,
+            default_restart_policy: RestartPolicy::OneForOne,
             shutdown_signal: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
-    
+
     pub async fn spawn_supervised_actor<A>(
         &self,
         actor: A,
         initial_state: A::State,
         supervisor: ActorRef,
-        strategy: SupervisionStrategy,
+        restart_policy: RestartPolicy,
     ) -> Result<ActorRef, ActorError>
     where
         A: Actor + 'static,
@@ -1529,7 +1529,7 @@ impl Clone for ActorSystem {
             actors: Arc::clone(&self.actors),
             mailbox_factory: MailboxFactory::new(self.mailbox_factory.default_capacity),
             dispatcher: Dispatcher::new(self.dispatcher.worker_count),
-            supervision_strategy: self.supervision_strategy,
+            default_restart_policy: self.default_restart_policy,
             shutdown_signal: Arc::clone(&self.shutdown_signal),
             supervisor_registry: Arc::clone(&self.supervisor_registry),
             restart_counts: Arc::clone(&self.restart_counts),
@@ -1805,13 +1805,21 @@ pub enum EventType {
     Custom(u32),
 }
 
-// Supervision strategy enumeration
+// Restart policy determines which siblings restart when a child fails.
+// See type-definitions.md for the canonical SupervisionStrategy struct.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SupervisionStrategy {
+pub enum RestartPolicy {
     OneForOne,
     OneForAll,
     RestForOne,
+}
+
+// Escalation policy determines how failures propagate up the tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EscalationPolicy {
     Escalate,
+    LogAndIgnore,
+    Shutdown,
 }
 
 // Node type for supervision hierarchy

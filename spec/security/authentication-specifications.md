@@ -67,13 +67,20 @@ pub struct AgentClaims {
     pub delegation_chain: Vec<String>,
 }
 
+/// Canonical agent types matching agent-orchestration.md and agent-lifecycle.md,
+/// plus External for cross-system authentication contexts.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum AgentType {
+    Supervisor,
+    Worker,
+    Coordinator,
+    Monitor,
     Planner,
     Executor,
     Critic,
     Router,
     Memory,
+    /// Extension: agents from external systems authenticating into this framework
     External,
 }
 
