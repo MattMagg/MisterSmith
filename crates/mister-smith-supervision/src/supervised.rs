@@ -410,7 +410,10 @@ async fn handle_decision(
                 let _ = system.shutdown().await;
                 break;
             }
-            SupervisionDecision::Stop(_) | SupervisionDecision::Ignore => break,
+            // Stop/Ignore are terminal only for the current notification.
+            // Return explicitly so supervision_loop can continue processing
+            // future actor failures.
+            SupervisionDecision::Stop(_) | SupervisionDecision::Ignore => return,
         }
     }
 }
