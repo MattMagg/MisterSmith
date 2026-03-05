@@ -9,6 +9,8 @@ use axum::middleware as axum_mw;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Router;
+use tonic::metadata::MetadataValue;
+use tonic::{Code, Request as GrpcRequest};
 use tower::ServiceExt;
 
 use mister_smith_security::config::{AuditConfig, JwtConfig, KeySource, RbacConfig};
@@ -68,6 +70,20 @@ fn test_app(security: Arc<SecurityLayer>) -> Router {
             security,
             mister_smith_security::middleware::axum_mw::auth_middleware,
         ))
+}
+
+fn latest_auth_failure_reason(security: &SecurityLayer) -> String {
+    security
+        .audit
+        .recent_events(20)
+        .into_iter()
+        .rev()
+        .find(|event| {
+            event.event_type == mister_smith_security::audit::AuditEventType::Authentication
+                && event.outcome == mister_smith_security::audit::AuditOutcome::Failure
+        })
+        .and_then(|event| event.details.get("reason").cloned())
+        .expect("expected auth failure audit reason")
 }
 
 // -- Valid Bearer token passes (US3-AS1) -----------------------------------
@@ -265,7 +281,6 @@ async fn revoked_token_returns_401() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-
 // -- Authorization failures return 403 -------------------------------------
 
 #[tokio::test]
@@ -395,4 +410,80 @@ async fn audit_log_contains_authz_events_for_allow_and_deny() {
             .iter()
             .any(|event| event.outcome == AuditOutcome::Success)
     );
+}
+
+// -- Error response sanitization ------------------------------------------
+
+#[tokio::test]
+async fn invalid_token_response_is_sanitized_and_audit_keeps_details() {
+    let security = test_security_layer(true);
+    let app = test_app(security.clone());
+
+    let request = Request::builder()
+        .uri("/protected")
+        .header("authorization", "Bearer invalid.token.here")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["error"], "unauthorized");
+
+    let audit_reason = latest_auth_failure_reason(&security);
+    assert!(audit_reason.contains("Invalid token:"));
+    assert_ne!(audit_reason, "unauthorized");
+}
+
+#[tokio::test]
+async fn revoked_token_response_is_sanitized_and_audit_keeps_details() {
+    let security = test_security_layer(true);
+    let token = test_token(&security);
+
+    let claims = security.jwt.validate_token(&token).unwrap();
+    security.jwt.revoke_token(&claims.jti);
+
+    let app = test_app(security.clone());
+    let request = Request::builder()
+        .uri("/protected")
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["error"], "token revoked");
+
+    let audit_reason = latest_auth_failure_reason(&security);
+    assert_eq!(audit_reason, "Token revoked");
+}
+
+#[test]
+fn tonic_invalid_token_is_sanitized_and_audit_keeps_details() {
+    let security = test_security_layer(true);
+    let interceptor =
+        mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor(security.clone());
+
+    let mut request = GrpcRequest::new(());
+    request.metadata_mut().insert(
+        "authorization",
+        MetadataValue::from_static("Bearer invalid.token.here"),
+    );
+
+    let error = interceptor(request).expect_err("expected unauthenticated error");
+    assert_eq!(error.code(), Code::Unauthenticated);
+    assert_eq!(error.message(), "unauthorized");
+
+    let audit_reason = latest_auth_failure_reason(&security);
+    assert!(audit_reason.contains("Invalid token:"));
+    assert_ne!(audit_reason, "unauthorized");
 }
