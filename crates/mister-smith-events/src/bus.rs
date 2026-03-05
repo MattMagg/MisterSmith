@@ -115,16 +115,20 @@ impl EventBus {
     /// Dispatch an event to all registered handlers, applying filters and
     /// routing failures to the dead letter queue.
     async fn process_event(&self, event: Event) {
-        let handlers = self.handlers.read().await;
+        let handlers = {
+            let handlers = self.handlers.read().await;
 
-        if handlers.is_empty() {
-            return;
-        }
+            if handlers.is_empty() {
+                return;
+            }
+
+            handlers.iter().cloned().collect::<Vec<_>>()
+        };
 
         let mut any_handled = false;
         let mut all_failed = true;
 
-        for handler in handlers.iter() {
+        for handler in handlers {
             // Apply handler filter.
             if let Some(filter) = handler.event_filter() {
                 if !filter.matches(&event) {
@@ -244,6 +248,20 @@ mod tests {
         }
     }
 
+
+
+    struct ConcurrentSubscribeHandler {
+        bus: Arc<EventBus>,
+    }
+
+    #[async_trait]
+    impl EventHandler for ConcurrentSubscribeHandler {
+        async fn handle_event(&self, _event: Event) -> Result<(), EventBusError> {
+            self.bus.subscribe(Arc::new(CountingHandler::new())).await;
+            Ok(())
+        }
+    }
+
     /// Handler that always fails.
     struct FailingHandler;
 
@@ -300,6 +318,24 @@ mod tests {
         let received = rx.recv().await.unwrap();
         assert_eq!(received.id, event_id);
     }
+
+
+
+    #[tokio::test]
+    async fn handler_can_subscribe_during_dispatch_without_stall() {
+        let bus = Arc::new(EventBus::default());
+        bus.subscribe(Arc::new(ConcurrentSubscribeHandler {
+            bus: Arc::clone(&bus),
+        }))
+        .await;
+
+        let event = Event::new("test", EventType::Custom("concurrent-subscribe".into()));
+
+        let publish_result = tokio::time::timeout(Duration::from_millis(250), bus.publish(event)).await;
+        assert!(publish_result.is_ok(), "publish timed out due to lock contention");
+        assert!(publish_result.unwrap().is_ok());
+    }
+
 
     #[tokio::test]
     async fn failing_handler_routes_to_dead_letter() {
