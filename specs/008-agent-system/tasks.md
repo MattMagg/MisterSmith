@@ -165,7 +165,7 @@
 - [x] T046 [P] Add documentation: module-level doc comments on all public items in `crates/mister-smith-agents/src/lib.rs`; crate-level docs describing Phase 7 purpose, quick start, and Gate 7 criteria
 - [x] T047 [P] Update `CLAUDE.md` implementation status table: add Phase 7 row as Complete with `mister-smith-agents` crate
 - [x] T048 Run full verification: `cargo test --workspace` (all tests including new agents tests pass), `cargo clippy --workspace -- -D warnings` (clean)
-- [ ] T049 Commit and create PR for Phase 7 implementation
+- [x] T049 Commit and create PR for Phase 7 implementation
 
 ---
 
