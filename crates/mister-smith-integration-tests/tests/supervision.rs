@@ -10,7 +10,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use mister_smith_actor::{ActorError, ActorSystemConfig, SpawnConfig};
 use mister_smith_core::{
-    Actor, AgentId, EscalationPolicy, RestartPolicy, SupervisionStrategy,
+    Actor, AgentId, EscalationPolicy, RestartPolicy, RestartScope, SupervisionStrategy,
 };
 use mister_smith_events::{AgentEventType, EventBus, EventType};
 use mister_smith_monitoring::health::HealthCheck;
@@ -1232,4 +1232,182 @@ async fn t095_graceful_shutdown_100_actors_all_post_stops() {
         "Shutdown of 100 actors should complete within 30 seconds, took {:?}",
         elapsed
     );
+}
+
+// T094: Stop decision should not terminate the supervision loop for future failures
+#[tokio::test]
+async fn supervision_continues_after_stop_decision() {
+    let supervised = SupervisedSystem::new(ActorSystemConfig::default());
+
+    let sup_id = supervised
+        .create_supervisor(SupervisionStrategy {
+            restart_policy: RestartPolicy::OneForOne,
+            max_failures: 5,
+            ..Default::default()
+        })
+        .await;
+
+    let stop_actor_id = AgentId::new();
+    let stop_starts = Arc::new(AtomicU32::new(0));
+    let stop_stops = Arc::new(AtomicU32::new(0));
+    let stop_s = Arc::clone(&stop_starts);
+    let stop_ps = Arc::clone(&stop_stops);
+
+    let _stop_ref = supervised
+        .spawn_supervised::<TrackingActor, _>(
+            sup_id,
+            move || {
+                (
+                    TrackingActor {
+                        id: stop_actor_id,
+                        pre_start_count: Arc::clone(&stop_s),
+                        post_stop_count: Arc::clone(&stop_ps),
+                    },
+                    0,
+                )
+            },
+            SpawnConfig {
+                restart_scope: RestartScope::Temporary,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    let restart_actor_id = AgentId::new();
+    let restart_starts = Arc::new(AtomicU32::new(0));
+    let restart_stops = Arc::new(AtomicU32::new(0));
+    let restart_s = Arc::clone(&restart_starts);
+    let restart_ps = Arc::clone(&restart_stops);
+
+    let restart_ref = supervised
+        .spawn_supervised::<TrackingActor, _>(
+            sup_id,
+            move || {
+                (
+                    TrackingActor {
+                        id: restart_actor_id,
+                        pre_start_count: Arc::clone(&restart_s),
+                        post_stop_count: Arc::clone(&restart_ps),
+                    },
+                    0,
+                )
+            },
+            SpawnConfig::default(),
+        )
+        .await
+        .unwrap();
+
+    let _handle = supervised.start_supervision();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Trigger Stop decision via normal termination of a temporary actor.
+    supervised.system().stop_actor(&stop_actor_id).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    assert_eq!(stop_starts.load(Ordering::SeqCst), 1);
+
+    // A later failure should still be handled and restarted.
+    restart_ref.tell(TestMsg::Fail).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    assert_eq!(
+        restart_starts.load(Ordering::SeqCst),
+        2,
+        "Second actor should restart after Stop decision"
+    );
+
+    supervised.shutdown().await.unwrap();
+}
+
+// T095: Ignore decision should not terminate the supervision loop for future failures
+#[tokio::test]
+async fn supervision_continues_after_ignore_decision() {
+    let supervised = SupervisedSystem::new(ActorSystemConfig::default());
+
+    let ignore_sup_id = supervised
+        .create_supervisor(SupervisionStrategy {
+            restart_policy: RestartPolicy::OneForOne,
+            max_failures: 0,
+            escalation_policy: EscalationPolicy::LogAndIgnore,
+            ..Default::default()
+        })
+        .await;
+
+    let restart_sup_id = supervised
+        .create_supervisor(SupervisionStrategy {
+            restart_policy: RestartPolicy::OneForOne,
+            max_failures: 5,
+            ..Default::default()
+        })
+        .await;
+
+    let ignore_actor_id = AgentId::new();
+    let ignore_starts = Arc::new(AtomicU32::new(0));
+    let ignore_stops = Arc::new(AtomicU32::new(0));
+    let ignore_s = Arc::clone(&ignore_starts);
+    let ignore_ps = Arc::clone(&ignore_stops);
+
+    let ignore_ref = supervised
+        .spawn_supervised::<TrackingActor, _>(
+            ignore_sup_id,
+            move || {
+                (
+                    TrackingActor {
+                        id: ignore_actor_id,
+                        pre_start_count: Arc::clone(&ignore_s),
+                        post_stop_count: Arc::clone(&ignore_ps),
+                    },
+                    0,
+                )
+            },
+            SpawnConfig::default(),
+        )
+        .await
+        .unwrap();
+
+    let restart_actor_id = AgentId::new();
+    let restart_starts = Arc::new(AtomicU32::new(0));
+    let restart_stops = Arc::new(AtomicU32::new(0));
+    let restart_s = Arc::clone(&restart_starts);
+    let restart_ps = Arc::clone(&restart_stops);
+
+    let restart_ref = supervised
+        .spawn_supervised::<TrackingActor, _>(
+            restart_sup_id,
+            move || {
+                (
+                    TrackingActor {
+                        id: restart_actor_id,
+                        pre_start_count: Arc::clone(&restart_s),
+                        post_stop_count: Arc::clone(&restart_ps),
+                    },
+                    0,
+                )
+            },
+            SpawnConfig::default(),
+        )
+        .await
+        .unwrap();
+
+    let _handle = supervised.start_supervision();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // First failure escalates to LogAndIgnore (Ignore decision).
+    ignore_ref.tell(TestMsg::Fail).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    assert_eq!(ignore_starts.load(Ordering::SeqCst), 1);
+
+    // A later failure on a different supervisor should still be handled.
+    restart_ref.tell(TestMsg::Fail).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    assert_eq!(
+        restart_starts.load(Ordering::SeqCst),
+        2,
+        "Second actor should restart after Ignore decision"
+    );
+
+    supervised.shutdown().await.unwrap();
 }
