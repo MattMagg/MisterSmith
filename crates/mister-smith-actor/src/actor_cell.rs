@@ -6,11 +6,46 @@
 
 use std::sync::Arc;
 
+use futures::FutureExt;
 use mister_smith_core::{Actor, AgentId, AgentState, EventPublisher, SystemEvent};
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, error, info, warn};
 
 use crate::mailbox::{Envelope, MailboxReceiver};
+
+enum MessageHandlingOutcome<E> {
+    Ok,
+    Failed(E),
+    Panicked(String),
+}
+
+fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = payload.downcast_ref::<&'static str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "panic with non-string payload".to_string()
+    }
+}
+
+async fn handle_message_with_panic_capture<A>(
+    actor: &mut A,
+    message: A::Message,
+    state: &mut A::State,
+) -> MessageHandlingOutcome<A::Error>
+where
+    A: Actor,
+{
+    match std::panic::AssertUnwindSafe(actor.handle_message(message, state))
+        .catch_unwind()
+        .await
+    {
+        Ok(Ok(())) => MessageHandlingOutcome::Ok,
+        Ok(Err(error)) => MessageHandlingOutcome::Failed(error),
+        Err(panic_payload) => MessageHandlingOutcome::Panicked(panic_payload_to_string(panic_payload)),
+    }
+}
 
 /// Fire-and-forget lifecycle event emission.
 async fn emit_lifecycle_event(
@@ -129,19 +164,26 @@ pub async fn run_actor<A>(
                     Some(envelope) => {
                         let Envelope { message, reply_tx } = envelope;
 
-                        match actor.handle_message(message, &mut state).await {
-                            Ok(()) => {
+                        match handle_message_with_panic_capture(&mut actor, message, &mut state).await {
+                            MessageHandlingOutcome::Ok => {
                                 if let Some(tx) = reply_tx {
                                     let _ = tx.send(Ok(()));
                                 }
                             }
-                            Err(e) => {
+                            MessageHandlingOutcome::Failed(e) => {
                                 let err_msg = e.to_string();
                                 warn!(actor_id = %actor_id, error = %err_msg, "handle_message failed");
                                 if let Some(tx) = reply_tx {
                                     let _ = tx.send(Err(err_msg.clone()));
                                 }
                                 break TerminationReason::Failed(err_msg);
+                            }
+                            MessageHandlingOutcome::Panicked(panic_msg) => {
+                                error!(actor_id = %actor_id, error = %panic_msg, "handle_message panicked");
+                                if let Some(tx) = reply_tx {
+                                    let _ = tx.send(Err(format!("actor panicked: {panic_msg}")));
+                                }
+                                break TerminationReason::Panicked(panic_msg);
                             }
                         }
                     }
@@ -167,15 +209,20 @@ pub async fn run_actor<A>(
     .await
     {
         let Envelope { message, reply_tx } = envelope;
-        match actor.handle_message(message, &mut state).await {
-            Ok(()) => {
+        match handle_message_with_panic_capture(&mut actor, message, &mut state).await {
+            MessageHandlingOutcome::Ok => {
                 if let Some(tx) = reply_tx {
                     let _ = tx.send(Ok(()));
                 }
             }
-            Err(e) => {
+            MessageHandlingOutcome::Failed(e) => {
                 if let Some(tx) = reply_tx {
                     let _ = tx.send(Err(e.to_string()));
+                }
+            }
+            MessageHandlingOutcome::Panicked(panic_msg) => {
+                if let Some(tx) = reply_tx {
+                    let _ = tx.send(Err(format!("actor panicked during shutdown: {panic_msg}")));
                 }
             }
         }
@@ -247,11 +294,11 @@ mod tests {
     use crate::mailbox::SpawnConfig;
     use crate::system::{ActorSystem, ActorSystemConfig};
     use async_trait::async_trait;
-    use mister_smith_core::ActorError;
+    use mister_smith_core::{ActorError, EventError};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use tokio::sync::oneshot;
+    use tokio::sync::{oneshot, Mutex};
 
     // --- Test actor definitions ---
 
@@ -357,6 +404,57 @@ mod tests {
         id: AgentId,
         pre_start_called: Arc<AtomicBool>,
         post_stop_called: Arc<AtomicBool>,
+    }
+
+    struct PanicActor {
+        id: AgentId,
+        post_stop_called: Arc<AtomicBool>,
+    }
+
+    #[derive(Debug)]
+    enum PanicMsg {
+        Panic,
+    }
+
+    #[async_trait]
+    impl Actor for PanicActor {
+        type Message = PanicMsg;
+        type State = ();
+        type Error = TestError;
+
+        async fn handle_message(
+            &mut self,
+            _message: PanicMsg,
+            _state: &mut (),
+        ) -> Result<(), TestError> {
+            panic!("panic requested");
+        }
+
+        fn pre_start(&mut self) -> Result<(), TestError> {
+            Ok(())
+        }
+
+        fn post_stop(&mut self) -> Result<(), TestError> {
+            self.post_stop_called.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn actor_id(&self) -> AgentId {
+            self.id
+        }
+    }
+
+    #[derive(Default)]
+    struct TestEventPublisher {
+        events: Mutex<Vec<SystemEvent>>,
+    }
+
+    #[async_trait]
+    impl EventPublisher for TestEventPublisher {
+        async fn publish(&self, event: SystemEvent) -> Result<(), EventError> {
+            self.events.lock().await.push(event);
+            Ok(())
+        }
     }
 
     #[async_trait]
@@ -682,5 +780,68 @@ mod tests {
             notification.reason,
             TerminationReason::PreStartFailed(_)
         ));
+    }
+
+    #[tokio::test]
+    async fn panic_transitions_to_error_and_notifies_supervisor() {
+        let id = AgentId::new();
+        let post_stop_called = Arc::new(AtomicBool::new(false));
+        let actor = PanicActor {
+            id,
+            post_stop_called: Arc::clone(&post_stop_called),
+        };
+        let (tx, rx) = create_mailbox::<PanicMsg>(&MailboxConfig::bounded(10));
+        let (_stop_tx, stop_rx) = mpsc::channel(1);
+        let (state_tx, state_rx) = watch::channel(AgentState::Initializing);
+        let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
+
+        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, Some(sup_tx), None));
+
+        tx.send(Envelope::tell(PanicMsg::Panic)).await.unwrap();
+        handle.await.unwrap();
+
+        assert_eq!(*state_rx.borrow(), AgentState::Error);
+        assert!(post_stop_called.load(Ordering::SeqCst));
+
+        let notification = sup_rx.recv().await.unwrap();
+        assert!(matches!(notification.reason, TerminationReason::Panicked(_)));
+    }
+
+    #[tokio::test]
+    async fn panic_emits_failure_event_with_panic_phase() {
+        let id = AgentId::new();
+        let actor = PanicActor {
+            id,
+            post_stop_called: Arc::new(AtomicBool::new(false)),
+        };
+        let (tx, rx) = create_mailbox::<PanicMsg>(&MailboxConfig::bounded(10));
+        let (_stop_tx, stop_rx) = mpsc::channel(1);
+        let (state_tx, _state_rx) = watch::channel(AgentState::Initializing);
+        let (sup_tx, _sup_rx) = mpsc::unbounded_channel();
+        let publisher = Arc::new(TestEventPublisher::default());
+
+        let handle = tokio::spawn(run_actor(
+            actor,
+            (),
+            rx,
+            stop_rx,
+            state_tx,
+            Some(sup_tx),
+            Some(Arc::clone(&publisher) as Arc<dyn EventPublisher>),
+        ));
+
+        tx.send(Envelope::tell(PanicMsg::Panic)).await.unwrap();
+        handle.await.unwrap();
+
+        let events = publisher.events.lock().await;
+        let panic_event = events.iter().find(|event| {
+            event.event_type == "actor.failed"
+                && event
+                    .payload
+                    .get("phase")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("panic")
+        });
+        assert!(panic_event.is_some());
     }
 }
