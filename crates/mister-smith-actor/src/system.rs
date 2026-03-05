@@ -187,10 +187,14 @@ impl ActorSystem {
     pub async fn shutdown(&self) -> Result<(), ActorError> {
         info!("Actor system shutting down");
 
-        let mut actors = self.actors.write().await;
+        let mut entries: Vec<(AgentId, ActorHandle)> = {
+            let mut actors = self.actors.write().await;
+            let entries = actors.drain().collect();
+            drop(actors);
+            entries
+        };
 
         // Sort by start_order descending (reverse start order)
-        let mut entries: Vec<(AgentId, ActorHandle)> = actors.drain().collect();
         entries.sort_by(|a, b| b.1.start_order.cmp(&a.1.start_order));
 
         for (id, handle) in entries {
@@ -519,6 +523,45 @@ mod tests {
 
         let err = actor_ref.tell("too late".to_string()).unwrap_err();
         assert!(matches!(err, ActorError::ActorStopped));
+    }
+
+
+    // Regression: shutdown should not hold write lock while awaiting actor stops.
+    #[tokio::test]
+    async fn shutdown_does_not_starve_readers() {
+        let system = Arc::new(ActorSystem::new(ActorSystemConfig {
+            shutdown_timeout: Duration::from_millis(300),
+            ..ActorSystemConfig::default()
+        }));
+
+        for _ in 0..3 {
+            let id = AgentId::new();
+            system
+                .spawn(SimpleActor { id }, vec![], SpawnConfig::default())
+                .await
+                .unwrap();
+        }
+
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        let shutdown_system = Arc::clone(&system);
+        let shutdown_task = tokio::spawn(async move { shutdown_system.shutdown().await });
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        let read_task = tokio::spawn({
+            let system = Arc::clone(&system);
+            async move {
+                tokio::time::timeout(Duration::from_millis(200), system.actor_count())
+                    .await
+                    .expect("actor_count should complete while shutdown is in progress")
+            }
+        });
+
+        let count = read_task.await.unwrap();
+        assert_eq!(count, 0);
+
+        shutdown_task.await.unwrap().unwrap();
     }
 
     // T026: Reverse start order shutdown
