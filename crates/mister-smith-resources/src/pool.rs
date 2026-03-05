@@ -154,7 +154,7 @@ pub struct ConnectionPool<R: Send + Sync + 'static> {
     /// Factory function that produces new resources.
     factory: ResourceFactory<R>,
     /// Number of resources currently checked out.
-    active_count: AtomicUsize,
+    active_count: Arc<AtomicUsize>,
     /// Total number of resources ever created by this pool.
     total_created: AtomicUsize,
     /// Whether the pool has been shut down.
@@ -182,7 +182,7 @@ impl<R: Send + Sync + 'static> ConnectionPool<R> {
             pool: Arc::new(Mutex::new(VecDeque::with_capacity(config.max_size))),
             config,
             factory,
-            active_count: AtomicUsize::new(0),
+            active_count: Arc::new(AtomicUsize::new(0)),
             total_created: AtomicUsize::new(0),
             shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
@@ -335,7 +335,7 @@ impl<R: Send + Sync + 'static> ConnectionPool<R> {
             self.active_count.fetch_add(1, Ordering::Release);
             PooledResource {
                 pool: Arc::clone(&self.pool),
-                active_count: &self.active_count as *const AtomicUsize,
+                active_count: Arc::clone(&self.active_count),
                 shutdown: Arc::clone(&self.shutdown),
                 max_size: self.config.max_size,
                 resource: Some(entry.resource),
@@ -349,7 +349,7 @@ impl<R: Send + Sync + 'static> ConnectionPool<R> {
         self.active_count.fetch_add(1, Ordering::Release);
         Ok(PooledResource {
             pool: Arc::clone(&self.pool),
-            active_count: &self.active_count as *const AtomicUsize,
+            active_count: Arc::clone(&self.active_count),
             shutdown: Arc::clone(&self.shutdown),
             max_size: self.config.max_size,
             resource: Some(resource),
@@ -367,20 +367,12 @@ impl<R: Send + Sync + 'static> ConnectionPool<R> {
 /// without returning it to the pool, use [`into_inner`](PooledResource::into_inner).
 pub struct PooledResource<R: Send + Sync + 'static> {
     pool: Arc<Mutex<VecDeque<PooledEntry<R>>>>,
-    /// Raw pointer to the pool's `active_count`. Safe because the pool
-    /// is always alive while any `PooledResource` referencing it exists
-    /// (the pool's `Arc<Mutex<...>>` keeps the allocation alive, and the
-    /// atomic is on the same logical owner).
-    active_count: *const AtomicUsize,
+    /// Shared active resource counter.
+    active_count: Arc<AtomicUsize>,
     shutdown: Arc<std::sync::atomic::AtomicBool>,
     max_size: usize,
     resource: Option<R>,
 }
-
-// SAFETY: The raw pointer points to an AtomicUsize owned by the ConnectionPool,
-// which lives as long as any PooledResource exists (enforced by the Arc on the pool).
-unsafe impl<R: Send + Sync + 'static> Send for PooledResource<R> {}
-unsafe impl<R: Send + Sync + 'static> Sync for PooledResource<R> {}
 
 impl<R: Send + Sync + 'static> Deref for PooledResource<R> {
     type Target = R;
@@ -405,8 +397,7 @@ impl<R: Send + Sync + 'static> Drop for PooledResource<R> {
         if let Some(resource) = self.resource.take() {
             if self.shutdown.load(Ordering::Acquire) {
                 // Pool is shut down — just decrement the active count.
-                // SAFETY: see unsafe impl Send/Sync above.
-                unsafe { &*self.active_count }.fetch_sub(1, Ordering::Release);
+                self.active_count.fetch_sub(1, Ordering::Release);
                 return;
             }
             let mut pool = self.pool.lock().expect("pool mutex poisoned");
@@ -416,8 +407,7 @@ impl<R: Send + Sync + 'static> Drop for PooledResource<R> {
                 pool.push_back(entry);
             }
             drop(pool);
-            // SAFETY: see unsafe impl Send/Sync above.
-            unsafe { &*self.active_count }.fetch_sub(1, Ordering::Release);
+            self.active_count.fetch_sub(1, Ordering::Release);
         }
     }
 }
@@ -431,8 +421,7 @@ impl<R: Send + Sync + 'static> PooledResource<R> {
             .take()
             .expect("PooledResource already consumed");
         // Decrement active since the resource is leaving pool management.
-        // SAFETY: see unsafe impl Send/Sync above.
-        unsafe { &*self.active_count }.fetch_sub(1, Ordering::Release);
+        self.active_count.fetch_sub(1, Ordering::Release);
         resource
     }
 }
@@ -545,6 +534,34 @@ mod tests {
         // Pool is now at max with one active resource.
         let result = pool.acquire().await;
         assert!(matches!(result, Err(PoolError::AcquireTimeout(_))));
+    }
+
+    #[tokio::test]
+    async fn dropping_pooled_resource_after_pool_owner_drop_is_safe() {
+        let resource = {
+            let pool = ConnectionPool::new(PoolConfig::default(), mock_factory());
+            let resource = pool.acquire().await.unwrap();
+            assert_eq!(pool.active(), 1);
+            resource
+        };
+
+        // Pool owner is dropped here. Dropping resource should not panic.
+        drop(resource);
+    }
+
+    #[tokio::test]
+    async fn into_inner_after_pool_owner_drop_keeps_active_counter_consistent() {
+        let (resource, active_count) = {
+            let pool = ConnectionPool::new(PoolConfig::default(), mock_factory());
+            let resource = pool.acquire().await.unwrap();
+            assert_eq!(pool.active(), 1);
+            (resource, Arc::clone(&pool.active_count))
+        };
+
+        assert_eq!(active_count.load(Ordering::Acquire), 1);
+        let inner = resource.into_inner();
+        assert_eq!(inner.id, 0);
+        assert_eq!(active_count.load(Ordering::Acquire), 0);
     }
 
     #[tokio::test]
