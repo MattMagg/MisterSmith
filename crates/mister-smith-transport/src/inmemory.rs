@@ -204,7 +204,7 @@ impl Transport for InMemoryTransport {
                     Ok(msg) => {
                         // Queue subscribers only receive messages assigned to their index.
                         if let Some(idx) = msg.queue_indices.get(&group_key) {
-                            if idx == member_index {
+                            if *idx == member_index {
                                 yield ReceivedMessage {
                                     envelope: msg.envelope,
                                     reply_subject: msg.reply_subject,
