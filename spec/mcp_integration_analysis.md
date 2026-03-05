@@ -59,6 +59,7 @@ LangChain's `MultiServerMCPClient` creates a fresh session per tool invocation. 
 Google ADK and Mastra both expose internal state as MCP resources. The pattern is: agents' **knowledge bases, context windows, and configuration** are natural MCP Resources. Agent **runtime state** (mailbox depth, current task) belongs in monitoring, not MCP.
 
 **MS Design:**
+
 ```
 Resource types to expose:
 ├── Agent knowledge bases → resources/read (read-only access to agent memory)
@@ -167,11 +168,13 @@ This is implemented by making `McpHandler` resolve tool ownership: local tools c
 **Answer: Yes — client-first, borrowing from AG2's on-demand session model.**
 
 Practical rationale:
+
 1. Consuming external MCP servers (filesystem, database, API) provides **immediate value** — agents gain access to the real world
 2. Serving MS tools via MCP requires agents and tools to exist first — that's further down the ROADMAP
 3. Client-side is lower risk — no public-facing surface to secure
 
 **Phase order adjustment:**
+
 - **Phase A**: MCP Client (connect to external servers, import tools into ToolBus)
 - **Phase B**: MCP Server (expose MS tools to external MCP clients)
 - **Phase C**: Full protocol (resources, prompts, notifications)
@@ -276,6 +279,7 @@ subject_prefix = "ms.mcp"       # NATS subject prefix for MCP routing
 ### 3.4 Implementation Phases (Revised Priority)
 
 #### Phase A: MCP Client (highest immediate value)
+
 1. Add `rust-mcp-sdk` dependency (client + stdio features)
 2. Implement `McpSessionManager` — on-demand sessions with reconnect
 3. Implement `ExternalMcpTool` — wraps remote MCP tool as MS `Tool`
@@ -285,6 +289,7 @@ subject_prefix = "ms.mcp"       # NATS subject prefix for MCP routing
 7. `tool_filter` + `allowed_agents` permission gating
 
 #### Phase B: MCP Server
+
 1. Add `rust-mcp-sdk` (server + streamable-http features)
 2. Implement `McpHandler` — bridge `ServerHandler` → `ToolBus`
 3. Implement `McpServerActor` — supervised actor with restart policies
@@ -293,12 +298,14 @@ subject_prefix = "ms.mcp"       # NATS subject prefix for MCP routing
 6. Two-layer auth (`permissions.rs`)
 
 #### Phase C: Full Protocol
+
 1. Resources adapter (`resources/list`, `resources/read`)
 2. Prompts adapter (`prompts/list`, `prompts/get`)
 3. `notifications/tools/list_changed` via EventBus
 4. SSE transport (legacy compatibility)
 
 #### Phase D: MS Differentiators
+
 1. NATS MCP bridge (federated tool discovery + remote execution)
 2. Hot-reload via `ConfigurationManager` watcher
 3. Sampling support (server → client LLM calls)

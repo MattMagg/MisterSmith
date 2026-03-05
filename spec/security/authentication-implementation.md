@@ -7,6 +7,7 @@
 **Status**: Updated for current ecosystem
 
 > **Key version changes applied in this validation**:
+>
 > - **rustls**: Updated to 0.23.37 API — `Certificate`/`PrivateKey` replaced by `CertificateDer<'static>`/`PrivateKeyDer<'static>`, `ServerConfig::builder()` now requires explicit `CryptoProvider`, `AllowAnyAuthenticatedClient` replaced by `WebPkiClientVerifier`
 > - **rustls-pemfile**: Updated API — `certs()` and key parsers now return iterators of `Result<T>`
 > - **tokio-rustls**: 0.26.4, aligned with rustls 0.23
