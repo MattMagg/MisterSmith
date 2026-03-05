@@ -112,8 +112,12 @@ impl HealthMonitor {
     /// Execute every registered health check, update the cache, and publish
     /// events for any status changes.
     pub async fn perform_health_checks(&self) {
-        let checks = self.health_checks.read().await;
-        for check in checks.iter() {
+        let checks = {
+            let checks = self.health_checks.read().await;
+            checks.clone()
+        };
+
+        for check in checks {
             let component_id = check.component_id();
             let result = check.check().await;
 
@@ -131,16 +135,26 @@ impl HealthMonitor {
                 hs = hs.with_message(msg);
             }
 
-            // Detect status change and publish event if needed.
-            let mut cache = self.status_cache.write().await;
-            let previous_status = cache.get(&component_id).map(|h| h.status);
-            let status_changed = previous_status != Some(new_status);
+            // Detect status change while holding the cache lock as briefly as possible.
+            let status_change = {
+                let mut cache = self.status_cache.write().await;
+                let previous_status = cache.get(&component_id).map(|h| h.status);
+                let status_changed = previous_status != Some(new_status);
+                cache.insert(component_id.clone(), hs);
 
-            if status_changed {
+                if status_changed {
+                    Some((previous_status, new_status))
+                } else {
+                    None
+                }
+            };
+
+            // Publish only after releasing status_cache lock.
+            if let Some((previous_status, current_status)) = status_change {
                 debug!(
                     component = %component_id,
                     previous = ?previous_status,
-                    current = ?new_status,
+                    current = ?current_status,
                     "Component status changed"
                 );
 
@@ -150,7 +164,7 @@ impl HealthMonitor {
                         payload: serde_json::json!({
                             "component_id": component_id.as_str(),
                             "previous_status": previous_status.map(|s| format!("{s:?}")),
-                            "new_status": format!("{new_status:?}"),
+                            "new_status": format!("{current_status:?}"),
                         }),
                     };
                     if let Err(e) = publisher.publish(event).await {
@@ -162,8 +176,6 @@ impl HealthMonitor {
                     }
                 }
             }
-
-            cache.insert(component_id, hs);
         }
     }
 
@@ -244,6 +256,9 @@ impl HealthCheck for RuntimeHealthCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mister_smith_core::EventError;
+    use std::sync::OnceLock;
+    use tokio::sync::{Barrier, Notify};
 
     /// A trivial health check that always returns a fixed status.
     struct FixedHealthCheck {
@@ -285,6 +300,67 @@ mod tests {
         }
     }
 
+    struct CallbackEventPublisher {
+        callback: Arc<
+            dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+                + Send
+                + Sync,
+        >,
+    }
+
+    impl CallbackEventPublisher {
+        fn new<F, Fut>(callback: F) -> Self
+        where
+            F: Fn() -> Fut + Send + Sync + 'static,
+            Fut: std::future::Future<Output = ()> + Send + 'static,
+        {
+            Self {
+                callback: Arc::new(move || Box::pin(callback())),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl EventPublisher for CallbackEventPublisher {
+        async fn publish(&self, _event: SystemEvent) -> Result<(), EventError> {
+            (self.callback)().await;
+            Ok(())
+        }
+    }
+
+    struct BlockingHealthCheck {
+        id: ComponentId,
+        started: Arc<Barrier>,
+        release: Arc<Notify>,
+        should_block: AtomicBool,
+    }
+
+    impl BlockingHealthCheck {
+        fn new(id: &str, started: Arc<Barrier>, release: Arc<Notify>) -> Self {
+            Self {
+                id: ComponentId::new(id),
+                started,
+                release,
+                should_block: AtomicBool::new(true),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl HealthCheck for BlockingHealthCheck {
+        async fn check(&self) -> Result<Status, Box<dyn std::error::Error + Send + Sync>> {
+            if self.should_block.swap(false, Ordering::SeqCst) {
+                self.started.wait().await;
+                self.release.notified().await;
+            }
+            Ok(Status::Healthy)
+        }
+
+        fn component_id(&self) -> ComponentId {
+            self.id.clone()
+        }
+    }
+
     #[tokio::test]
     async fn register_and_check() {
         let monitor = HealthMonitor::new(Duration::from_secs(60));
@@ -303,9 +379,7 @@ mod tests {
     #[tokio::test]
     async fn failing_check_produces_unhealthy() {
         let monitor = HealthMonitor::new(Duration::from_secs(60));
-        monitor
-            .register_check(Arc::new(FailingHealthCheck))
-            .await;
+        monitor.register_check(Arc::new(FailingHealthCheck)).await;
 
         monitor.perform_health_checks().await;
 
@@ -397,5 +471,80 @@ mod tests {
     async fn default_check_interval() {
         let check = FixedHealthCheck::new("test", Status::Healthy);
         assert_eq!(check.check_interval(), Duration::from_secs(30));
+    }
+
+    #[tokio::test]
+    async fn event_publisher_can_read_monitor_without_deadlock() {
+        let monitor_ref: Arc<OnceLock<Arc<HealthMonitor>>> = Arc::new(OnceLock::new());
+        let monitor_ref_for_publisher = Arc::clone(&monitor_ref);
+        let publisher = Arc::new(CallbackEventPublisher::new(move || {
+            let monitor = Arc::clone(
+                monitor_ref_for_publisher
+                    .get()
+                    .expect("monitor should be initialized before publishing"),
+            );
+            async move {
+                let statuses = monitor.get_all_statuses().await;
+                let status = statuses
+                    .get(&ComponentId::new("svc"))
+                    .map(|entry| entry.status);
+                assert_eq!(status, Some(Status::Healthy));
+            }
+        }));
+
+        let monitor =
+            Arc::new(HealthMonitor::new(Duration::from_secs(60)).with_event_publisher(publisher));
+        assert!(
+            monitor_ref.set(Arc::clone(&monitor)).is_ok(),
+            "monitor should only be set once"
+        );
+        monitor
+            .register_check(Arc::new(FixedHealthCheck::new("svc", Status::Healthy)))
+            .await;
+
+        tokio::time::timeout(Duration::from_secs(1), monitor.perform_health_checks())
+            .await
+            .expect("health checks should complete without deadlock");
+    }
+
+    #[tokio::test]
+    async fn registration_during_checks_does_not_starve_writers() {
+        let monitor = Arc::new(HealthMonitor::new(Duration::from_secs(60)));
+        let started = Arc::new(Barrier::new(2));
+        let release = Arc::new(Notify::new());
+
+        monitor
+            .register_check(Arc::new(BlockingHealthCheck::new(
+                "slow",
+                Arc::clone(&started),
+                Arc::clone(&release),
+            )))
+            .await;
+
+        let monitor_for_checks = Arc::clone(&monitor);
+        let checks_task = tokio::spawn(async move {
+            monitor_for_checks.perform_health_checks().await;
+        });
+
+        started.wait().await;
+
+        let registration_result = tokio::time::timeout(
+            Duration::from_secs(1),
+            monitor.register_check(Arc::new(FixedHealthCheck::new("new", Status::Degraded))),
+        )
+        .await;
+
+        release.notify_waiters();
+        registration_result.expect("register_check should not block while checks are executing");
+        tokio::time::timeout(Duration::from_secs(1), checks_task)
+            .await
+            .expect("health-check task should finish")
+            .expect("health-check task should not panic");
+
+        monitor.perform_health_checks().await;
+
+        let all = monitor.get_all_statuses().await;
+        assert_eq!(all[&ComponentId::new("slow")].status, Status::Healthy);
+        assert_eq!(all[&ComponentId::new("new")].status, Status::Degraded);
     }
 }
