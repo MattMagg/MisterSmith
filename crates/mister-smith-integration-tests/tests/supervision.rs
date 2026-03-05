@@ -693,69 +693,85 @@ async fn t084_event_bus_lifecycle_events_on_failure_and_restart() {
         .unwrap();
 
     let _handle = supervised.start_supervision();
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(150)).await;
 
-    // Drain the "actor.started" event from initial spawn
-    let mut started_count = 0;
+    // Initial lifecycle events from spawn + startup.
+    let mut initial_events = Vec::new();
     while let Ok(event) = rx.try_recv() {
-        if event.event_type == EventType::Custom("actor.started".into()) {
-            started_count += 1;
-        }
+        initial_events.push(event);
     }
-    assert_eq!(
-        started_count, 1,
-        "Should have 1 initial actor.started event"
+
+    let created_event = initial_events
+        .iter()
+        .find(|e| e.event_type == EventType::Custom("agent.Created".into()))
+        .expect("Should have agent.Created event");
+    assert_eq!(created_event.payload["actor_id"], actor_id.to_string());
+
+    let started_event = initial_events
+        .iter()
+        .find(|e| e.event_type == EventType::Custom("agent.Started".into()))
+        .expect("Should have agent.Started event");
+    assert_eq!(started_event.payload["actor_id"], actor_id.to_string());
+
+    let actor_id_str = actor_id.to_string();
+    let init_to_running = initial_events.iter().any(|e| {
+        e.event_type == EventType::Custom("agent.StateChanged".into())
+            && e.payload.get("actor_id").and_then(|v| v.as_str()) == Some(actor_id_str.as_str())
+            && e.payload.get("from").and_then(|v| v.as_str()) == Some("Initializing")
+            && e.payload.get("to").and_then(|v| v.as_str()) == Some("Running")
+    });
+    assert!(
+        init_to_running,
+        "Should have StateChanged Initializing->Running event"
     );
 
-    // Trigger failure
+    // Trigger failure and restart.
     ref_a.tell(TestMsg::Fail).unwrap();
-    tokio::time::sleep(Duration::from_millis(900)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Collect all events from the failure+restart chain
-    let mut events = Vec::new();
+    let mut restart_events = Vec::new();
     while let Ok(event) = rx.try_recv() {
-        events.push(event);
+        restart_events.push(event);
     }
 
-    // Should have:
-    // 1. actor.failed (from ActorCell lifecycle)
-    // 2. Agent(Failed) (from supervision events — failure detection)
-    // 3. Agent(Started) (from supervision events — restart)
-    // 4. actor.started (from ActorCell lifecycle on restart)
-    // Plus possibly actor.stopped for the old instance
-
-    let has_actor_failed = events
+    // Actor cell lifecycle and supervision chain should both be present.
+    let has_cell_failed = restart_events
         .iter()
-        .any(|e| e.event_type == EventType::Custom("actor.failed".into()));
-    let has_supervision_failed = events
+        .any(|e| e.event_type == EventType::Custom("agent.Failed".into()));
+    let has_stopping_transition = restart_events.iter().any(|e| {
+        e.event_type == EventType::Custom("agent.StateChanged".into())
+            && e.payload.get("from").and_then(|v| v.as_str()) == Some("Running")
+            && e.payload.get("to").and_then(|v| v.as_str()) == Some("Stopping")
+    });
+    let has_error_transition = restart_events.iter().any(|e| {
+        e.event_type == EventType::Custom("agent.StateChanged".into())
+            && e.payload.get("from").and_then(|v| v.as_str()) == Some("Stopping")
+            && e.payload.get("to").and_then(|v| v.as_str()) == Some("Error")
+    });
+    let has_supervision_failed = restart_events
         .iter()
         .any(|e| e.event_type == EventType::Agent(AgentEventType::Failed));
-    let has_supervision_restart = events.iter().any(|e| {
-        e.event_type == EventType::Agent(AgentEventType::Started)
-            && e.payload.get("action").and_then(|v| v.as_str()) == Some("restart")
-    });
-
-    assert!(has_actor_failed, "Should have actor.failed event");
-    assert!(
-        has_supervision_failed,
-        "Should have supervision Failed event"
-    );
-    assert!(
-        has_supervision_restart,
-        "Should have supervision restart Started event"
-    );
-
-    // Verify correlation IDs link the chain
-    let failure_event = events
-        .iter()
-        .find(|e| e.event_type == EventType::Agent(AgentEventType::Failed))
-        .unwrap();
-    let restart_event = events
+    let supervision_restart = restart_events
         .iter()
         .find(|e| {
             e.event_type == EventType::Agent(AgentEventType::Started)
                 && e.payload.get("action").and_then(|v| v.as_str()) == Some("restart")
         })
+        .expect("Should have supervision restart Started event");
+    let restarted_started = restart_events.iter().any(|e| {
+        e.event_type == EventType::Custom("agent.Started".into())
+            && e.id != started_event.id
+    });
+
+    assert!(has_cell_failed, "Should have actor-cell Failed event");
+    assert!(has_stopping_transition, "Should have Running->Stopping transition");
+    assert!(has_error_transition, "Should have Stopping->Error transition");
+    assert!(has_supervision_failed, "Should have supervision Failed event");
+    assert!(restarted_started, "Should have restarted agent.Started event");
+
+    let failure_event = restart_events
+        .iter()
+        .find(|e| e.event_type == EventType::Agent(AgentEventType::Failed))
         .unwrap();
 
     assert!(
@@ -763,11 +779,11 @@ async fn t084_event_bus_lifecycle_events_on_failure_and_restart() {
         "Failure event should have correlation_id"
     );
     assert_eq!(
-        failure_event.correlation_id, restart_event.correlation_id,
+        failure_event.correlation_id, supervision_restart.correlation_id,
         "Failure and restart events should share correlation_id"
     );
     assert_eq!(
-        restart_event.causation_id,
+        supervision_restart.causation_id,
         Some(failure_event.id),
         "Restart event causation_id should reference failure event"
     );

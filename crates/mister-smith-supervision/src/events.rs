@@ -166,6 +166,50 @@ mod tests {
         assert_eq!(event.causation_id, Some(cause));
     }
 
+
+    #[tokio::test]
+    async fn failure_then_restart_chain_preserves_ids() {
+        let bus = EventBus::default();
+        let mut rx = collect_broadcast(&bus);
+
+        let actor_id = AgentId::new();
+        let supervisor_id = AgentId::new();
+        let correlation_id = Uuid::new_v4();
+
+        let failure_event_id =
+            emit_failure_event(&bus, &actor_id, "boom", correlation_id).await;
+        emit_restart_event(
+            &bus,
+            &actor_id,
+            &supervisor_id,
+            correlation_id,
+            failure_event_id,
+        )
+        .await;
+
+        let failure_event = rx.recv().await.unwrap();
+        let restart_event = rx.recv().await.unwrap();
+
+        assert_eq!(failure_event.id, failure_event_id);
+        assert_eq!(failure_event.payload["actor_id"], actor_id.to_string());
+        assert_eq!(
+            failure_event.event_type,
+            EventType::Agent(AgentEventType::Failed)
+        );
+
+        assert_eq!(restart_event.payload["actor_id"], actor_id.to_string());
+        assert_eq!(
+            restart_event.payload["supervisor_id"],
+            supervisor_id.to_string()
+        );
+        assert_eq!(restart_event.correlation_id, Some(correlation_id));
+        assert_eq!(restart_event.causation_id, Some(failure_event_id));
+        assert_eq!(
+            restart_event.event_type,
+            EventType::Agent(AgentEventType::Started)
+        );
+    }
+
     #[tokio::test]
     async fn budget_exhausted_event_emitted() {
         let bus = EventBus::default();
