@@ -1,10 +1,8 @@
 name: MisterSmith Documentation CI
 
+# Disabled: this workflow was for the pre-implementation documentation phase.
+# The project is now in implementation (Phase 5+) with .rs source files.
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
   workflow_dispatch:
     inputs:
       rust_version:
