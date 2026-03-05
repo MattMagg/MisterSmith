@@ -8,12 +8,15 @@ use std::sync::Arc;
 use tonic::{Request, Status};
 
 use crate::middleware::SecurityLayer;
+#[cfg(feature = "rbac")]
+use crate::rbac::AuthorizationRequest;
 
 /// Create a Tonic interceptor closure that validates JWT tokens.
 ///
 /// When security is disabled, all requests pass through unchanged.
 /// When enabled, extracts the token from `authorization` metadata,
-/// validates it, and inserts `AgentClaims` into request extensions.
+/// validates it, evaluates RBAC policy (when enabled), and inserts
+/// `AgentClaims` into request extensions.
 ///
 /// # Usage
 ///
@@ -66,6 +69,31 @@ pub fn grpc_auth_interceptor(
                         std::collections::HashMap::new(),
                     );
                 }
+                #[cfg(feature = "rbac")]
+                {
+                    let authz_request = build_grpc_authorization_request(&request, &claims);
+                    let decision = security.policy.evaluate(&authz_request);
+
+                    #[cfg(feature = "audit")]
+                    {
+                        use crate::audit::events::AuditOutcome;
+                        security.audit.record_authz(
+                            &claims.sub,
+                            &authz_request.action,
+                            &authz_request.resource,
+                            if decision.allowed {
+                                AuditOutcome::Success
+                            } else {
+                                AuditOutcome::Failure
+                            },
+                        );
+                    }
+
+                    if !decision.allowed {
+                        return Err(Status::permission_denied("forbidden"));
+                    }
+                }
+
                 request.extensions_mut().insert(claims);
                 Ok(request)
             }
@@ -84,5 +112,30 @@ pub fn grpc_auth_interceptor(
                 Err(Status::unauthenticated(e.to_string()))
             }
         }
+    }
+}
+
+#[cfg(feature = "rbac")]
+fn build_grpc_authorization_request(
+    request: &Request<()>,
+    claims: &crate::jwt::AgentClaims,
+) -> AuthorizationRequest {
+    let grpc_method = request.extensions().get::<tonic::GrpcMethod<'static>>();
+    let service = grpc_method.map(|m| m.service()).unwrap_or("unknown");
+    let method = grpc_method.map(|m| m.method()).unwrap_or("unknown");
+    let path = format!("/{service}/{method}");
+
+    AuthorizationRequest {
+        principal: claims.clone(),
+        action: "grpc_call".to_string(),
+        resource: path.clone(),
+        resource_id: Some(path.clone()),
+        context: [
+            ("scope".to_string(), path.clone()),
+            ("grpc_method".to_string(), path),
+            ("transport".to_string(), "grpc".to_string()),
+        ]
+        .into_iter()
+        .collect(),
     }
 }

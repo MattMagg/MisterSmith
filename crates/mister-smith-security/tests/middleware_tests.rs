@@ -41,15 +41,20 @@ fn test_security_layer(enabled: bool) -> Arc<SecurityLayer> {
     )
 }
 
-fn test_token(security: &SecurityLayer) -> String {
+fn test_token_with_permissions(security: &SecurityLayer, permissions: Vec<String>) -> String {
     let claims = AgentClaims {
         sub: "test-agent".to_string(),
         agent_id: "test-agent".to_string(),
         agent_type: "worker".to_string(),
+        permissions,
         ..Default::default()
     };
     let pair = security.jwt.generate_token_pair(&claims).unwrap();
     pair.access_token
+}
+
+fn test_token(security: &SecurityLayer) -> String {
+    test_token_with_permissions(security, Vec::new())
 }
 
 async fn test_handler() -> impl IntoResponse {
@@ -70,7 +75,7 @@ fn test_app(security: Arc<SecurityLayer>) -> Router {
 #[tokio::test]
 async fn valid_bearer_token_passes() {
     let security = test_security_layer(true);
-    let token = test_token(&security);
+    let token = test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
     let app = test_app(security);
 
     let request = Request::builder()
@@ -162,7 +167,7 @@ async fn rate_limiter_returns_429() {
         )
         .unwrap(),
     );
-    let token = test_token(&security);
+    let token = test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
 
     // The SecurityLayer creates a rate limiter with 100 requests/60s.
     // Let's test the rate limiter directly instead.
@@ -195,7 +200,7 @@ async fn authenticated_agent_extractor_works() {
     use mister_smith_security::middleware::axum_mw::AuthenticatedAgent;
 
     let security = test_security_layer(true);
-    let token = test_token(&security);
+    let token = test_token_with_permissions(&security, vec!["get:/me:/me".to_string()]);
 
     async fn handler(AuthenticatedAgent(claims): AuthenticatedAgent) -> impl IntoResponse {
         format!("Hello, {}", claims.agent_id)
@@ -258,4 +263,136 @@ async fn revoked_token_returns_401() {
 
     let response = app.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+
+// -- Authorization failures return 403 -------------------------------------
+
+#[tokio::test]
+async fn authenticated_but_unauthorized_http_request_returns_403() {
+    let security = test_security_layer(true);
+    let token = test_token(&security);
+    let app = test_app(security);
+
+    let request = Request::builder()
+        .uri("/protected")
+        .method("GET")
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn authorized_http_request_succeeds() {
+    let security = test_security_layer(true);
+    let token = test_token_with_permissions(
+        &security,
+        vec!["get:/protected:/protected".to_string()],
+    );
+    let app = test_app(security);
+
+    let request = Request::builder()
+        .uri("/protected")
+        .method("GET")
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[test]
+fn authenticated_but_unauthorized_grpc_request_returns_permission_denied() {
+    let security = test_security_layer(true);
+    let token = test_token(&security);
+    let interceptor = mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor(security);
+
+    let mut request = tonic::Request::new(());
+    request
+        .metadata_mut()
+        .insert("authorization", format!("Bearer {token}").parse().unwrap());
+    request
+        .extensions_mut()
+        .insert(tonic::GrpcMethod::new("mistersmith.SecurityService", "Check"));
+
+    let result = interceptor(request);
+    assert!(result.is_err());
+    let err = result.err().unwrap();
+    assert_eq!(err.code(), tonic::Code::PermissionDenied);
+}
+
+#[test]
+fn authorized_grpc_request_succeeds() {
+    let security = test_security_layer(true);
+    let token = test_token_with_permissions(
+        &security,
+        vec!["grpc_call:/mistersmith.SecurityService/Check:/mistersmith.SecurityService/Check"
+            .to_string()],
+    );
+    let interceptor =
+        mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor(security.clone());
+
+    let mut request = tonic::Request::new(());
+    request
+        .metadata_mut()
+        .insert("authorization", format!("Bearer {token}").parse().unwrap());
+    request
+        .extensions_mut()
+        .insert(tonic::GrpcMethod::new("mistersmith.SecurityService", "Check"));
+
+    let result = interceptor(request);
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn audit_log_contains_authz_events_for_allow_and_deny() {
+    use mister_smith_security::audit::events::{AuditEventType, AuditOutcome};
+
+    let security = test_security_layer(true);
+    let denied_token = test_token(&security);
+    let allowed_token = test_token_with_permissions(
+        &security,
+        vec!["get:/protected:/protected".to_string()],
+    );
+
+    let app = test_app(security.clone());
+
+    let denied_request = Request::builder()
+        .uri("/protected")
+        .method("GET")
+        .header("authorization", format!("Bearer {denied_token}"))
+        .body(Body::empty())
+        .unwrap();
+    let denied_response = app.clone().oneshot(denied_request).await.unwrap();
+    assert_eq!(denied_response.status(), StatusCode::FORBIDDEN);
+
+    let allowed_request = Request::builder()
+        .uri("/protected")
+        .method("GET")
+        .header("authorization", format!("Bearer {allowed_token}"))
+        .body(Body::empty())
+        .unwrap();
+    let allowed_response = app.oneshot(allowed_request).await.unwrap();
+    assert_eq!(allowed_response.status(), StatusCode::OK);
+
+    let events = security.audit.recent_events(32);
+    let authz_events: Vec<_> = events
+        .iter()
+        .filter(|event| event.event_type == AuditEventType::Authorization)
+        .collect();
+
+    assert!(
+        authz_events
+            .iter()
+            .any(|event| event.outcome == AuditOutcome::Failure)
+    );
+    assert!(
+        authz_events
+            .iter()
+            .any(|event| event.outcome == AuditOutcome::Success)
+    );
 }

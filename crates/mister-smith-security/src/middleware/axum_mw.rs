@@ -12,6 +12,8 @@ use axum::response::{IntoResponse, Response};
 
 use crate::jwt::AgentClaims;
 use crate::middleware::SecurityLayer;
+#[cfg(feature = "rbac")]
+use crate::rbac::AuthorizationRequest;
 
 /// Axum middleware that validates JWT Bearer tokens.
 ///
@@ -20,7 +22,8 @@ use crate::middleware::SecurityLayer;
 /// 1. Checks rate limiter — returns 429 if exceeded.
 /// 2. Extracts Bearer token from `Authorization` header — returns 401 if missing.
 /// 3. Validates the token via `JwtManager` — returns 401 if invalid/expired/revoked.
-/// 4. Inserts `AgentClaims` into request extensions for downstream handlers.
+/// 4. Evaluates RBAC policy (when enabled) — returns 403 if unauthorized.
+/// 5. Inserts `AgentClaims` into request extensions for downstream handlers.
 pub async fn auth_middleware(
     State(security): State<Arc<SecurityLayer>>,
     mut request: Request<axum::body::Body>,
@@ -84,6 +87,31 @@ pub async fn auth_middleware(
                     std::collections::HashMap::new(),
                 );
             }
+            #[cfg(feature = "rbac")]
+            {
+                let authz_request = build_http_authorization_request(&request, &claims);
+                let decision = security.policy.evaluate(&authz_request);
+
+                #[cfg(feature = "audit")]
+                {
+                    use crate::audit::events::AuditOutcome;
+                    security.audit.record_authz(
+                        &claims.sub,
+                        &authz_request.action,
+                        &authz_request.resource,
+                        if decision.allowed {
+                            AuditOutcome::Success
+                        } else {
+                            AuditOutcome::Failure
+                        },
+                    );
+                }
+
+                if !decision.allowed {
+                    return forbidden_response("forbidden");
+                }
+            }
+
             request.extensions_mut().insert(claims);
             next.run(request).await
         }
@@ -101,6 +129,30 @@ pub async fn auth_middleware(
             }
             unauthorized_response(&e.to_string())
         }
+    }
+}
+
+#[cfg(feature = "rbac")]
+fn build_http_authorization_request<B>(request: &Request<B>, claims: &AgentClaims) -> AuthorizationRequest {
+    let route = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(axum::extract::MatchedPath::as_str)
+        .unwrap_or_else(|| request.uri().path());
+    let action = request.method().as_str().to_ascii_lowercase();
+
+    AuthorizationRequest {
+        principal: claims.clone(),
+        action,
+        resource: route.to_string(),
+        resource_id: Some(route.to_string()),
+        context: [
+            ("scope".to_string(), route.to_string()),
+            ("http_method".to_string(), request.method().as_str().to_string()),
+            ("transport".to_string(), "http".to_string()),
+        ]
+        .into_iter()
+        .collect(),
     }
 }
 
@@ -148,6 +200,12 @@ fn extract_bearer_token<B>(request: &Request<B>) -> Option<String> {
 fn unauthorized_response(message: &str) -> Response {
     let body = serde_json::json!({ "error": message });
     (StatusCode::UNAUTHORIZED, axum::Json(body)).into_response()
+}
+
+/// Build a 403 Forbidden JSON response.
+fn forbidden_response(message: &str) -> Response {
+    let body = serde_json::json!({ "error": message });
+    (StatusCode::FORBIDDEN, axum::Json(body)).into_response()
 }
 
 /// Build a 429 Too Many Requests JSON response.
