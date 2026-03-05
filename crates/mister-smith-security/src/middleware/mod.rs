@@ -20,6 +20,9 @@ use crate::jwt::JwtManager;
 use crate::rbac::PolicyEngine;
 #[cfg(feature = "audit")]
 use crate::audit::AuditLogger;
+use mister_smith_config::SecurityConfig as RuntimeSecurityConfig;
+#[cfg(feature = "tls")]
+use crate::tls::CertificateManager;
 
 use crate::config;
 use mister_smith_core::SecurityError;
@@ -32,17 +35,61 @@ use rate_limiter::RateLimiter;
 pub struct SecurityLayer {
     /// JWT token manager.
     #[cfg(feature = "jwt")]
-    pub jwt: Arc<JwtManager>,
+    pub jwt: Option<Arc<JwtManager>>,
     /// RBAC policy engine.
     #[cfg(feature = "rbac")]
-    pub policy: Arc<PolicyEngine>,
+    pub policy: Option<Arc<PolicyEngine>>,
     /// Audit logger.
     #[cfg(feature = "audit")]
-    pub audit: Arc<AuditLogger>,
+    pub audit: Option<Arc<AuditLogger>>,
+    /// TLS certificate manager.
+    #[cfg(feature = "tls")]
+    pub tls: Option<Arc<CertificateManager>>,
     /// Request rate limiter.
     pub rate_limiter: Arc<RateLimiter>,
     /// Whether security is enabled (master switch).
     enabled: bool,
+}
+
+/// Runtime middleware construction settings, typically derived from
+/// `mister_smith_config::SecurityConfig`.
+#[derive(Debug, Clone, Default)]
+pub struct SecurityLayerConfig {
+    /// Master security switch.
+    pub enabled: bool,
+    /// Authentication subsystem enabled flag.
+    pub auth_enabled: bool,
+    /// Authorization subsystem enabled flag.
+    pub authz_enabled: bool,
+    /// Audit subsystem enabled flag.
+    pub audit_enabled: bool,
+    /// TLS subsystem enabled flag.
+    pub tls_enabled: bool,
+    /// JWT subsystem configuration.
+    #[cfg(feature = "jwt")]
+    pub jwt_config: Option<config::JwtConfig>,
+    /// RBAC subsystem configuration.
+    #[cfg(feature = "rbac")]
+    pub rbac_config: Option<config::RbacConfig>,
+    /// Audit subsystem configuration.
+    #[cfg(feature = "audit")]
+    pub audit_config: Option<config::AuditConfig>,
+    /// TLS subsystem configuration.
+    #[cfg(feature = "tls")]
+    pub tls_config: Option<config::TlsConfig>,
+}
+
+impl From<&RuntimeSecurityConfig> for SecurityLayerConfig {
+    fn from(value: &RuntimeSecurityConfig) -> Self {
+        Self {
+            enabled: value.enabled,
+            auth_enabled: value.auth.enabled,
+            authz_enabled: value.authz.enabled,
+            audit_enabled: value.audit.enabled,
+            tls_enabled: value.tls.enabled,
+            ..Default::default()
+        }
+    }
 }
 
 impl SecurityLayer {
@@ -51,20 +98,47 @@ impl SecurityLayer {
     /// # Errors
     ///
     /// Returns `SecurityError` if JWT key loading fails.
-    pub fn new(
-        security_enabled: bool,
-        #[cfg(feature = "jwt")] jwt_config: &config::JwtConfig,
-        #[cfg(feature = "rbac")] rbac_config: &config::RbacConfig,
-        #[cfg(feature = "audit")] audit_config: &config::AuditConfig,
-    ) -> Result<Self, SecurityError> {
+    pub fn new(config: SecurityLayerConfig) -> Result<Self, SecurityError> {
         #[cfg(feature = "jwt")]
-        let jwt = Arc::new(JwtManager::new(jwt_config)?);
+        let jwt = if config.enabled && config.auth_enabled {
+            config
+                .jwt_config
+                .as_ref()
+                .map(JwtManager::new)
+                .transpose()?
+                .map(Arc::new)
+        } else {
+            None
+        };
 
         #[cfg(feature = "rbac")]
-        let policy = Arc::new(PolicyEngine::new(rbac_config));
+        let policy = if config.enabled && config.authz_enabled {
+            config.rbac_config.as_ref().map(|cfg| Arc::new(PolicyEngine::new(cfg)))
+        } else {
+            None
+        };
 
         #[cfg(feature = "audit")]
-        let audit = Arc::new(AuditLogger::new(audit_config));
+        let audit = if config.enabled && config.audit_enabled {
+            config
+                .audit_config
+                .as_ref()
+                .map(|cfg| Arc::new(AuditLogger::new(cfg)))
+        } else {
+            None
+        };
+
+        #[cfg(feature = "tls")]
+        let tls = if config.enabled && config.tls_enabled {
+            config
+                .tls_config
+                .as_ref()
+                .map(CertificateManager::new)
+                .transpose()?
+                .map(Arc::new)
+        } else {
+            None
+        };
 
         let rate_limiter = Arc::new(RateLimiter::new(100, std::time::Duration::from_secs(60)));
 
@@ -75,8 +149,10 @@ impl SecurityLayer {
             policy,
             #[cfg(feature = "audit")]
             audit,
+            #[cfg(feature = "tls")]
+            tls,
             rate_limiter,
-            enabled: security_enabled,
+            enabled: config.enabled,
         })
     }
 

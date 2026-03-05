@@ -46,16 +46,22 @@ pub async fn auth_middleware(
         #[cfg(feature = "audit")]
         {
             use crate::audit::events::AuditOutcome;
-            security.audit.record_auth(
-                &source,
-                AuditOutcome::Blocked,
-                [("reason".to_string(), "rate_limited".to_string())]
-                    .into_iter()
-                    .collect(),
-            );
+            if let Some(audit) = security.audit.as_ref() {
+                audit.record_auth(
+                    &source,
+                    AuditOutcome::Blocked,
+                    [("reason".to_string(), "rate_limited".to_string())]
+                        .into_iter()
+                        .collect(),
+                );
+            }
         }
         return rate_limited_response(retry_after.as_secs());
     }
+
+    let Some(jwt) = security.jwt.as_ref() else {
+        return next.run(request).await;
+    };
 
     // Extract Bearer token
     let token = match extract_bearer_token(&request) {
@@ -64,52 +70,60 @@ pub async fn auth_middleware(
             #[cfg(feature = "audit")]
             {
                 use crate::audit::events::AuditOutcome;
-                security.audit.record_auth(
-                    &source,
-                    AuditOutcome::Failure,
-                    [("reason".to_string(), "missing_auth_header".to_string())]
-                        .into_iter()
-                        .collect(),
-                );
+                if let Some(audit) = security.audit.as_ref() {
+                    audit.record_auth(
+                        &source,
+                        AuditOutcome::Failure,
+                        [("reason".to_string(), "missing_auth_header".to_string())]
+                            .into_iter()
+                            .collect(),
+                    );
+                }
             }
             return unauthorized_response("missing authorization header");
         }
     };
 
     // Validate token
-    match security.jwt.validate_token(&token) {
+    match jwt.validate_token(&token) {
         Ok(claims) => {
             #[cfg(feature = "audit")]
             {
                 use crate::audit::events::AuditOutcome;
-                security.audit.record_auth(
-                    &claims.sub,
-                    AuditOutcome::Success,
-                    std::collections::HashMap::new(),
-                );
+                if let Some(audit) = security.audit.as_ref() {
+                    audit.record_auth(
+                        &claims.sub,
+                        AuditOutcome::Success,
+                        std::collections::HashMap::new(),
+                    );
+                }
             }
             #[cfg(feature = "rbac")]
             {
-                let authz_request = build_http_authorization_request(&request, &claims);
-                let decision = security.policy.evaluate(&authz_request);
+                if let Some(policy) = security.policy.as_ref() {
+                    let authz_request = build_http_authorization_request(&request, &claims);
+                    let decision = policy.evaluate(&authz_request);
 
-                #[cfg(feature = "audit")]
-                {
-                    use crate::audit::events::AuditOutcome;
-                    security.audit.record_authz(
-                        &claims.sub,
-                        &authz_request.action,
-                        &authz_request.resource,
-                        if decision.allowed {
-                            AuditOutcome::Success
-                        } else {
-                            AuditOutcome::Failure
-                        },
-                    );
-                }
+                    #[cfg(feature = "audit")]
+                    {
+                        use crate::audit::events::AuditOutcome;
+                        if let Some(audit) = security.audit.as_ref() {
+                            audit.record_authz(
+                                &claims.sub,
+                                &authz_request.action,
+                                &authz_request.resource,
+                                if decision.allowed {
+                                    AuditOutcome::Success
+                                } else {
+                                    AuditOutcome::Failure
+                                },
+                            );
+                        }
+                    }
 
-                if !decision.allowed {
-                    return forbidden_response("forbidden");
+                    if !decision.allowed {
+                        return forbidden_response("forbidden");
+                    }
                 }
             }
 
@@ -120,13 +134,15 @@ pub async fn auth_middleware(
             #[cfg(feature = "audit")]
             {
                 use crate::audit::events::AuditOutcome;
-                security.audit.record_auth(
-                    &source,
-                    AuditOutcome::Failure,
-                    [("reason".to_string(), e.to_string())]
-                        .into_iter()
-                        .collect(),
-                );
+                if let Some(audit) = security.audit.as_ref() {
+                    audit.record_auth(
+                        &source,
+                        AuditOutcome::Failure,
+                        [("reason".to_string(), e.to_string())]
+                            .into_iter()
+                            .collect(),
+                    );
+                }
             }
             unauthorized_response(map_auth_error_message(&e))
         }

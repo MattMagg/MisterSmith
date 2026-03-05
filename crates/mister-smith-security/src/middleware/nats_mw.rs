@@ -20,13 +20,13 @@ use crate::rbac::PolicyEngine;
 /// `subscribe:{subject}:*` before subscribe operations.
 pub struct SecureTransport<T: Transport> {
     inner: T,
-    policy_engine: Arc<PolicyEngine>,
+    policy_engine: Option<Arc<PolicyEngine>>,
     agent_claims: AgentClaims,
 }
 
 impl<T: Transport> SecureTransport<T> {
     /// Create a new `SecureTransport` wrapping the given transport.
-    pub fn new(inner: T, policy_engine: Arc<PolicyEngine>, claims: AgentClaims) -> Self {
+    pub fn new(inner: T, policy_engine: Option<Arc<PolicyEngine>>, claims: AgentClaims) -> Self {
         Self {
             inner,
             policy_engine,
@@ -36,10 +36,11 @@ impl<T: Transport> SecureTransport<T> {
 
     /// Check a permission, converting denial to a TransportError.
     fn check_permission(&self, action: &str, subject: &str) -> Result<(), TransportError> {
-        if self
-            .policy_engine
-            .check_permission(&self.agent_claims, action, subject)
-        {
+        let Some(policy_engine) = self.policy_engine.as_ref() else {
+            return Ok(());
+        };
+
+        if policy_engine.check_permission(&self.agent_claims, action, subject) {
             Ok(())
         } else {
             Err(TransportError::ConnectionFailed(format!(
