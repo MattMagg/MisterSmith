@@ -6,7 +6,7 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-a
 
 ```bash
 cargo build --workspace                    # Build all crates
-cargo test --workspace                     # Run all tests (882 as of Phase 6 complete)
+cargo test --workspace                     # Run all tests (950 as of Phase 7 complete)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 ```
 
@@ -20,7 +20,8 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 4. Transport & Messaging | Complete | `mister-smith-transport`, `mister-smith-nats`, `mister-smith-http`, `mister-smith-grpc`, `mister-smith-mcp` |
 | 5. Security | Complete | `mister-smith-security` |
 | 6. Persistence & State | Complete | `mister-smith-persistence` |
-| 7–8 | Not started | See `ROADMAP.md` |
+| 7. Agent System | Complete | `mister-smith-agents` |
+| 8 | Not started | See `ROADMAP.md` |
 
 ## Workspace Crate Dependencies
 
@@ -41,6 +42,7 @@ mister-smith-core (foundation types, traits, errors)
 ├── mister-smith-mcp (MCP client/server, tool registry, NATS bridge)
 ├── mister-smith-security (JWT auth, RBAC, TLS/mTLS, audit logging)
 ├── mister-smith-persistence (PostgreSQL + JetStream KV dual-store, repositories, audit bridge)
+├── mister-smith-agents (AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles)
 └── mister-smith-integration-tests (cross-crate validation)
 ```
 
@@ -48,7 +50,7 @@ mister-smith-core (foundation types, traits, errors)
 
 | Directory | Contents |
 |-----------|----------|
-| `crates/` | Rust workspace — 17 crates (Phase 1-6: foundation, runtime/async, actor/supervision, transport, security, persistence) |
+| `crates/` | Rust workspace — 18 crates (Phase 1-7: foundation, runtime/async, actor/supervision, transport, security, persistence, agents) |
 | `specs/` | SpecKit feature directories with spec, plan, and task artifacts |
 | `ROADMAP.md` | 8-phase build roadmap — dependency-aware implementation order |
 | `spec/` | Framework specifications — 65+ files across 8 domains |

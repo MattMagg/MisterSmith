@@ -1,0 +1,50 @@
+[package]
+name = "mister-smith-agents"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Multi-agent orchestration layer — lifecycle, teams, tools, and specialized roles"
+
+[dependencies]
+# Internal crates
+mister-smith-core = { workspace = true }
+mister-smith-config = { workspace = true }
+mister-smith-actor = { workspace = true }
+mister-smith-supervision = { workspace = true }
+mister-smith-transport = { workspace = true }
+mister-smith-events = { workspace = true }
+mister-smith-monitoring = { workspace = true }
+mister-smith-security = { workspace = true }
+mister-smith-persistence = { workspace = true }
+mister-smith-mcp = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# Identity
+uuid = { workspace = true }
+
+# Async
+async-trait = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Concurrency
+dashmap = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Versioning
+semver = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+serde_json = { workspace = true }

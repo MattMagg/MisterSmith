@@ -1446,6 +1446,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "mister-smith-agents"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "dashmap",
+ "futures",
+ "mister-smith-actor",
+ "mister-smith-config",
+ "mister-smith-core",
+ "mister-smith-events",
+ "mister-smith-mcp",
+ "mister-smith-monitoring",
+ "mister-smith-persistence",
+ "mister-smith-security",
+ "mister-smith-supervision",
+ "mister-smith-transport",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "mister-smith-async"
 version = "0.1.0"
 dependencies = [
