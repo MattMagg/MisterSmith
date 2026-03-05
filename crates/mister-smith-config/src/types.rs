@@ -293,6 +293,27 @@ pub struct FrameworkConfig {
     /// Security configuration.
     #[serde(default)]
     pub security: SecurityConfig,
+    /// Persistence configuration.
+    #[serde(default)]
+    pub persistence: PersistenceConfig,
+}
+
+/// Persistence configuration (re-exported from mister-smith-persistence).
+///
+/// This is a minimal placeholder to avoid a circular dependency.
+/// The full implementation lives in `mister-smith-persistence::config`.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct PersistenceConfig {
+    /// Master switch — when `false`, persistence is disabled.
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl PersistenceConfig {
+    /// Validate persistence configuration values.
+    pub fn validate(&self) -> Result<(), crate::error::ConfigValidationError> {
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------

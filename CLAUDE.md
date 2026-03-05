@@ -6,7 +6,7 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-a
 
 ```bash
 cargo build --workspace                    # Build all crates
-cargo test --workspace                     # Run all tests (717 as of Phase 5 complete)
+cargo test --workspace                     # Run all tests (882 as of Phase 6 complete)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 ```
 
@@ -19,7 +19,8 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 3. Actor System & Supervision | Complete | `mister-smith-actor`, `mister-smith-supervision` |
 | 4. Transport & Messaging | Complete | `mister-smith-transport`, `mister-smith-nats`, `mister-smith-http`, `mister-smith-grpc`, `mister-smith-mcp` |
 | 5. Security | Complete | `mister-smith-security` |
-| 6–8 | Not started | See `ROADMAP.md` |
+| 6. Persistence & State | Complete | `mister-smith-persistence` |
+| 7–8 | Not started | See `ROADMAP.md` |
 
 ## Workspace Crate Dependencies
 
@@ -39,6 +40,7 @@ mister-smith-core (foundation types, traits, errors)
 ├── mister-smith-grpc (Tonic gRPC services, health, protobuf)
 ├── mister-smith-mcp (MCP client/server, tool registry, NATS bridge)
 ├── mister-smith-security (JWT auth, RBAC, TLS/mTLS, audit logging)
+├── mister-smith-persistence (PostgreSQL + JetStream KV dual-store, repositories, audit bridge)
 └── mister-smith-integration-tests (cross-crate validation)
 ```
 
@@ -46,7 +48,7 @@ mister-smith-core (foundation types, traits, errors)
 
 | Directory | Contents |
 |-----------|----------|
-| `crates/` | Rust workspace — 10 crates (Phase 1 foundation + Phase 2 runtime/async + Phase 3 actor/supervision) |
+| `crates/` | Rust workspace — 17 crates (Phase 1-6: foundation, runtime/async, actor/supervision, transport, security, persistence) |
 | `specs/` | SpecKit feature directories with spec, plan, and task artifacts |
 | `ROADMAP.md` | 8-phase build roadmap — dependency-aware implementation order |
 | `spec/` | Framework specifications — 65+ files across 8 domains |
@@ -127,6 +129,9 @@ The following apps are connected and available for use. Select the most appropri
 - Phase 4 (next): async-nats 0.46.0 (jetstream, kv, service), rmcp 1.1.0 (client, server, streamable-HTTP), rmp-serde 1.3.1, Axum 0.8.8, Tonic 0.14.x, prost 0.14.x, tonic-build 0.14.x, serde 1.x, serde_json 1.x, bytes 1.x, uuid 1.x
 - Rust, MSRV 1.88.0 (005-phase5-security)
 - In-memory (audit persistence deferred to Phase 6) (005-phase5-security)
+- Rust, MSRV 1.88.0 + sqlx 0.8.6 (new), async-nats 0.46.0 (existing), tokio 1.49.0 (existing), serde 1.x (existing) (006-phase6-persistence-state)
+- PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) (006-phase6-persistence-state)
 
 ## Recent Changes
+- 006-phase6-persistence-state: Added sqlx 0.8.6, chrono 0.4 — PR #108
 - 005-phase5-security: Added Rust, MSRV 1.88.0
