@@ -123,3 +123,8 @@ The following apps are connected and available for use. Select the most appropri
 ## Active Technologies
 - Phase 3 (complete): Rust MSRV 1.88.0, Tokio 1.49.0 (mpsc, oneshot, sync, time), async-trait 0.1.83, mister-smith-core (Actor/Supervisor traits, supervision types, error types), mister-smith-events (EventBus, AgentEventType), mister-smith-monitoring (HealthCheck, HealthMonitor, MetricsCollector)
 - Phase 4 (next): async-nats 0.46.0 (jetstream, kv, service), rmcp 1.1.0 (client, server, streamable-HTTP), rmp-serde 1.3.1, Axum 0.8.8, Tonic 0.14.x, prost 0.14.x, tonic-build 0.14.x, serde 1.x, serde_json 1.x, bytes 1.x, uuid 1.x
+- Rust, MSRV 1.88.0 (005-phase5-security)
+- In-memory (audit persistence deferred to Phase 6) (005-phase5-security)
+
+## Recent Changes
+- 005-phase5-security: Added Rust, MSRV 1.88.0
