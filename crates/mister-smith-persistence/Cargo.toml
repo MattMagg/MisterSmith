@@ -1,0 +1,55 @@
+[package]
+name = "mister-smith-persistence"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Persistence and state management — PostgreSQL + JetStream KV dual-store"
+
+[dependencies]
+# Internal crates
+mister-smith-core = { workspace = true }
+mister-smith-config = { workspace = true }
+mister-smith-resources = { workspace = true }
+mister-smith-nats = { workspace = true }
+mister-smith-security = { workspace = true, optional = true }
+mister-smith-events = { workspace = true }
+mister-smith-async = { workspace = true }
+
+# Database
+sqlx = { workspace = true, optional = true }
+
+# NATS KV
+async-nats = { workspace = true }
+
+# Serialization / types
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+bytes = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Encoding
+hex = { workspace = true }
+
+[features]
+default = ["sqlx", "security"]
+sqlx = ["dep:sqlx"]
+security = ["dep:mister-smith-security"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3"
+toml = { workspace = true }

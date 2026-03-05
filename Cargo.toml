@@ -16,6 +16,7 @@ members = [
     "crates/mister-smith-grpc",
     "crates/mister-smith-mcp",
     "crates/mister-smith-security",
+    "crates/mister-smith-persistence",
     "crates/mister-smith-integration-tests",
 ]
 
@@ -76,6 +77,9 @@ prost = "0.14"
 prost-types = "0.14"
 prost-build = "0.14"
 
+# Persistence — Phase 6
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls", "uuid", "json", "chrono", "migrate"] }
+
 # Security — Phase 5
 jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
 ipnet = "2.11.0"
@@ -103,3 +107,4 @@ mister-smith-http = { path = "crates/mister-smith-http" }
 mister-smith-grpc = { path = "crates/mister-smith-grpc" }
 mister-smith-mcp = { path = "crates/mister-smith-mcp" }
 mister-smith-security = { path = "crates/mister-smith-security" }
+mister-smith-persistence = { path = "crates/mister-smith-persistence" }

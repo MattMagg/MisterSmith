@@ -215,6 +215,31 @@ pub enum PersistenceError {
     /// Data corruption detected.
     #[error("Data corruption detected: {0}")]
     DataCorrupted(String),
+    /// Entity or key not found.
+    #[error("Not found: {0}")]
+    NotFound(String),
+    /// Unique constraint violation.
+    #[error("Duplicate key: {0}")]
+    DuplicateKey(String),
+    /// Optimistic concurrency conflict — expected revision does not match actual.
+    #[error("Version conflict on key '{key}': expected {expected}, actual {actual}")]
+    VersionConflict {
+        /// The key that had a conflict.
+        key: String,
+        /// The expected revision.
+        expected: u64,
+        /// The actual revision found.
+        actual: u64,
+    },
+    /// Storage backend is unreachable.
+    #[error("Connection failed: {0}")]
+    ConnectionFailed(String),
+    /// KV entry expired before it could be read or flushed.
+    #[error("TTL expired: {0}")]
+    TtlExpired(String),
+    /// Schema migration failed.
+    #[error("Migration failed: {0}")]
+    MigrationFailed(String),
 }
 
 /// Security subsystem errors.

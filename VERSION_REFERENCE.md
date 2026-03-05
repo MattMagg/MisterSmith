@@ -73,7 +73,7 @@ This document maps every crate referenced in `spec/core-architecture/dependency-
 
 | Crate | Spec Version | Current Stable | Version Gap | Breaking Changes | Migration Priority |
 |-------|-------------|----------------|-------------|------------------|--------------------|
-| sqlx | 0.8.2 | 0.8.6 | Patch (4 releases) | None | None |
+| sqlx | 0.8.2 | 0.8.6 | Patch (4 releases) | None | None — **Active** (Phase 6 persistence) |
 | **redis** | **0.27.5** | **1.0.4** | **Major version** | **Yes — significant API changes** | **High** |
 | sled | 0.34.7 | 0.34.7 | None | None (unmaintained) | Low |
 | deadpool | (not in spec) | 0.13.0 | N/A | N/A | N/A |
@@ -83,7 +83,7 @@ This document maps every crate referenced in `spec/core-architecture/dependency-
 | Crate | Spec Version | Current Stable | Version Gap | Breaking Changes | Migration Priority |
 |-------|-------------|----------------|-------------|------------------|--------------------|
 | uuid | 1.11.0 | 1.x | Patch at most | None | None |
-| chrono | 0.4.38 | 0.4.x | Patch at most | None | None |
+| chrono | 0.4.38 | 0.4.x | Patch at most | None | None — **Active** (Phase 6 persistence) |
 | indexmap | 2.6.0 | 2.x | Patch at most | None | None |
 | dashmap | 6.1.0 | 6.x | Patch at most | None | None |
 | parking_lot | 0.12.3 | 0.12.x | Patch at most | None | None |

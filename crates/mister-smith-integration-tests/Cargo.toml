@@ -23,6 +23,7 @@ mister-smith-http = { workspace = true }
 mister-smith-grpc = { workspace = true }
 mister-smith-mcp = { workspace = true }
 mister-smith-security = { workspace = true }
+mister-smith-persistence = { workspace = true, optional = true, features = ["sqlx", "security"] }
 tokio = { workspace = true, features = ["test-util"] }
 axum = { workspace = true }
 tower = { workspace = true }
@@ -35,5 +36,10 @@ tonic = { workspace = true }
 tonic-health = { workspace = true }
 chrono = { workspace = true }
 async-nats = { workspace = true }
+toml = { workspace = true }
 tokio-stream = { version = "0.1", features = ["net"] }
 tokio-tungstenite = "0.24"
+
+[features]
+default = ["persistence"]
+persistence = ["dep:mister-smith-persistence"]
