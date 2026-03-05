@@ -28,12 +28,43 @@ pub use serialization::{from_json, from_msgpack, to_json, to_msgpack};
 pub use subject::SubjectTaxonomy;
 pub use transport::{ReceivedMessage, Subscription, Transport};
 
-/// Generated protobuf types from `common.proto`, `agent_service.proto`, and `system_service.proto`.
+/// Generated protobuf types from `common.proto`, `agent_service.proto`, `system_service.proto`, and `health_service.proto`.
 pub mod proto {
-    /// Types from the `mister_smith.v1` package.
+    /// Types from the `mister_smith.v1` package (`common`, `agent_service`, and `system_service`).
     pub mod mister_smith {
         pub mod v1 {
             include!(concat!(env!("OUT_DIR"), "/mister_smith.v1.rs"));
         }
+    }
+
+    /// Types from the `grpc.health.v1` package (`health_service`).
+    pub mod grpc {
+        pub mod health {
+            pub mod v1 {
+                include!(concat!(env!("OUT_DIR"), "/grpc.health.v1.rs"));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod proto_tests {
+    use super::proto;
+
+    #[test]
+    fn health_proto_types_are_accessible() {
+        let request = proto::grpc::health::v1::HealthCheckRequest {
+            service: "transport".to_string(),
+        };
+
+        let response = proto::grpc::health::v1::HealthCheckResponse {
+            status: proto::grpc::health::v1::health_check_response::ServingStatus::Serving.into(),
+        };
+
+        assert_eq!(request.service, "transport");
+        assert_eq!(
+            response.status,
+            proto::grpc::health::v1::health_check_response::ServingStatus::Serving as i32
+        );
     }
 }
