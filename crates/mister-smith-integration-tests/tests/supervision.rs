@@ -46,12 +46,13 @@ impl Actor for TrackingActor {
     type Message = TestMsg;
     type State = u32;
     type Error = TestError;
+    type Response = u32;
 
-    async fn handle_message(&mut self, message: TestMsg, state: &mut u32) -> Result<(), TestError> {
+    async fn handle_message(&mut self, message: TestMsg, state: &mut u32) -> Result<u32, TestError> {
         match message {
             TestMsg::Ping => {
                 *state += 1;
-                Ok(())
+                Ok(*state)
             }
             TestMsg::Fail => Err(TestError("intentional failure".into())),
         }
@@ -83,6 +84,7 @@ impl Actor for TimestampActor {
     type Message = TestMsg;
     type State = ();
     type Error = TestError;
+    type Response = ();
 
     async fn handle_message(&mut self, message: TestMsg, _state: &mut ()) -> Result<(), TestError> {
         match message {
@@ -204,6 +206,12 @@ async fn t054_one_for_one_only_failed_child_restarts() {
 
     let _handle = supervised.start_supervision();
     tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let ping_value = ref_b
+        .ask(TestMsg::Ping, Duration::from_secs(1))
+        .await
+        .unwrap();
+    assert_eq!(ping_value, 1);
 
     // Kill B
     ref_b.tell(TestMsg::Fail).unwrap();
@@ -856,14 +864,15 @@ impl Actor for SlowActor {
     type Message = TestMsg;
     type State = u32;
     type Error = TestError;
+    type Response = u32;
 
     async fn handle_message(
         &mut self,
         _message: TestMsg,
         _state: &mut u32,
-    ) -> Result<(), TestError> {
+    ) -> Result<u32, TestError> {
         tokio::time::sleep(Duration::from_secs(5)).await;
-        Ok(())
+        Ok(*_state)
     }
 
     fn pre_start(&mut self) -> Result<(), TestError> {
@@ -890,14 +899,18 @@ impl Actor for PreStartFailActor {
     type Message = TestMsg;
     type State = u32;
     type Error = TestError;
+    type Response = u32;
 
     async fn handle_message(
         &mut self,
         message: TestMsg,
-        _state: &mut u32,
-    ) -> Result<(), TestError> {
+        state: &mut u32,
+    ) -> Result<u32, TestError> {
         match message {
-            TestMsg::Ping => Ok(()),
+            TestMsg::Ping => {
+                *state += 1;
+                Ok(*state)
+            }
             TestMsg::Fail => Err(TestError("intentional failure".into())),
         }
     }

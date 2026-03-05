@@ -21,6 +21,7 @@ impl Actor for MockActor {
     type Message = String;
     type State = Vec<String>;
     type Error = ActorError;
+    type Response = ();
 
     async fn handle_message(
         &mut self,

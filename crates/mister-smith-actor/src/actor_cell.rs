@@ -13,8 +13,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::mailbox::{Envelope, MailboxReceiver};
 
-enum MessageHandlingOutcome<E> {
-    Ok,
+enum MessageHandlingOutcome<R, E> {
+    Ok(R),
     Failed(E),
     Panicked(String),
 }
@@ -33,7 +33,7 @@ async fn handle_message_with_panic_capture<A>(
     actor: &mut A,
     message: A::Message,
     state: &mut A::State,
-) -> MessageHandlingOutcome<A::Error>
+) -> MessageHandlingOutcome<A::Response, A::Error>
 where
     A: Actor,
 {
@@ -41,7 +41,7 @@ where
         .catch_unwind()
         .await
     {
-        Ok(Ok(())) => MessageHandlingOutcome::Ok,
+        Ok(Ok(response)) => MessageHandlingOutcome::Ok(response),
         Ok(Err(error)) => MessageHandlingOutcome::Failed(error),
         Err(panic_payload) => MessageHandlingOutcome::Panicked(panic_payload_to_string(panic_payload)),
     }
@@ -120,7 +120,7 @@ pub enum TerminationReason {
 pub async fn run_actor<A>(
     mut actor: A,
     mut state: A::State,
-    mut receiver: MailboxReceiver<Envelope<A::Message>>,
+    mut receiver: MailboxReceiver<Envelope<A::Message, A::Response>>,
     mut stop_rx: mpsc::Receiver<()>,
     state_tx: watch::Sender<AgentState>,
     startup_tx: Option<oneshot::Sender<Result<(), String>>>,
@@ -209,9 +209,9 @@ pub async fn run_actor<A>(
                         let Envelope { message, reply_tx } = envelope;
 
                         match handle_message_with_panic_capture(&mut actor, message, &mut state).await {
-                            MessageHandlingOutcome::Ok => {
+                            MessageHandlingOutcome::Ok(response) => {
                                 if let Some(tx) = reply_tx {
-                                    let _ = tx.send(Ok(()));
+                                    let _ = tx.send(Ok(response));
                                 }
                             }
                             MessageHandlingOutcome::Failed(e) => {
@@ -261,9 +261,9 @@ pub async fn run_actor<A>(
     {
         let Envelope { message, reply_tx } = envelope;
         match handle_message_with_panic_capture(&mut actor, message, &mut state).await {
-            MessageHandlingOutcome::Ok => {
+            MessageHandlingOutcome::Ok(response) => {
                 if let Some(tx) = reply_tx {
-                    let _ = tx.send(Ok(()));
+                    let _ = tx.send(Ok(response));
                 }
             }
             MessageHandlingOutcome::Failed(e) => {
@@ -398,20 +398,21 @@ mod tests {
         type Message = CounterMsg;
         type State = u64;
         type Error = TestError;
+        type Response = u64;
 
         async fn handle_message(
             &mut self,
             message: CounterMsg,
             state: &mut u64,
-        ) -> Result<(), TestError> {
+        ) -> Result<u64, TestError> {
             match message {
                 CounterMsg::Increment => {
                     *state += 1;
-                    Ok(())
+                    Ok(*state)
                 }
                 CounterMsg::GetCount { reply } => {
                     let _ = reply.send(*state);
-                    Ok(())
+                    Ok(*state)
                 }
             }
         }
@@ -446,6 +447,7 @@ mod tests {
         type Message = FailMsg;
         type State = ();
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
@@ -493,6 +495,7 @@ mod tests {
         type Message = PanicMsg;
         type State = ();
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
@@ -534,6 +537,7 @@ mod tests {
         type Message = String;
         type State = ();
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
@@ -568,6 +572,7 @@ mod tests {
         type Message = ();
         type State = ();
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
@@ -595,7 +600,7 @@ mod tests {
     async fn actor_cell_process_tell() {
         let id = AgentId::new();
         let actor = CounterActor { id };
-        let (tx, rx) = create_mailbox::<CounterMsg>(&MailboxConfig::bounded(10));
+        let (tx, rx) = create_mailbox::<CounterMsg, u64>(&MailboxConfig::bounded(10));
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
@@ -639,7 +644,7 @@ mod tests {
             pre_start_called: Arc::clone(&pre_start),
             post_stop_called: Arc::clone(&post_stop),
         };
-        let (tx, rx) = create_mailbox::<String>(&MailboxConfig::bounded(10));
+        let (tx, rx) = create_mailbox::<String, ()>(&MailboxConfig::bounded(10));
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
 
@@ -663,7 +668,7 @@ mod tests {
     async fn actor_failure_transitions_to_error() {
         let id = AgentId::new();
         let actor = FailingActor { id };
-        let (tx, rx) = create_mailbox::<FailMsg>(&MailboxConfig::bounded(10));
+        let (tx, rx) = create_mailbox::<FailMsg, ()>(&MailboxConfig::bounded(10));
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
@@ -691,7 +696,7 @@ mod tests {
     async fn ask_pattern_reply() {
         let id = AgentId::new();
         let actor = CounterActor { id };
-        let (tx, rx) = create_mailbox::<CounterMsg>(&MailboxConfig::bounded(10));
+        let (tx, rx) = create_mailbox::<CounterMsg, u64>(&MailboxConfig::bounded(10));
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
 
@@ -706,24 +711,12 @@ mod tests {
         tx.send(Envelope::tell(CounterMsg::Increment)).await.unwrap();
         tx.send(Envelope::tell(CounterMsg::Increment)).await.unwrap();
 
-        // Ask via envelope with both reply channels
-        let (ask_reply_tx, ask_reply_rx) = oneshot::channel();
-        let (count_reply_tx, count_reply_rx) = oneshot::channel();
-        tx.send(Envelope::ask(
-            CounterMsg::GetCount {
-                reply: count_reply_tx,
-            },
-            ask_reply_tx,
-        ))
-        .await
-        .unwrap();
+        // Ask via envelope with reply channel carrying typed payload
+        let (ask_reply_tx, ask_reply_rx) = oneshot::channel::<Result<u64, String>>();
+        tx.send(Envelope::ask(CounterMsg::Increment, ask_reply_tx)).await.unwrap();
 
-        // Count reply from inside the actor
-        let count = count_reply_rx.await.unwrap();
-        assert_eq!(count, 3);
-        // Ask reply from the envelope routing
-        let ask_result = ask_reply_rx.await.unwrap();
-        assert!(ask_result.is_ok());
+        let ask_result = ask_reply_rx.await.unwrap().unwrap();
+        assert_eq!(ask_result, 4);
 
         drop(tx);
         handle.await.unwrap();
@@ -739,7 +732,7 @@ mod tests {
             pre_start_called: Arc::new(AtomicBool::new(false)),
             post_stop_called: Arc::clone(&post_stop),
         };
-        let (_tx, rx) = create_mailbox::<String>(&MailboxConfig::bounded(10));
+        let (_tx, rx) = create_mailbox::<String, ()>(&MailboxConfig::bounded(10));
         let (stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
 
@@ -767,6 +760,7 @@ mod tests {
         type Message = String;
         type State = ();
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
@@ -837,7 +831,7 @@ mod tests {
     async fn pre_start_failure_notifies_supervisor() {
         let id = AgentId::new();
         let actor = PreStartFailActor { id };
-        let (_tx, rx) = create_mailbox::<()>(&MailboxConfig::bounded(10));
+        let (_tx, rx) = create_mailbox::<(), ()>(&MailboxConfig::bounded(10));
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
@@ -861,7 +855,7 @@ mod tests {
             id,
             post_stop_called: Arc::clone(&post_stop_called),
         };
-        let (tx, rx) = create_mailbox::<PanicMsg>(&MailboxConfig::bounded(10));
+        let (tx, rx) = create_mailbox::<PanicMsg, ()>(&MailboxConfig::bounded(10));
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
@@ -885,7 +879,7 @@ mod tests {
             id,
             post_stop_called: Arc::new(AtomicBool::new(false)),
         };
-        let (tx, rx) = create_mailbox::<PanicMsg>(&MailboxConfig::bounded(10));
+        let (tx, rx) = create_mailbox::<PanicMsg, ()>(&MailboxConfig::bounded(10));
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, _state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, _sup_rx) = mpsc::unbounded_channel();

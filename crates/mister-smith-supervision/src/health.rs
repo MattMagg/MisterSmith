@@ -181,6 +181,7 @@ mod tests {
         type Message = ();
         type State = ();
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
