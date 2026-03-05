@@ -893,15 +893,23 @@ impl Actor for PreStartFailActor {
 
     async fn handle_message(
         &mut self,
-        _message: TestMsg,
+        message: TestMsg,
         _state: &mut u32,
     ) -> Result<(), TestError> {
-        Ok(())
+        match message {
+            TestMsg::Ping => Ok(()),
+            TestMsg::Fail => Err(TestError("intentional failure".into())),
+        }
     }
 
     fn pre_start(&mut self) -> Result<(), TestError> {
-        self.pre_start_count.fetch_add(1, Ordering::SeqCst);
-        Err(TestError("pre_start always fails".into()))
+        let count = self.pre_start_count.fetch_add(1, Ordering::SeqCst);
+        // Succeed on first call (initial spawn), fail on subsequent (restarts)
+        if count == 0 {
+            Ok(())
+        } else {
+            Err(TestError("pre_start always fails".into()))
+        }
     }
 
     fn post_stop(&mut self) -> Result<(), TestError> {
@@ -961,8 +969,8 @@ async fn t090_pre_start_failure_during_restart() {
     let pre_start_count = Arc::new(AtomicU32::new(0));
     let psc = Arc::clone(&pre_start_count);
 
-    // Spawn an actor whose pre_start always fails
-    let _ref = supervised
+    // Spawn actor — first pre_start succeeds, subsequent ones fail
+    let actor_ref = supervised
         .spawn_supervised::<PreStartFailActor, _>(
             sup_id,
             move || {
@@ -982,10 +990,14 @@ async fn t090_pre_start_failure_during_restart() {
     let _handle = supervised.start_supervision();
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    // pre_start should have been called at least once (initial spawn)
+    // Trigger a failure so supervision attempts restart (which will fail in pre_start)
+    actor_ref.tell(TestMsg::Fail).unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // pre_start called at least twice: once for initial spawn, once for restart attempt
     assert!(
-        pre_start_count.load(Ordering::SeqCst) >= 1,
-        "pre_start should have been called"
+        pre_start_count.load(Ordering::SeqCst) >= 2,
+        "pre_start should have been called at least twice (spawn + restart)"
     );
 
     supervised.shutdown().await.unwrap();
@@ -1010,8 +1022,8 @@ async fn t091_root_supervisor_budget_exhaustion() {
     let pre_start_count = Arc::new(AtomicU32::new(0));
     let psc = Arc::clone(&pre_start_count);
 
-    // Spawn actor whose pre_start always fails — will cascade failures
-    let _ref = supervised
+    // Spawn actor — first pre_start succeeds, subsequent ones fail during restart
+    let actor_ref = supervised
         .spawn_supervised::<PreStartFailActor, _>(
             sup_id,
             move || {
@@ -1029,6 +1041,10 @@ async fn t091_root_supervisor_budget_exhaustion() {
         .unwrap();
 
     let _handle = supervised.start_supervision();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Trigger initial failure to start cascading restart attempts
+    actor_ref.tell(TestMsg::Fail).unwrap();
 
     // Wait for cascading failures to exhaust budget
     tokio::time::sleep(Duration::from_millis(2000)).await;
