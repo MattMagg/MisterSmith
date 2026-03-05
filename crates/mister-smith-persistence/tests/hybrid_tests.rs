@@ -3,7 +3,6 @@
 //! These tests require both PostgreSQL and NATS running.
 //! Run with: `DATABASE_URL=postgres://... NATS_URL=nats://localhost:4222 cargo test -p mister-smith-persistence --test hybrid_tests -- --ignored`
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use mister_smith_persistence::config::{FlushConfig, KvConfig};
