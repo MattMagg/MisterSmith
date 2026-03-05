@@ -14,6 +14,7 @@ use crate::jwt::AgentClaims;
 use crate::middleware::SecurityLayer;
 #[cfg(feature = "rbac")]
 use crate::rbac::AuthorizationRequest;
+use mister_smith_core::SecurityError;
 
 /// Axum middleware that validates JWT Bearer tokens.
 ///
@@ -127,7 +128,7 @@ pub async fn auth_middleware(
                         .collect(),
                 );
             }
-            unauthorized_response(&e.to_string())
+            unauthorized_response(map_auth_error_message(&e))
         }
     }
 }
@@ -153,6 +154,14 @@ fn build_http_authorization_request<B>(request: &Request<B>, claims: &AgentClaim
         ]
         .into_iter()
         .collect(),
+    }
+}
+
+fn map_auth_error_message(error: &SecurityError) -> &'static str {
+    match error {
+        SecurityError::TokenExpired => "token expired",
+        SecurityError::TokenRevoked => "token revoked",
+        _ => "unauthorized",
     }
 }
 

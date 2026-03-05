@@ -10,6 +10,7 @@ use tonic::{Request, Status};
 use crate::middleware::SecurityLayer;
 #[cfg(feature = "rbac")]
 use crate::rbac::AuthorizationRequest;
+use mister_smith_core::SecurityError;
 
 /// Create a Tonic interceptor closure that validates JWT tokens.
 ///
@@ -49,9 +50,12 @@ pub fn grpc_auth_interceptor(
                     security.audit.record_auth(
                         "unknown",
                         AuditOutcome::Failure,
-                        [("reason".to_string(), "missing_authorization_metadata".to_string())]
-                            .into_iter()
-                            .collect(),
+                        [(
+                            "reason".to_string(),
+                            "missing_authorization_metadata".to_string(),
+                        )]
+                        .into_iter()
+                        .collect(),
                     );
                 }
                 return Err(Status::unauthenticated("missing authorization metadata"));
@@ -109,7 +113,7 @@ pub fn grpc_auth_interceptor(
                             .collect(),
                     );
                 }
-                Err(Status::unauthenticated(e.to_string()))
+                Err(Status::unauthenticated(map_auth_error_message(&e)))
             }
         }
     }
@@ -137,5 +141,13 @@ fn build_grpc_authorization_request(
         ]
         .into_iter()
         .collect(),
+    }
+}
+
+fn map_auth_error_message(error: &SecurityError) -> &'static str {
+    match error {
+        SecurityError::TokenExpired => "token expired",
+        SecurityError::TokenRevoked => "token revoked",
+        _ => "unauthorized",
     }
 }
