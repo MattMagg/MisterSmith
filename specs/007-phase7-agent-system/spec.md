@@ -1,6 +1,6 @@
 # Feature Specification: Phase 7 — Agent System
 
-**Feature Branch**: `008-agent-system`
+**Feature Branch**: `007-phase7-agent-system`
 **Created**: 2026-03-05
 **Status**: Draft
 **Input**: Phase 7: Agent System — Multi-agent orchestration with supervision trees, lifecycle management, agent-to-agent communication, task scheduling, and tool integration.

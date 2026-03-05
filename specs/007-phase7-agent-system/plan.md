@@ -1,7 +1,7 @@
 # Implementation Plan: Phase 7 — Agent System
 
-**Branch**: `008-agent-system` | **Date**: 2026-03-05 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `/specs/008-agent-system/spec.md`
+**Branch**: `007-phase7-agent-system` | **Date**: 2026-03-05 | **Spec**: [spec.md](spec.md)
+**Input**: Feature specification from `/specs/007-phase7-agent-system/spec.md`
 
 ## Summary
 
@@ -26,7 +26,7 @@ Build the `mister-smith-agents` crate — the multi-agent orchestration layer th
 | Principle | Status | Evidence |
 |-----------|--------|----------|
 | I. Canonical Single Source | PASS | Agent types use canonical `AgentId`, `AgentType`, `AgentState` from `mister-smith-core/src/ids.rs` and `enums.rs`. No redefinitions. |
-| II. Spec-First Design | PASS | Spec written and validated at `specs/008-agent-system/spec.md` before any implementation code. |
+| II. Spec-First Design | PASS | Spec written and validated at `specs/007-phase7-agent-system/spec.md` before any implementation code. |
 | III. Phase-Gated Build Order | PASS | Phases 1-6 complete with 882+ passing tests. Phase 7 prerequisites implemented and committed. |
 | IV. Model-Agnostic Architecture | PASS | Spec explicitly states LLM/model integration is out of scope. Agents are model-agnostic containers. |
 | V. Erlang/OTP Fault Tolerance | PASS | Supervision integration is FR-1 core requirement. Uses Phase 3 SupervisedSystem with OneForOne/OneForAll/RestForOne. Actor model with bounded mailboxes. |
@@ -38,7 +38,7 @@ Build the `mister-smith-agents` crate — the multi-agent orchestration layer th
 ### Documentation (this feature)
 
 ```text
-specs/008-agent-system/
+specs/007-phase7-agent-system/
 ├── plan.md              # This file
 ├── research.md          # Phase 0 output
 ├── data-model.md        # Phase 1 output

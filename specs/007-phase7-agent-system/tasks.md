@@ -1,6 +1,6 @@
 # Tasks: Phase 7 — Agent System
 
-**Input**: Design documents from `/specs/008-agent-system/`
+**Input**: Design documents from `/specs/007-phase7-agent-system/`
 **Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, contracts/
 
 **Tests**: Tests are included as they are integral to the phase-gated build process. Each user story includes unit tests. Gate 7 integration test validates end-to-end orchestration.

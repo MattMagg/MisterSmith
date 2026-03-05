@@ -133,8 +133,8 @@ The following apps are connected and available for use. Select the most appropri
 - In-memory (audit persistence deferred to Phase 6) (005-phase5-security)
 - Rust, MSRV 1.88.0 + sqlx 0.8.6 (new), async-nats 0.46.0 (existing), tokio 1.49.0 (existing), serde 1.x (existing) (006-phase6-persistence-state)
 - PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) (006-phase6-persistence-state)
-- Rust, MSRV 1.88.0 + mister-smith-core (types, traits), mister-smith-actor (ActorCell, ActorRef, mailbox), mister-smith-supervision (SupervisedSystem, restart strategies), mister-smith-transport (Transport, DurableTransport, MessageEnvelope), mister-smith-nats (NatsTransport, JetStream), mister-smith-mcp (MCP client/server, tool bridge), mister-smith-security (PolicyEngine, JwtManager, AuditLogger), mister-smith-persistence (repositories, state persistence), mister-smith-events (EventBus), mister-smith-monitoring (HealthMonitor, phi accrual) (008-agent-system)
-- PostgreSQL (via Phase 6 persistence layer), JetStream KV (via Phase 6 dual-store) (008-agent-system)
+- Rust, MSRV 1.88.0 + mister-smith-core (types, traits), mister-smith-actor (ActorCell, ActorRef, mailbox), mister-smith-supervision (SupervisedSystem, restart strategies), mister-smith-transport (Transport, DurableTransport, MessageEnvelope), mister-smith-nats (NatsTransport, JetStream), mister-smith-mcp (MCP client/server, tool bridge), mister-smith-security (PolicyEngine, JwtManager, AuditLogger), mister-smith-persistence (repositories, state persistence), mister-smith-events (EventBus), mister-smith-monitoring (HealthMonitor, phi accrual) (007-phase7-agent-system)
+- PostgreSQL (via Phase 6 persistence layer), JetStream KV (via Phase 6 dual-store) (007-phase7-agent-system)
 
 ## Recent Changes
 - 006-phase6-persistence-state: Added sqlx 0.8.6, chrono 0.4 — PR #108
