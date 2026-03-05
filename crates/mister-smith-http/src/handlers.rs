@@ -127,7 +127,9 @@ pub struct AgentListQuery {
 // ---------------------------------------------------------------------------
 
 /// `GET /api/v1/health` — System health with component details.
-pub async fn health_check(State(_state): State<AppState>) -> Json<HealthResponse> {
+pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
+    let transport_connected = state.transport_health.is_connected();
+
     let components = vec![
         ComponentHealth {
             name: "http_server".to_string(),
@@ -135,9 +137,17 @@ pub async fn health_check(State(_state): State<AppState>) -> Json<HealthResponse
             message: None,
         },
         ComponentHealth {
-            name: "event_bus".to_string(),
-            status: "healthy".to_string(),
-            message: None,
+            name: "nats_transport".to_string(),
+            status: if transport_connected {
+                "healthy".to_string()
+            } else {
+                "unhealthy".to_string()
+            },
+            message: if transport_connected {
+                None
+            } else {
+                Some("NATS transport disconnected".to_string())
+            },
         },
     ];
 
@@ -296,18 +306,37 @@ fn mock_agents() -> Vec<AgentSummary> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::AppState;
+    use crate::server::{AppState, NatsHealthCheck};
 
     fn test_state() -> AppState {
         AppState::new()
     }
 
     #[tokio::test]
-    async fn health_check_returns_healthy() {
-        let state = test_state();
+    async fn health_check_returns_healthy_when_transport_connected() {
+        let state = test_state().with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(true)));
         let Json(response) = health_check(State(state)).await;
+
         assert_eq!(response.status, "healthy");
-        assert!(!response.components.is_empty());
+        assert_eq!(response.components.len(), 2);
+        assert_eq!(response.components[0].name, "http_server");
+        assert_eq!(response.components[0].status, "healthy");
+        assert_eq!(response.components[1].name, "nats_transport");
+        assert_eq!(response.components[1].status, "healthy");
+    }
+
+    #[tokio::test]
+    async fn health_check_returns_unhealthy_when_transport_disconnected() {
+        let state = test_state().with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(false)));
+        let Json(response) = health_check(State(state)).await;
+
+        assert_eq!(response.status, "unhealthy");
+        assert_eq!(response.components[1].name, "nats_transport");
+        assert_eq!(response.components[1].status, "unhealthy");
+        assert_eq!(
+            response.components[1].message.as_deref(),
+            Some("NATS transport disconnected")
+        );
     }
 
     #[tokio::test]

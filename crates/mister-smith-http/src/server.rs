@@ -7,6 +7,7 @@
 use axum::middleware as axum_mw;
 use axum::Router;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::broadcast;
 use tracing::info;
 
@@ -20,11 +21,45 @@ use crate::websocket::WsEvent;
 /// Default broadcast channel capacity for WebSocket events.
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 
+/// Runtime health interface for the transport dependency backing this HTTP server.
+pub trait TransportHealth: Send + Sync {
+    /// Return true when the underlying transport is connected and serving traffic.
+    fn is_connected(&self) -> bool;
+}
+
+/// NATS transport health check implementation backed by an atomic connection flag.
+#[derive(Debug, Default)]
+pub struct NatsHealthCheck {
+    connected: AtomicBool,
+}
+
+impl NatsHealthCheck {
+    /// Build a new check with explicit initial connectivity.
+    pub fn new(connected: bool) -> Self {
+        Self {
+            connected: AtomicBool::new(connected),
+        }
+    }
+
+    /// Update the observed NATS connectivity.
+    pub fn set_connected(&self, connected: bool) {
+        self.connected.store(connected, Ordering::Relaxed);
+    }
+}
+
+impl TransportHealth for NatsHealthCheck {
+    fn is_connected(&self) -> bool {
+        self.connected.load(Ordering::Relaxed)
+    }
+}
+
 /// Shared application state accessible by all handlers.
 #[derive(Clone)]
 pub struct AppState {
     /// Broadcast sender for WebSocket events.
     pub event_tx: broadcast::Sender<WsEvent>,
+    /// Transport health dependency used by readiness/liveness handlers.
+    pub transport_health: Arc<dyn TransportHealth>,
     /// Optional security layer for JWT authentication.
     #[cfg(feature = "security")]
     pub security: Option<Arc<mister_smith_security::middleware::SecurityLayer>>,
@@ -36,6 +71,7 @@ impl AppState {
         let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         Self {
             event_tx,
+            transport_health: Arc::new(NatsHealthCheck::new(true)),
             #[cfg(feature = "security")]
             security: None,
         }
@@ -46,9 +82,16 @@ impl AppState {
         let (event_tx, _) = broadcast::channel(capacity);
         Self {
             event_tx,
+            transport_health: Arc::new(NatsHealthCheck::new(true)),
             #[cfg(feature = "security")]
             security: None,
         }
+    }
+
+    /// Set a custom transport health checker implementation.
+    pub fn with_transport_health(mut self, transport_health: Arc<dyn TransportHealth>) -> Self {
+        self.transport_health = transport_health;
+        self
     }
 
     /// Set the security layer for JWT authentication enforcement.
@@ -143,6 +186,14 @@ mod tests {
     fn app_state_with_capacity() {
         let state = AppState::with_capacity(64);
         let _rx = state.event_tx.subscribe();
+    }
+
+    #[test]
+    fn nats_health_check_tracks_connectivity() {
+        let check = NatsHealthCheck::new(true);
+        assert!(check.is_connected());
+        check.set_connected(false);
+        assert!(!check.is_connected());
     }
 
     #[test]
