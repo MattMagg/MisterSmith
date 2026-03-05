@@ -6,6 +6,7 @@
 
 use std::any::Any;
 use std::collections::HashMap;
+use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -147,15 +148,40 @@ impl ActorSystem {
         } else {
             None
         };
+        let (startup_tx, startup_rx) = tokio::sync::oneshot::channel();
         let join_handle = tokio::spawn(actor_cell::run_actor(
             actor,
             initial_state,
             receiver,
             stop_rx,
             state_tx,
+            Some(startup_tx),
             Some(sup_tx),
             event_pub,
         ));
+
+        match tokio::time::timeout(self.config.ask_timeout, startup_rx).await {
+            Ok(Ok(Ok(()))) => {}
+            Ok(Ok(Err(err))) => {
+                let _ = stop_tx.send(()).await;
+                let _ = tokio::time::timeout(self.config.shutdown_timeout, join_handle).await;
+                return Err(ActorError::StartupFailed(Box::new(io::Error::other(err))));
+            }
+            Ok(Err(_)) => {
+                let _ = stop_tx.send(()).await;
+                let _ = tokio::time::timeout(self.config.shutdown_timeout, join_handle).await;
+                return Err(ActorError::StartupFailed(Box::new(io::Error::other(
+                    "actor task exited before startup acknowledgement",
+                ))));
+            }
+            Err(_) => {
+                let _ = stop_tx.send(()).await;
+                let _ = tokio::time::timeout(self.config.shutdown_timeout, join_handle).await;
+                return Err(ActorError::StartupFailed(Box::new(io::Error::other(
+                    "actor startup acknowledgement timed out",
+                ))));
+            }
+        }
 
         // Create actor ref
         let actor_ref = ActorRef::new(actor_id, sender.clone());
