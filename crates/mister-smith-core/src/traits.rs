@@ -83,13 +83,15 @@ pub trait Actor: Send + 'static {
     type State: Send + 'static;
     /// The error type returned by this actor's operations.
     type Error: Send + std::error::Error + 'static;
+    /// The typed response returned by `ask` requests.
+    type Response: Send + 'static;
 
     /// Handle an incoming message, potentially mutating state.
     async fn handle_message(
         &mut self,
         message: Self::Message,
         state: &mut Self::State,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<Self::Response, Self::Error>;
 
     /// Called before the actor starts processing messages.
     fn pre_start(&mut self) -> Result<(), Self::Error>;

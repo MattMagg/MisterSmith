@@ -119,7 +119,7 @@ impl ActorSystem {
         actor: A,
         initial_state: A::State,
         config: SpawnConfig,
-    ) -> Result<ActorRef<A::Message>, ActorError>
+    ) -> Result<ActorRef<A::Message, A::Response>, ActorError>
     where
         A: Actor,
         A::Message: Send + 'static,
@@ -128,7 +128,7 @@ impl ActorSystem {
         let actor_id = actor.actor_id();
 
         // Create mailbox
-        let (sender, receiver) = create_mailbox::<A::Message>(&config.mailbox);
+        let (sender, receiver) = create_mailbox::<A::Message, A::Response>(&config.mailbox);
 
         // Create stop signal channel
         let (stop_tx, stop_rx) = mpsc::channel(1);
@@ -405,6 +405,7 @@ mod tests {
         type Message = String;
         type State = Vec<String>;
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
@@ -444,6 +445,7 @@ mod tests {
         type Message = ();
         type State = ();
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
@@ -473,6 +475,7 @@ mod tests {
         type Message = ();
         type State = ();
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
@@ -693,6 +696,7 @@ mod tests {
                 type Message = ();
                 type State = ();
                 type Error = TestError;
+                type Response = ();
 
                 async fn handle_message(
                     &mut self,

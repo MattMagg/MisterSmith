@@ -68,14 +68,14 @@ impl Default for SpawnConfig {
 /// For tell (fire-and-forget), `reply_tx` is `None`.
 /// For ask (request-response), `reply_tx` carries the oneshot sender for the response.
 #[derive(Debug)]
-pub struct Envelope<M> {
+pub struct Envelope<M, R> {
     /// The message payload.
     pub message: M,
     /// Optional reply channel for the ask pattern.
-    pub reply_tx: Option<oneshot::Sender<Result<(), String>>>,
+    pub reply_tx: Option<oneshot::Sender<Result<R, String>>>,
 }
 
-impl<M> Envelope<M> {
+impl<M, R> Envelope<M, R> {
     /// Create a tell envelope (no reply expected).
     pub fn tell(message: M) -> Self {
         Self {
@@ -85,7 +85,7 @@ impl<M> Envelope<M> {
     }
 
     /// Create an ask envelope with a reply channel.
-    pub fn ask(message: M, reply_tx: oneshot::Sender<Result<(), String>>) -> Self {
+    pub fn ask(message: M, reply_tx: oneshot::Sender<Result<R, String>>) -> Self {
         Self {
             message,
             reply_tx: Some(reply_tx),
@@ -184,9 +184,10 @@ impl<M> MailboxReceiver<M> {
 /// Create a mailbox channel pair based on the given configuration.
 ///
 /// Returns a `(MailboxSender, MailboxReceiver)` tuple.
-pub fn create_mailbox<M>(
+#[allow(clippy::type_complexity)]
+pub fn create_mailbox<M, R>(
     config: &MailboxConfig,
-) -> (MailboxSender<Envelope<M>>, MailboxReceiver<Envelope<M>>) {
+) -> (MailboxSender<Envelope<M, R>>, MailboxReceiver<Envelope<M, R>>) {
     match config.capacity {
         Some(capacity) => {
             let (tx, rx) = mpsc::channel(capacity);
@@ -210,7 +211,7 @@ mod tests {
 
     #[tokio::test]
     async fn bounded_send_receive() {
-        let (tx, mut rx) = create_mailbox::<String>(&MailboxConfig::bounded(10));
+        let (tx, mut rx) = create_mailbox::<String, u32>(&MailboxConfig::bounded(10));
         tx.send(Envelope::tell("hello".to_string())).await.unwrap();
         let env = rx.recv().await.unwrap();
         assert_eq!(env.message, "hello");
@@ -219,7 +220,7 @@ mod tests {
 
     #[tokio::test]
     async fn unbounded_send_receive() {
-        let (tx, mut rx) = create_mailbox::<String>(&MailboxConfig::unbounded());
+        let (tx, mut rx) = create_mailbox::<String, u32>(&MailboxConfig::unbounded());
         tx.send(Envelope::tell("world".to_string())).await.unwrap();
         let env = rx.recv().await.unwrap();
         assert_eq!(env.message, "world");
@@ -227,7 +228,7 @@ mod tests {
 
     #[tokio::test]
     async fn bounded_capacity_rejection() {
-        let (tx, _rx) = create_mailbox::<u32>(&MailboxConfig::bounded(2));
+        let (tx, _rx) = create_mailbox::<u32, ()>(&MailboxConfig::bounded(2));
         // Fill the mailbox
         tx.try_send(Envelope::tell(1)).unwrap();
         tx.try_send(Envelope::tell(2)).unwrap();
@@ -238,7 +239,7 @@ mod tests {
 
     #[tokio::test]
     async fn fifo_ordering() {
-        let (tx, mut rx) = create_mailbox::<u32>(&MailboxConfig::bounded(10));
+        let (tx, mut rx) = create_mailbox::<u32, ()>(&MailboxConfig::bounded(10));
         for i in 0..5 {
             tx.send(Envelope::tell(i)).await.unwrap();
         }
@@ -250,7 +251,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_to_dropped_receiver_returns_actor_stopped() {
-        let (tx, rx) = create_mailbox::<u32>(&MailboxConfig::bounded(10));
+        let (tx, rx) = create_mailbox::<u32, ()>(&MailboxConfig::bounded(10));
         drop(rx);
         let err = tx.send(Envelope::tell(1)).await.unwrap_err();
         assert!(matches!(err, ActorError::ActorStopped));
@@ -258,7 +259,7 @@ mod tests {
 
     #[tokio::test]
     async fn try_send_to_dropped_receiver_returns_actor_stopped() {
-        let (tx, rx) = create_mailbox::<u32>(&MailboxConfig::bounded(10));
+        let (tx, rx) = create_mailbox::<u32, ()>(&MailboxConfig::bounded(10));
         drop(rx);
         let err = tx.try_send(Envelope::tell(1)).unwrap_err();
         assert!(matches!(err, ActorError::ActorStopped));
@@ -266,7 +267,7 @@ mod tests {
 
     #[tokio::test]
     async fn unbounded_never_rejects() {
-        let (tx, _rx) = create_mailbox::<u32>(&MailboxConfig::unbounded());
+        let (tx, _rx) = create_mailbox::<u32, ()>(&MailboxConfig::unbounded());
         // Send many messages — unbounded should never fail
         for i in 0..1000 {
             tx.try_send(Envelope::tell(i)).unwrap();
@@ -275,13 +276,13 @@ mod tests {
 
     #[tokio::test]
     async fn envelope_ask_has_reply_channel() {
-        let (reply_tx, reply_rx) = oneshot::channel();
+        let (reply_tx, reply_rx) = oneshot::channel::<Result<String, String>>();
         let env = Envelope::ask("question".to_string(), reply_tx);
         assert!(env.reply_tx.is_some());
         // Send reply through the channel
-        env.reply_tx.unwrap().send(Ok(())).unwrap();
+        env.reply_tx.unwrap().send(Ok("answer".to_string())).unwrap();
         let result = reply_rx.await.unwrap();
-        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "answer");
     }
 
     #[test]
@@ -301,7 +302,7 @@ mod tests {
 
     #[tokio::test]
     async fn is_closed_after_receiver_drop() {
-        let (tx, rx) = create_mailbox::<u32>(&MailboxConfig::bounded(10));
+        let (tx, rx) = create_mailbox::<u32, ()>(&MailboxConfig::bounded(10));
         assert!(!tx.is_closed());
         drop(rx);
         assert!(tx.is_closed());
@@ -309,7 +310,7 @@ mod tests {
 
     #[tokio::test]
     async fn receiver_close_prevents_new_sends() {
-        let (tx, mut rx) = create_mailbox::<u32>(&MailboxConfig::bounded(10));
+        let (tx, mut rx) = create_mailbox::<u32, ()>(&MailboxConfig::bounded(10));
         rx.close();
         // Existing messages in buffer can still be received, but new sends fail
         // (since buffer is empty and closed, try_send should fail)

@@ -132,7 +132,7 @@ impl SupervisedSystem {
         supervisor_id: AgentId,
         factory: F,
         config: SpawnConfig,
-    ) -> Result<ActorRef<A::Message>, ActorError>
+    ) -> Result<ActorRef<A::Message, A::Response>, ActorError>
     where
         A: Actor + 'static,
         A::Message: Send + 'static,
@@ -468,6 +468,7 @@ mod tests {
         type Message = TestMsg;
         type State = u32;
         type Error = TestError;
+        type Response = ();
 
         async fn handle_message(
             &mut self,
