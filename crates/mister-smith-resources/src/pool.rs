@@ -155,6 +155,8 @@ pub struct ConnectionPool<R: Send + Sync + 'static> {
     factory: ResourceFactory<R>,
     /// Number of resources currently checked out.
     active_count: Arc<AtomicUsize>,
+    /// Number of capacity slots reserved for in-flight resource creation.
+    reserved_count: AtomicUsize,
     /// Total number of resources ever created by this pool.
     total_created: AtomicUsize,
     /// Whether the pool has been shut down.
@@ -183,6 +185,7 @@ impl<R: Send + Sync + 'static> ConnectionPool<R> {
             config,
             factory,
             active_count: Arc::new(AtomicUsize::new(0)),
+            reserved_count: AtomicUsize::new(0),
             total_created: AtomicUsize::new(0),
             shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
@@ -208,8 +211,7 @@ impl<R: Send + Sync + 'static> ConnectionPool<R> {
             }
 
             // Try to create a new one if under capacity.
-            let current_total = self.idle_count() + self.active_count.load(Ordering::Acquire);
-            if current_total < self.config.max_size {
+            if self.try_reserve_slot() {
                 match self.create_resource().await {
                     Ok(resource) => {
                         trace!("created new resource for pool");
@@ -343,10 +345,36 @@ impl<R: Send + Sync + 'static> ConnectionPool<R> {
         })
     }
 
+    fn try_reserve_slot(&self) -> bool {
+        loop {
+            let idle = self.idle_count();
+            let active = self.active_count.load(Ordering::Acquire);
+            let reserved = self.reserved_count.load(Ordering::Acquire);
+            if idle + active + reserved >= self.config.max_size {
+                return false;
+            }
+
+            if self
+                .reserved_count
+                .compare_exchange_weak(reserved, reserved + 1, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                return true;
+            }
+        }
+    }
+
     async fn create_resource(&self) -> Result<PooledResource<R>, PoolError> {
-        let resource = (self.factory)().await?;
+        let resource = match (self.factory)().await {
+            Ok(resource) => resource,
+            Err(error) => {
+                self.reserved_count.fetch_sub(1, Ordering::Release);
+                return Err(error);
+            }
+        };
         self.total_created.fetch_add(1, Ordering::Release);
         self.active_count.fetch_add(1, Ordering::Release);
+        self.reserved_count.fetch_sub(1, Ordering::Release);
         Ok(PooledResource {
             pool: Arc::clone(&self.pool),
             active_count: Arc::clone(&self.active_count),
@@ -654,6 +682,45 @@ mod tests {
             result,
             Err(PoolError::ResourceCreationFailed(ref msg)) if msg == "boom"
         ));
+    }
+
+    #[tokio::test]
+    async fn concurrent_acquires_do_not_overshoot_max_size() {
+        let max_size = 3;
+        let config = PoolConfig {
+            max_size,
+            acquire_timeout: Duration::from_millis(300),
+            ..Default::default()
+        };
+        let pool = Arc::new(ConnectionPool::new(config, {
+            let counter = Arc::new(AtomicUsize::new(0));
+            move || {
+                let counter = Arc::clone(&counter);
+                Box::pin(async move {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                    Ok(MockResource::new(counter.fetch_add(1, Ordering::SeqCst)))
+                })
+            }
+        }));
+
+        let mut tasks = Vec::new();
+        for _ in 0..20 {
+            let pool = Arc::clone(&pool);
+            tasks.push(tokio::spawn(async move {
+                let resource = pool.acquire().await;
+                if let Ok(resource) = resource {
+                    tokio::time::sleep(Duration::from_millis(30)).await;
+                    drop(resource);
+                }
+            }));
+        }
+
+        for task in tasks {
+            task.await.unwrap();
+        }
+
+        assert!(pool.total_created() <= max_size);
+        assert!(pool.active() + pool.size() <= max_size);
     }
 
     #[test]
