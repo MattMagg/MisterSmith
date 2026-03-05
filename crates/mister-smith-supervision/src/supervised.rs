@@ -452,6 +452,7 @@ mod tests {
     impl std::error::Error for TestError {}
 
     #[derive(Debug)]
+    #[allow(dead_code)]
     enum TestMsg {
         Ping,
         Fail,

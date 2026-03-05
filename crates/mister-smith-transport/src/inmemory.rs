@@ -196,7 +196,6 @@ impl Transport for InMemoryTransport {
         };
 
         let mut rx = self.subscribe_to_channel(subject).await;
-        let group_key = group_key;
 
         let stream = async_stream::stream! {
             loop {

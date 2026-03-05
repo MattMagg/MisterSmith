@@ -96,6 +96,7 @@ pub enum TerminationReason {
 /// 4. Detects panics by spawning message handling in a sub-task
 /// 5. Calls `post_stop` on termination
 /// 6. Sends a supervision notification on exit
+#[allow(clippy::too_many_arguments)]
 pub async fn run_actor<A>(
     mut actor: A,
     mut state: A::State,
