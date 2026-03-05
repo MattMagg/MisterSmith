@@ -229,8 +229,10 @@ impl ActorSystem {
             // Send stop signal
             let _ = handle.stop_tx.send(()).await;
 
+            let mut join_handle = handle.join_handle;
+
             // Wait for the task with timeout
-            match tokio::time::timeout(self.config.shutdown_timeout, handle.join_handle).await {
+            match tokio::time::timeout(self.config.shutdown_timeout, &mut join_handle).await {
                 Ok(Ok(())) => {
                     debug!(actor_id = %id, "Actor stopped cleanly");
                 }
@@ -242,7 +244,22 @@ impl ActorSystem {
                     }
                 }
                 Err(_) => {
-                    warn!(actor_id = %id, "Actor shutdown timed out, aborting");
+                    warn!(actor_id = %id, "Actor shutdown timed out, aborting task");
+                    join_handle.abort();
+                    match join_handle.await {
+                        Ok(()) => {
+                            warn!(actor_id = %id, "Actor task completed after timeout and abort request");
+                        }
+                        Err(e) if e.is_cancelled() => {
+                            debug!(actor_id = %id, "Actor task aborted after shutdown timeout");
+                        }
+                        Err(e) if e.is_panic() => {
+                            warn!(actor_id = %id, "Actor task panicked while aborting after timeout");
+                        }
+                        Err(_) => {
+                            warn!(actor_id = %id, "Actor task failed with unknown error after abort");
+                        }
+                    }
                 }
             }
         }
@@ -294,17 +311,35 @@ impl ActorSystem {
 
         if let Some(handle) = handle {
             let _ = handle.stop_tx.send(()).await;
-            match tokio::time::timeout(self.config.shutdown_timeout, handle.join_handle).await {
+            let mut join_handle = handle.join_handle;
+            match tokio::time::timeout(self.config.shutdown_timeout, &mut join_handle).await {
                 Ok(Ok(())) => {
                     debug!(actor_id = %actor_id, "Actor stopped");
                 }
                 Ok(Err(e)) => {
                     if e.is_panic() {
                         warn!(actor_id = %actor_id, "Actor panicked during stop");
+                    } else {
+                        warn!(actor_id = %actor_id, "Actor was already cancelled during stop");
                     }
                 }
                 Err(_) => {
-                    warn!(actor_id = %actor_id, "Actor stop timed out");
+                    warn!(actor_id = %actor_id, "Actor stop timed out, aborting task");
+                    join_handle.abort();
+                    match join_handle.await {
+                        Ok(()) => {
+                            warn!(actor_id = %actor_id, "Actor task completed after timeout and abort request");
+                        }
+                        Err(e) if e.is_cancelled() => {
+                            debug!(actor_id = %actor_id, "Actor task aborted after stop timeout");
+                        }
+                        Err(e) if e.is_panic() => {
+                            warn!(actor_id = %actor_id, "Actor task panicked while aborting after stop timeout");
+                        }
+                        Err(_) => {
+                            warn!(actor_id = %actor_id, "Actor task failed with unknown error after abort");
+                        }
+                    }
                 }
             }
             true
@@ -336,7 +371,8 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use crate::mailbox::MailboxConfig;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::time::Instant;
 
     // --- Test actors ---
 
@@ -384,6 +420,41 @@ mod tests {
     struct PostStopTracker {
         id: AgentId,
         called: Arc<AtomicBool>,
+    }
+
+    struct BlockingActor {
+        id: AgentId,
+        completed_messages: Arc<AtomicUsize>,
+        block_for: Duration,
+    }
+
+    #[async_trait]
+    impl Actor for BlockingActor {
+        type Message = ();
+        type State = ();
+        type Error = TestError;
+
+        async fn handle_message(
+            &mut self,
+            _: (),
+            _: &mut (),
+        ) -> Result<(), TestError> {
+            tokio::time::sleep(self.block_for).await;
+            self.completed_messages.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn pre_start(&mut self) -> Result<(), TestError> {
+            Ok(())
+        }
+
+        fn post_stop(&mut self) -> Result<(), TestError> {
+            Ok(())
+        }
+
+        fn actor_id(&self) -> AgentId {
+            self.id
+        }
     }
 
     #[async_trait]
@@ -657,6 +728,74 @@ mod tests {
         // Should be stopped in reverse order: 2, 1, 0
         let stopped = order.lock().unwrap().clone();
         assert_eq!(stopped, vec![2, 1, 0]);
+    }
+
+    #[tokio::test]
+    async fn shutdown_aborts_timed_out_actor_task() {
+        let system = ActorSystem::new(ActorSystemConfig {
+            shutdown_timeout: Duration::from_millis(25),
+            ..ActorSystemConfig::default()
+        });
+        let completed_messages = Arc::new(AtomicUsize::new(0));
+        let id = AgentId::new();
+        let actor_ref = system
+            .spawn(
+                BlockingActor {
+                    id,
+                    completed_messages: Arc::clone(&completed_messages),
+                    block_for: Duration::from_millis(250),
+                },
+                (),
+                SpawnConfig::default(),
+            )
+            .await
+            .unwrap();
+
+        actor_ref.tell(()).unwrap();
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        let started = Instant::now();
+        system.shutdown().await.unwrap();
+        assert!(started.elapsed() < Duration::from_millis(200));
+
+        assert!(!actor_ref.is_alive());
+        assert_eq!(completed_messages.load(Ordering::SeqCst), 0);
+        let err = actor_ref.tell(()).unwrap_err();
+        assert!(matches!(err, ActorError::ActorStopped));
+    }
+
+    #[tokio::test]
+    async fn stop_actor_aborts_timed_out_actor_task() {
+        let system = ActorSystem::new(ActorSystemConfig {
+            shutdown_timeout: Duration::from_millis(25),
+            ..ActorSystemConfig::default()
+        });
+        let completed_messages = Arc::new(AtomicUsize::new(0));
+        let id = AgentId::new();
+        let actor_ref = system
+            .spawn(
+                BlockingActor {
+                    id,
+                    completed_messages: Arc::clone(&completed_messages),
+                    block_for: Duration::from_millis(250),
+                },
+                (),
+                SpawnConfig::default(),
+            )
+            .await
+            .unwrap();
+
+        actor_ref.tell(()).unwrap();
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        let started = Instant::now();
+        assert!(system.stop_actor(&id).await);
+        assert!(started.elapsed() < Duration::from_millis(200));
+
+        assert!(!actor_ref.is_alive());
+        assert_eq!(completed_messages.load(Ordering::SeqCst), 0);
+        let err = actor_ref.tell(()).unwrap_err();
+        assert!(matches!(err, ActorError::ActorStopped));
     }
 
     // Config defaults
