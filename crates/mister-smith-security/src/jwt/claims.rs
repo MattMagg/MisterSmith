@@ -44,6 +44,9 @@ pub struct AgentClaims {
     /// Chain of delegating agents.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub delegation_chain: Vec<String>,
+    /// Token purpose discriminator (`access` or `refresh`).
+    #[serde(default)]
+    pub token_use: String,
 }
 
 /// Access + refresh token pair issued during authentication.

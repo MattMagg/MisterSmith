@@ -44,6 +44,7 @@ fn generate_and_validate_roundtrip() {
     // Validate access token
     let validated = mgr.validate_token(&pair.access_token).unwrap();
     assert_eq!(validated.sub, "agent-001");
+    assert_eq!(validated.token_use, "access");
     assert_eq!(validated.agent_id, "agent-001");
     assert_eq!(validated.agent_type, "worker");
     assert_eq!(validated.capabilities, vec!["compute"]);
@@ -114,6 +115,23 @@ fn token_refresh() {
     // New tokens should validate
     let claims = mgr.validate_token(&new_pair.access_token).unwrap();
     assert_eq!(claims.agent_id, "agent-001");
+    assert_eq!(claims.token_use, "access");
+
+    let refresh_claims = mgr.validate_token(&new_pair.refresh_token).unwrap();
+    assert_eq!(refresh_claims.token_use, "refresh");
+}
+
+#[test]
+fn access_token_cannot_refresh() {
+    let mgr = JwtManager::new(&hmac_config()).unwrap();
+    let pair = mgr.generate_token_pair(&test_claims()).unwrap();
+
+    let result = mgr.refresh_token(&pair.access_token);
+    assert!(matches!(
+        result,
+        Err(mister_smith_core::SecurityError::InvalidToken(message))
+            if message == "token_use must be 'refresh' for refresh flow"
+    ));
 }
 
 // -- Token revocation (US1-AS6) -------------------------------------------

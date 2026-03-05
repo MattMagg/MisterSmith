@@ -87,6 +87,7 @@ impl JwtManager {
         if access_claims.aud.is_empty() && !self.audience.is_empty() {
             access_claims.aud.clone_from(&self.audience);
         }
+        access_claims.token_use = "access".to_string();
 
         let header = jsonwebtoken::Header::new(self.algorithm);
         let access_token = jsonwebtoken::encode(&header, &access_claims, &self.encoding_key)
@@ -96,6 +97,7 @@ impl JwtManager {
         let mut refresh_claims = access_claims.clone();
         refresh_claims.exp = now + self.refresh_ttl.as_secs();
         refresh_claims.jti = uuid::Uuid::new_v4().to_string();
+        refresh_claims.token_use = "refresh".to_string();
 
         let refresh_token = jsonwebtoken::encode(&header, &refresh_claims, &self.encoding_key)
             .map_err(|e| SecurityError::TokenGenerationFailed(e.to_string()))?;
@@ -131,6 +133,12 @@ impl JwtManager {
     /// same claims but fresh expiration.
     pub fn refresh_token(&self, refresh_token: &str) -> Result<TokenPair, SecurityError> {
         let claims = self.validate_token(refresh_token)?;
+        if claims.token_use != "refresh" {
+            return Err(SecurityError::InvalidToken(
+                "token_use must be 'refresh' for refresh flow".to_string(),
+            ));
+        }
+
         self.generate_token_pair(&claims)
     }
 
