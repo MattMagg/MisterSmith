@@ -1222,6 +1222,7 @@ name = "mister-smith-actor"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures",
  "mister-smith-core",
  "serde",
  "serde_json",
