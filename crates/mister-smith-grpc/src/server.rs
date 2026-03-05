@@ -117,8 +117,24 @@ impl GrpcServer {
             "starting gRPC server"
         );
 
-        Server::builder()
-            .add_service(health_service)
+        let mut builder = Server::builder();
+
+        #[cfg(feature = "security")]
+        let builder = if let Some(security) = self.security.as_ref().filter(|layer| layer.is_enabled())
+        {
+            let interceptor =
+                mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor(
+                    std::sync::Arc::clone(security),
+                );
+            builder.add_service(tonic::service::interceptor::InterceptedService::new(health_service, interceptor))
+        } else {
+            builder.add_service(health_service)
+        };
+
+        #[cfg(not(feature = "security"))]
+        let builder = builder.add_service(health_service);
+
+        builder
             .serve_with_shutdown(addr, shutdown_signal)
             .await
             .map_err(|e| {

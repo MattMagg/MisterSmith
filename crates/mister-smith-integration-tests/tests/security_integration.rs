@@ -214,6 +214,159 @@ fn audit_chain_integrity_integration() {
     assert_eq!(events.len(), 3);
 }
 
+
+
+// -- gRPC auth interceptor integration --------------------------------------
+
+async fn spawn_secure_grpc_server(
+    security: Arc<SecurityLayer>,
+) -> (tokio::task::JoinHandle<Result<(), mister_smith_grpc::errors::TransportError>>, String, tokio::sync::oneshot::Sender<()>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    drop(listener);
+
+    let mut server = mister_smith_grpc::server::GrpcServer::new(
+        mister_smith_grpc::config::GrpcTransportConfig::new(addr.to_string()),
+    )
+    .with_security(security);
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let handle = tokio::spawn(async move {
+        server
+            .serve(async {
+                let _ = rx.await;
+            })
+            .await
+    });
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    (handle, format!("http://{addr}"), tx)
+}
+
+#[tokio::test]
+async fn grpc_request_without_authorization_returns_unauthenticated() {
+    let security = Arc::new(
+        SecurityLayer::new(
+            true,
+            &test_jwt_config(),
+            &RbacConfig::default(),
+            &AuditConfig::default(),
+        )
+        .unwrap(),
+    );
+
+    let (handle, endpoint, shutdown_tx) = spawn_secure_grpc_server(security).await;
+
+    let channel = tonic::transport::Endpoint::from_shared(endpoint)
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+
+    let mut client = tonic_health::pb::health_client::HealthClient::new(channel);
+    let err = client
+        .check(tonic_health::pb::HealthCheckRequest {
+            service: "".to_string(),
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), tonic::Code::Unauthenticated);
+
+    let _ = shutdown_tx.send(());
+    let result = handle.await.unwrap();
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn grpc_request_with_invalid_token_returns_unauthenticated() {
+    let security = Arc::new(
+        SecurityLayer::new(
+            true,
+            &test_jwt_config(),
+            &RbacConfig::default(),
+            &AuditConfig::default(),
+        )
+        .unwrap(),
+    );
+
+    let (handle, endpoint, shutdown_tx) = spawn_secure_grpc_server(security).await;
+
+    let channel = tonic::transport::Endpoint::from_shared(endpoint)
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+
+    let mut client = tonic_health::pb::health_client::HealthClient::new(channel);
+    let mut request = tonic::Request::new(tonic_health::pb::HealthCheckRequest {
+        service: "".to_string(),
+    });
+    request.metadata_mut().insert(
+        "authorization",
+        tonic::metadata::MetadataValue::from_static("Bearer not-a-valid-token"),
+    );
+
+    let err = client.check(request).await.unwrap_err();
+
+    assert_eq!(err.code(), tonic::Code::Unauthenticated);
+
+    let _ = shutdown_tx.send(());
+    let result = handle.await.unwrap();
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn grpc_request_with_valid_token_succeeds() {
+    let security = Arc::new(
+        SecurityLayer::new(
+            true,
+            &test_jwt_config(),
+            &RbacConfig::default(),
+            &AuditConfig::default(),
+        )
+        .unwrap(),
+    );
+
+    let token = security
+        .jwt
+        .generate_token_pair(&AgentClaims {
+            sub: "grpc-int-test".to_string(),
+            agent_id: "grpc-int-test".to_string(),
+            ..Default::default()
+        })
+        .unwrap()
+        .access_token;
+
+    let (handle, endpoint, shutdown_tx) = spawn_secure_grpc_server(security).await;
+
+    let channel = tonic::transport::Endpoint::from_shared(endpoint)
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+
+    let mut client = tonic_health::pb::health_client::HealthClient::new(channel);
+    let mut request = tonic::Request::new(tonic_health::pb::HealthCheckRequest {
+        service: "".to_string(),
+    });
+    request.metadata_mut().insert(
+        "authorization",
+        tonic::metadata::MetadataValue::try_from(format!("Bearer {token}")).unwrap(),
+    );
+
+    let response = client.check(request).await.unwrap();
+    assert_eq!(
+        response.into_inner().status,
+        tonic_health::ServingStatus::Serving as i32
+    );
+
+    let _ = shutdown_tx.send(());
+    let result = handle.await.unwrap();
+    assert!(result.is_ok());
+}
+
 // -- Middleware integration with Axum -------------------------------------
 
 #[tokio::test]

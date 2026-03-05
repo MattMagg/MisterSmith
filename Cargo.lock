@@ -1387,6 +1387,8 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tonic",
+ "tonic-health",
  "tower",
  "uuid",
 ]
