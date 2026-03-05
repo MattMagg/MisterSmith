@@ -118,11 +118,14 @@ CREATE TABLE IF NOT EXISTS messages.records (
     error_message     TEXT,
     PRIMARY KEY (id, created_at),
     CONSTRAINT valid_msg_priority CHECK (priority >= 0 AND priority <= 4),
-    CONSTRAINT valid_msg_status CHECK (status IN ('pending', 'sent', 'delivered', 'processed', 'failed', 'expired'))
+    CONSTRAINT valid_msg_status CHECK (status IN ('pending', 'sent', 'delivered', 'processed', 'failed', 'expired', 'cancelled'))
 ) PARTITION BY RANGE (created_at);
 
+-- Configuration schema
+CREATE SCHEMA IF NOT EXISTS config;
+
 -- Configurations
-CREATE TABLE IF NOT EXISTS configurations (
+CREATE TABLE IF NOT EXISTS config.configurations (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     key         TEXT NOT NULL,
     value       JSONB NOT NULL,
@@ -132,6 +135,14 @@ CREATE TABLE IF NOT EXISTS configurations (
     description TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT valid_environment CHECK (environment IN ('development', 'staging', 'production', 'testing')),
-    CONSTRAINT unique_config_key UNIQUE (key, environment, agent_id)
+    CONSTRAINT valid_environment CHECK (environment IN ('development', 'staging', 'production', 'testing'))
 );
+
+-- Partial unique indexes for NULL-safe uniqueness on configurations
+CREATE UNIQUE INDEX IF NOT EXISTS idx_config_key_env_agent
+    ON config.configurations (key, environment, agent_id)
+    WHERE agent_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_config_key_env_global
+    ON config.configurations (key, environment)
+    WHERE agent_id IS NULL;

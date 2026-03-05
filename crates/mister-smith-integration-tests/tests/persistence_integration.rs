@@ -111,7 +111,7 @@ mod persistence_tests {
     async fn persistence_health_checker_no_backends_returns_unknown() {
         use mister_smith_core::HealthStatus;
 
-        let checker = PersistenceHealthChecker::new(None, None);
+        let checker = PersistenceHealthChecker::new(None);
         let status = checker.check_all().await;
         assert_eq!(status, HealthStatus::Unknown);
     }
@@ -119,7 +119,7 @@ mod persistence_tests {
     #[test]
     fn persistence_health_checker_is_constructible() {
         // Verify the type exists and can be constructed with no backends.
-        let _checker = PersistenceHealthChecker::new(None, None);
+        let _checker = PersistenceHealthChecker::new(None);
     }
 
     // -----------------------------------------------------------------------

@@ -309,6 +309,13 @@ pub struct PersistenceConfig {
     pub enabled: bool,
 }
 
+impl PersistenceConfig {
+    /// Validate persistence configuration values.
+    pub fn validate(&self) -> Result<(), crate::error::ConfigValidationError> {
+        Ok(())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Default value functions
 // ---------------------------------------------------------------------------

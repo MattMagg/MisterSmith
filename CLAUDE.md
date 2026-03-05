@@ -133,4 +133,5 @@ The following apps are connected and available for use. Select the most appropri
 - PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) (006-phase6-persistence-state)
 
 ## Recent Changes
+- 006-phase6-persistence-state: Added sqlx 0.8.6, chrono 0.4 — PR #108
 - 005-phase5-security: Added Rust, MSRV 1.88.0

@@ -41,11 +41,11 @@ pub fn from_sqlx_error(_msg: String) -> PersistenceError {
 /// Handles common KV operation failure modes: put, entry, update, delete, watch.
 pub fn from_kv_error(err: impl std::fmt::Display) -> PersistenceError {
     let msg = err.to_string();
-    if msg.contains("wrong last sequence") || msg.contains("revision") {
+    if msg.contains("wrong last sequence") || msg.contains("wrong last revision") {
         PersistenceError::VersionConflict {
             key: String::new(),
             expected: 0,
-            actual: 0,
+            actual: None,
         }
     } else if msg.contains("timeout") || msg.contains("connection") {
         PersistenceError::ConnectionFailed(msg)
@@ -61,7 +61,7 @@ pub fn from_kv_version_error(key: &str, expected: u64, _err: impl std::fmt::Disp
     PersistenceError::VersionConflict {
         key: key.to_string(),
         expected,
-        actual: 0,
+        actual: None,
     }
 }
 
@@ -80,8 +80,8 @@ mod tests {
     }
 
     #[test]
-    fn kv_error_revision_maps_to_version_conflict() {
-        let err = from_kv_error("revision mismatch");
+    fn kv_error_wrong_last_revision_maps_to_version_conflict() {
+        let err = from_kv_error("wrong last revision: 10");
         assert!(matches!(err, PersistenceError::VersionConflict { .. }));
     }
 
@@ -130,7 +130,7 @@ mod tests {
             } => {
                 assert_eq!(key, "agent:state_key");
                 assert_eq!(expected, 42);
-                assert_eq!(actual, 0);
+                assert_eq!(actual, None);
             }
             other => panic!("Expected VersionConflict, got: {other:?}"),
         }

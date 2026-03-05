@@ -1,7 +1,8 @@
 -- Rollback: 00001_initial_schema
 -- DROP tables, types, schemas in reverse dependency order
 
-DROP TABLE IF EXISTS configurations;
+DROP TABLE IF EXISTS config.configurations;
+DROP SCHEMA IF EXISTS config CASCADE;
 DROP TABLE IF EXISTS messages.records;
 DROP TABLE IF EXISTS tasks.records;
 DROP TABLE IF EXISTS agents.checkpoints;

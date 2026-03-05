@@ -222,14 +222,14 @@ pub enum PersistenceError {
     #[error("Duplicate key: {0}")]
     DuplicateKey(String),
     /// Optimistic concurrency conflict — expected revision does not match actual.
-    #[error("Version conflict on key '{key}': expected {expected}, actual {actual}")]
+    #[error("Version conflict on key '{key}': expected {expected}, actual {actual_str}", actual_str = .actual.map_or("unknown".to_string(), |v| v.to_string()))]
     VersionConflict {
         /// The key that had a conflict.
         key: String,
         /// The expected revision.
         expected: u64,
-        /// The actual revision found.
-        actual: u64,
+        /// The actual revision found (None when the backend does not expose it).
+        actual: Option<u64>,
     },
     /// Storage backend is unreachable.
     #[error("Connection failed: {0}")]

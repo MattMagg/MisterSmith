@@ -995,9 +995,9 @@ pub struct ConfigRecord {
 
 /// Upsert a configuration entry.
 ///
-/// Uses `INSERT ... ON CONFLICT (key, environment, agent_id) DO UPDATE`
-/// to atomically create or update the config value. Increments the version
-/// on conflict. Returns the new version.
+/// Uses `INSERT ... ON CONFLICT` with partial unique indexes to atomically
+/// create or update the config value. Increments the version on conflict.
+/// Returns the new version.
 pub async fn upsert_config(
     pool: &PgPool,
     key: &str,
@@ -1007,27 +1007,51 @@ pub async fn upsert_config(
     description: Option<&str>,
 ) -> Result<i32, PersistenceError> {
     let id = Uuid::new_v4();
-    let row: (i32,) = sqlx::query_as(
-        r#"
-        INSERT INTO configurations (id, key, value, environment, agent_id, description, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-        ON CONFLICT (key, environment, agent_id) DO UPDATE
-        SET value       = EXCLUDED.value,
-            description = COALESCE(EXCLUDED.description, configurations.description),
-            version     = configurations.version + 1,
-            updated_at  = NOW()
-        RETURNING version
-        "#,
-    )
-    .bind(id)
-    .bind(key)
-    .bind(&value)
-    .bind(environment)
-    .bind(agent_id)
-    .bind(description)
-    .fetch_one(pool)
-    .await
-    .map_err(from_sqlx_error)?;
+
+    let row: (i32,) = if let Some(aid) = agent_id {
+        sqlx::query_as(
+            r#"
+            INSERT INTO config.configurations (id, key, value, environment, agent_id, description, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+            ON CONFLICT (key, environment, agent_id) WHERE agent_id IS NOT NULL DO UPDATE
+            SET value       = EXCLUDED.value,
+                description = COALESCE(EXCLUDED.description, config.configurations.description),
+                version     = config.configurations.version + 1,
+                updated_at  = NOW()
+            RETURNING version
+            "#,
+        )
+        .bind(id)
+        .bind(key)
+        .bind(&value)
+        .bind(environment)
+        .bind(aid)
+        .bind(description)
+        .fetch_one(pool)
+        .await
+        .map_err(from_sqlx_error)?
+    } else {
+        sqlx::query_as(
+            r#"
+            INSERT INTO config.configurations (id, key, value, environment, description, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+            ON CONFLICT (key, environment) WHERE agent_id IS NULL DO UPDATE
+            SET value       = EXCLUDED.value,
+                description = COALESCE(EXCLUDED.description, config.configurations.description),
+                version     = config.configurations.version + 1,
+                updated_at  = NOW()
+            RETURNING version
+            "#,
+        )
+        .bind(id)
+        .bind(key)
+        .bind(&value)
+        .bind(environment)
+        .bind(description)
+        .fetch_one(pool)
+        .await
+        .map_err(from_sqlx_error)?
+    };
 
     Ok(row.0)
 }
@@ -1042,24 +1066,33 @@ pub async fn get_config(
     let query = if agent_id.is_some() {
         r#"
         SELECT id, key, value, environment, agent_id, version, description, created_at, updated_at
-        FROM configurations
+        FROM config.configurations
         WHERE key = $1 AND environment = $2 AND agent_id = $3
         "#
     } else {
         r#"
         SELECT id, key, value, environment, agent_id, version, description, created_at, updated_at
-        FROM configurations
+        FROM config.configurations
         WHERE key = $1 AND environment = $2 AND agent_id IS NULL
         "#
     };
 
-    sqlx::query_as::<_, ConfigRecord>(query)
-        .bind(key)
-        .bind(environment)
-        .bind(agent_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(from_sqlx_error)
+    let result = if let Some(aid) = agent_id {
+        sqlx::query_as::<_, ConfigRecord>(query)
+            .bind(key)
+            .bind(environment)
+            .bind(aid)
+            .fetch_optional(pool)
+            .await
+    } else {
+        sqlx::query_as::<_, ConfigRecord>(query)
+            .bind(key)
+            .bind(environment)
+            .fetch_optional(pool)
+            .await
+    };
+
+    result.map_err(from_sqlx_error)
 }
 
 /// Get all configuration entries for a given environment.
@@ -1070,7 +1103,7 @@ pub async fn get_config_by_environment(
     sqlx::query_as::<_, ConfigRecord>(
         r#"
         SELECT id, key, value, environment, agent_id, version, description, created_at, updated_at
-        FROM configurations
+        FROM config.configurations
         WHERE environment = $1
         ORDER BY key
         "#,
@@ -1091,7 +1124,7 @@ pub async fn get_config_history(
     sqlx::query_as::<_, ConfigRecord>(
         r#"
         SELECT id, key, value, environment, agent_id, version, description, created_at, updated_at
-        FROM configurations
+        FROM config.configurations
         WHERE key = $1
         ORDER BY version DESC, updated_at DESC
         "#,

@@ -107,7 +107,7 @@ impl MigrationRunner {
         )
         .fetch_all(&self.pool)
         .await
-        .unwrap_or_default();
+        .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
 
         let mut statuses = Vec::new();
         for migration in migrator.iter() {
@@ -204,7 +204,7 @@ impl MigrationRunner {
         )
         .fetch_one(&self.pool)
         .await
-        .unwrap_or((0,));
+        .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
 
         Ok(row.0 as usize)
     }

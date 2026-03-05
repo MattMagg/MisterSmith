@@ -92,24 +92,23 @@ pub struct PersistenceHealthChecker {
 }
 
 impl PersistenceHealthChecker {
-    /// Create a new checker with both backends optionally configured.
+    /// Create a new checker with the KV backend optionally configured.
     ///
-    /// Pass `None` for any backend that is not in use.
-    #[cfg(feature = "sqlx")]
-    pub fn new(
-        pg_pool: Option<sqlx::PgPool>,
-        kv_context: Option<async_nats::jetstream::Context>,
-    ) -> Self {
+    /// Pass `None` if KV is not in use. Use [`with_pg_pool`](Self::with_pg_pool)
+    /// to add PostgreSQL health checking (requires the `sqlx` feature).
+    pub fn new(kv_context: Option<async_nats::jetstream::Context>) -> Self {
         Self {
-            pg_pool,
+            #[cfg(feature = "sqlx")]
+            pg_pool: None,
             kv_context,
         }
     }
 
-    /// Create a new checker without PostgreSQL support (sqlx feature disabled).
-    #[cfg(not(feature = "sqlx"))]
-    pub fn new(kv_context: Option<async_nats::jetstream::Context>) -> Self {
-        Self { kv_context }
+    /// Set the PostgreSQL pool for health checking.
+    #[cfg(feature = "sqlx")]
+    pub fn with_pg_pool(mut self, pool: sqlx::PgPool) -> Self {
+        self.pg_pool = Some(pool);
+        self
     }
 
     /// Check all configured backends and return a composite [`HealthStatus`].
@@ -246,11 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn checker_no_backends_returns_unknown() {
-        #[cfg(feature = "sqlx")]
-        let checker = PersistenceHealthChecker::new(None, None);
-        #[cfg(not(feature = "sqlx"))]
         let checker = PersistenceHealthChecker::new(None);
-
         assert_eq!(checker.check_all().await, HealthStatus::Unknown);
     }
 }

@@ -9,9 +9,10 @@
 #[cfg(all(feature = "security", feature = "sqlx"))]
 mod inner {
     use std::collections::HashSet;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::time::Duration;
 
+    use tokio::sync::Mutex;
     use tracing::{debug, error};
     use uuid::Uuid;
 
@@ -78,22 +79,22 @@ mod inner {
 
         /// Flush new events from the ring buffer to PostgreSQL.
         ///
-        /// Reads recent events, filters out already-persisted ones,
-        /// converts to `AuditEntry`, and batch-inserts.
+        /// Holds the persisted_ids lock across the entire operation (filter +
+        /// write + record) to prevent TOCTOU races with concurrent flushes.
         pub async fn flush(&self) -> Result<usize, PersistenceError> {
             let events = self.logger.recent_events(self.batch_size);
             if events.is_empty() {
                 return Ok(0);
             }
 
+            // Hold lock across entire flush to prevent TOCTOU race
+            let mut persisted = self.persisted_ids.lock().await;
+
             // Filter out already-persisted events
-            let new_events: Vec<&SecurityAuditEvent> = {
-                let persisted = self.persisted_ids.lock().unwrap();
-                events
-                    .iter()
-                    .filter(|e| !persisted.contains(&e.event_id))
-                    .collect()
-            };
+            let new_events: Vec<&SecurityAuditEvent> = events
+                .iter()
+                .filter(|e| !persisted.contains(&e.event_id))
+                .collect();
 
             if new_events.is_empty() {
                 return Ok(0);
@@ -108,20 +109,17 @@ mod inner {
             // Batch insert
             let count = self.repository.append_batch(&entries).await?;
 
-            // Track persisted IDs
-            {
-                let mut persisted = self.persisted_ids.lock().unwrap();
-                for event in &new_events {
-                    persisted.insert(event.event_id.clone());
-                }
+            // Track persisted IDs (only the newly-persisted events)
+            for event in &new_events {
+                persisted.insert(event.event_id.clone());
+            }
 
-                // Prevent unbounded growth — if tracking set exceeds 2x batch size,
-                // only keep the most recent IDs (matching ring buffer capacity).
-                if persisted.len() > self.batch_size * 2 {
-                    let recent_ids: HashSet<String> =
-                        events.iter().map(|e| e.event_id.clone()).collect();
-                    *persisted = recent_ids;
-                }
+            // Prevent unbounded growth — if tracking set exceeds 2x batch size,
+            // only keep the newly-persisted IDs (not all ring buffer events).
+            if persisted.len() > self.batch_size * 2 {
+                let new_ids: HashSet<String> =
+                    new_events.iter().map(|e| e.event_id.clone()).collect();
+                *persisted = new_ids;
             }
 
             debug!(
@@ -190,8 +188,8 @@ mod inner {
         }
 
         /// Get the number of events that have been persisted.
-        pub fn persisted_count(&self) -> usize {
-            self.persisted_ids.lock().unwrap().len()
+        pub async fn persisted_count(&self) -> usize {
+            self.persisted_ids.lock().await.len()
         }
     }
 }

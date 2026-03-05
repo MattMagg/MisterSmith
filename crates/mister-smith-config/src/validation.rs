@@ -135,6 +135,7 @@ impl FrameworkConfig {
         self.agent.validate()?;
         self.transport.validate()?;
         self.security.validate()?;
+        self.persistence.validate()?;
         Ok(())
     }
 }

@@ -1644,7 +1644,6 @@ dependencies = [
  "futures",
  "hex",
  "mister-smith-async",
- "mister-smith-config",
  "mister-smith-core",
  "mister-smith-events",
  "mister-smith-nats",

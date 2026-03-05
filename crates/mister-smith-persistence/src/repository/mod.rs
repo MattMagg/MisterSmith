@@ -18,12 +18,6 @@ use mister_smith_core::PersistenceError;
 ///
 /// Implementations route to KV, SQL, or both based on the data type.
 /// All methods are async and return typed `PersistenceError` on failure.
-///
-/// # Concurrency
-///
-/// Implementations use optimistic concurrency control. The `update` method
-/// will return [`PersistenceError::VersionConflict`] if the entity was modified
-/// concurrently since it was last read.
 #[async_trait]
 pub trait Repository<T: Send + Sync>: Send + Sync {
     /// Persist an entity. Returns the saved entity (may include generated fields).
@@ -33,9 +27,6 @@ pub trait Repository<T: Send + Sync>: Send + Sync {
     async fn find(&self, id: &Uuid) -> Result<Option<T>, PersistenceError>;
 
     /// Update an existing entity. Returns the updated entity.
-    ///
-    /// Fails with [`PersistenceError::VersionConflict`] if the entity was
-    /// modified concurrently.
     async fn update(&self, entity: &T) -> Result<T, PersistenceError>;
 
     /// Delete an entity by its primary identifier.

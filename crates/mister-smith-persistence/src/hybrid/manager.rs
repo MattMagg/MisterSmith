@@ -55,16 +55,19 @@ impl DirtyState {
         self.keys.insert(key);
     }
 
-    fn drain(&mut self) -> Vec<String> {
-        self.oldest_dirty_at = None;
-        self.keys.drain().collect()
+    /// Drain all dirty keys, returning them and the saved oldest timestamp.
+    fn drain(&mut self) -> (Vec<String>, Option<Instant>) {
+        let saved_oldest = self.oldest_dirty_at.take();
+        let keys = self.keys.drain().collect();
+        (keys, saved_oldest)
     }
 
-    fn re_mark(&mut self, key: String) {
-        if self.keys.is_empty() {
-            self.oldest_dirty_at = Some(Instant::now());
-        }
+    /// Re-mark a key as dirty, preserving a saved timestamp if available.
+    fn re_mark(&mut self, key: String, saved_oldest: Option<Instant>) {
         self.keys.insert(key);
+        if self.oldest_dirty_at.is_none() {
+            self.oldest_dirty_at = saved_oldest.or_else(|| Some(Instant::now()));
+        }
     }
 
     fn count(&self) -> usize {
@@ -277,12 +280,14 @@ impl HybridStateManager {
     /// Flush all dirty keys from KV to PostgreSQL.
     ///
     /// Reads each dirty key from KV and upserts it into the SQL agent state table
-    /// within a single transaction for atomicity. Returns the number of keys flushed.
+    /// via [`queries::upsert_state`]. Returns the number of keys flushed.
     ///
     /// Keys that fail to read from KV are re-marked dirty for retry.
+    /// On SQL error, all remaining unprocessed keys are re-marked with the
+    /// original dirty timestamp preserved.
     #[cfg(feature = "sqlx")]
     pub async fn flush_to_sql(&self) -> Result<usize, PersistenceError> {
-        let keys: Vec<String> = {
+        let (keys, saved_oldest) = {
             let mut dirty = self.dirty.lock().await;
             dirty.drain()
         };
@@ -293,15 +298,9 @@ impl HybridStateManager {
 
         debug!(count = keys.len(), "Flushing dirty keys to SQL");
 
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(crate::error::from_sqlx_error)?;
-
         let mut flushed = 0usize;
 
-        for kv_key in &keys {
+        for (i, kv_key) in keys.iter().enumerate() {
             let (agent_id, state_key) = match parse_kv_key(kv_key) {
                 Some(parts) => parts,
                 None => {
@@ -312,34 +311,39 @@ impl HybridStateManager {
 
             match self.kv.get::<Value>(kv_key).await {
                 Ok(Some(value)) => {
-                    sqlx::query(
-                        "INSERT INTO agents.state (agent_id, state_key, state_value, version, created_at, updated_at)
-                         VALUES ($1, $2, $3, 1, NOW(), NOW())
-                         ON CONFLICT (agent_id, state_key) DO UPDATE
-                         SET state_value = $3, version = agents.state.version + 1, updated_at = NOW()"
+                    match crate::postgres::queries::upsert_state(
+                        &self.pool,
+                        agent_id,
+                        state_key,
+                        value,
+                        None,
                     )
-                    .bind(agent_id)
-                    .bind(state_key)
-                    .bind(&value)
-                    .execute(&mut *tx)
                     .await
-                    .map_err(crate::error::from_sqlx_error)?;
-
-                    flushed += 1;
+                    {
+                        Ok(_) => {
+                            flushed += 1;
+                        }
+                        Err(e) => {
+                            warn!(key = %kv_key, error = %e, "SQL upsert failed during flush");
+                            // Re-mark this key and all remaining unprocessed keys
+                            let mut dirty = self.dirty.lock().await;
+                            dirty.re_mark(kv_key.clone(), saved_oldest);
+                            for remaining_key in &keys[i + 1..] {
+                                dirty.re_mark(remaining_key.clone(), saved_oldest);
+                            }
+                            return Err(e);
+                        }
+                    }
                 }
                 Ok(None) => {
                     debug!(key = %kv_key, "Dirty key no longer in KV (TTL expired?), skipping");
                 }
                 Err(e) => {
                     warn!(key = %kv_key, error = %e, "Failed to read dirty key from KV during flush");
-                    self.dirty.lock().await.re_mark(kv_key.clone());
+                    self.dirty.lock().await.re_mark(kv_key.clone(), saved_oldest);
                 }
             }
         }
-
-        tx.commit()
-            .await
-            .map_err(crate::error::from_sqlx_error)?;
 
         debug!(flushed = flushed, "Flush to SQL complete");
         Ok(flushed)
@@ -552,16 +556,28 @@ mod tests {
         state.mark_dirty("key2".to_string());
         assert_eq!(state.count(), 2);
 
-        let drained = state.drain();
+        let (drained, saved_oldest) = state.drain();
         assert_eq!(drained.len(), 2);
+        assert!(saved_oldest.is_some());
         assert_eq!(state.count(), 0);
         assert!(state.time_since_oldest().is_none());
     }
 
     #[test]
-    fn dirty_state_re_mark() {
+    fn dirty_state_re_mark_preserves_timestamp() {
         let mut state = DirtyState::new();
-        state.re_mark("retry_key".to_string());
+        let saved = Some(Instant::now() - Duration::from_secs(30));
+        state.re_mark("retry_key".to_string(), saved);
+        assert_eq!(state.count(), 1);
+        // Timestamp should be the saved one, not a fresh Instant::now()
+        let elapsed = state.time_since_oldest().unwrap();
+        assert!(elapsed >= Duration::from_secs(29));
+    }
+
+    #[test]
+    fn dirty_state_re_mark_no_saved_timestamp() {
+        let mut state = DirtyState::new();
+        state.re_mark("retry_key".to_string(), None);
         assert_eq!(state.count(), 1);
         assert!(state.time_since_oldest().is_some());
     }

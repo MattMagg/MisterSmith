@@ -22,7 +22,9 @@ pub mod audit_persister;
 
 // Re-exports for convenience
 pub use config::{CheckpointConfig, FlushConfig, KvConfig, PersistenceConfig, PostgresConfig};
-pub use error::{from_kv_error, from_sqlx_error};
+pub use error::from_kv_error;
+#[cfg(feature = "sqlx")]
+pub use error::from_sqlx_error;
 
 // Core types
 pub use hybrid::manager::HybridStateManager;

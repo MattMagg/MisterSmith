@@ -10,7 +10,6 @@ description = "Persistence and state management — PostgreSQL + JetStream KV du
 [dependencies]
 # Internal crates
 mister-smith-core = { workspace = true }
-mister-smith-config = { workspace = true }
 mister-smith-resources = { workspace = true }
 mister-smith-nats = { workspace = true }
 mister-smith-security = { workspace = true, optional = true }
