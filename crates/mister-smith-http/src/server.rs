@@ -11,7 +11,9 @@ use tokio::sync::broadcast;
 use tracing::info;
 
 use crate::config::HttpTransportConfig;
-use crate::middleware::{request_id_middleware, security_middleware, RateLimiter};
+use crate::middleware::{
+    rate_limit_middleware, request_id_middleware, security_middleware, RateLimiter,
+};
 use crate::routes::api_router;
 use crate::websocket::WsEvent;
 
@@ -70,9 +72,12 @@ impl Default for AppState {
 pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit_rps));
 
+    // Axum executes layers in reverse declaration order (last = outermost = first).
+    // Rate limiting must be outermost to block floods of unauthenticated requests.
     let router = api_router()
         .layer(axum_mw::from_fn(request_id_middleware))
         .layer(axum_mw::from_fn(security_middleware))
+        .layer(axum_mw::from_fn(rate_limit_middleware))
         .layer(axum::Extension(rate_limiter));
 
     // Inject SecurityLayer into extensions when available.
@@ -121,6 +126,11 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
+    use axum::extract::ConnectInfo;
+    use axum::http::{Request, StatusCode};
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use tower::ServiceExt;
 
     #[test]
     fn app_state_default() {
@@ -156,5 +166,34 @@ mod tests {
         state.event_tx.send(event.clone()).unwrap();
         let received = rx.recv().await.unwrap();
         assert_eq!(received.event_type, "test");
+    }
+
+    #[tokio::test]
+    async fn build_router_rate_limits_repeated_requests() {
+        let mut config = HttpTransportConfig::default();
+        config.rate_limit_rps = 2;
+
+        let app = build_router(&config, AppState::new());
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40123);
+
+        for _ in 0..2 {
+            let request = Request::builder()
+                .uri("/api/v1/health")
+                .extension(ConnectInfo(client_addr))
+                .body(Body::empty())
+                .unwrap();
+
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        let request = Request::builder()
+            .uri("/api/v1/health")
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 }
