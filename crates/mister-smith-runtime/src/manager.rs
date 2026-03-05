@@ -143,6 +143,8 @@ impl RuntimeManager {
     /// - The task handle mutex is poisoned.
     ///
     /// Task panics are still observable by caller-owned [`JoinHandle`]s.
+    /// - Returns [`RuntimeError::ShutdownFailed`] if any tracked task did not complete
+    ///   before the shutdown timeout.
     pub fn graceful_shutdown(self) -> Result<(), RuntimeError> {
         info!("Graceful shutdown initiated");
 
@@ -162,13 +164,14 @@ impl RuntimeManager {
             info!(count = task_count, "Aborting and waiting on tracked tasks");
         }
 
+        let mut join_failures = Vec::new();
         for tracked in &tracked_tasks {
             tracked.abort_handle.abort();
         }
 
         // Wait for completions using the runtime itself, since it is still alive.
         self.runtime.block_on(async {
-            for tracked in tracked_tasks {
+            for (idx, tracked) in tracked_tasks.into_iter().enumerate() {
                 match tokio::time::timeout(self.shutdown_timeout, tracked.completion_rx).await {
                     Ok(Ok(())) => {}
                     Ok(Err(_closed)) => {
@@ -177,6 +180,10 @@ impl RuntimeManager {
                     }
                     Err(_elapsed) => {
                         warn!("Tracked task did not complete within shutdown timeout");
+                        join_failures.push(format!(
+                            "task #{idx} exceeded shutdown timeout of {:?}",
+                            self.shutdown_timeout
+                        ));
                     }
                 }
             }
@@ -199,8 +206,12 @@ impl RuntimeManager {
             }
         }
 
-        info!("Graceful shutdown complete");
-        Ok(())
+        if join_failures.is_empty() {
+            info!("Graceful shutdown complete");
+            Ok(())
+        } else {
+            Err(RuntimeError::ShutdownFailed(join_failures.join("; ")))
+        }
     }
 
     // -- Task spawning -------------------------------------------------------
@@ -600,6 +611,29 @@ mod tests {
             .block_on(handle)
             .expect_err("task should be cancelled by shutdown");
         assert!(join_err.is_cancelled());
+    }
+
+
+
+    #[test]
+    fn graceful_shutdown_returns_err_on_timeout() {
+        let manager = RuntimeManager::builder()
+            .shutdown_timeout(Duration::from_millis(10))
+            .build(&test_config())
+            .expect("should initialize");
+
+        manager.spawn_blocking_task(move || {
+            std::thread::sleep(Duration::from_millis(250));
+        });
+
+        let err = manager.graceful_shutdown().expect_err("shutdown should fail");
+        match err {
+            RuntimeError::ShutdownFailed(msg) => {
+                assert!(msg.contains("exceeded shutdown timeout"));
+                assert!(msg.contains("task #"));
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
     }
 
     #[test]
