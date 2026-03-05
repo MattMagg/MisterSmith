@@ -131,18 +131,154 @@ pub struct TransportConfig {
     pub grpc_port: Option<u16>,
 }
 
-/// Security configuration (minimal placeholder — full definition in Phase 5).
+/// Security configuration with independent subsystem toggles.
+///
+/// The top-level `enabled` field acts as a master switch — when `false`, all
+/// subsystems are disabled regardless of their individual flags.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SecurityConfig {
-    /// Whether security features are enabled.
+    /// Master switch — disables all security subsystems when `false`.
     #[serde(default)]
     pub enabled: bool,
+    /// Authentication (JWT) configuration.
+    #[serde(default)]
+    pub auth: AuthConfig,
+    /// Authorization (RBAC) configuration.
+    #[serde(default)]
+    pub authz: AuthzConfig,
+    /// TLS / mTLS configuration.
+    #[serde(default)]
+    pub tls: TlsSecurityConfig,
+    /// Audit logging configuration.
+    #[serde(default)]
+    pub audit: AuditSecurityConfig,
+}
+
+/// Authentication (JWT) configuration section.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    /// Whether authentication is enabled.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Signing algorithm (e.g., "RS256", "ES256", "HS256").
+    #[serde(default = "default_algorithm")]
+    pub algorithm: String,
+    /// Access token TTL in seconds.
+    #[serde(default = "default_access_token_ttl")]
+    pub access_token_ttl_secs: u64,
+    /// Refresh token TTL in seconds.
+    #[serde(default = "default_refresh_token_ttl")]
+    pub refresh_token_ttl_secs: u64,
+    /// Token issuer claim.
+    #[serde(default)]
+    pub issuer: Option<String>,
+    /// Required audience claims.
+    #[serde(default)]
+    pub audience: Vec<String>,
+    /// Path to the private key PEM file (for RSA/EC/Ed algorithms).
+    #[serde(default)]
+    pub private_key_path: Option<String>,
+    /// Path to the public key PEM file (for RSA/EC/Ed algorithms).
+    #[serde(default)]
+    pub public_key_path: Option<String>,
+    /// HMAC secret (for HS* algorithms). Base64-encoded.
+    #[serde(default)]
+    pub hmac_secret: Option<String>,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            algorithm: default_algorithm(),
+            access_token_ttl_secs: default_access_token_ttl(),
+            refresh_token_ttl_secs: default_refresh_token_ttl(),
+            issuer: None,
+            audience: Vec::new(),
+            private_key_path: None,
+            public_key_path: None,
+            hmac_secret: None,
+        }
+    }
+}
+
+/// Authorization (RBAC) configuration section.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AuthzConfig {
+    /// Whether authorization is enabled.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Default role for unauthenticated requests (when auth is disabled).
+    #[serde(default)]
+    pub default_role: Option<String>,
+}
+
+/// TLS / mTLS configuration section.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsSecurityConfig {
     /// Whether TLS is enabled.
     #[serde(default)]
-    pub tls_enabled: bool,
-    /// Whether authentication is required.
+    pub enabled: bool,
+    /// Path to the server certificate PEM file.
     #[serde(default)]
-    pub auth_required: bool,
+    pub cert_path: Option<String>,
+    /// Path to the server private key PEM file.
+    #[serde(default)]
+    pub key_path: Option<String>,
+    /// Path to the CA certificate PEM for client verification.
+    #[serde(default)]
+    pub ca_path: Option<String>,
+    /// Whether mutual TLS (client certificates) is required.
+    #[serde(default)]
+    pub mtls_enabled: bool,
+    /// Auto-generate self-signed certificates for dev/test.
+    #[serde(default)]
+    pub generate_self_signed: bool,
+    /// Certificate reload check interval in seconds.
+    #[serde(default)]
+    pub reload_interval_secs: Option<u64>,
+    /// Days before expiry to emit warnings.
+    #[serde(default = "default_expiry_warning_days")]
+    pub expiry_warning_days: u32,
+}
+
+impl Default for TlsSecurityConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cert_path: None,
+            key_path: None,
+            ca_path: None,
+            mtls_enabled: false,
+            generate_self_signed: false,
+            reload_interval_secs: None,
+            expiry_warning_days: default_expiry_warning_days(),
+        }
+    }
+}
+
+/// Audit logging configuration section.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditSecurityConfig {
+    /// Whether audit logging is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Maximum number of audit events to retain in memory.
+    #[serde(default = "default_max_audit_events")]
+    pub max_events: usize,
+    /// Auth failure threshold per source per minute before alert.
+    #[serde(default = "default_auth_failure_threshold")]
+    pub auth_failure_alert_threshold: u32,
+}
+
+impl Default for AuditSecurityConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_events: default_max_audit_events(),
+            auth_failure_alert_threshold: default_auth_failure_threshold(),
+        }
+    }
 }
 
 /// Top-level framework configuration.
@@ -197,4 +333,28 @@ fn default_metrics_export_interval() -> Duration {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_algorithm() -> String {
+    "RS256".to_string()
+}
+
+fn default_access_token_ttl() -> u64 {
+    900 // 15 minutes
+}
+
+fn default_refresh_token_ttl() -> u64 {
+    86400 // 24 hours
+}
+
+fn default_expiry_warning_days() -> u32 {
+    30
+}
+
+fn default_max_audit_events() -> usize {
+    10_000
+}
+
+fn default_auth_failure_threshold() -> u32 {
+    5
 }

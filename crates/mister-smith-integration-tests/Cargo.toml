@@ -22,7 +22,11 @@ mister-smith-nats = { workspace = true }
 mister-smith-http = { workspace = true }
 mister-smith-grpc = { workspace = true }
 mister-smith-mcp = { workspace = true }
+mister-smith-security = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+axum = { workspace = true }
+tower = { workspace = true }
+tempfile = "3"
 serde_json = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }

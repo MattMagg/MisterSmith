@@ -1,0 +1,280 @@
+//! Cross-crate security integration tests.
+//!
+//! End-to-end scenarios: JWT → RBAC → Audit → Middleware.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use mister_smith_security::config::{AuditConfig, JwtConfig, KeySource, RbacConfig};
+use mister_smith_security::jwt::AgentClaims;
+use mister_smith_security::middleware::SecurityLayer;
+use mister_smith_security::rbac::PolicyEngine;
+
+fn test_jwt_config() -> JwtConfig {
+    JwtConfig {
+        algorithm: "HS256".to_string(),
+        access_token_ttl: Duration::from_secs(300),
+        refresh_token_ttl: Duration::from_secs(3600),
+        issuer: Some("mister-smith".to_string()),
+        audience: vec!["integration-test".to_string()],
+        key_source: KeySource::Hmac {
+            secret: b"integration-test-secret-key-at-least-32-bytes!".to_vec(),
+        },
+    }
+}
+
+// -- End-to-end: JWT → validate → RBAC → audit ---------------------------
+
+#[test]
+fn e2e_jwt_validate_rbac_audit() {
+    let security = SecurityLayer::new(
+        true,
+        &test_jwt_config(),
+        &RbacConfig::default(),
+        &AuditConfig::default(),
+    )
+    .unwrap();
+
+    // Generate a token for a viewer agent
+    let claims = AgentClaims {
+        sub: "agent-viewer".to_string(),
+        agent_id: "agent-viewer".to_string(),
+        agent_type: "viewer".to_string(),
+        ..Default::default()
+    };
+
+    let pair = security.jwt.generate_token_pair(&claims).unwrap();
+
+    // Validate the token
+    let validated = security.jwt.validate_token(&pair.access_token).unwrap();
+    assert_eq!(validated.agent_id, "agent-viewer");
+
+    // Check RBAC permission (viewer can read)
+    assert!(security.policy.check_permission(&validated, "read", "agent"));
+    // Viewer cannot write
+    assert!(!security.policy.check_permission(&validated, "write", "agent"));
+
+    // Record auth success in audit log
+    security.audit.record_auth(
+        &validated.sub,
+        mister_smith_security::audit::AuditOutcome::Success,
+        std::collections::HashMap::new(),
+    );
+
+    let events = security.audit.recent_events(1);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].principal.as_deref(), Some("agent-viewer"));
+}
+
+// -- Security disabled pass-through ---------------------------------------
+
+#[test]
+fn security_disabled_layer() {
+    let security = SecurityLayer::new(
+        false,
+        &test_jwt_config(),
+        &RbacConfig::default(),
+        &AuditConfig::default(),
+    )
+    .unwrap();
+
+    assert!(!security.is_enabled());
+    // JWT still works even when disabled (middleware just skips enforcement)
+    let pair = security
+        .jwt
+        .generate_token_pair(&AgentClaims {
+            sub: "test".to_string(),
+            agent_id: "test".to_string(),
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(!pair.access_token.is_empty());
+}
+
+// -- RBAC with default role fallback --------------------------------------
+
+#[test]
+fn rbac_default_role_integration() {
+    let rbac_config = RbacConfig {
+        default_role: Some("viewer".to_string()),
+    };
+    let engine = PolicyEngine::new(&rbac_config);
+
+    // Claims with no agent_type should fall back to viewer
+    let claims = AgentClaims {
+        sub: "anonymous".to_string(),
+        agent_id: "anonymous".to_string(),
+        ..Default::default()
+    };
+
+    assert!(engine.check_permission(&claims, "read", "agent"));
+    assert!(!engine.check_permission(&claims, "write", "agent"));
+}
+
+// -- Token lifecycle: generate → validate → revoke → reject ---------------
+
+#[test]
+fn token_lifecycle_integration() {
+    let security = SecurityLayer::new(
+        true,
+        &test_jwt_config(),
+        &RbacConfig::default(),
+        &AuditConfig::default(),
+    )
+    .unwrap();
+
+    let claims = AgentClaims {
+        sub: "lifecycle-agent".to_string(),
+        agent_id: "lifecycle-agent".to_string(),
+        agent_type: "admin".to_string(),
+        ..Default::default()
+    };
+
+    // Generate
+    let pair = security.jwt.generate_token_pair(&claims).unwrap();
+
+    // Validate
+    let validated = security.jwt.validate_token(&pair.access_token).unwrap();
+    assert_eq!(validated.agent_id, "lifecycle-agent");
+
+    // Revoke
+    security.jwt.revoke_token(&validated.jti);
+
+    // Reject revoked token
+    let result = security.jwt.validate_token(&pair.access_token);
+    assert!(result.is_err());
+}
+
+// -- TLS dev certificate generation integration ---------------------------
+
+#[test]
+fn tls_dev_cert_generation_integration() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let certs = mister_smith_security::tls::CertificateManager::generate_dev_certificates(
+        dir.path(),
+        &["localhost".to_string(), "127.0.0.1".to_string()],
+    )
+    .unwrap();
+
+    // Verify all files exist
+    assert!(certs.ca_cert_path.exists());
+    assert!(certs.server_cert_path.exists());
+    assert!(certs.client_cert_path.exists());
+
+    // Verify we can load them into a CertificateManager
+    let tls_config = mister_smith_security::config::TlsConfig {
+        enabled: true,
+        cert_path: Some(certs.server_cert_path),
+        key_path: Some(certs.server_key_path),
+        ca_path: Some(certs.ca_cert_path),
+        mtls_enabled: true,
+        ..Default::default()
+    };
+    let mgr = mister_smith_security::tls::CertificateManager::new(&tls_config);
+    assert!(mgr.is_ok());
+}
+
+// -- Audit hash chain integrity across operations -------------------------
+
+#[test]
+fn audit_chain_integrity_integration() {
+    let security = SecurityLayer::new(
+        true,
+        &test_jwt_config(),
+        &RbacConfig::default(),
+        &AuditConfig::default(),
+    )
+    .unwrap();
+
+    // Perform multiple operations
+    security.audit.record_auth(
+        "agent-1",
+        mister_smith_security::audit::AuditOutcome::Success,
+        std::collections::HashMap::new(),
+    );
+    security.audit.record_authz(
+        "agent-1",
+        "read",
+        "config",
+        mister_smith_security::audit::AuditOutcome::Success,
+    );
+    security.audit.record_auth(
+        "agent-2",
+        mister_smith_security::audit::AuditOutcome::Failure,
+        [("reason".to_string(), "invalid_token".to_string())]
+            .into_iter()
+            .collect(),
+    );
+
+    // Verify chain integrity
+    assert!(security.audit.verify_chain().is_ok());
+
+    // Verify event count
+    let events = security.audit.recent_events(10);
+    assert_eq!(events.len(), 3);
+}
+
+// -- Middleware integration with Axum -------------------------------------
+
+#[tokio::test]
+async fn axum_middleware_integration() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::middleware as axum_mw;
+    use axum::response::IntoResponse;
+    use axum::routing::get;
+    use axum::Router;
+    use tower::ServiceExt;
+
+    let security = Arc::new(
+        SecurityLayer::new(
+            true,
+            &test_jwt_config(),
+            &RbacConfig::default(),
+            &AuditConfig::default(),
+        )
+        .unwrap(),
+    );
+
+    async fn handler() -> impl IntoResponse {
+        "authorized"
+    }
+
+    let app = Router::new()
+        .route("/test", get(handler))
+        .layer(axum_mw::from_fn_with_state(
+            security.clone(),
+            mister_smith_security::middleware::axum_mw::auth_middleware,
+        ));
+
+    // Unauthenticated → 401
+    let response = app
+        .clone()
+        .oneshot(Request::builder().uri("/test").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Authenticated → 200
+    let token = security
+        .jwt
+        .generate_token_pair(&AgentClaims {
+            sub: "int-test".to_string(),
+            agent_id: "int-test".to_string(),
+            ..Default::default()
+        })
+        .unwrap()
+        .access_token;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/test")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}

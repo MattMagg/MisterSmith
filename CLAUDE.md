@@ -6,7 +6,7 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-a
 
 ```bash
 cargo build --workspace                    # Build all crates
-cargo test --workspace                     # Run all tests (605 as of Phase 4 complete)
+cargo test --workspace                     # Run all tests (717 as of Phase 5 complete)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 ```
 
@@ -18,7 +18,8 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 2. Runtime & Async | Complete | `mister-smith-runtime`, `mister-smith-monitoring`, `mister-smith-events`, `mister-smith-async`, `mister-smith-resources`, `mister-smith-integration-tests` |
 | 3. Actor System & Supervision | Complete | `mister-smith-actor`, `mister-smith-supervision` |
 | 4. Transport & Messaging | Complete | `mister-smith-transport`, `mister-smith-nats`, `mister-smith-http`, `mister-smith-grpc`, `mister-smith-mcp` |
-| 5–8 | Not started | See `ROADMAP.md` |
+| 5. Security | Complete | `mister-smith-security` |
+| 6–8 | Not started | See `ROADMAP.md` |
 
 ## Workspace Crate Dependencies
 
@@ -37,6 +38,7 @@ mister-smith-core (foundation types, traits, errors)
 ├── mister-smith-http (Axum REST API, WebSocket, middleware, rate limiting)
 ├── mister-smith-grpc (Tonic gRPC services, health, protobuf)
 ├── mister-smith-mcp (MCP client/server, tool registry, NATS bridge)
+├── mister-smith-security (JWT auth, RBAC, TLS/mTLS, audit logging)
 └── mister-smith-integration-tests (cross-crate validation)
 ```
 

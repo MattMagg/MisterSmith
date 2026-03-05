@@ -74,12 +74,12 @@ pub fn apply_env_overlay(config: &mut FrameworkConfig, prefix: &str) {
     }
     if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__TLS_ENABLED")) {
         if let Ok(b) = val.parse() {
-            config.security.tls_enabled = b;
+            config.security.tls.enabled = b;
         }
     }
-    if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__AUTH_REQUIRED")) {
+    if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__AUTH_ENABLED")) {
         if let Ok(b) = val.parse() {
-            config.security.auth_required = b;
+            config.security.auth.enabled = b;
         }
     }
 }

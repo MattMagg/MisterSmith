@@ -23,6 +23,10 @@ use crate::health;
 pub struct GrpcServer {
     config: GrpcTransportConfig,
     health_reporter: Option<HealthReporter>,
+    /// Optional security layer for JWT authentication.
+    #[cfg(feature = "security")]
+    #[allow(dead_code)]
+    security: Option<std::sync::Arc<mister_smith_security::middleware::SecurityLayer>>,
 }
 
 impl GrpcServer {
@@ -32,6 +36,8 @@ impl GrpcServer {
         Self {
             config,
             health_reporter: None,
+            #[cfg(feature = "security")]
+            security: None,
         }
     }
 
@@ -39,6 +45,29 @@ impl GrpcServer {
     #[must_use]
     pub fn with_defaults() -> Self {
         Self::new(GrpcTransportConfig::default())
+    }
+
+    /// Set the security layer for gRPC authentication.
+    ///
+    /// When set, the [`grpc_auth_interceptor`](mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor)
+    /// can be applied to service builders to enforce JWT authentication
+    /// on incoming requests.
+    #[cfg(feature = "security")]
+    pub fn with_security(
+        mut self,
+        security: std::sync::Arc<mister_smith_security::middleware::SecurityLayer>,
+    ) -> Self {
+        self.security = Some(security);
+        self
+    }
+
+    /// Returns the security layer, if configured.
+    #[cfg(feature = "security")]
+    #[must_use]
+    pub fn security(
+        &self,
+    ) -> Option<&std::sync::Arc<mister_smith_security::middleware::SecurityLayer>> {
+        self.security.as_ref()
     }
 
     /// Returns a reference to the health reporter, if the server has been

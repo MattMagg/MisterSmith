@@ -131,11 +131,24 @@ fn rate_limited_response() -> Response {
     response
 }
 
-/// Security middleware placeholder for Phase 5 auth enforcement.
+/// Security middleware that delegates to the security crate when available.
 ///
-/// Currently passes all requests through without checks.
+/// When the `security` feature is enabled and a `SecurityLayer` is present
+/// in the request extensions, JWT authentication is enforced. Otherwise,
+/// all requests pass through.
 pub async fn security_middleware(request: Request<axum::body::Body>, next: Next) -> Response {
-    // Phase 5: Add JWT/API key validation here.
+    #[cfg(feature = "security")]
+    {
+        use mister_smith_security::middleware::SecurityLayer;
+        if let Some(security) = request.extensions().get::<Arc<SecurityLayer>>().cloned() {
+            return mister_smith_security::middleware::axum_mw::auth_middleware(
+                axum::extract::State(security),
+                request,
+                next,
+            )
+            .await;
+        }
+    }
     next.run(request).await
 }
 

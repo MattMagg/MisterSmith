@@ -6,10 +6,15 @@ rust-version.workspace = true
 license.workspace = true
 description = "HTTP REST API and WebSocket transport using Axum"
 
+[features]
+default = ["security"]
+security = ["dep:mister-smith-security"]
+
 [dependencies]
 mister-smith-core = { workspace = true }
 mister-smith-transport = { workspace = true }
 mister-smith-monitoring = { workspace = true }
+mister-smith-security = { workspace = true, optional = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
