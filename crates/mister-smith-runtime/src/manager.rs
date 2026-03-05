@@ -30,7 +30,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tokio::runtime::Runtime;
-use tokio::task::JoinHandle;
+use tokio::sync::oneshot;
+use tokio::task::{AbortHandle, JoinHandle};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -49,7 +50,7 @@ use crate::config::{RuntimeConfigExt, DEFAULT_SHUTDOWN_TIMEOUT};
 ///
 /// - Builds and holds the Tokio [`Runtime`] according to [`RuntimeConfig`].
 /// - Provides a cooperative shutdown signal via [`AtomicBool`].
-/// - Tracks spawned task handles so they can be joined during shutdown.
+/// - Tracks spawned tasks for shutdown via abort + completion metadata.
 /// - Installs signal handlers for `SIGTERM`/`SIGINT` (unix) or `ctrl_c` (other).
 /// - Initialises the `tracing` subscriber on first construction.
 pub struct RuntimeManager {
@@ -57,14 +58,22 @@ pub struct RuntimeManager {
     runtime: Arc<Runtime>,
     /// Cooperative shutdown signal — `true` means shutdown has been requested.
     shutdown_signal: Arc<AtomicBool>,
-    /// Handles to all tasks spawned through [`spawn_task`](Self::spawn_task) and
+    /// Metadata for tasks spawned through [`spawn_task`](Self::spawn_task) and
     /// [`spawn_blocking_task`](Self::spawn_blocking_task).
-    task_handles: Mutex<Vec<JoinHandle<()>>>,
+    ///
+    /// We track abort handles and completion notifications internally so callers can keep
+    /// ownership of the original [`JoinHandle`].
+    tracked_tasks: Mutex<Vec<TrackedTask>>,
     /// How long to wait for tasks to finish during graceful shutdown.
     shutdown_timeout: Duration,
     /// Optional event publisher for emitting lifecycle events (wired at integration time).
     #[allow(dead_code)]
     event_publisher: Option<Arc<dyn EventPublisher>>,
+}
+
+struct TrackedTask {
+    abort_handle: AbortHandle,
+    completion_rx: oneshot::Receiver<()>,
 }
 
 impl RuntimeManager {
@@ -102,7 +111,7 @@ impl RuntimeManager {
         Ok(Self {
             runtime: Arc::new(runtime),
             shutdown_signal: Arc::new(AtomicBool::new(false)),
-            task_handles: Mutex::new(Vec::new()),
+            tracked_tasks: Mutex::new(Vec::new()),
             shutdown_timeout: DEFAULT_SHUTDOWN_TIMEOUT,
             event_publisher: None,
         })
@@ -124,41 +133,47 @@ impl RuntimeManager {
     /// Perform a graceful shutdown.
     ///
     /// 1. Sets the shutdown signal so all cooperative loops can observe it.
-    /// 2. Drains tracked task handles, waiting up to the configured shutdown timeout.
+    /// 2. Aborts all tracked tasks and waits for completion notifications up to the
+    ///    configured shutdown timeout.
     /// 3. Shuts down the Tokio runtime with the configured timeout.
     ///
     /// # Errors
     ///
     /// Returns [`RuntimeError::ShutdownFailed`] if:
     /// - The task handle mutex is poisoned.
-    /// - Any tracked task panicked.
+    ///
+    /// Task panics are still observable by caller-owned [`JoinHandle`]s.
     pub fn graceful_shutdown(self) -> Result<(), RuntimeError> {
         info!("Graceful shutdown initiated");
 
         // 1. Signal all cooperative loops.
         self.shutdown_signal.store(true, Ordering::SeqCst);
 
-        // 2. Drain and join tracked tasks.
-        let handles = {
-            let mut guard = self.task_handles.lock().map_err(|e| {
-                RuntimeError::ShutdownFailed(format!("task handle mutex poisoned: {e}"))
+        // 2. Drain tracked tasks, abort them, and await completion notifications.
+        let tracked_tasks = {
+            let mut guard = self.tracked_tasks.lock().map_err(|e| {
+                RuntimeError::ShutdownFailed(format!("tracked task mutex poisoned: {e}"))
             })?;
             std::mem::take(&mut *guard)
         };
 
-        let handle_count = handles.len();
-        if handle_count > 0 {
-            info!(count = handle_count, "Joining tracked task handles");
+        let task_count = tracked_tasks.len();
+        if task_count > 0 {
+            info!(count = task_count, "Aborting and waiting on tracked tasks");
         }
 
-        // We must block on the joins using the runtime itself, since the runtime
-        // is still alive at this point.
+        for tracked in &tracked_tasks {
+            tracked.abort_handle.abort();
+        }
+
+        // Wait for completions using the runtime itself, since it is still alive.
         self.runtime.block_on(async {
-            for handle in handles {
-                match tokio::time::timeout(self.shutdown_timeout, handle).await {
+            for tracked in tracked_tasks {
+                match tokio::time::timeout(self.shutdown_timeout, tracked.completion_rx).await {
                     Ok(Ok(())) => {}
-                    Ok(Err(join_err)) => {
-                        warn!(%join_err, "Tracked task panicked during shutdown");
+                    Ok(Err(_closed)) => {
+                        // Sender is dropped for aborted/panicked tasks; caller-owned JoinHandle
+                        // remains the source of panic/cancel detail.
                     }
                     Err(_elapsed) => {
                         warn!("Tracked task did not complete within shutdown timeout");
@@ -190,35 +205,34 @@ impl RuntimeManager {
 
     // -- Task spawning -------------------------------------------------------
 
-    /// Spawn an async task on the runtime, tracking its [`JoinHandle`].
+    /// Spawn an async task on the runtime.
+///
+    /// Returns the task's original [`JoinHandle`] so callers can directly await, abort,
+    /// or inspect panic/cancellation outcomes for the submitted task itself.
     ///
-    /// The handle is stored so that [`graceful_shutdown`](Self::graceful_shutdown)
-    /// can join it. Callers that need the handle directly can clone the
-    /// returned reference.
+    /// Internally, shutdown tracking uses task metadata (abort handle + completion signal)
+    /// and does not consume the caller-facing join handle.
     pub fn spawn_task<F>(&self, future: F) -> JoinHandle<()>
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        let handle = self.runtime.spawn(future);
+        let (completion_tx, completion_rx) = oneshot::channel();
+        let handle = self.runtime.spawn(async move {
+            future.await;
+            let _ = completion_tx.send(());
+        });
 
-        // Tokio's JoinHandle is not Clone, so we cannot both store it for
-        // shutdown joining AND return it to the caller. We store the real
-        // handle (needed for graceful_shutdown to join) and return a
-        // lightweight sentinel handle to the caller. The caller can await
-        // the sentinel or ignore it; the real work is tracked internally.
         let abort_handle = handle.abort_handle();
-        if let Ok(mut handles) = self.task_handles.lock() {
-            handles.push(handle);
+        if let Ok(mut tracked_tasks) = self.tracked_tasks.lock() {
+            tracked_tasks.push(TrackedTask {
+                abort_handle,
+                completion_rx,
+            });
         } else {
-            error!("Task handle mutex poisoned — task will not be tracked for shutdown");
+            error!("Tracked task mutex poisoned — task will not be tracked for shutdown");
         }
 
-        // Sentinel task: completes immediately, gives caller a JoinHandle.
-        // Captures abort_handle so the caller could abort the real task if
-        // they wanted (by aborting through the handle).
-        self.runtime.spawn(async move {
-            let _ = abort_handle;
-        })
+        handle
     }
 
     /// Spawn a blocking task on the runtime's blocking thread pool, tracking it.
@@ -229,14 +243,23 @@ impl RuntimeManager {
     where
         F: FnOnce() + Send + 'static,
     {
-        let handle = self.runtime.spawn_blocking(f);
-        if let Ok(mut handles) = self.task_handles.lock() {
-            handles.push(handle);
+        let (completion_tx, completion_rx) = oneshot::channel();
+        let handle = self.runtime.spawn_blocking(move || {
+            f();
+            let _ = completion_tx.send(());
+        });
+
+        let abort_handle = handle.abort_handle();
+        if let Ok(mut tracked_tasks) = self.tracked_tasks.lock() {
+            tracked_tasks.push(TrackedTask {
+                abort_handle,
+                completion_rx,
+            });
         } else {
-            error!("Task handle mutex poisoned — blocking task will not be tracked");
+            error!("Tracked task mutex poisoned — blocking task will not be tracked");
         }
-        // Return a lightweight handle (same pattern as spawn_task).
-        self.runtime.spawn(async {})
+
+        handle
     }
 
     // -- Accessors -----------------------------------------------------------
@@ -278,7 +301,7 @@ impl RuntimeManager {
 impl std::fmt::Debug for RuntimeManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let handle_count = self
-            .task_handles
+            .tracked_tasks
             .lock()
             .map(|h| h.len())
             .unwrap_or(0);
@@ -352,7 +375,7 @@ impl RuntimeManagerBuilder {
         Ok(RuntimeManager {
             runtime: Arc::new(runtime),
             shutdown_signal: Arc::new(AtomicBool::new(false)),
-            task_handles: Mutex::new(Vec::new()),
+            tracked_tasks: Mutex::new(Vec::new()),
             shutdown_timeout: self.shutdown_timeout.unwrap_or(DEFAULT_SHUTDOWN_TIMEOUT),
             event_publisher: self.event_publisher,
         })
@@ -457,18 +480,24 @@ mod tests {
     }
 
     #[test]
-    fn spawn_task_runs_on_runtime() {
+    fn spawn_task_handle_resolves_when_submitted_task_completes() {
         let manager = RuntimeManager::initialize(&test_config())
             .expect("should initialize");
 
-        let (tx, rx) = std::sync::mpsc::channel();
-        manager.spawn_task(async move {
-            tx.send(42).unwrap();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (finish_tx, finish_rx) = tokio::sync::oneshot::channel();
+
+        let handle = manager.spawn_task(async move {
+            started_tx.send(()).unwrap();
+            let _ = finish_rx.await;
         });
 
-        let val = rx.recv_timeout(Duration::from_secs(5))
-            .expect("task should have sent a value");
-        assert_eq!(val, 42);
+        started_rx.recv_timeout(Duration::from_secs(1))
+            .expect("task should start");
+        assert!(!handle.is_finished(), "handle should not finish before task completion");
+
+        finish_tx.send(()).expect("task should still be waiting");
+        manager.runtime().block_on(handle).expect("task should complete successfully");
     }
 
     #[test]
@@ -477,13 +506,49 @@ mod tests {
             .expect("should initialize");
 
         let (tx, rx) = std::sync::mpsc::channel();
-        manager.spawn_blocking_task(move || {
+        let handle = manager.spawn_blocking_task(move || {
             tx.send(99).unwrap();
         });
 
         let val = rx.recv_timeout(Duration::from_secs(5))
             .expect("blocking task should have sent a value");
         assert_eq!(val, 99);
+
+        manager.runtime().block_on(handle).expect("blocking task handle should resolve");
+    }
+
+
+    #[test]
+    fn spawn_task_panic_is_observable_to_caller() {
+        let manager = RuntimeManager::initialize(&test_config())
+            .expect("should initialize");
+
+        let handle = manager.spawn_task(async {
+            panic!("boom");
+        });
+
+        let join_err = manager
+            .runtime()
+            .block_on(handle)
+            .expect_err("caller should observe panic");
+        assert!(join_err.is_panic());
+    }
+
+    #[test]
+    fn spawn_task_abort_is_observable_to_caller() {
+        let manager = RuntimeManager::initialize(&test_config())
+            .expect("should initialize");
+
+        let handle = manager.spawn_task(async {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        });
+
+        handle.abort();
+        let join_err = manager
+            .runtime()
+            .block_on(handle)
+            .expect_err("caller should observe cancellation");
+        assert!(join_err.is_cancelled());
     }
 
     #[test]
@@ -515,19 +580,26 @@ mod tests {
     }
 
     #[test]
-    fn graceful_shutdown_completes() {
+    fn graceful_shutdown_aborts_outstanding_tasks() {
         let manager = RuntimeManager::initialize(&test_config())
             .expect("should initialize");
 
-        // Spawn a task that completes quickly.
-        manager.spawn_task(async {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let handle = manager.spawn_task(async move {
+            started_tx.send(()).unwrap();
+            tokio::time::sleep(Duration::from_secs(5)).await;
         });
 
-        // Give the task a moment to be scheduled.
-        std::thread::sleep(Duration::from_millis(50));
+        started_rx.recv_timeout(Duration::from_secs(1))
+            .expect("task should start before shutdown");
 
+        let runtime = Arc::clone(manager.runtime());
         manager.graceful_shutdown().expect("shutdown should succeed");
+
+        let join_err = runtime
+            .block_on(handle)
+            .expect_err("task should be cancelled by shutdown");
+        assert!(join_err.is_cancelled());
     }
 
     #[test]
