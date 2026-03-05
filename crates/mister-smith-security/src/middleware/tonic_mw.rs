@@ -33,6 +33,10 @@ pub fn grpc_auth_interceptor(
             return Ok(request);
         }
 
+        let Some(jwt) = security.jwt.as_ref() else {
+            return Ok(request);
+        };
+
         // Extract token from metadata
         let token = request
             .metadata()
@@ -47,54 +51,63 @@ pub fn grpc_auth_interceptor(
                 #[cfg(feature = "audit")]
                 {
                     use crate::audit::events::AuditOutcome;
-                    security.audit.record_auth(
-                        "unknown",
-                        AuditOutcome::Failure,
-                        [(
-                            "reason".to_string(),
-                            "missing_authorization_metadata".to_string(),
-                        )]
-                        .into_iter()
-                        .collect(),
-                    );
+                    if let Some(audit) = security.audit.as_ref() {
+                        audit.record_auth(
+                            "unknown",
+                            AuditOutcome::Failure,
+                            [(
+                                "reason".to_string(),
+                                "missing_authorization_metadata".to_string(),
+                            )]
+                            .into_iter()
+                            .collect(),
+                        );
+                    }
                 }
                 return Err(Status::unauthenticated("missing authorization metadata"));
             }
         };
 
-        match security.jwt.validate_token(&token) {
+        match jwt.validate_token(&token) {
             Ok(claims) => {
                 #[cfg(feature = "audit")]
                 {
                     use crate::audit::events::AuditOutcome;
-                    security.audit.record_auth(
-                        &claims.sub,
-                        AuditOutcome::Success,
-                        std::collections::HashMap::new(),
-                    );
+                    if let Some(audit) = security.audit.as_ref() {
+                        audit.record_auth(
+                            &claims.sub,
+                            AuditOutcome::Success,
+                            std::collections::HashMap::new(),
+                        );
+                    }
                 }
                 #[cfg(feature = "rbac")]
                 {
-                    let authz_request = build_grpc_authorization_request(&request, &claims);
-                    let decision = security.policy.evaluate(&authz_request);
+                    if let Some(policy) = security.policy.as_ref() {
+                        let authz_request =
+                            build_grpc_authorization_request(&request, &claims);
+                        let decision = policy.evaluate(&authz_request);
 
-                    #[cfg(feature = "audit")]
-                    {
-                        use crate::audit::events::AuditOutcome;
-                        security.audit.record_authz(
-                            &claims.sub,
-                            &authz_request.action,
-                            &authz_request.resource,
-                            if decision.allowed {
-                                AuditOutcome::Success
-                            } else {
-                                AuditOutcome::Failure
-                            },
-                        );
-                    }
+                        #[cfg(feature = "audit")]
+                        {
+                            use crate::audit::events::AuditOutcome;
+                            if let Some(audit) = security.audit.as_ref() {
+                                audit.record_authz(
+                                    &claims.sub,
+                                    &authz_request.action,
+                                    &authz_request.resource,
+                                    if decision.allowed {
+                                        AuditOutcome::Success
+                                    } else {
+                                        AuditOutcome::Failure
+                                    },
+                                );
+                            }
+                        }
 
-                    if !decision.allowed {
-                        return Err(Status::permission_denied("forbidden"));
+                        if !decision.allowed {
+                            return Err(Status::permission_denied("forbidden"));
+                        }
                     }
                 }
 
@@ -105,13 +118,15 @@ pub fn grpc_auth_interceptor(
                 #[cfg(feature = "audit")]
                 {
                     use crate::audit::events::AuditOutcome;
-                    security.audit.record_auth(
-                        "unknown",
-                        AuditOutcome::Failure,
-                        [("reason".to_string(), e.to_string())]
-                            .into_iter()
-                            .collect(),
-                    );
+                    if let Some(audit) = security.audit.as_ref() {
+                        audit.record_auth(
+                            "unknown",
+                            AuditOutcome::Failure,
+                            [("reason".to_string(), e.to_string())]
+                                .into_iter()
+                                .collect(),
+                        );
+                    }
                 }
                 Err(Status::unauthenticated(map_auth_error_message(&e)))
             }

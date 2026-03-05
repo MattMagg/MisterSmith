@@ -16,7 +16,7 @@ use tower::ServiceExt;
 use mister_smith_security::config::{AuditConfig, JwtConfig, KeySource, RbacConfig};
 use mister_smith_security::jwt::AgentClaims;
 use mister_smith_security::middleware::rate_limiter::RateLimiter;
-use mister_smith_security::middleware::SecurityLayer;
+use mister_smith_security::middleware::{SecurityLayer, SecurityLayerConfig};
 
 fn test_jwt_config() -> JwtConfig {
     JwtConfig {
@@ -31,14 +31,20 @@ fn test_jwt_config() -> JwtConfig {
     }
 }
 
-fn test_security_layer(enabled: bool) -> Arc<SecurityLayer> {
+fn test_security_layer(enabled: bool, auth_enabled: bool, authz_enabled: bool) -> Arc<SecurityLayer> {
     Arc::new(
-        SecurityLayer::new(
+        SecurityLayer::new(SecurityLayerConfig {
             enabled,
-            &test_jwt_config(),
-            &RbacConfig::default(),
-            &AuditConfig::default(),
-        )
+            auth_enabled,
+            authz_enabled,
+            audit_enabled: true,
+            tls_enabled: false,
+            jwt_config: Some(test_jwt_config()),
+            rbac_config: Some(RbacConfig::default()),
+            audit_config: Some(AuditConfig::default()),
+            #[cfg(feature = "tls")]
+            tls_config: None,
+        })
         .unwrap(),
     )
 }
@@ -51,7 +57,12 @@ fn test_token_with_permissions(security: &SecurityLayer, permissions: Vec<String
         permissions,
         ..Default::default()
     };
-    let pair = security.jwt.generate_token_pair(&claims).unwrap();
+    let pair = security
+        .jwt
+        .as_ref()
+        .expect("jwt should be configured for token generation")
+        .generate_token_pair(&claims)
+        .unwrap();
     pair.access_token
 }
 
@@ -75,6 +86,8 @@ fn test_app(security: Arc<SecurityLayer>) -> Router {
 fn latest_auth_failure_reason(security: &SecurityLayer) -> String {
     security
         .audit
+        .as_ref()
+        .expect("audit should be configured")
         .recent_events(20)
         .into_iter()
         .rev()
@@ -90,7 +103,7 @@ fn latest_auth_failure_reason(security: &SecurityLayer) -> String {
 
 #[tokio::test]
 async fn valid_bearer_token_passes() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let token = test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
     let app = test_app(security);
 
@@ -104,11 +117,59 @@ async fn valid_bearer_token_passes() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
+// -- PR #103: subsystem toggle tests --------------------------------------
+
+#[tokio::test]
+async fn master_on_auth_off_passes_through() {
+    let security = test_security_layer(true, false, true);
+    let app = test_app(security);
+
+    let request = Request::builder()
+        .uri("/protected")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn master_on_auth_on_authz_off_authenticates_without_rbac_path() {
+    let security = test_security_layer(true, true, false);
+    let token = test_token(&security);
+    assert!(security.policy.is_none());
+
+    let app = test_app(security);
+
+    let request = Request::builder()
+        .uri("/protected")
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn master_off_full_pass_through() {
+    let security = test_security_layer(false, true, true);
+    let app = test_app(security);
+
+    let request = Request::builder()
+        .uri("/protected")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
 // -- Missing auth header returns 401 (US3-AS2) ----------------------------
 
 #[tokio::test]
 async fn missing_auth_header_returns_401() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let app = test_app(security);
 
     let request = Request::builder()
@@ -124,7 +185,7 @@ async fn missing_auth_header_returns_401() {
 
 #[tokio::test]
 async fn invalid_token_returns_401() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let app = test_app(security);
 
     let request = Request::builder()
@@ -141,7 +202,7 @@ async fn invalid_token_returns_401() {
 
 #[tokio::test]
 async fn wrong_auth_scheme_returns_401() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let app = test_app(security);
 
     let request = Request::builder()
@@ -158,7 +219,7 @@ async fn wrong_auth_scheme_returns_401() {
 
 #[tokio::test]
 async fn security_disabled_passes_through() {
-    let security = test_security_layer(false);
+    let security = test_security_layer(false, true, true);
     let app = test_app(security);
 
     let request = Request::builder()
@@ -174,15 +235,7 @@ async fn security_disabled_passes_through() {
 
 #[tokio::test]
 async fn rate_limiter_returns_429() {
-    let security = Arc::new(
-        SecurityLayer::new(
-            true,
-            &test_jwt_config(),
-            &RbacConfig::default(),
-            &AuditConfig::default(),
-        )
-        .unwrap(),
-    );
+    let security = test_security_layer(true, true, true);
     let token = test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
 
     // The SecurityLayer creates a rate limiter with 100 requests/60s.
@@ -215,7 +268,7 @@ async fn rate_limiter_returns_429() {
 async fn authenticated_agent_extractor_works() {
     use mister_smith_security::middleware::axum_mw::AuthenticatedAgent;
 
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let token = test_token_with_permissions(&security, vec!["get:/me:/me".to_string()]);
 
     async fn handler(AuthenticatedAgent(claims): AuthenticatedAgent) -> impl IntoResponse {
@@ -249,13 +302,13 @@ async fn authenticated_agent_extractor_works() {
 
 #[test]
 fn security_layer_enabled() {
-    let layer = test_security_layer(true);
+    let layer = test_security_layer(true, true, true);
     assert!(layer.is_enabled());
 }
 
 #[test]
 fn security_layer_disabled() {
-    let layer = test_security_layer(false);
+    let layer = test_security_layer(false, true, true);
     assert!(!layer.is_enabled());
 }
 
@@ -263,12 +316,12 @@ fn security_layer_disabled() {
 
 #[tokio::test]
 async fn revoked_token_returns_401() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let token = test_token(&security);
 
-    // Validate to get JTI, then revoke
-    let claims = security.jwt.validate_token(&token).unwrap();
-    security.jwt.revoke_token(&claims.jti);
+    let jwt = security.jwt.as_ref().unwrap();
+    let claims = jwt.validate_token(&token).unwrap();
+    jwt.revoke_token(&claims.jti);
 
     let app = test_app(security);
     let request = Request::builder()
@@ -285,7 +338,7 @@ async fn revoked_token_returns_401() {
 
 #[tokio::test]
 async fn authenticated_but_unauthorized_http_request_returns_403() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let token = test_token(&security);
     let app = test_app(security);
 
@@ -302,7 +355,7 @@ async fn authenticated_but_unauthorized_http_request_returns_403() {
 
 #[tokio::test]
 async fn authorized_http_request_succeeds() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let token = test_token_with_permissions(
         &security,
         vec!["get:/protected:/protected".to_string()],
@@ -322,7 +375,7 @@ async fn authorized_http_request_succeeds() {
 
 #[test]
 fn authenticated_but_unauthorized_grpc_request_returns_permission_denied() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let token = test_token(&security);
     let interceptor = mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor(security);
 
@@ -342,7 +395,7 @@ fn authenticated_but_unauthorized_grpc_request_returns_permission_denied() {
 
 #[test]
 fn authorized_grpc_request_succeeds() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let token = test_token_with_permissions(
         &security,
         vec!["grpc_call:/mistersmith.SecurityService/Check:/mistersmith.SecurityService/Check"
@@ -367,7 +420,7 @@ fn authorized_grpc_request_succeeds() {
 async fn audit_log_contains_authz_events_for_allow_and_deny() {
     use mister_smith_security::audit::events::{AuditEventType, AuditOutcome};
 
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let denied_token = test_token(&security);
     let allowed_token = test_token_with_permissions(
         &security,
@@ -394,7 +447,8 @@ async fn audit_log_contains_authz_events_for_allow_and_deny() {
     let allowed_response = app.oneshot(allowed_request).await.unwrap();
     assert_eq!(allowed_response.status(), StatusCode::OK);
 
-    let events = security.audit.recent_events(32);
+    let audit = security.audit.as_ref().expect("audit should be configured");
+    let events = audit.recent_events(32);
     let authz_events: Vec<_> = events
         .iter()
         .filter(|event| event.event_type == AuditEventType::Authorization)
@@ -416,7 +470,7 @@ async fn audit_log_contains_authz_events_for_allow_and_deny() {
 
 #[tokio::test]
 async fn invalid_token_response_is_sanitized_and_audit_keeps_details() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let app = test_app(security.clone());
 
     let request = Request::builder()
@@ -441,11 +495,12 @@ async fn invalid_token_response_is_sanitized_and_audit_keeps_details() {
 
 #[tokio::test]
 async fn revoked_token_response_is_sanitized_and_audit_keeps_details() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let token = test_token(&security);
 
-    let claims = security.jwt.validate_token(&token).unwrap();
-    security.jwt.revoke_token(&claims.jti);
+    let jwt = security.jwt.as_ref().unwrap();
+    let claims = jwt.validate_token(&token).unwrap();
+    jwt.revoke_token(&claims.jti);
 
     let app = test_app(security.clone());
     let request = Request::builder()
@@ -469,7 +524,7 @@ async fn revoked_token_response_is_sanitized_and_audit_keeps_details() {
 
 #[test]
 fn tonic_invalid_token_is_sanitized_and_audit_keeps_details() {
-    let security = test_security_layer(true);
+    let security = test_security_layer(true, true, true);
     let interceptor =
         mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor(security.clone());
 

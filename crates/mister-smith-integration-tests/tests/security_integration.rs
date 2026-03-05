@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use mister_smith_security::config::{AuditConfig, JwtConfig, KeySource, RbacConfig};
 use mister_smith_security::jwt::AgentClaims;
-use mister_smith_security::middleware::SecurityLayer;
+use mister_smith_security::middleware::{SecurityLayer, SecurityLayerConfig};
 use mister_smith_security::rbac::PolicyEngine;
 
 fn test_jwt_config() -> JwtConfig {
@@ -25,15 +25,28 @@ fn test_jwt_config() -> JwtConfig {
 
 // -- End-to-end: JWT → validate → RBAC → audit ---------------------------
 
+fn test_security_layer(enabled: bool) -> SecurityLayer {
+    test_security_layer_with_authz(enabled, true)
+}
+
+fn test_security_layer_with_authz(enabled: bool, authz_enabled: bool) -> SecurityLayer {
+    SecurityLayer::new(SecurityLayerConfig {
+        enabled,
+        auth_enabled: true,
+        authz_enabled,
+        audit_enabled: true,
+        tls_enabled: false,
+        jwt_config: Some(test_jwt_config()),
+        rbac_config: Some(RbacConfig::default()),
+        audit_config: Some(AuditConfig::default()),
+        tls_config: None,
+    })
+    .unwrap()
+}
+
 #[test]
 fn e2e_jwt_validate_rbac_audit() {
-    let security = SecurityLayer::new(
-        true,
-        &test_jwt_config(),
-        &RbacConfig::default(),
-        &AuditConfig::default(),
-    )
-    .unwrap();
+    let security = test_security_layer(true);
 
     // Generate a token for a viewer agent
     let claims = AgentClaims {
@@ -43,25 +56,43 @@ fn e2e_jwt_validate_rbac_audit() {
         ..Default::default()
     };
 
-    let pair = security.jwt.generate_token_pair(&claims).unwrap();
+    let pair = security
+        .jwt
+        .as_ref()
+        .unwrap()
+        .generate_token_pair(&claims)
+        .unwrap();
 
     // Validate the token
-    let validated = security.jwt.validate_token(&pair.access_token).unwrap();
+    let validated = security
+        .jwt
+        .as_ref()
+        .unwrap()
+        .validate_token(&pair.access_token)
+        .unwrap();
     assert_eq!(validated.agent_id, "agent-viewer");
 
     // Check RBAC permission (viewer can read)
-    assert!(security.policy.check_permission(&validated, "read", "agent"));
+    assert!(security
+        .policy
+        .as_ref()
+        .unwrap()
+        .check_permission(&validated, "read", "agent"));
     // Viewer cannot write
-    assert!(!security.policy.check_permission(&validated, "write", "agent"));
+    assert!(!security
+        .policy
+        .as_ref()
+        .unwrap()
+        .check_permission(&validated, "write", "agent"));
 
     // Record auth success in audit log
-    security.audit.record_auth(
+    security.audit.as_ref().unwrap().record_auth(
         &validated.sub,
         mister_smith_security::audit::AuditOutcome::Success,
         std::collections::HashMap::new(),
     );
 
-    let events = security.audit.recent_events(1);
+    let events = security.audit.as_ref().unwrap().recent_events(1);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].principal.as_deref(), Some("agent-viewer"));
 }
@@ -70,25 +101,13 @@ fn e2e_jwt_validate_rbac_audit() {
 
 #[test]
 fn security_disabled_layer() {
-    let security = SecurityLayer::new(
-        false,
-        &test_jwt_config(),
-        &RbacConfig::default(),
-        &AuditConfig::default(),
-    )
-    .unwrap();
+    let security = test_security_layer(false);
 
     assert!(!security.is_enabled());
-    // JWT still works even when disabled (middleware just skips enforcement)
-    let pair = security
-        .jwt
-        .generate_token_pair(&AgentClaims {
-            sub: "test".to_string(),
-            agent_id: "test".to_string(),
-            ..Default::default()
-        })
-        .unwrap();
-    assert!(!pair.access_token.is_empty());
+    // With master switch off, optional subsystems are not constructed.
+    assert!(security.jwt.is_none());
+    assert!(security.policy.is_none());
+    assert!(security.audit.is_none());
 }
 
 // -- RBAC with default role fallback --------------------------------------
@@ -115,13 +134,7 @@ fn rbac_default_role_integration() {
 
 #[test]
 fn token_lifecycle_integration() {
-    let security = SecurityLayer::new(
-        true,
-        &test_jwt_config(),
-        &RbacConfig::default(),
-        &AuditConfig::default(),
-    )
-    .unwrap();
+    let security = test_security_layer(true);
 
     let claims = AgentClaims {
         sub: "lifecycle-agent".to_string(),
@@ -131,17 +144,31 @@ fn token_lifecycle_integration() {
     };
 
     // Generate
-    let pair = security.jwt.generate_token_pair(&claims).unwrap();
+    let pair = security
+        .jwt
+        .as_ref()
+        .unwrap()
+        .generate_token_pair(&claims)
+        .unwrap();
 
     // Validate
-    let validated = security.jwt.validate_token(&pair.access_token).unwrap();
+    let validated = security
+        .jwt
+        .as_ref()
+        .unwrap()
+        .validate_token(&pair.access_token)
+        .unwrap();
     assert_eq!(validated.agent_id, "lifecycle-agent");
 
     // Revoke
-    security.jwt.revoke_token(&validated.jti);
+    security.jwt.as_ref().unwrap().revoke_token(&validated.jti);
 
     // Reject revoked token
-    let result = security.jwt.validate_token(&pair.access_token);
+    let result = security
+        .jwt
+        .as_ref()
+        .unwrap()
+        .validate_token(&pair.access_token);
     assert!(result.is_err());
 }
 
@@ -178,27 +205,21 @@ fn tls_dev_cert_generation_integration() {
 
 #[test]
 fn audit_chain_integrity_integration() {
-    let security = SecurityLayer::new(
-        true,
-        &test_jwt_config(),
-        &RbacConfig::default(),
-        &AuditConfig::default(),
-    )
-    .unwrap();
+    let security = test_security_layer(true);
 
     // Perform multiple operations
-    security.audit.record_auth(
+    security.audit.as_ref().unwrap().record_auth(
         "agent-1",
         mister_smith_security::audit::AuditOutcome::Success,
         std::collections::HashMap::new(),
     );
-    security.audit.record_authz(
+    security.audit.as_ref().unwrap().record_authz(
         "agent-1",
         "read",
         "config",
         mister_smith_security::audit::AuditOutcome::Success,
     );
-    security.audit.record_auth(
+    security.audit.as_ref().unwrap().record_auth(
         "agent-2",
         mister_smith_security::audit::AuditOutcome::Failure,
         [("reason".to_string(), "invalid_token".to_string())]
@@ -207,10 +228,10 @@ fn audit_chain_integrity_integration() {
     );
 
     // Verify chain integrity
-    assert!(security.audit.verify_chain().is_ok());
+    assert!(security.audit.as_ref().unwrap().verify_chain().is_ok());
 
     // Verify event count
-    let events = security.audit.recent_events(10);
+    let events = security.audit.as_ref().unwrap().recent_events(10);
     assert_eq!(events.len(), 3);
 }
 
@@ -246,15 +267,7 @@ async fn spawn_secure_grpc_server(
 
 #[tokio::test]
 async fn grpc_request_without_authorization_returns_unauthenticated() {
-    let security = Arc::new(
-        SecurityLayer::new(
-            true,
-            &test_jwt_config(),
-            &RbacConfig::default(),
-            &AuditConfig::default(),
-        )
-        .unwrap(),
-    );
+    let security = Arc::new(test_security_layer(true));
 
     let (handle, endpoint, shutdown_tx) = spawn_secure_grpc_server(security).await;
 
@@ -281,15 +294,7 @@ async fn grpc_request_without_authorization_returns_unauthenticated() {
 
 #[tokio::test]
 async fn grpc_request_with_invalid_token_returns_unauthenticated() {
-    let security = Arc::new(
-        SecurityLayer::new(
-            true,
-            &test_jwt_config(),
-            &RbacConfig::default(),
-            &AuditConfig::default(),
-        )
-        .unwrap(),
-    );
+    let security = Arc::new(test_security_layer(true));
 
     let (handle, endpoint, shutdown_tx) = spawn_secure_grpc_server(security).await;
 
@@ -319,18 +324,12 @@ async fn grpc_request_with_invalid_token_returns_unauthenticated() {
 
 #[tokio::test]
 async fn grpc_request_with_valid_token_succeeds() {
-    let security = Arc::new(
-        SecurityLayer::new(
-            true,
-            &test_jwt_config(),
-            &RbacConfig::default(),
-            &AuditConfig::default(),
-        )
-        .unwrap(),
-    );
+    let security = Arc::new(test_security_layer_with_authz(true, false));
 
     let token = security
         .jwt
+        .as_ref()
+        .unwrap()
         .generate_token_pair(&AgentClaims {
             sub: "grpc-int-test".to_string(),
             agent_id: "grpc-int-test".to_string(),
@@ -380,13 +379,7 @@ async fn axum_middleware_integration() {
     use tower::ServiceExt;
 
     let security = Arc::new(
-        SecurityLayer::new(
-            true,
-            &test_jwt_config(),
-            &RbacConfig::default(),
-            &AuditConfig::default(),
-        )
-        .unwrap(),
+        test_security_layer_with_authz(true, false),
     );
 
     async fn handler() -> impl IntoResponse {
@@ -411,6 +404,8 @@ async fn axum_middleware_integration() {
     // Authenticated → 200
     let token = security
         .jwt
+        .as_ref()
+        .unwrap()
         .generate_token_pair(&AgentClaims {
             sub: "int-test".to_string(),
             agent_id: "int-test".to_string(),
