@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use futures::FutureExt;
 use mister_smith_core::{Actor, AgentId, AgentState, EventPublisher, SystemEvent};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, error, info, warn};
 
 use crate::mailbox::{Envelope, MailboxReceiver};
@@ -102,6 +102,7 @@ pub async fn run_actor<A>(
     mut receiver: MailboxReceiver<Envelope<A::Message>>,
     mut stop_rx: mpsc::Receiver<()>,
     state_tx: watch::Sender<AgentState>,
+    startup_tx: Option<oneshot::Sender<Result<(), String>>>,
     supervision_tx: Option<mpsc::UnboundedSender<SupervisionNotification>>,
     event_publisher: Option<Arc<dyn EventPublisher>>,
 ) where
@@ -116,14 +117,18 @@ pub async fn run_actor<A>(
     debug!(actor_id = %actor_id, "Actor initializing");
 
     if let Err(e) = actor.pre_start() {
+        let startup_error = e.to_string();
         error!(actor_id = %actor_id, error = %e, "pre_start failed");
         let _ = state_tx.send(AgentState::Error);
+        if let Some(tx) = startup_tx {
+            let _ = tx.send(Err(startup_error.clone()));
+        }
         emit_lifecycle_event(
             &event_publisher,
             "actor.failed",
             serde_json::json!({
                 "actor_id": actor_id.to_string(),
-                "error": e.to_string(),
+                "error": startup_error.clone(),
                 "phase": "pre_start",
             }),
         )
@@ -131,10 +136,14 @@ pub async fn run_actor<A>(
         if let Some(ref tx) = supervision_tx {
             let _ = tx.send(SupervisionNotification {
                 actor_id,
-                reason: TerminationReason::PreStartFailed(e.to_string()),
+                reason: TerminationReason::PreStartFailed(startup_error),
             });
         }
         return;
+    }
+
+    if let Some(tx) = startup_tx {
+        let _ = tx.send(Ok(()));
     }
 
     // Phase: Running
@@ -528,7 +537,7 @@ mod tests {
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
 
-        let handle = tokio::spawn(run_actor(actor, 0u64, rx, stop_rx, state_tx, Some(sup_tx), None));
+        let handle = tokio::spawn(run_actor(actor, 0u64, rx, stop_rx, state_tx, None, Some(sup_tx), None));
 
         // Wait for Running state
         while *state_rx.borrow() != AgentState::Running {
@@ -571,7 +580,7 @@ mod tests {
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, None));
+        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, None, None));
 
         // Wait for Running
         while *state_rx.borrow() != AgentState::Running {
@@ -596,7 +605,7 @@ mod tests {
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, Some(sup_tx), None));
+        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, Some(sup_tx), None));
 
         // Wait for Running
         while *state_rx.borrow() != AgentState::Running {
@@ -623,7 +632,7 @@ mod tests {
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
 
-        let handle = tokio::spawn(run_actor(actor, 0u64, rx, stop_rx, state_tx, None, None));
+        let handle = tokio::spawn(run_actor(actor, 0u64, rx, stop_rx, state_tx, None, None, None));
 
         while *state_rx.borrow() != AgentState::Running {
             state_rx.changed().await.unwrap();
@@ -671,7 +680,7 @@ mod tests {
         let (stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, None));
+        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, None, None));
 
         while *state_rx.borrow() != AgentState::Running {
             state_rx.changed().await.unwrap();
@@ -739,24 +748,23 @@ mod tests {
         system.shutdown().await.unwrap();
     }
 
-    // T089: pre_start failure on initial spawn — actor transitions to Error, not registered as Running
+    // T089: pre_start failure on initial spawn — spawn returns startup error and actor is not registered
     #[tokio::test]
     async fn pre_start_failure_on_spawn_transitions_to_error() {
         let system = ActorSystem::new(ActorSystemConfig::default());
         let id = AgentId::new();
 
         // Spawn an actor whose pre_start always fails
-        let _ref = system
+        let result = system
             .spawn(PreStartFailActor { id }, (), SpawnConfig::default())
-            .await
-            .unwrap();
+            .await;
 
-        // Give the actor cell time to run pre_start and transition to Error
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(matches!(result, Err(ActorError::StartupFailed(_))));
 
-        // Actor should be in Error state, not Running
+        // Startup failure should keep actor out of registry
         let state = system.get_actor_state(&id).await;
-        assert_eq!(state, Some(AgentState::Error));
+        assert_eq!(state, None);
+        assert_eq!(system.actor_count().await, 0);
 
         system.shutdown().await.unwrap();
     }
@@ -771,7 +779,7 @@ mod tests {
         let (state_tx, state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, Some(sup_tx), None));
+        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, Some(sup_tx), None));
         handle.await.unwrap();
 
         assert_eq!(*state_rx.borrow(), AgentState::Error);
@@ -795,7 +803,7 @@ mod tests {
         let (state_tx, state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, Some(sup_tx), None));
+        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, Some(sup_tx), None));
 
         tx.send(Envelope::tell(PanicMsg::Panic)).await.unwrap();
         handle.await.unwrap();
@@ -826,6 +834,7 @@ mod tests {
             rx,
             stop_rx,
             state_tx,
+            None,
             Some(sup_tx),
             Some(Arc::clone(&publisher) as Arc<dyn EventPublisher>),
         ));
