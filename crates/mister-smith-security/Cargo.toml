@@ -1,0 +1,62 @@
+[package]
+name = "mister-smith-security"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Security layer for Mister Smith: JWT auth, RBAC, TLS/mTLS, audit logging"
+
+[features]
+default = ["jwt", "rbac", "tls", "audit"]
+jwt = ["dep:jsonwebtoken"]
+rbac = []
+tls = ["dep:rustls", "dep:tokio-rustls", "dep:rcgen", "dep:rustls-pki-types", "dep:arc-swap"]
+audit = ["dep:sha2", "dep:hex"]
+
+[dependencies]
+# Internal
+mister-smith-core = { workspace = true }
+mister-smith-config = { workspace = true }
+mister-smith-transport = { workspace = true }
+mister-smith-events = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# Identity & time
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Concurrency
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+
+# Security — feature-gated
+jsonwebtoken = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+rcgen = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
+arc-swap = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+
+# HTTP/gRPC types for middleware
+axum = { workspace = true }
+tonic = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tower = { workspace = true }
+tempfile = "3"
+rustls-pki-types = { workspace = true }

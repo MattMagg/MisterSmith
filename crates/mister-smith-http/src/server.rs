@@ -23,19 +23,40 @@ const EVENT_CHANNEL_CAPACITY: usize = 1024;
 pub struct AppState {
     /// Broadcast sender for WebSocket events.
     pub event_tx: broadcast::Sender<WsEvent>,
+    /// Optional security layer for JWT authentication.
+    #[cfg(feature = "security")]
+    pub security: Option<Arc<mister_smith_security::middleware::SecurityLayer>>,
 }
 
 impl AppState {
     /// Create a new `AppState` with default settings.
     pub fn new() -> Self {
         let (event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
-        Self { event_tx }
+        Self {
+            event_tx,
+            #[cfg(feature = "security")]
+            security: None,
+        }
     }
 
     /// Create a new `AppState` with a custom event channel capacity.
     pub fn with_capacity(capacity: usize) -> Self {
         let (event_tx, _) = broadcast::channel(capacity);
-        Self { event_tx }
+        Self {
+            event_tx,
+            #[cfg(feature = "security")]
+            security: None,
+        }
+    }
+
+    /// Set the security layer for JWT authentication enforcement.
+    #[cfg(feature = "security")]
+    pub fn with_security(
+        mut self,
+        security: Arc<mister_smith_security::middleware::SecurityLayer>,
+    ) -> Self {
+        self.security = Some(security);
+        self
     }
 }
 
@@ -49,11 +70,20 @@ impl Default for AppState {
 pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit_rps));
 
-    api_router()
+    let router = api_router()
         .layer(axum_mw::from_fn(request_id_middleware))
         .layer(axum_mw::from_fn(security_middleware))
-        .layer(axum::Extension(rate_limiter))
-        .with_state(state)
+        .layer(axum::Extension(rate_limiter));
+
+    // Inject SecurityLayer into extensions when available.
+    #[cfg(feature = "security")]
+    let router = if let Some(ref security) = state.security {
+        router.layer(axum::Extension(security.clone()))
+    } else {
+        router
+    };
+
+    router.with_state(state)
 }
 
 /// Start the HTTP transport server.

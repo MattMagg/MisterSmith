@@ -15,6 +15,7 @@ members = [
     "crates/mister-smith-http",
     "crates/mister-smith-grpc",
     "crates/mister-smith-mcp",
+    "crates/mister-smith-security",
     "crates/mister-smith-integration-tests",
 ]
 
@@ -75,6 +76,16 @@ prost = "0.14"
 prost-types = "0.14"
 prost-build = "0.14"
 
+# Security — Phase 5
+jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
+rustls = "0.23.37"
+tokio-rustls = "0.26.4"
+rcgen = { version = "0.14.7", features = ["pem"] }
+rustls-pki-types = "1"
+sha2 = "0.10"
+arc-swap = "1"
+hex = "0.4"
+
 # Internal crates
 mister-smith-core = { path = "crates/mister-smith-core" }
 mister-smith-config = { path = "crates/mister-smith-config" }
@@ -90,3 +101,4 @@ mister-smith-nats = { path = "crates/mister-smith-nats" }
 mister-smith-http = { path = "crates/mister-smith-http" }
 mister-smith-grpc = { path = "crates/mister-smith-grpc" }
 mister-smith-mcp = { path = "crates/mister-smith-mcp" }
+mister-smith-security = { path = "crates/mister-smith-security" }

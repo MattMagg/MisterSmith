@@ -217,6 +217,50 @@ pub enum PersistenceError {
     DataCorrupted(String),
 }
 
+/// Security subsystem errors.
+#[derive(Debug, Error)]
+pub enum SecurityError {
+    /// Authentication failed.
+    #[error("Authentication failed: {0}")]
+    AuthenticationFailed(String),
+    /// Token has expired.
+    #[error("Token expired")]
+    TokenExpired,
+    /// Token has been revoked.
+    #[error("Token revoked")]
+    TokenRevoked,
+    /// Token signature is invalid.
+    #[error("Invalid signature")]
+    InvalidSignature,
+    /// Token is malformed or otherwise invalid.
+    #[error("Invalid token: {0}")]
+    InvalidToken(String),
+    /// Authorization denied.
+    #[error("Authorization denied: {0}")]
+    AuthorizationDenied(String),
+    /// Insufficient permissions for the requested action.
+    #[error("Insufficient permissions: {0}")]
+    InsufficientPermissions(String),
+    /// Certificate loading failed.
+    #[error("Certificate load failed: {0}")]
+    CertificateLoadFailed(String),
+    /// Certificate generation failed.
+    #[error("Certificate generation failed: {0}")]
+    CertificateGenerationFailed(String),
+    /// TLS configuration failed.
+    #[error("TLS config failed: {0}")]
+    TlsConfigFailed(String),
+    /// Key loading failed.
+    #[error("Key load failed: {0}")]
+    KeyLoadFailed(String),
+    /// Token generation failed.
+    #[error("Token generation failed: {0}")]
+    TokenGenerationFailed(String),
+    /// Rate limited — caller should retry after the given duration.
+    #[error("Rate limited (retry after {0:?})")]
+    RateLimited(Duration),
+}
+
 /// Top-level error type aggregating all subsystem errors.
 ///
 /// All domain-specific errors can be converted to `SystemError` via `#[from]`.
@@ -255,6 +299,9 @@ pub enum SystemError {
     /// Tool error.
     #[error("Tool system error: {0}")]
     Tool(#[from] ToolError),
+    /// Security error.
+    #[error("Security error: {0}")]
+    Security(#[from] SecurityError),
 }
 
 /// Error severity for system-wide error handling.
@@ -309,6 +356,7 @@ impl SystemError {
             SystemError::Stream(_) => ErrorSeverity::Medium,
             SystemError::Event(_) => ErrorSeverity::Low,
             SystemError::Tool(_) => ErrorSeverity::Low,
+            SystemError::Security(_) => ErrorSeverity::Medium,
         }
     }
 
@@ -352,6 +400,7 @@ mod tests {
         let _: SystemError = StreamError::SinkFull.into();
         let _: SystemError = EventError::HandlerFailed("test".into()).into();
         let _: SystemError = ToolError::NotFound("test".into()).into();
+        let _: SystemError = SecurityError::TokenExpired.into();
     }
 
     #[test]

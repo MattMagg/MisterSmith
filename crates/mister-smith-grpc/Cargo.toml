@@ -6,9 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 description = "gRPC transport layer with protobuf services for agent management and system operations"
 
+[features]
+default = ["security"]
+security = ["dep:mister-smith-security"]
+
 [dependencies]
 mister-smith-core = { workspace = true }
 mister-smith-transport = { workspace = true }
+mister-smith-security = { workspace = true, optional = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

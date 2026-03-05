@@ -22,8 +22,8 @@ pub use supervision::{
 // Error hierarchy
 pub use error::{
     ActorError, ConfigError, ErrorSeverity, EventError, FrameworkResult, NetworkError,
-    PersistenceError, RecoveryStrategy, ResourceError, RuntimeError, StreamError, SupervisionError,
-    SystemError, TaskError, ToolError,
+    PersistenceError, RecoveryStrategy, ResourceError, RuntimeError, SecurityError, StreamError,
+    SupervisionError, SystemError, TaskError, ToolError,
 };
 
 // Core traits
