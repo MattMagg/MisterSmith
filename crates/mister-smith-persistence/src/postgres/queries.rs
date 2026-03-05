@@ -373,6 +373,10 @@ pub struct MessageRecord {
     pub processed_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
     pub error_message: Option<String>,
+    /// Envelope message_id for idempotent deduplication. Set from
+    /// `MessageEnvelope.message_id` to prevent duplicate processing
+    /// under at-least-once delivery.
+    pub message_id: Option<Uuid>,
 }
 
 // ---------------------------------------------------------------------------
@@ -638,52 +642,132 @@ pub async fn find_tasks_by_status_and_priority(
 /// Insert a new message into `messages.records`.
 ///
 /// Returns the fully populated row via `INSERT ... RETURNING`.
+/// Insert a message record with idempotency support.
+///
+/// When `message_id` is set, duplicate inserts are rejected via the
+/// `idx_messages_dedup` unique index (`ON CONFLICT DO NOTHING`). The
+/// returned record is either the newly inserted row or the existing
+/// row that matched on `message_id`.
 pub async fn insert_message(
     pool: &PgPool,
     record: &MessageRecord,
 ) -> Result<MessageRecord, PersistenceError> {
-    sqlx::query_as::<_, MessageRecord>(
-        r#"
-        INSERT INTO messages.records (
-            id, from_agent_id, to_agent_id, message_type, subject,
-            content, priority, status, correlation_id, parent_message_id,
-            retry_count, max_retries, created_at, sent_at,
-            delivered_at, processed_at, expires_at, error_message
+    // If message_id is set, use idempotent insert with conflict detection.
+    if let Some(msg_id) = record.message_id {
+        // Try to insert; if a duplicate message_id exists, return the existing row.
+        let maybe_inserted = sqlx::query_as::<_, MessageRecord>(
+            r#"
+            INSERT INTO messages.records (
+                id, from_agent_id, to_agent_id, message_type, subject,
+                content, priority, status, correlation_id, parent_message_id,
+                retry_count, max_retries, created_at, sent_at,
+                delivered_at, processed_at, expires_at, error_message, message_id
+            )
+            VALUES (
+                $1, $2, $3, $4, $5,
+                $6, $7, $8, $9, $10,
+                $11, $12, $13, $14,
+                $15, $16, $17, $18, $19
+            )
+            ON CONFLICT (message_id) WHERE message_id IS NOT NULL DO NOTHING
+            RETURNING
+                id, from_agent_id, to_agent_id, message_type, subject,
+                content, priority, status, correlation_id, parent_message_id,
+                retry_count, max_retries, created_at, sent_at,
+                delivered_at, processed_at, expires_at, error_message, message_id
+            "#,
         )
-        VALUES (
-            $1, $2, $3, $4, $5,
-            $6, $7, $8, $9, $10,
-            $11, $12, $13, $14,
-            $15, $16, $17, $18
+        .bind(record.id)
+        .bind(record.from_agent_id)
+        .bind(record.to_agent_id)
+        .bind(&record.message_type)
+        .bind(&record.subject)
+        .bind(&record.content)
+        .bind(record.priority)
+        .bind(&record.status)
+        .bind(record.correlation_id)
+        .bind(record.parent_message_id)
+        .bind(record.retry_count)
+        .bind(record.max_retries)
+        .bind(record.created_at)
+        .bind(record.sent_at)
+        .bind(record.delivered_at)
+        .bind(record.processed_at)
+        .bind(record.expires_at)
+        .bind(&record.error_message)
+        .bind(msg_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(from_sqlx_error)?;
+
+        // If DO NOTHING fired, fetch the existing record by message_id.
+        match maybe_inserted {
+            Some(row) => Ok(row),
+            None => {
+                sqlx::query_as::<_, MessageRecord>(
+                    r#"
+                    SELECT
+                        id, from_agent_id, to_agent_id, message_type, subject,
+                        content, priority, status, correlation_id, parent_message_id,
+                        retry_count, max_retries, created_at, sent_at,
+                        delivered_at, processed_at, expires_at, error_message, message_id
+                    FROM messages.records
+                    WHERE message_id = $1
+                    LIMIT 1
+                    "#,
+                )
+                .bind(msg_id)
+                .fetch_one(pool)
+                .await
+                .map_err(from_sqlx_error)
+            }
+        }
+    } else {
+        // No message_id — standard insert without dedup.
+        sqlx::query_as::<_, MessageRecord>(
+            r#"
+            INSERT INTO messages.records (
+                id, from_agent_id, to_agent_id, message_type, subject,
+                content, priority, status, correlation_id, parent_message_id,
+                retry_count, max_retries, created_at, sent_at,
+                delivered_at, processed_at, expires_at, error_message, message_id
+            )
+            VALUES (
+                $1, $2, $3, $4, $5,
+                $6, $7, $8, $9, $10,
+                $11, $12, $13, $14,
+                $15, $16, $17, $18, $19
+            )
+            RETURNING
+                id, from_agent_id, to_agent_id, message_type, subject,
+                content, priority, status, correlation_id, parent_message_id,
+                retry_count, max_retries, created_at, sent_at,
+                delivered_at, processed_at, expires_at, error_message, message_id
+            "#,
         )
-        RETURNING
-            id, from_agent_id, to_agent_id, message_type, subject,
-            content, priority, status, correlation_id, parent_message_id,
-            retry_count, max_retries, created_at, sent_at,
-            delivered_at, processed_at, expires_at, error_message
-        "#,
-    )
-    .bind(record.id)
-    .bind(record.from_agent_id)
-    .bind(record.to_agent_id)
-    .bind(&record.message_type)
-    .bind(&record.subject)
-    .bind(&record.content)
-    .bind(record.priority)
-    .bind(&record.status)
-    .bind(record.correlation_id)
-    .bind(record.parent_message_id)
-    .bind(record.retry_count)
-    .bind(record.max_retries)
-    .bind(record.created_at)
-    .bind(record.sent_at)
-    .bind(record.delivered_at)
-    .bind(record.processed_at)
-    .bind(record.expires_at)
-    .bind(&record.error_message)
-    .fetch_one(pool)
-    .await
-    .map_err(from_sqlx_error)
+        .bind(record.id)
+        .bind(record.from_agent_id)
+        .bind(record.to_agent_id)
+        .bind(&record.message_type)
+        .bind(&record.subject)
+        .bind(&record.content)
+        .bind(record.priority)
+        .bind(&record.status)
+        .bind(record.correlation_id)
+        .bind(record.parent_message_id)
+        .bind(record.retry_count)
+        .bind(record.max_retries)
+        .bind(record.created_at)
+        .bind(record.sent_at)
+        .bind(record.delivered_at)
+        .bind(record.processed_at)
+        .bind(record.expires_at)
+        .bind(&record.error_message)
+        .bind(record.message_id)
+        .fetch_one(pool)
+        .await
+        .map_err(from_sqlx_error)
+    }
 }
 
 /// Find a message by primary key.
@@ -699,7 +783,7 @@ pub async fn find_message(
             id, from_agent_id, to_agent_id, message_type, subject,
             content, priority, status, correlation_id, parent_message_id,
             retry_count, max_retries, created_at, sent_at,
-            delivered_at, processed_at, expires_at, error_message
+            delivered_at, processed_at, expires_at, error_message, message_id
         FROM messages.records
         WHERE id = $1
         "#,
@@ -752,7 +836,7 @@ pub async fn find_messages_by_sender(
             id, from_agent_id, to_agent_id, message_type, subject,
             content, priority, status, correlation_id, parent_message_id,
             retry_count, max_retries, created_at, sent_at,
-            delivered_at, processed_at, expires_at, error_message
+            delivered_at, processed_at, expires_at, error_message, message_id
         FROM messages.records
         WHERE from_agent_id = $1 AND created_at >= $2 AND created_at < $3
         ORDER BY created_at
@@ -777,7 +861,7 @@ pub async fn find_messages_by_receiver(
             id, from_agent_id, to_agent_id, message_type, subject,
             content, priority, status, correlation_id, parent_message_id,
             retry_count, max_retries, created_at, sent_at,
-            delivered_at, processed_at, expires_at, error_message
+            delivered_at, processed_at, expires_at, error_message, message_id
         FROM messages.records
         WHERE to_agent_id = $1
         ORDER BY created_at
@@ -800,7 +884,7 @@ pub async fn find_messages_by_correlation(
             id, from_agent_id, to_agent_id, message_type, subject,
             content, priority, status, correlation_id, parent_message_id,
             retry_count, max_retries, created_at, sent_at,
-            delivered_at, processed_at, expires_at, error_message
+            delivered_at, processed_at, expires_at, error_message, message_id
         FROM messages.records
         WHERE correlation_id = $1
         ORDER BY created_at
@@ -824,7 +908,7 @@ pub async fn find_messages_by_time_range(
             id, from_agent_id, to_agent_id, message_type, subject,
             content, priority, status, correlation_id, parent_message_id,
             retry_count, max_retries, created_at, sent_at,
-            delivered_at, processed_at, expires_at, error_message
+            delivered_at, processed_at, expires_at, error_message, message_id
         FROM messages.records
         WHERE created_at >= $1 AND created_at < $2
         ORDER BY created_at
@@ -1399,6 +1483,7 @@ mod tests {
             processed_at: None,
             expires_at: None,
             error_message: None,
+            message_id: None,
         }
     }
 

@@ -240,7 +240,7 @@ The `Transport` trait and message envelope — protocol-agnostic layer that NATS
 The primary inter-agent communication layer. This is the most critical transport — agents talk to each other through NATS subjects.
 
 - async-nats 0.46 `Client` integration (feature-gated: jetstream, kv, object-store, service)
-- Subject-based routing (`agent.<type>.<id>.<action>`)
+- Hierarchical subject-based routing (`agents.{id}.commands.{type}`, `tasks.{type}.assignment`, etc.)
 - Queue groups for load balancing
 - Request-reply with timeout
 - Publish with backpressure (async-nats 0.46 publish returns a future)

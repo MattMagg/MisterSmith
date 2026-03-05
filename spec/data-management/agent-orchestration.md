@@ -66,10 +66,8 @@ pub enum MessagePriority {
 **AgentId Format**: UUID v4 with agent prefix
 
 ```rust
-pub type AgentId = String;  // Format: "agent-{uuid-v4}"
-
-// Validation pattern
-const AGENT_ID_PATTERN: &str = r"^agent-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$";
+/// Canonical definition from type-definitions.md and mister-smith-core/src/ids.rs
+pub struct AgentId(pub Uuid);
 ```
 
 **Security Integration**: mTLS with message authentication

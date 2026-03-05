@@ -300,7 +300,7 @@ pub use async_trait::async_trait;  // Still needed for dyn-compatible async trai
 pub use uuid::Uuid;
 
 /// Type aliases for common patterns
-pub type AgentId = Uuid;
+pub struct AgentId(pub Uuid);
 pub type NodeId = Uuid;  
 pub type ComponentId = Uuid;
 pub type TaskId = Uuid;

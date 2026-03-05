@@ -23,7 +23,7 @@ Mister Smith coordinates distributed AI agents through three core subsystems:
 
 **Supervision Trees** — Hierarchical fault tolerance inspired by Erlang/OTP. Supervisors manage agent lifecycles with configurable restart strategies (OneForOne, OneForAll, RestForOne), failure escalation, and circuit breakers.
 
-**NATS Messaging** — High-performance pub/sub communication layer using NATS and JetStream. Supports request-response, publish-subscribe, queue groups, and subject-based routing (`agent.<type>.<id>.<action>`).
+**NATS Messaging** — High-performance pub/sub communication layer using NATS and JetStream. Supports request-response, publish-subscribe, queue groups, and hierarchical subject-based routing (`agents.{id}.commands.{type}`, `tasks.{type}.assignment`, `workflow.{id}.step.{step_id}`, etc.).
 
 **Agent Orchestration** — Nine specialized agent roles (Supervisor, Worker, Coordinator, Monitor, Planner, Executor, Critic, Router, Memory) with dynamic team composition based on task requirements.
 

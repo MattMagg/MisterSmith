@@ -7,7 +7,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use mister_smith_transport::{
-    MessageEnvelope, ReceivedMessage, Subscription, Transport, TransportError,
+    DurableMessage, DurableSubscription, DurableTransport, MessageAcker, MessageEnvelope,
+    ReceivedMessage, Subscription, Transport, TransportError,
 };
 
 use crate::config::NatsTransportConfig;
@@ -208,5 +209,163 @@ impl Transport for NatsTransport {
             })?;
 
         MessageEnvelope::from_bytes(&response.payload)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Durable transport (JetStream-backed)
+// ---------------------------------------------------------------------------
+
+/// Acknowledgment handle wrapping a JetStream message.
+struct JetStreamAcker {
+    message: async_nats::jetstream::Message,
+}
+
+#[async_trait]
+impl MessageAcker for JetStreamAcker {
+    async fn ack(&self) -> Result<(), TransportError> {
+        self.message
+            .ack()
+            .await
+            .map_err(|e| TransportError::ProtocolError(format!("ack failed: {e}")))
+    }
+
+    async fn nak(&self, delay: Option<Duration>) -> Result<(), TransportError> {
+        let ack_kind = match delay {
+            Some(d) => async_nats::jetstream::AckKind::Nak(Some(d)),
+            None => async_nats::jetstream::AckKind::Nak(None),
+        };
+        self.message
+            .ack_with(ack_kind)
+            .await
+            .map_err(|e| TransportError::ProtocolError(format!("nak failed: {e}")))
+    }
+
+    async fn term(&self) -> Result<(), TransportError> {
+        self.message
+            .ack_with(async_nats::jetstream::AckKind::Term)
+            .await
+            .map_err(|e| TransportError::ProtocolError(format!("term failed: {e}")))
+    }
+
+    async fn in_progress(&self) -> Result<(), TransportError> {
+        self.message
+            .ack_with(async_nats::jetstream::AckKind::Progress)
+            .await
+            .map_err(|e| TransportError::ProtocolError(format!("in_progress failed: {e}")))
+    }
+}
+
+#[async_trait]
+impl DurableTransport for NatsTransport {
+    async fn durable_publish(
+        &self,
+        subject: &str,
+        envelope: MessageEnvelope,
+    ) -> Result<(), TransportError> {
+        let client = self.get_client().await.map_err(TransportError::from)?;
+        let js = async_nats::jetstream::new(client);
+
+        let payload = envelope.to_bytes()?;
+
+        // Set MsgId header for server-side deduplication using the envelope's message_id.
+        let mut headers = async_nats::HeaderMap::new();
+        headers.insert(
+            "Nats-Msg-Id",
+            envelope.message_id.to_string().as_str(),
+        );
+
+        let ack_future = js
+            .publish_with_headers(subject.to_string(), headers, payload)
+            .await
+            .map_err(|e| TransportError::PublishError(format!("durable publish failed: {e}")))?;
+
+        // Wait for server persistence acknowledgment.
+        ack_future
+            .await
+            .map_err(|e| TransportError::PublishError(format!("publish ack failed: {e}")))?;
+
+        debug!(subject, "durable message published and acknowledged");
+        Ok(())
+    }
+
+    async fn durable_subscribe(
+        &self,
+        stream_name: &str,
+        consumer_name: &str,
+        filter_subject: &str,
+    ) -> Result<DurableSubscription, TransportError> {
+        let client = self.get_client().await.map_err(TransportError::from)?;
+        let js = async_nats::jetstream::new(client);
+
+        let stream = js
+            .get_stream(stream_name)
+            .await
+            .map_err(|e| {
+                TransportError::SubscriptionError(format!(
+                    "stream '{stream_name}' not found: {e}"
+                ))
+            })?;
+
+        let consumer_config = async_nats::jetstream::consumer::pull::Config {
+            durable_name: Some(consumer_name.to_string()),
+            filter_subject: filter_subject.to_string(),
+            ack_policy: async_nats::jetstream::consumer::AckPolicy::Explicit,
+            ack_wait: self.config.jetstream.ack_timeout,
+            max_ack_pending: self.config.jetstream.max_ack_inflight as i64,
+            ..Default::default()
+        };
+
+        let consumer = stream
+            .get_or_create_consumer(consumer_name, consumer_config)
+            .await
+            .map_err(|e| {
+                TransportError::SubscriptionError(format!(
+                    "consumer '{consumer_name}' creation failed: {e}"
+                ))
+            })?;
+
+        let messages = consumer.messages().await.map_err(|e| {
+            TransportError::SubscriptionError(format!("message stream failed: {e}"))
+        })?;
+
+        let stream = async_stream::stream! {
+            use futures::StreamExt;
+            let mut messages = messages;
+            while let Some(result) = messages.next().await {
+                match result {
+                    Ok(js_msg) => {
+                        match MessageEnvelope::from_bytes(&js_msg.payload) {
+                            Ok(envelope) => {
+                                let reply_subject = js_msg.reply.as_ref().map(|s| s.to_string());
+                                let acker = JetStreamAcker { message: js_msg };
+                                yield DurableMessage::new(envelope, reply_subject, acker);
+                            }
+                            Err(e) => {
+                                error!("Failed to deserialize JetStream message: {e}");
+                                // Term malformed messages to prevent infinite redelivery.
+                                if let Err(term_err) = js_msg.ack_with(
+                                    async_nats::jetstream::AckKind::Term
+                                ).await {
+                                    error!("Failed to term malformed message: {term_err}");
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("JetStream message stream error: {e}");
+                    }
+                }
+            }
+        };
+
+        info!(
+            stream = stream_name,
+            consumer = consumer_name,
+            filter = filter_subject,
+            "durable subscription created"
+        );
+
+        Ok(DurableSubscription::new(stream))
     }
 }

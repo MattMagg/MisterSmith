@@ -84,12 +84,10 @@ const SUBJECT_PATTERNS: &[&str] = &[
     "system.config.{component}.{action}",
     "system.alerts.{severity}",
     
-    // LLM Backend Integration
-    "cli.startup",
-    "cli.hooks.{hook_type}.{agent_id}",
-    "cli.responses.{agent_id}",
-    "cli.context.{group_id}.{context_type}",
-    
+    // REMOVED: CLI-specific patterns (cli.startup, cli.hooks.*, cli.responses.*, cli.context.*)
+    // Mister Smith is model-agnostic. LLM backend integration uses the standard
+    // agent and task subject hierarchies, not CLI-specific subjects.
+
     // Workflow Orchestration
     "workflow.{workflow_id}.orchestration",
     "workflow.{workflow_id}.coordination",
@@ -106,7 +104,7 @@ const WILDCARD_SUBSCRIPTIONS: &[&str] = &[
     "agents.*.heartbeat",        // All agent heartbeats
     "tasks.>"                    // All task-related subjects
     "system.alerts.>",           // All system alerts
-    "cli.hooks.>"                // All CLI hook events
+    // REMOVED: "cli.hooks.>" — CLI-specific patterns removed. Mister Smith is model-agnostic.
 ];
 
 // Discovery Patterns
@@ -612,15 +610,10 @@ lazy_static! {
             "workflow.{workflow_id}.rollback",
         ]);
         
-        // LLM Backend Integration Subjects
-        templates.insert("cli", vec![
-            "cli.startup",
-            "cli.hooks.{hook_type}.{agent_id}",
-            "cli.responses.{agent_id}",
-            "cli.mutations.{agent_id}",
-            "cli.context.{group_id}.{context_type}",
-        ]);
-        
+        // REMOVED: CLI-specific subject templates (cli.startup, cli.hooks.*, cli.responses.*,
+        // cli.mutations.*, cli.context.*). Mister Smith is model-agnostic — LLM backend
+        // integration uses the standard agent and task subject hierarchies.
+
         templates
     };
 }
@@ -649,10 +642,8 @@ impl SubjectBuilder {
         format!("system.alerts.{}", severity)
     }
     
-    pub fn cli_hook(hook_type: &str, agent_id: &str) -> String {
-        format!("cli.hooks.{}.{}", hook_type, agent_id)
-    }
-    
+    // REMOVED: cli_hook() — CLI-specific patterns removed. Mister Smith is model-agnostic.
+
     pub fn workflow_orchestration(workflow_id: &Uuid) -> String {
         format!("workflow.{}.orchestration", workflow_id)
     }
