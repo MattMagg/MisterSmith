@@ -48,7 +48,7 @@ where
 }
 
 /// Fire-and-forget lifecycle event emission.
-async fn emit_lifecycle_event(
+pub(crate) async fn emit_lifecycle_event(
     publisher: &Option<Arc<dyn EventPublisher>>,
     event_type: &str,
     payload: serde_json::Value,
@@ -62,6 +62,26 @@ async fn emit_lifecycle_event(
             warn!(error = %e, event_type, "Failed to publish lifecycle event");
         }
     }
+}
+
+async fn transition_state(
+    state_tx: &watch::Sender<AgentState>,
+    event_publisher: &Option<Arc<dyn EventPublisher>>,
+    actor_id: AgentId,
+    from: AgentState,
+    to: AgentState,
+) {
+    let _ = state_tx.send(to);
+    emit_lifecycle_event(
+        event_publisher,
+        "agent.StateChanged",
+        serde_json::json!({
+            "actor_id": actor_id.to_string(),
+            "from": format!("{:?}", from),
+            "to": format!("{:?}", to),
+        }),
+    )
+    .await;
 }
 
 /// Notification sent from an actor cell to its supervisor when the actor
@@ -120,13 +140,20 @@ pub async fn run_actor<A>(
     if let Err(e) = actor.pre_start() {
         let startup_error = e.to_string();
         error!(actor_id = %actor_id, error = %e, "pre_start failed");
-        let _ = state_tx.send(AgentState::Error);
+        transition_state(
+            &state_tx,
+            &event_publisher,
+            actor_id,
+            AgentState::Initializing,
+            AgentState::Error,
+        )
+        .await;
         if let Some(tx) = startup_tx {
             let _ = tx.send(Err(startup_error.clone()));
         }
         emit_lifecycle_event(
             &event_publisher,
-            "actor.failed",
+            "agent.Failed",
             serde_json::json!({
                 "actor_id": actor_id.to_string(),
                 "error": startup_error.clone(),
@@ -148,11 +175,18 @@ pub async fn run_actor<A>(
     }
 
     // Phase: Running
-    let _ = state_tx.send(AgentState::Running);
+    transition_state(
+        &state_tx,
+        &event_publisher,
+        actor_id,
+        AgentState::Initializing,
+        AgentState::Running,
+    )
+    .await;
     info!(actor_id = %actor_id, "Actor started");
     emit_lifecycle_event(
         &event_publisher,
-        "actor.started",
+        "agent.Started",
         serde_json::json!({"actor_id": actor_id.to_string()}),
     )
     .await;
@@ -208,7 +242,14 @@ pub async fn run_actor<A>(
     };
 
     // Phase: Stopping
-    let _ = state_tx.send(AgentState::Stopping);
+    transition_state(
+        &state_tx,
+        &event_publisher,
+        actor_id,
+        AgentState::Running,
+        AgentState::Stopping,
+    )
+    .await;
     debug!(actor_id = %actor_id, "Actor stopping");
 
     // Drain remaining messages in the mailbox
@@ -246,21 +287,35 @@ pub async fn run_actor<A>(
     // Set terminal state and emit events
     match &termination_reason {
         TerminationReason::Normal => {
-            let _ = state_tx.send(AgentState::Terminated);
+            transition_state(
+                &state_tx,
+                &event_publisher,
+                actor_id,
+                AgentState::Stopping,
+                AgentState::Terminated,
+            )
+            .await;
             info!(actor_id = %actor_id, "Actor terminated normally");
             emit_lifecycle_event(
                 &event_publisher,
-                "actor.stopped",
+                "agent.Stopped",
                 serde_json::json!({"actor_id": actor_id.to_string()}),
             )
             .await;
         }
         TerminationReason::Failed(e) => {
-            let _ = state_tx.send(AgentState::Error);
+            transition_state(
+                &state_tx,
+                &event_publisher,
+                actor_id,
+                AgentState::Stopping,
+                AgentState::Error,
+            )
+            .await;
             error!(actor_id = %actor_id, error = %e, "Actor failed");
             emit_lifecycle_event(
                 &event_publisher,
-                "actor.failed",
+                "agent.Failed",
                 serde_json::json!({
                     "actor_id": actor_id.to_string(),
                     "error": e,
@@ -270,11 +325,18 @@ pub async fn run_actor<A>(
             .await;
         }
         TerminationReason::Panicked(e) => {
-            let _ = state_tx.send(AgentState::Error);
+            transition_state(
+                &state_tx,
+                &event_publisher,
+                actor_id,
+                AgentState::Stopping,
+                AgentState::Error,
+            )
+            .await;
             error!(actor_id = %actor_id, error = %e, "Actor panicked");
             emit_lifecycle_event(
                 &event_publisher,
-                "actor.failed",
+                "agent.Failed",
                 serde_json::json!({
                     "actor_id": actor_id.to_string(),
                     "error": e,
@@ -845,7 +907,7 @@ mod tests {
 
         let events = publisher.events.lock().await;
         let panic_event = events.iter().find(|event| {
-            event.event_type == "actor.failed"
+            event.event_type == "agent.Failed"
                 && event
                     .payload
                     .get("phase")

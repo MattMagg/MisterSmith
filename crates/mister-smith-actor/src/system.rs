@@ -4,7 +4,7 @@
 //! the actor registry, spawns actors into Tokio tasks, and coordinates
 //! graceful shutdown.
 
-use std::any::Any;
+use std::any::{type_name, Any};
 use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
@@ -198,6 +198,17 @@ impl ActorSystem {
 
         let mut actors = self.actors.write().await;
         actors.insert(actor_id, handle);
+        drop(actors);
+
+        actor_cell::emit_lifecycle_event(
+            &self.event_publisher,
+            "agent.Created",
+            serde_json::json!({
+                "actor_id": actor_id.to_string(),
+                "actor_type": type_name::<A>(),
+            }),
+        )
+        .await;
 
         debug!(actor_id = %actor_id, start_order, "Actor spawned");
 
