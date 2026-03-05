@@ -7,11 +7,12 @@
 //! Supported constraint dimensions:
 //!
 //! - **Time window** — restrict to business hours / specific weekdays.
-//! - **IP ranges** — restrict to allowed CIDR ranges (string comparison).
+//! - **IP ranges** — restrict to allowed CIDR ranges (IPv4/IPv6 aware).
 //! - **Resource ownership** — require the caller to own the target resource.
 
+use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, net::IpAddr};
 use tracing::warn;
 
 // ---------------------------------------------------------------------------
@@ -28,10 +29,6 @@ pub struct PolicyConstraints {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_window: Option<TimeWindow>,
     /// Restrict access to specific IP CIDR ranges (e.g. `["10.0.0.0/8"]`).
-    ///
-    /// Matching is performed by string prefix comparison on the network
-    /// portion.  For production use, a proper CIDR library should replace
-    /// the prefix check.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ip_ranges: Option<Vec<String>>,
     /// When `true`, the caller must own the target resource.
@@ -122,10 +119,8 @@ impl PolicyConstraints {
 
     /// Check whether the caller's IP falls within one of the allowed ranges.
     ///
-    /// Uses simple string-prefix matching on the network portion of each CIDR
-    /// string.  For example, CIDR `"10.0.0.0/8"` is satisfied if the IP
-    /// starts with `"10."`.  This is intentionally simplified; a proper CIDR
-    /// library should replace this for production deployments.
+    /// Invalid caller IP or invalid CIDR entries are treated as denial. Invalid
+    /// CIDRs also emit warning logs to help diagnose misconfiguration.
     fn evaluate_ip_ranges(ranges: &[String], context: &HashMap<String, String>) -> bool {
         let ip = match context.get("ip") {
             Some(ip) => ip,
@@ -135,7 +130,44 @@ impl PolicyConstraints {
             }
         };
 
-        ranges.iter().any(|cidr| ip_in_cidr(ip, cidr))
+        let parsed_ip = match ip.parse::<IpAddr>() {
+            Ok(parsed) => parsed,
+            Err(err) => {
+                warn!(
+                    ip = ip,
+                    error = %err,
+                    "ip_ranges constraint: invalid caller IP in context"
+                );
+                return false;
+            }
+        };
+
+        let mut has_invalid_cidr = false;
+        let mut matched = false;
+
+        for cidr in ranges {
+            match ip_in_cidr(parsed_ip, cidr) {
+                Ok(is_match) => {
+                    if is_match {
+                        matched = true;
+                    }
+                }
+                Err(err) => {
+                    has_invalid_cidr = true;
+                    warn!(
+                        cidr = %cidr,
+                        error = %err,
+                        "ip_ranges constraint: invalid CIDR entry"
+                    );
+                }
+            }
+        }
+
+        if has_invalid_cidr {
+            return false;
+        }
+
+        matched
     }
 
     /// Check the resource ownership flag.
@@ -174,37 +206,12 @@ pub struct TimeWindow {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Simplified CIDR match: extract the network prefix from the CIDR string and
-/// check if the IP starts with it.
+/// CIDR match helper based on `ipnet` parsing.
 ///
-/// For example:
-/// - `"10.0.0.0/8"` -> network prefix `"10."` -> matches `"10.1.2.3"`
-/// - `"192.168.1.0/24"` -> network prefix `"192.168.1."` -> matches `"192.168.1.42"`
-///
-/// This is a best-effort heuristic.  A production system should use a proper
-/// CIDR parsing library (e.g., `ipnetwork` or `ipnet`).
-fn ip_in_cidr(ip: &str, cidr: &str) -> bool {
-    // Strip the mask suffix if present.
-    let network = cidr.split('/').next().unwrap_or(cidr);
-
-    // Build a prefix from the non-zero octets of the network address.
-    // e.g., "10.0.0.0" -> "10.", "192.168.0.0" -> "192.168."
-    let octets: Vec<&str> = network.split('.').collect();
-    let mut prefix = String::new();
-    for octet in &octets {
-        if *octet == "0" {
-            break;
-        }
-        prefix.push_str(octet);
-        prefix.push('.');
-    }
-
-    if prefix.is_empty() {
-        // "0.0.0.0/0" matches everything
-        return true;
-    }
-
-    ip.starts_with(&prefix)
+/// Returns an error when the CIDR is malformed.
+fn ip_in_cidr(ip: IpAddr, cidr: &str) -> Result<bool, ipnet::AddrParseError> {
+    let network: IpNet = cidr.parse()?;
+    Ok(network.contains(&ip))
 }
 
 // ---------------------------------------------------------------------------
@@ -442,23 +449,84 @@ mod tests {
         assert!(constraints.evaluate(&ctx(&[])));
     }
 
-    // -- ip_in_cidr helper -------------------------------------------------
+    // -- IP range edge cases -----------------------------------------------
 
     #[test]
-    fn cidr_helper_class_a() {
-        assert!(super::ip_in_cidr("10.1.2.3", "10.0.0.0/8"));
-        assert!(!super::ip_in_cidr("11.1.2.3", "10.0.0.0/8"));
+    fn ip_range_overlapping_cidrs() {
+        let constraints = PolicyConstraints {
+            time_window: None,
+            ip_ranges: Some(vec![
+                "10.0.0.0/8".to_string(),
+                "10.1.0.0/16".to_string(),
+            ]),
+            resource_owner: None,
+        };
+        assert!(constraints.evaluate(&ctx(&[("ip", "10.1.2.3")])));
+        assert!(!constraints.evaluate(&ctx(&[("ip", "11.1.2.3")])));
     }
 
     #[test]
-    fn cidr_helper_class_c() {
-        assert!(super::ip_in_cidr("192.168.1.42", "192.168.1.0/24"));
-        assert!(!super::ip_in_cidr("192.168.2.1", "192.168.1.0/24"));
+    fn ip_range_ipv6_support() {
+        let constraints = PolicyConstraints {
+            time_window: None,
+            ip_ranges: Some(vec!["2001:db8::/32".to_string()]),
+            resource_owner: None,
+        };
+        assert!(constraints.evaluate(&ctx(&[("ip", "2001:db8::1")])));
+        assert!(!constraints.evaluate(&ctx(&[("ip", "2001:db9::1")])));
     }
 
     #[test]
-    fn cidr_helper_catch_all() {
-        assert!(super::ip_in_cidr("1.2.3.4", "0.0.0.0/0"));
+    fn ip_range_malformed_cidr_denies() {
+        let constraints = PolicyConstraints {
+            time_window: None,
+            ip_ranges: Some(vec![
+                "10.0.0.0/8".to_string(),
+                "not-a-cidr".to_string(),
+            ]),
+            resource_owner: None,
+        };
+
+        assert!(!constraints.evaluate(&ctx(&[("ip", "10.1.2.3")])));
+    }
+
+    #[test]
+    fn ip_range_boundary_addresses_ipv4() {
+        let constraints = PolicyConstraints {
+            time_window: None,
+            ip_ranges: Some(vec!["192.168.1.0/24".to_string()]),
+            resource_owner: None,
+        };
+
+        assert!(constraints.evaluate(&ctx(&[("ip", "192.168.1.0")])));
+        assert!(constraints.evaluate(&ctx(&[("ip", "192.168.1.255")])));
+        assert!(constraints.evaluate(&ctx(&[("ip", "192.168.1.42")])));
+        assert!(!constraints.evaluate(&ctx(&[("ip", "192.168.2.1")])));
+    }
+
+    #[test]
+    fn ip_range_boundary_addresses_ipv6() {
+        let constraints = PolicyConstraints {
+            time_window: None,
+            ip_ranges: Some(vec!["2001:db8::/126".to_string()]),
+            resource_owner: None,
+        };
+
+        assert!(constraints.evaluate(&ctx(&[("ip", "2001:db8::")])));
+        assert!(constraints.evaluate(&ctx(&[("ip", "2001:db8::1")])));
+        assert!(constraints.evaluate(&ctx(&[("ip", "2001:db8::3")])));
+        assert!(!constraints.evaluate(&ctx(&[("ip", "2001:db8::4")])));
+    }
+
+    #[test]
+    fn ip_range_invalid_request_ip_denies() {
+        let constraints = PolicyConstraints {
+            time_window: None,
+            ip_ranges: Some(vec!["10.0.0.0/8".to_string()]),
+            resource_owner: None,
+        };
+
+        assert!(!constraints.evaluate(&ctx(&[("ip", "999.999.999.999")])));
     }
 
     #[test]

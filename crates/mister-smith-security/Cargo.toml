@@ -29,6 +29,7 @@ thiserror = { workspace = true }
 # Identity & time
 uuid = { workspace = true }
 chrono = { workspace = true }
+ipnet = { workspace = true }
 
 # Async
 tokio = { workspace = true }
