@@ -24,8 +24,8 @@ pub fn api_router() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::AppState;
-    use axum::body::Body;
+    use crate::server::{AppState, NatsHealthCheck};
+    use axum::body::{to_bytes, Body};
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
@@ -33,9 +33,15 @@ mod tests {
         api_router().with_state(AppState::new())
     }
 
+    fn test_app_with_transport(connected: bool) -> Router {
+        api_router().with_state(
+            AppState::new().with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(connected))),
+        )
+    }
+
     #[tokio::test]
-    async fn health_route_responds_ok() {
-        let app = test_app();
+    async fn health_route_responds_healthy_when_transport_connected() {
+        let app = test_app_with_transport(true);
         let request = Request::builder()
             .uri("/api/v1/health")
             .body(Body::empty())
@@ -43,6 +49,32 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["status"], "healthy");
+        assert_eq!(payload["components"][0]["name"], "http_server");
+        assert_eq!(payload["components"][1]["name"], "nats_transport");
+        assert_eq!(payload["components"][1]["status"], "healthy");
+    }
+
+    #[tokio::test]
+    async fn health_route_responds_unhealthy_when_transport_disconnected() {
+        let app = test_app_with_transport(false);
+        let request = Request::builder()
+            .uri("/api/v1/health")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["status"], "unhealthy");
+        assert_eq!(payload["components"][0]["name"], "http_server");
+        assert_eq!(payload["components"][1]["name"], "nats_transport");
+        assert_eq!(payload["components"][1]["status"], "unhealthy");
     }
 
     #[tokio::test]
