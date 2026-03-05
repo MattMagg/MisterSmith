@@ -10,6 +10,11 @@ members = [
     "crates/mister-smith-resources",
     "crates/mister-smith-actor",
     "crates/mister-smith-supervision",
+    "crates/mister-smith-transport",
+    "crates/mister-smith-nats",
+    "crates/mister-smith-http",
+    "crates/mister-smith-grpc",
+    "crates/mister-smith-mcp",
     "crates/mister-smith-integration-tests",
 ]
 
@@ -53,6 +58,23 @@ dashmap = "6.1.0"
 # System
 num_cpus = "1.16"
 
+# Transport — Phase 4
+bytes = "1"
+async-stream = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+rmp-serde = "1.3.1"
+serde_bytes = "0.11"
+async-nats = { version = "0.46.0", features = ["jetstream", "kv", "service"] }
+axum = { version = "0.8.8", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+tonic = "0.14"
+tonic-health = "0.14"
+tonic-build = "0.14"
+prost = "0.14"
+prost-types = "0.14"
+prost-build = "0.14"
+
 # Internal crates
 mister-smith-core = { path = "crates/mister-smith-core" }
 mister-smith-config = { path = "crates/mister-smith-config" }
@@ -63,3 +85,8 @@ mister-smith-async = { path = "crates/mister-smith-async" }
 mister-smith-resources = { path = "crates/mister-smith-resources" }
 mister-smith-actor = { path = "crates/mister-smith-actor" }
 mister-smith-supervision = { path = "crates/mister-smith-supervision" }
+mister-smith-transport = { path = "crates/mister-smith-transport" }
+mister-smith-nats = { path = "crates/mister-smith-nats" }
+mister-smith-http = { path = "crates/mister-smith-http" }
+mister-smith-grpc = { path = "crates/mister-smith-grpc" }
+mister-smith-mcp = { path = "crates/mister-smith-mcp" }

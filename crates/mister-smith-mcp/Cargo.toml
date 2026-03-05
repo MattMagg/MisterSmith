@@ -1,0 +1,22 @@
+[package]
+name = "mister-smith-mcp"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "MCP integration for bidirectional tool discovery and invocation"
+
+[dependencies]
+mister-smith-core = { workspace = true }
+mister-smith-transport = { workspace = true }
+mister-smith-nats = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

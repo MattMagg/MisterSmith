@@ -2,7 +2,7 @@
 //!
 //! Defines [`EventBusError`] for the events crate's internal error handling.
 //! The core crate provides [`mister_smith_core::EventError`] which is used
-//! by the [`EventPublisher`] trait. This module provides a richer error type
+//! by the `EventPublisher` trait. This module provides a richer error type
 //! with additional variants needed by the event bus internals, along with
 //! conversions to/from the core error type.
 

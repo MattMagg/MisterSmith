@@ -6,7 +6,7 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-a
 
 ```bash
 cargo build --workspace                    # Build all crates
-cargo test --workspace                     # Run all tests (388 as of Phase 3)
+cargo test --workspace                     # Run all tests (605 as of Phase 4 complete)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 ```
 
@@ -17,7 +17,7 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 1. Foundation | Complete | `mister-smith-core`, `mister-smith-config` |
 | 2. Runtime & Async | Complete | `mister-smith-runtime`, `mister-smith-monitoring`, `mister-smith-events`, `mister-smith-async`, `mister-smith-resources`, `mister-smith-integration-tests` |
 | 3. Actor System & Supervision | Complete | `mister-smith-actor`, `mister-smith-supervision` |
-| 4. Transport & Messaging | Next | See `specs/004-phase4-transport-messaging/` |
+| 4. Transport & Messaging | Complete | `mister-smith-transport`, `mister-smith-nats`, `mister-smith-http`, `mister-smith-grpc`, `mister-smith-mcp` |
 | 5–8 | Not started | See `ROADMAP.md` |
 
 ## Workspace Crate Dependencies
@@ -32,6 +32,11 @@ mister-smith-core (foundation types, traits, errors)
 ├── mister-smith-resources (ConnectionPool, pool sizing, health reports)
 ├── mister-smith-actor (ActorCell, ActorRef, lifecycle management, mailbox)
 ├── mister-smith-supervision (SupervisedSystem, restart strategies, health checks)
+├── mister-smith-transport (MessageEnvelope, Transport trait, serialization, InMemoryTransport)
+├── mister-smith-nats (NATS pub/sub, request-reply, JetStream, health checks)
+├── mister-smith-http (Axum REST API, WebSocket, middleware, rate limiting)
+├── mister-smith-grpc (Tonic gRPC services, health, protobuf)
+├── mister-smith-mcp (MCP client/server, tool registry, NATS bridge)
 └── mister-smith-integration-tests (cross-crate validation)
 ```
 

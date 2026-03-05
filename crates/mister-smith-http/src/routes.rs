@@ -1,0 +1,112 @@
+//! Route definitions for the HTTP API.
+//!
+//! Composes all REST and WebSocket endpoints under `/api/v1`.
+
+use axum::routing::{any, get, post};
+use axum::Router;
+
+use crate::handlers;
+use crate::server::AppState;
+use crate::websocket;
+
+/// Build the complete API router with all REST and WebSocket routes.
+pub fn api_router() -> Router<AppState> {
+    Router::new()
+        .route("/api/v1/health", get(handlers::health_check))
+        .route("/api/v1/agents", get(handlers::list_agents))
+        .route("/api/v1/agents/{agent_id}", get(handlers::get_agent))
+        .route("/api/v1/tasks", post(handlers::create_task))
+        .route("/api/v1/tasks/{task_id}", get(handlers::get_task))
+        .route("/api/v1/config", get(handlers::get_config))
+        .route("/api/v1/events/ws", any(websocket::ws_handler))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::server::AppState;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    fn test_app() -> Router {
+        api_router().with_state(AppState::new())
+    }
+
+    #[tokio::test]
+    async fn health_route_responds_ok() {
+        let app = test_app();
+        let request = Request::builder()
+            .uri("/api/v1/health")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn agents_route_responds_ok() {
+        let app = test_app();
+        let request = Request::builder()
+            .uri("/api/v1/agents")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn agent_detail_not_found() {
+        let app = test_app();
+        let request = Request::builder()
+            .uri("/api/v1/agents/00000000-0000-0000-0000-000000000099")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn create_task_route_responds_accepted() {
+        let app = test_app();
+        let body = serde_json::json!({
+            "description": "Test task",
+        });
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/tasks")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+    }
+
+    #[tokio::test]
+    async fn config_route_responds_ok() {
+        let app = test_app();
+        let request = Request::builder()
+            .uri("/api/v1/config")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn unknown_route_responds_not_found() {
+        let app = test_app();
+        let request = Request::builder()
+            .uri("/api/v1/unknown")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+}

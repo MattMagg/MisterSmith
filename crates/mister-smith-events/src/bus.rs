@@ -1,7 +1,7 @@
 //! EventBus: in-process pub/sub with broadcast, filtering, and dead letter handling.
 //!
 //! The [`EventBus`] is the central event distribution mechanism. It implements
-//! the core [`EventPublisher`](mister_smith_core::EventPublisher) trait, allowing
+//! the core [`EventPublisher`] trait, allowing
 //! any component that depends on `mister-smith-core` to publish events without
 //! depending on this crate directly.
 

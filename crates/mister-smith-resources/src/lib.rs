@@ -3,10 +3,10 @@
 //! This crate provides:
 //!
 //! - **[`pool`]** — [`ConnectionPool<R>`](pool::ConnectionPool), a generic async-aware
-//!   connection pool with RAII checkout via [`PooledResource`](pool::PooledResource).
+//!   connection pool with RAII checkout via [`PooledResource`].
 //! - **[`sizing`]** — Pool sizing algorithms using Little's Law and environment templates.
-//! - **[`health`]** — [`PoolHealthReport`](health::PoolHealthReport) for pool observability.
-//! - **[`manager`]** — [`ResourceManager`](manager::ResourceManager) for heterogeneous pool
+//! - **[`health`]** — [`PoolHealthReport`] for pool observability.
+//! - **[`manager`]** — [`ResourceManager`] for heterogeneous pool
 //!   registration and lookup.
 
 pub mod health;

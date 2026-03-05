@@ -1,0 +1,28 @@
+[package]
+name = "mister-smith-grpc"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "gRPC transport layer with protobuf services for agent management and system operations"
+
+[dependencies]
+mister-smith-core = { workspace = true }
+mister-smith-transport = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+tonic = { workspace = true }
+tonic-health = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+tokio-stream = { version = "0.1", features = ["net"] }
+async-stream = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

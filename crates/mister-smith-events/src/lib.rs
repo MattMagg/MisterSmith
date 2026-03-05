@@ -5,23 +5,23 @@
 //!
 //! # Architecture
 //!
-//! The [`EventBus`](bus::EventBus) is the central distribution point. Events flow through:
+//! The [`EventBus`] is the central distribution point. Events flow through:
 //!
 //! 1. **Event store** (optional) — persists the event for replay and audit.
 //! 2. **Broadcast channel** — delivers to all broadcast subscribers.
-//! 3. **Handler dispatch** — delivers to registered [`EventHandler`](handler::EventHandler)
-//!    implementations, applying [`EventFilter`](handler::EventFilter) per handler.
+//! 3. **Handler dispatch** — delivers to registered [`EventHandler`]
+//!    implementations, applying [`EventFilter`] per handler.
 //! 4. **Dead letter queue** — captures events where all matching handlers failed.
 //!
-//! The bus also implements [`EventPublisher`](mister_smith_core::EventPublisher) from
+//! The bus also implements `EventPublisher` from
 //! the core crate, enabling components to publish events through the core trait
 //! without depending on this crate directly.
 //!
 //! # Event Types
 //!
-//! Events use a rich type hierarchy ([`EventType`](types::EventType)) covering
+//! Events use a rich type hierarchy ([`EventType`]) covering
 //! system, agent, and tool domains, with a custom escape hatch. The
-//! [`Event`](types::Event) struct carries full metadata including correlation
+//! [`Event`] struct carries full metadata including correlation
 //! and causation IDs for distributed tracing.
 
 pub mod builder;

@@ -17,7 +17,13 @@ mister-smith-async = { workspace = true }
 mister-smith-resources = { workspace = true }
 mister-smith-actor = { workspace = true }
 mister-smith-supervision = { workspace = true }
+mister-smith-transport = { workspace = true }
+mister-smith-nats = { workspace = true }
+mister-smith-http = { workspace = true }
+mister-smith-grpc = { workspace = true }
+mister-smith-mcp = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 serde_json = { workspace = true }
+futures = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }

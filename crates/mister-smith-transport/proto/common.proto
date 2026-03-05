@@ -1,0 +1,95 @@
+// Common types — shared enums and messages used across all gRPC services.
+// Spec reference: FR-002, FR-017, FR-020, FR-021
+// Phase 4: Transport & Messaging
+//
+// This file is the single source of truth for all shared protobuf types.
+// Service-specific protos import from here — never redefine these types.
+
+syntax = "proto3";
+
+package mister_smith.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// --- Shared Enums ---
+
+enum MessagePriority {
+  PRIORITY_NORMAL = 0;
+  PRIORITY_LOW = 1;
+  PRIORITY_HIGH = 2;
+  PRIORITY_CRITICAL = 3;
+}
+
+enum AgentAvailability {
+  AVAILABILITY_IDLE = 0;
+  AVAILABILITY_BUSY = 1;
+  AVAILABILITY_OFFLINE = 2;
+}
+
+enum TaskStatus {
+  TASK_STATUS_SUCCESS = 0;
+  TASK_STATUS_FAILURE = 1;
+  TASK_STATUS_PARTIAL = 2;
+}
+
+enum Severity {
+  SEVERITY_INFO = 0;
+  SEVERITY_WARNING = 1;
+  SEVERITY_ERROR = 2;
+  SEVERITY_CRITICAL = 3;
+}
+
+// --- Shared Messages ---
+
+message MessageEnvelope {
+  string message_id = 1;        // UUID v4
+  google.protobuf.Timestamp timestamp = 2;
+  string schema_version = 3;    // semver, e.g. "1.0.0"
+  string message_type = 4;      // discriminator
+  optional string correlation_id = 5;
+  optional string trace_id = 6;
+  optional string source_agent_id = 7;
+  optional string target_agent_id = 8;
+  MessagePriority priority = 9;
+  bytes payload = 10;           // serialized inner message
+  map<string, string> headers = 11;
+}
+
+message AgentInfo {
+  string agent_id = 1;
+  string agent_type = 2;
+  AgentAvailability availability = 3;
+  uint32 active_tasks = 4;
+  google.protobuf.Timestamp started_at = 5;
+  double load = 6;              // 0.0–1.0
+}
+
+message TaskAssignment {
+  string task_id = 1;
+  string task_type = 2;
+  google.protobuf.Struct payload = 3;
+  MessagePriority priority = 4;
+  optional google.protobuf.Timestamp deadline = 5;
+  optional string assigned_agent = 6;
+  string requester_id = 7;
+  map<string, string> metadata = 8;
+}
+
+message TaskResult {
+  string task_id = 1;
+  TaskStatus status = 2;
+  optional google.protobuf.Struct result = 3;
+  optional string error = 4;
+  uint64 duration_ms = 5;
+  string agent_id = 6;
+}
+
+message SystemEvent {
+  string event_type = 1;
+  string source = 2;
+  Severity severity = 3;
+  string message = 4;
+  optional google.protobuf.Struct data = 5;
+  google.protobuf.Timestamp timestamp = 6;
+}

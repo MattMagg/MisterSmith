@@ -1,0 +1,72 @@
+// Agent Service — gRPC service definitions for agent management.
+// Spec reference: FR-014, FR-015, US5
+// Phase 4: Transport & Messaging
+
+syntax = "proto3";
+
+package mister_smith.v1;
+
+import "google/protobuf/timestamp.proto";
+import "common.proto";
+
+// AgentService — manage and communicate with agents
+service AgentService {
+  // List all active agents with their current status
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+
+  // Get a specific agent's details
+  rpc GetAgent(GetAgentRequest) returns (AgentInfo);
+
+  // Submit a task for execution
+  rpc SubmitTask(SubmitTaskRequest) returns (SubmitTaskResponse);
+
+  // Get task result
+  rpc GetTaskResult(GetTaskResultRequest) returns (TaskResult);
+
+  // Stream agent status updates (server-streaming)
+  rpc StreamAgentStatus(StreamAgentStatusRequest) returns (stream AgentStatusUpdate);
+
+  // Bidirectional agent communication stream
+  rpc AgentChannel(stream MessageEnvelope) returns (stream MessageEnvelope);
+}
+
+// --- Request/Response Messages ---
+
+message ListAgentsRequest {
+  optional AgentAvailability filter_availability = 1;
+  optional string filter_type = 2;
+}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
+
+message GetAgentRequest {
+  string agent_id = 1;
+}
+
+message SubmitTaskRequest {
+  TaskAssignment task = 1;
+}
+
+message SubmitTaskResponse {
+  string task_id = 1;
+  string assigned_agent_id = 2;
+}
+
+message GetTaskResultRequest {
+  string task_id = 1;
+}
+
+message StreamAgentStatusRequest {
+  // Empty = all agents; set agent_id for a specific agent
+  optional string agent_id = 1;
+}
+
+message AgentStatusUpdate {
+  string agent_id = 1;
+  AgentAvailability availability = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  optional double load = 4;
+  optional uint32 active_tasks = 5;
+}

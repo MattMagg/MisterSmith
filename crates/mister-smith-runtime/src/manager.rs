@@ -81,7 +81,7 @@ impl RuntimeManager {
     /// # Tracing initialisation
     ///
     /// On the first call, installs a `tracing_subscriber` with
-    /// [`EnvFilter`](tracing_subscriber::EnvFilter) defaulting to `"info"`.
+    /// [`EnvFilter`] defaulting to `"info"`.
     /// Subsequent calls silently skip re-initialisation (via `try_init()`).
     ///
     /// # Errors
@@ -124,7 +124,7 @@ impl RuntimeManager {
     /// Perform a graceful shutdown.
     ///
     /// 1. Sets the shutdown signal so all cooperative loops can observe it.
-    /// 2. Drains tracked task handles, waiting up to [`shutdown_timeout`](Self::shutdown_timeout).
+    /// 2. Drains tracked task handles, waiting up to the configured shutdown timeout.
     /// 3. Shuts down the Tokio runtime with the configured timeout.
     ///
     /// # Errors

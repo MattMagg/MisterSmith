@@ -2,7 +2,7 @@
 //!
 //! The [`Event`] struct is the rich event representation used throughout the events crate.
 //! It is distinct from [`mister_smith_core::SystemEvent`], which is a minimal struct
-//! used by the [`EventPublisher`] trait in the core crate. The [`EventBus`] converts
+//! used by the `EventPublisher` trait in the core crate. The `EventBus` converts
 //! between the two when implementing `EventPublisher`.
 
 use serde::{Deserialize, Serialize};
@@ -99,7 +99,7 @@ impl std::fmt::Display for EventType {
 ///
 /// Contains full metadata including correlation and causation IDs for
 /// distributed tracing. This is distinct from [`mister_smith_core::SystemEvent`],
-/// which is a minimal type used by the core [`EventPublisher`] trait.
+/// which is a minimal type used by the core `EventPublisher` trait.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     /// Unique event identifier.

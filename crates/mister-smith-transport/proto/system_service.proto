@@ -1,0 +1,64 @@
+// System Service — system events and configuration management via gRPC.
+// Spec reference: FR-014, FR-015, US5
+// Phase 4: Transport & Messaging
+
+syntax = "proto3";
+
+package mister_smith.v1;
+
+import "google/protobuf/timestamp.proto";
+import "common.proto";
+
+// SystemService — system-wide operations and event streaming
+service SystemService {
+  // Stream system events (server-streaming)
+  rpc StreamEvents(StreamEventsRequest) returns (stream SystemEvent);
+
+  // Get current system configuration
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+
+  // Update system configuration
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
+
+  // Get system metrics snapshot
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+}
+
+// --- Request/Response Messages ---
+
+message StreamEventsRequest {
+  // Filter by event type (empty = all events)
+  repeated string event_types = 1;
+  // Filter by minimum severity
+  optional Severity min_severity = 2;
+}
+
+message GetConfigRequest {
+  // Component name (empty = all components)
+  optional string component = 1;
+}
+
+message GetConfigResponse {
+  map<string, string> config = 1;
+}
+
+message UpdateConfigRequest {
+  string component = 1;
+  string key = 2;
+  string value = 3;
+}
+
+message UpdateConfigResponse {
+  bool success = 1;
+  optional string previous_value = 2;
+}
+
+message GetMetricsRequest {
+  // Component name (empty = all components)
+  optional string component = 1;
+}
+
+message GetMetricsResponse {
+  map<string, double> metrics = 1;
+  google.protobuf.Timestamp collected_at = 2;
+}

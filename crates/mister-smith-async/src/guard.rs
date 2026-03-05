@@ -1,6 +1,6 @@
 //! RAII task guard for cleanup on drop.
 //!
-//! [`TaskGuard`] wraps a [`JoinHandle`](tokio::task::JoinHandle) and an
+//! [`TaskGuard`] wraps a [`JoinHandle`] and an
 //! optional cleanup closure. When the guard is dropped — whether normally or
 //! due to a panic — it aborts the spawned task and runs the cleanup function.
 
