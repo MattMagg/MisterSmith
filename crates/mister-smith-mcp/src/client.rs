@@ -1,14 +1,25 @@
 //! MCP client for connecting to external MCP servers.
 //!
 //! Provides tool discovery, caching, namespace prefixing, and tool invocation.
-//! Actual rmcp integration will be added when connecting to real MCP servers.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::time::Duration;
 
-use crate::config::McpClientConfig;
+use rmcp::{
+    ClientHandler, ServiceExt,
+    model::{CallToolRequestParams, ClientInfo},
+    service::{Peer, RoleClient, RunningService},
+    transport::{StreamableHttpClientTransport, TokioChildProcess},
+};
+use tokio::process::Command;
+use tokio::sync::{RwLock, watch};
+
+use crate::config::{McpClientConfig, McpTransportType};
 use crate::errors::McpError;
+
+const TOOL_CALL_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Represents a discovered MCP tool.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -21,9 +32,44 @@ pub struct McpTool {
     pub input_schema: serde_json::Value,
 }
 
+#[derive(Clone)]
+struct ToolListWatcher {
+    tx: watch::Sender<u64>,
+}
+
+impl ToolListWatcher {
+    fn new() -> (Self, watch::Receiver<u64>) {
+        let (tx, rx) = watch::channel(0);
+        (Self { tx }, rx)
+    }
+}
+
+impl ClientHandler for ToolListWatcher {
+    fn on_tool_list_changed(
+        &self,
+        _context: rmcp::service::NotificationContext<RoleClient>,
+    ) -> impl Future<Output = ()> + Send + '_ {
+        let tx = self.tx.clone();
+        async move {
+            let next = *tx.borrow() + 1;
+            let _ = tx.send(next);
+        }
+    }
+
+    fn get_info(&self) -> ClientInfo {
+        ClientInfo::default()
+    }
+}
+
+type RmcpSession = RunningService<RoleClient, ToolListWatcher>;
+
 /// MCP client for connecting to and invoking tools on external MCP servers.
 pub struct McpClient {
     config: McpClientConfig,
+    /// Active rmcp session.
+    session: Arc<RwLock<Option<RmcpSession>>>,
+    /// Tool list change notifications from rmcp.
+    tool_list_version: Arc<RwLock<Option<watch::Receiver<u64>>>>,
     /// Cached tool list, keyed by namespaced name.
     tool_cache: Arc<RwLock<HashMap<String, McpTool>>>,
     /// Whether the client is connected.
@@ -35,6 +81,8 @@ impl McpClient {
     pub fn new(config: McpClientConfig) -> Self {
         Self {
             config,
+            session: Arc::new(RwLock::new(None)),
+            tool_list_version: Arc::new(RwLock::new(None)),
             tool_cache: Arc::new(RwLock::new(HashMap::new())),
             connected: Arc::new(RwLock::new(false)),
         }
@@ -56,15 +104,94 @@ impl McpClient {
     }
 
     /// Connect to the MCP server and discover tools.
-    ///
-    /// Currently a placeholder — actual rmcp connection will be added
-    /// when integrating with real MCP servers.
     pub async fn connect(&self) -> Result<(), McpError> {
-        // TODO: Use rmcp to establish actual connection.
-        // For now, mark as connected.
-        let mut connected = self.connected.write().await;
-        *connected = true;
+        let (handler, version_rx) = ToolListWatcher::new();
+
+        let session = match self.config.transport {
+            McpTransportType::Stdio => {
+                let command = self
+                    .config
+                    .command
+                    .as_deref()
+                    .ok_or_else(|| McpError::ConnectionFailed("stdio transport requires command".into()))?;
+
+                let mut parts = command.split_whitespace();
+                let program = parts
+                    .next()
+                    .ok_or_else(|| McpError::ConnectionFailed("invalid command".into()))?;
+
+                let mut cmd = Command::new(program);
+                cmd.args(parts);
+                let transport = TokioChildProcess::new(cmd)
+                    .map_err(|e| McpError::ConnectionFailed(e.to_string()))?;
+                handler
+                    .serve(transport)
+                    .await
+                    .map_err(|e| McpError::ConnectionFailed(e.to_string()))?
+            }
+            McpTransportType::StreamableHttp => {
+                let url = self
+                    .config
+                    .url
+                    .as_ref()
+                    .ok_or_else(|| McpError::ConnectionFailed("streamable-http transport requires url".into()))?;
+                let transport = StreamableHttpClientTransport::from_uri(url.clone());
+                handler
+                    .serve(transport)
+                    .await
+                    .map_err(|e| McpError::ConnectionFailed(e.to_string()))?
+            }
+        };
+
+        {
+            let mut session_lock = self.session.write().await;
+            *session_lock = Some(session);
+        }
+        {
+            let mut rx = self.tool_list_version.write().await;
+            *rx = Some(version_rx);
+        }
+        *self.connected.write().await = true;
+
+        self.discover_tools().await?;
+
         Ok(())
+    }
+
+    async fn peer(&self) -> Result<Peer<RoleClient>, McpError> {
+        let session_lock = self.session.read().await;
+        let session = session_lock
+            .as_ref()
+            .ok_or_else(|| McpError::SessionError("session not initialized".into()))?;
+        Ok(session.peer().clone())
+    }
+
+    fn tool_allowed(&self, tool_name: &str) -> bool {
+        if self.config.tool_filter.is_empty() {
+            return true;
+        }
+
+        self.config
+            .tool_filter
+            .iter()
+            .any(|pattern| wildcard_match(pattern, tool_name))
+    }
+
+    async fn handle_tools_changed_notification(&self) {
+        let mut changed = false;
+        {
+            let mut version = self.tool_list_version.write().await;
+            if let Some(rx) = version.as_mut() {
+                changed = rx.has_changed().unwrap_or(false);
+                if changed {
+                    let _ = rx.borrow_and_update();
+                }
+            }
+        }
+
+        if changed {
+            self.invalidate_cache().await;
+        }
     }
 
     /// Discover available tools from the MCP server.
@@ -75,9 +202,41 @@ impl McpClient {
             ));
         }
 
-        // Return cached tools.
-        let cache = self.tool_cache.read().await;
-        Ok(cache.values().cloned().collect())
+        self.handle_tools_changed_notification().await;
+
+        let cached = self.tool_cache.read().await;
+        if !cached.is_empty() {
+            return Ok(cached.values().cloned().collect());
+        }
+        drop(cached);
+
+        let peer = self.peer().await?;
+        let tools = peer
+            .list_all_tools()
+            .await
+            .map_err(|e| McpError::SessionError(e.to_string()))?;
+
+        let discovered: Vec<McpTool> = tools
+            .into_iter()
+            .filter(|tool| self.tool_allowed(tool.name.as_ref()))
+            .map(|tool| McpTool {
+                name: tool.name.into_owned(),
+                description: tool
+                    .description
+                    .map(|d| d.into_owned())
+                    .unwrap_or_default(),
+                input_schema: serde_json::Value::Object((*tool.input_schema).clone()),
+            })
+            .collect();
+
+        let mut cache = self.tool_cache.write().await;
+        cache.clear();
+        for tool in &discovered {
+            let namespaced = format!("{}.{}", self.config.namespace, tool.name);
+            cache.insert(namespaced, tool.clone());
+        }
+
+        Ok(discovered)
     }
 
     /// Get a tool by its namespaced name.
@@ -97,8 +256,6 @@ impl McpClient {
     }
 
     /// Invoke a tool by name with the given parameters.
-    ///
-    /// Currently a placeholder — actual rmcp tool invocation will be added.
     pub async fn call_tool(
         &self,
         tool_name: &str,
@@ -108,17 +265,47 @@ impl McpClient {
             return Err(McpError::ConnectionFailed("not connected".into()));
         }
 
-        // Verify tool exists.
-        let namespaced = format!("{}.{tool_name}", self.config.namespace);
+        self.handle_tools_changed_notification().await;
+
+        let namespaced = format!("{}.{}", self.config.namespace, tool_name);
         let _tool = self.get_tool(&namespaced).await?;
 
-        // TODO: Use rmcp to invoke the actual tool.
-        // For now, return the params as a placeholder response.
-        Ok(serde_json::json!({
-            "tool": tool_name,
-            "params": params,
-            "status": "placeholder"
-        }))
+        let peer = self.peer().await?;
+        let args = match params {
+            serde_json::Value::Object(obj) => obj,
+            _ => {
+                return Err(McpError::SerializationError(
+                    "tool params must be a JSON object".into(),
+                ))
+            }
+        };
+
+        let request = CallToolRequestParams::new(tool_name.to_string()).with_arguments(args);
+
+        let result = tokio::time::timeout(TOOL_CALL_TIMEOUT, peer.call_tool(request)).await;
+
+        let result = match result {
+            Ok(inner) => inner.map_err(|e| McpError::ToolCallFailed(e.to_string()))?,
+            Err(_) => {
+                return Err(McpError::BridgeTimeout(format!(
+                    "tool '{}' timed out after {:?}",
+                    tool_name, TOOL_CALL_TIMEOUT
+                )))
+            }
+        };
+
+        if result.is_error.unwrap_or(false) {
+            return Err(McpError::ToolCallFailed(
+                serde_json::to_string(&result).unwrap_or_else(|_| "tool returned error".to_string()),
+            ));
+        }
+
+        if let Some(structured) = result.structured_content {
+            Ok(structured)
+        } else {
+            serde_json::to_value(result)
+                .map_err(|e| McpError::SerializationError(e.to_string()))
+        }
     }
 
     /// Invalidate the tool cache (called on tools/list_changed notification).
@@ -129,17 +316,52 @@ impl McpClient {
 
     /// Disconnect from the MCP server.
     pub async fn disconnect(&self) -> Result<(), McpError> {
-        let mut connected = self.connected.write().await;
-        *connected = false;
+        let mut session = self.session.write().await;
+        if let Some(mut running) = session.take() {
+            let _ = running.close().await;
+        }
+
+        *self.connected.write().await = false;
+        *self.tool_list_version.write().await = None;
         self.invalidate_cache().await;
         Ok(())
     }
 }
 
+fn wildcard_match(pattern: &str, input: &str) -> bool {
+    if pattern == "*" {
+        return true;
+    }
+
+    let mut remaining = input;
+    let mut first = true;
+
+    for part in pattern.split('*') {
+        if part.is_empty() {
+            continue;
+        }
+
+        if first && !pattern.starts_with('*') {
+            if !remaining.starts_with(part) {
+                return false;
+            }
+            remaining = &remaining[part.len()..];
+        } else if let Some(idx) = remaining.find(part) {
+            remaining = &remaining[idx + part.len()..];
+        } else {
+            return false;
+        }
+
+        first = false;
+    }
+
+    pattern.ends_with('*') || remaining.is_empty() || pattern.split('*').next_back().is_some_and(|last| input.ends_with(last))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::McpTransportType;
+    use rmcp::{ServerHandler, model::*, serve_server};
 
     fn test_config() -> McpClientConfig {
         McpClientConfig {
@@ -152,41 +374,174 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn client_lifecycle() {
-        let client = McpClient::new(test_config());
-        assert!(!client.is_connected().await);
+    #[derive(Clone)]
+    struct TestServer {
+        tools: Arc<RwLock<Vec<Tool>>>,
+        calls: Arc<RwLock<u64>>,
+    }
 
-        client.connect().await.unwrap();
-        assert!(client.is_connected().await);
+    impl TestServer {
+        fn new(tools: Vec<Tool>) -> Self {
+            Self {
+                tools: Arc::new(RwLock::new(tools)),
+                calls: Arc::new(RwLock::new(0)),
+            }
+        }
 
-        client.disconnect().await.unwrap();
-        assert!(!client.is_connected().await);
+        async fn call_count(&self) -> u64 {
+            *self.calls.read().await
+        }
+    }
+
+    impl ServerHandler for TestServer {
+        fn get_info(&self) -> ServerInfo {
+            ServerInfo::default()
+        }
+
+        fn list_tools(
+            &self,
+            _request: Option<PaginatedRequestParams>,
+            _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+        ) -> impl Future<Output = Result<ListToolsResult, rmcp::ErrorData>> + Send + '_ {
+            let tools = self.tools.clone();
+            async move {
+                Ok(ListToolsResult {
+                    next_cursor: None,
+                    tools: tools.read().await.clone(),
+                    meta: None,
+                })
+            }
+        }
+
+        fn call_tool(
+            &self,
+            request: CallToolRequestParams,
+            _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+        ) -> impl Future<Output = Result<CallToolResult, rmcp::ErrorData>> + Send + '_ {
+            let calls = self.calls.clone();
+            async move {
+                let mut guard = calls.write().await;
+                *guard += 1;
+
+                if request.name.as_ref() == "slow" {
+                    tokio::time::sleep(Duration::from_secs(11)).await;
+                }
+
+                if request.name.as_ref() == "fail" {
+                    return Ok(CallToolResult::structured_error(serde_json::json!({"reason": "boom"})));
+                }
+
+                Ok(CallToolResult::structured(serde_json::json!({
+                    "name": request.name,
+                    "args": request.arguments
+                })))
+            }
+        }
+    }
+
+    fn mk_tool(name: &str) -> Tool {
+        Tool::new(
+            name.to_string(),
+            format!("{name} description"),
+            serde_json::Map::new(),
+        )
+    }
+
+    async fn connected_client_with_server(
+        cfg: McpClientConfig,
+        server: TestServer,
+    ) -> Result<McpClient, McpError> {
+        let (server_transport, client_transport) = tokio::io::duplex(4096);
+
+        tokio::spawn(async move {
+            if let Ok(running) = serve_server(server, server_transport).await {
+                let _ = running.waiting().await;
+            }
+        });
+
+        let (handler, version_rx) = ToolListWatcher::new();
+        let session = handler
+            .serve(client_transport)
+            .await
+            .map_err(|e| McpError::ConnectionFailed(e.to_string()))?;
+
+        let client = McpClient::new(cfg);
+        *client.connected.write().await = true;
+        *client.session.write().await = Some(session);
+        *client.tool_list_version.write().await = Some(version_rx);
+        Ok(client)
     }
 
     #[tokio::test]
-    async fn tool_cache() {
-        let client = McpClient::new(test_config());
-        client.connect().await.unwrap();
-
-        let tool = McpTool {
-            name: "read_file".into(),
-            description: "Read a file".into(),
-            input_schema: serde_json::json!({"type": "object"}),
+    async fn connection_failure_path() {
+        let cfg = McpClientConfig {
+            command: None,
+            ..test_config()
         };
 
-        client.register_tool(tool).await;
-
-        let found = client.get_tool("test.read_file").await.unwrap();
-        assert_eq!(found.name, "read_file");
-
-        client.invalidate_cache().await;
-        assert!(client.get_tool("test.read_file").await.is_err());
+        let client = McpClient::new(cfg);
+        let err = client.connect().await.unwrap_err();
+        assert!(matches!(err, McpError::ConnectionFailed(_)));
     }
 
     #[tokio::test]
-    async fn discover_requires_connection() {
-        let client = McpClient::new(test_config());
-        assert!(client.discover_tools().await.is_err());
+    async fn cache_miss_then_hit_behavior() {
+        let server = TestServer::new(vec![mk_tool("echo")]);
+        let client = connected_client_with_server(test_config(), server.clone())
+            .await
+            .unwrap();
+
+        let first = client.discover_tools().await.unwrap();
+        assert_eq!(first.len(), 1);
+
+        let second = client.discover_tools().await.unwrap();
+        assert_eq!(second.len(), 1);
+
+        let result = client
+            .call_tool("echo", serde_json::json!({"x": 1}))
+            .await
+            .unwrap();
+        assert_eq!(result["name"], "echo");
+        assert_eq!(server.call_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn tool_filter_application() {
+        let cfg = McpClientConfig {
+            tool_filter: vec!["read_*".into()],
+            ..test_config()
+        };
+        let server = TestServer::new(vec![mk_tool("read_file"), mk_tool("write_file")]);
+        let client = connected_client_with_server(cfg, server).await.unwrap();
+
+        let tools = client.discover_tools().await.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "read_file");
+    }
+
+    #[tokio::test]
+    async fn namespace_prefixing() {
+        let server = TestServer::new(vec![mk_tool("echo")]);
+        let client = connected_client_with_server(test_config(), server)
+            .await
+            .unwrap();
+
+        client.discover_tools().await.unwrap();
+        assert!(client.get_tool("test.echo").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn timeout_and_error_mapping() {
+        let server = TestServer::new(vec![mk_tool("slow"), mk_tool("fail")]);
+        let client = connected_client_with_server(test_config(), server)
+            .await
+            .unwrap();
+        client.discover_tools().await.unwrap();
+
+        let timeout = client.call_tool("slow", serde_json::json!({})).await;
+        assert!(matches!(timeout, Err(McpError::BridgeTimeout(_))));
+
+        let failed = client.call_tool("fail", serde_json::json!({})).await;
+        assert!(matches!(failed, Err(McpError::ToolCallFailed(_))));
     }
 }
