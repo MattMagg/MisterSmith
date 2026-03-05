@@ -24,7 +24,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
-use tonic_health::pb::health_check_response::ServingStatus;
+use tonic_health::ServingStatus;
+use tonic_health::pb::health_check_response::ServingStatus as PbServingStatus;
 use tonic_health::pb::health_client::HealthClient;
 use tonic_health::pb::HealthCheckRequest;
 use uuid::Uuid;
@@ -356,11 +357,16 @@ async fn grpc_health_tracks_transport_state() {
             .serve_with_incoming_shutdown(incoming, async { let _ = shutdown_rx.await; })
             .await.unwrap();
     });
-    let mut client = HealthClient::connect(format!("http://{addr}")).await.unwrap();
+    let channel = tonic::transport::Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+    let mut client = HealthClient::new(channel);
     let initial = client.check(HealthCheckRequest {
         service: health::service_names::SYSTEM_SERVICE.to_string(),
     }).await.unwrap().into_inner();
-    assert_eq!(initial.status(), ServingStatus::NotServing);
+    assert_eq!(initial.status(), PbServingStatus::NotServing);
 
     transport.connect().await.unwrap();
     if transport.connection_state().await == async_nats::connection::State::Connected {
@@ -369,7 +375,7 @@ async fn grpc_health_tracks_transport_state() {
     let connected = client.check(HealthCheckRequest {
         service: health::service_names::SYSTEM_SERVICE.to_string(),
     }).await.unwrap().into_inner();
-    assert_eq!(connected.status(), ServingStatus::Serving);
+    assert_eq!(connected.status(), PbServingStatus::Serving);
 
     transport.disconnect().await.unwrap();
     if transport.connection_state().await != async_nats::connection::State::Connected {
@@ -378,7 +384,7 @@ async fn grpc_health_tracks_transport_state() {
     let disconnected = client.check(HealthCheckRequest {
         service: health::service_names::SYSTEM_SERVICE.to_string(),
     }).await.unwrap().into_inner();
-    assert_eq!(disconnected.status(), ServingStatus::NotServing);
+    assert_eq!(disconnected.status(), PbServingStatus::NotServing);
     let _ = shutdown_tx.send(());
     server_task.await.unwrap();
 }

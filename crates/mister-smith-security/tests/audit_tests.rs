@@ -13,7 +13,7 @@ use tower::ServiceExt;
 
 use mister_smith_security::audit::{AuditEventType, AuditLogger, AuditOutcome, SecurityAuditEvent};
 use mister_smith_security::config::{AuditConfig, JwtConfig, KeySource, RbacConfig};
-use mister_smith_security::middleware::SecurityLayer;
+use mister_smith_security::middleware::{SecurityLayer, SecurityLayerConfig};
 
 fn test_audit_config() -> AuditConfig {
     AuditConfig {
@@ -38,12 +38,17 @@ fn test_jwt_config() -> JwtConfig {
 
 fn test_layer() -> Arc<SecurityLayer> {
     Arc::new(
-        SecurityLayer::new(
-            true,
-            &test_jwt_config(),
-            &RbacConfig::default(),
-            &test_audit_config(),
-        )
+        SecurityLayer::new(SecurityLayerConfig {
+            enabled: true,
+            auth_enabled: true,
+            authz_enabled: false,
+            audit_enabled: true,
+            tls_enabled: false,
+            jwt_config: Some(test_jwt_config()),
+            rbac_config: Some(RbacConfig::default()),
+            audit_config: Some(test_audit_config()),
+            tls_config: None,
+        })
         .unwrap(),
     )
 }
@@ -138,14 +143,14 @@ async fn us5_as5_middleware_rejection_audit_capture() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    let events = security.audit.recent_events(10);
+    let events = security.audit.as_ref().expect("audit enabled").recent_events(10);
     assert!(events.iter().any(|event| {
         event.event_type == AuditEventType::Authentication
             && event.outcome == AuditOutcome::Failure
             && event
                 .details
                 .get("reason")
-                .map(|value| value.contains("missing_auth_header"))
+                .map(|value: &String| value.contains("missing_auth_header"))
                 .unwrap_or(false)
     }));
 }
