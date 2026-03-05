@@ -12,7 +12,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use mister_smith_actor::actor_cell::{SupervisionNotification, TerminationReason};
 use mister_smith_actor::{ActorRef, ActorSystem, ActorSystemConfig, SpawnConfig};
-use mister_smith_core::{Actor, ActorError, AgentId, EventPublisher, SupervisionError, SupervisionStrategy};
+use mister_smith_core::{
+    Actor, ActorError, AgentId, EventPublisher, SupervisionError, SupervisionStrategy,
+};
 use mister_smith_events::EventBus;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -20,7 +22,7 @@ use uuid::Uuid;
 
 use crate::escalation::escalate;
 use crate::events as supervision_events;
-use crate::strategy::{SupervisionDecision, TerminationType};
+use crate::strategy::{compute_backoff, SupervisionDecision, TerminationType};
 use crate::tree::SupervisionTree;
 
 /// Type-erased trait for restarting actors without knowing their concrete type.
@@ -232,7 +234,10 @@ async fn supervision_loop(
     event_bus: Option<Arc<EventBus>>,
 ) {
     let rx = system.supervision_rx();
-    let mut rx: tokio::sync::MutexGuard<'_, tokio::sync::mpsc::UnboundedReceiver<SupervisionNotification>> = rx.lock().await;
+    let mut rx: tokio::sync::MutexGuard<
+        '_,
+        tokio::sync::mpsc::UnboundedReceiver<SupervisionNotification>,
+    > = rx.lock().await;
 
     // Track actors being intentionally stopped for restart
     let mut pending_restarts: HashSet<AgentId> = HashSet::new();
@@ -263,9 +268,7 @@ async fn supervision_loop(
         };
 
         let causation_id = if let (Some(ref bus), Some(ref err)) = (&event_bus, &error_msg) {
-            Some(
-                supervision_events::emit_failure_event(bus, &actor_id, err, correlation_id).await,
-            )
+            Some(supervision_events::emit_failure_event(bus, &actor_id, err, correlation_id).await)
         } else {
             None
         };
@@ -320,10 +323,24 @@ async fn handle_decision(
     loop {
         match decision {
             SupervisionDecision::Restart(ids) => {
-                // Find the supervisor for event emission
-                let supervisor_id = {
+                let restart_plan = {
                     let tree_guard = tree.read().await;
-                    tree_guard.find_supervisor(&failed_actor_id)
+                    ids.iter()
+                        .map(|id| {
+                            let supervisor_id = tree_guard.find_supervisor(id);
+                            let delay = supervisor_id
+                                .and_then(|sup_id| tree_guard.get_node(&sup_id))
+                                .and_then(|node| {
+                                    node.find_child(id).map(|child| {
+                                        let attempt = child.restart_count.saturating_sub(1);
+                                        compute_backoff(&node.strategy.backoff_strategy, attempt)
+                                    })
+                                })
+                                .unwrap_or_default();
+
+                            (*id, delay, supervisor_id)
+                        })
+                        .collect::<Vec<_>>()
                 };
 
                 // Stop sibling actors that need restarting
@@ -337,14 +354,14 @@ async fn handle_decision(
 
                 // Restart all affected actors using their factories
                 let factories_guard = factories.read().await;
-                for &id in &ids {
+                for (id, delay, supervisor_id) in restart_plan {
+                    tokio::time::sleep(delay).await;
+
                     if let Some(restarter) = factories_guard.get(&id) {
                         match restarter.restart(system).await {
                             Ok(_) => {
                                 tracing::info!(actor_id = %id, "Actor restarted successfully");
-                                if let (Some(ref bus), Some(sup_id)) =
-                                    (event_bus, supervisor_id)
-                                {
+                                if let (Some(ref bus), Some(sup_id)) = (event_bus, supervisor_id) {
                                     supervision_events::emit_restart_event(
                                         bus,
                                         &id,
@@ -691,7 +708,7 @@ mod tests {
         // Kill B — all should restart
         ref_b.tell(TestMsg::Fail).unwrap();
         // OneForAll stops 2 siblings (each with ~100ms drain timeout) then restarts 3
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(900)).await;
 
         // All started twice
         assert_eq!(a_starts.load(Ordering::SeqCst), 2);
@@ -780,7 +797,7 @@ mod tests {
 
         // Kill B — B and C should restart, A should not
         ref_b.tell(TestMsg::Fail).unwrap();
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        tokio::time::sleep(Duration::from_millis(900)).await;
 
         assert_eq!(a_starts.load(Ordering::SeqCst), 1);
         assert_eq!(b_starts.load(Ordering::SeqCst), 2);

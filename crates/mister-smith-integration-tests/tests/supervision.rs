@@ -4,8 +4,8 @@
 //! Validates restart policies, hierarchical escalation, and lifecycle guarantees.
 
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use mister_smith_actor::{ActorError, ActorSystemConfig, SpawnConfig};
@@ -47,11 +47,7 @@ impl Actor for TrackingActor {
     type State = u32;
     type Error = TestError;
 
-    async fn handle_message(
-        &mut self,
-        message: TestMsg,
-        state: &mut u32,
-    ) -> Result<(), TestError> {
+    async fn handle_message(&mut self, message: TestMsg, state: &mut u32) -> Result<(), TestError> {
         match message {
             TestMsg::Ping => {
                 *state += 1;
@@ -74,6 +70,54 @@ impl Actor for TrackingActor {
     fn actor_id(&self) -> AgentId {
         self.id
     }
+}
+
+struct TimestampActor {
+    id: AgentId,
+    starts: Arc<AtomicU32>,
+    start_times: Arc<Mutex<Vec<Instant>>>,
+}
+
+#[async_trait]
+impl Actor for TimestampActor {
+    type Message = TestMsg;
+    type State = ();
+    type Error = TestError;
+
+    async fn handle_message(&mut self, message: TestMsg, _state: &mut ()) -> Result<(), TestError> {
+        match message {
+            TestMsg::Ping => Ok(()),
+            TestMsg::Fail => Err(TestError("intentional failure".into())),
+        }
+    }
+
+    fn pre_start(&mut self) -> Result<(), TestError> {
+        self.starts.fetch_add(1, Ordering::SeqCst);
+        self.start_times.lock().unwrap().push(Instant::now());
+        Ok(())
+    }
+
+    fn post_stop(&mut self) -> Result<(), TestError> {
+        Ok(())
+    }
+
+    fn actor_id(&self) -> AgentId {
+        self.id
+    }
+}
+
+async fn wait_for_restarts(counters: &[Arc<AtomicU32>], expected: u32) {
+    for _ in 0..80 {
+        if counters
+            .iter()
+            .all(|counter| counter.load(Ordering::SeqCst) >= expected)
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    panic!("timed out waiting for restart counters to reach {expected}");
 }
 
 // --- T054: OneForOne integration test ---
@@ -261,7 +305,7 @@ async fn t055_one_for_all_all_children_restart() {
     // Kill B — all should restart
     ref_b.tell(TestMsg::Fail).unwrap();
     // OneForAll stops 2 siblings (~100ms drain each) then restarts 3
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(900)).await;
 
     assert_eq!(a_starts.load(Ordering::SeqCst), 2, "A should restart");
     assert_eq!(b_starts.load(Ordering::SeqCst), 2, "B should restart");
@@ -357,8 +401,8 @@ async fn t056_rest_for_one_failed_and_younger_restart() {
 
     // Kill B — B and C should restart, A should not
     ref_b.tell(TestMsg::Fail).unwrap();
-    // RestForOne stops 1 sibling (~100ms drain) then restarts 2
-    tokio::time::sleep(Duration::from_millis(400)).await;
+    // RestForOne stops 1 sibling (~100ms drain) then restarts 2 with per-child backoff
+    tokio::time::sleep(Duration::from_millis(900)).await;
 
     assert_eq!(a_starts.load(Ordering::SeqCst), 1, "A should not restart");
     assert_eq!(b_starts.load(Ordering::SeqCst), 2, "B should restart");
@@ -612,10 +656,8 @@ async fn t084_event_bus_lifecycle_events_on_failure_and_restart() {
     let event_bus = Arc::new(EventBus::default());
     let mut rx = event_bus.subscribe_broadcast();
 
-    let supervised = SupervisedSystem::with_event_bus(
-        ActorSystemConfig::default(),
-        Arc::clone(&event_bus),
-    );
+    let supervised =
+        SupervisedSystem::with_event_bus(ActorSystemConfig::default(), Arc::clone(&event_bus));
 
     let sup_id = supervised
         .create_supervisor(SupervisionStrategy {
@@ -660,11 +702,14 @@ async fn t084_event_bus_lifecycle_events_on_failure_and_restart() {
             started_count += 1;
         }
     }
-    assert_eq!(started_count, 1, "Should have 1 initial actor.started event");
+    assert_eq!(
+        started_count, 1,
+        "Should have 1 initial actor.started event"
+    );
 
     // Trigger failure
     ref_a.tell(TestMsg::Fail).unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(900)).await;
 
     // Collect all events from the failure+restart chain
     let mut events = Vec::new();
@@ -767,7 +812,9 @@ async fn t085_health_check_reports_actor_system_status() {
 
     // Create health check
     let health_check = ActorSystemHealthCheck::new(
-        Arc::new(mister_smith_actor::ActorSystem::new(ActorSystemConfig::default())),
+        Arc::new(mister_smith_actor::ActorSystem::new(
+            ActorSystemConfig::default(),
+        )),
         supervised.tree().clone(),
     );
 
@@ -776,10 +823,7 @@ async fn t085_health_check_reports_actor_system_status() {
     assert_eq!(status, Status::Healthy);
 
     // Verify component ID
-    assert_eq!(
-        health_check.component_id().as_str(),
-        "actor-system"
-    );
+    assert_eq!(health_check.component_id().as_str(), "actor-system");
 
     supervised.shutdown().await.unwrap();
 }
@@ -1040,10 +1084,13 @@ async fn t092_message_during_restart_processed_after() {
 
     // Immediately send a Ping — this should be accepted in the mailbox
     let ping_result = ref_a.tell(TestMsg::Ping);
-    assert!(ping_result.is_ok(), "Tell should succeed (mailbox has capacity)");
+    assert!(
+        ping_result.is_ok(),
+        "Tell should succeed (mailbox has capacity)"
+    );
 
     // Wait for restart to complete
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(900)).await;
 
     // Actor should have restarted (pre_start called at least twice: initial + restart)
     assert!(
@@ -1157,7 +1204,7 @@ async fn t094_spawn_1000_actors_process_messages() {
     }
 
     // Wait for all messages to be processed
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(900)).await;
 
     let elapsed = start.elapsed();
     assert!(
@@ -1410,4 +1457,202 @@ async fn supervision_continues_after_ignore_decision() {
     );
 
     supervised.shutdown().await.unwrap();
+}
+
+// --- T085: Backoff timing for OneForOne ---
+
+#[tokio::test]
+async fn t085_backoff_delays_restart_one_for_one() {
+    let backoff = Duration::from_millis(120);
+    let margin = Duration::from_millis(20);
+    let supervised = SupervisedSystem::new(ActorSystemConfig::default());
+
+    let sup_id = supervised
+        .create_supervisor(SupervisionStrategy {
+            restart_policy: RestartPolicy::OneForOne,
+            max_failures: 5,
+            backoff_strategy: mister_smith_core::BackoffStrategy::Fixed(backoff),
+            ..Default::default()
+        })
+        .await;
+
+    let actor_id = AgentId::new();
+    let starts = Arc::new(AtomicU32::new(0));
+    let start_times = Arc::new(Mutex::new(Vec::new()));
+
+    let starts_clone = Arc::clone(&starts);
+    let times_clone = Arc::clone(&start_times);
+    let actor_ref = supervised
+        .spawn_supervised::<TimestampActor, _>(
+            sup_id,
+            move || {
+                (
+                    TimestampActor {
+                        id: actor_id,
+                        starts: Arc::clone(&starts_clone),
+                        start_times: Arc::clone(&times_clone),
+                    },
+                    (),
+                )
+            },
+            SpawnConfig::default(),
+        )
+        .await
+        .unwrap();
+
+    let _handle = supervised.start_supervision();
+    tokio::time::sleep(Duration::from_millis(80)).await;
+
+    let fail_at = Instant::now();
+    actor_ref.tell(TestMsg::Fail).unwrap();
+    wait_for_restarts(&[Arc::clone(&starts)], 2).await;
+
+    let times = start_times.lock().unwrap().clone();
+    assert_eq!(times.len(), 2);
+    let restart_delay = times[1].saturating_duration_since(fail_at);
+    assert!(
+        restart_delay >= backoff - margin,
+        "restart occurred too early: {restart_delay:?} < {:?}",
+        backoff - margin
+    );
+
+    supervised.shutdown().await.unwrap();
+}
+
+// --- T086: Backoff timing for OneForAll and RestForOne ---
+
+#[tokio::test]
+async fn t086_backoff_delays_restart_for_all_affected_siblings() {
+    let backoff = Duration::from_millis(100);
+    let margin = Duration::from_millis(20);
+
+    for policy in [RestartPolicy::OneForAll, RestartPolicy::RestForOne] {
+        let supervised = SupervisedSystem::new(ActorSystemConfig::default());
+        let sup_id = supervised
+            .create_supervisor(SupervisionStrategy {
+                restart_policy: policy,
+                max_failures: 5,
+                backoff_strategy: mister_smith_core::BackoffStrategy::Fixed(backoff),
+                ..Default::default()
+            })
+            .await;
+
+        let a_id = AgentId::new();
+        let b_id = AgentId::new();
+        let c_id = AgentId::new();
+
+        let a_starts = Arc::new(AtomicU32::new(0));
+        let b_starts = Arc::new(AtomicU32::new(0));
+        let c_starts = Arc::new(AtomicU32::new(0));
+
+        let a_times = Arc::new(Mutex::new(Vec::new()));
+        let b_times = Arc::new(Mutex::new(Vec::new()));
+        let c_times = Arc::new(Mutex::new(Vec::new()));
+
+        let ref_a = supervised
+            .spawn_supervised::<TimestampActor, _>(
+                sup_id,
+                {
+                    let starts = Arc::clone(&a_starts);
+                    let times = Arc::clone(&a_times);
+                    move || {
+                        (
+                            TimestampActor {
+                                id: a_id,
+                                starts: Arc::clone(&starts),
+                                start_times: Arc::clone(&times),
+                            },
+                            (),
+                        )
+                    }
+                },
+                SpawnConfig::default(),
+            )
+            .await
+            .unwrap();
+
+        let ref_b = supervised
+            .spawn_supervised::<TimestampActor, _>(
+                sup_id,
+                {
+                    let starts = Arc::clone(&b_starts);
+                    let times = Arc::clone(&b_times);
+                    move || {
+                        (
+                            TimestampActor {
+                                id: b_id,
+                                starts: Arc::clone(&starts),
+                                start_times: Arc::clone(&times),
+                            },
+                            (),
+                        )
+                    }
+                },
+                SpawnConfig::default(),
+            )
+            .await
+            .unwrap();
+
+        let ref_c = supervised
+            .spawn_supervised::<TimestampActor, _>(
+                sup_id,
+                {
+                    let starts = Arc::clone(&c_starts);
+                    let times = Arc::clone(&c_times);
+                    move || {
+                        (
+                            TimestampActor {
+                                id: c_id,
+                                starts: Arc::clone(&starts),
+                                start_times: Arc::clone(&times),
+                            },
+                            (),
+                        )
+                    }
+                },
+                SpawnConfig::default(),
+            )
+            .await
+            .unwrap();
+
+        let _handle = supervised.start_supervision();
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        let fail_at = Instant::now();
+        ref_b.tell(TestMsg::Fail).unwrap();
+
+        if policy == RestartPolicy::OneForAll {
+            wait_for_restarts(
+                &[
+                    Arc::clone(&a_starts),
+                    Arc::clone(&b_starts),
+                    Arc::clone(&c_starts),
+                ],
+                2,
+            )
+            .await;
+        } else {
+            wait_for_restarts(&[Arc::clone(&b_starts), Arc::clone(&c_starts)], 2).await;
+            assert_eq!(a_starts.load(Ordering::SeqCst), 1);
+        }
+
+        let mut affected = vec![b_times.lock().unwrap().clone()];
+        if policy == RestartPolicy::OneForAll {
+            affected.push(a_times.lock().unwrap().clone());
+        }
+        affected.push(c_times.lock().unwrap().clone());
+
+        for times in affected {
+            assert!(times.len() >= 2, "expected restart timestamp");
+            let restart_delay = times[1].saturating_duration_since(fail_at);
+            assert!(
+                restart_delay >= backoff - margin,
+                "policy {policy:?} restarted too early: {restart_delay:?} < {:?}",
+                backoff - margin
+            );
+        }
+
+        let _ = (ref_a, ref_c);
+        supervised.shutdown().await.unwrap();
+    }
 }
