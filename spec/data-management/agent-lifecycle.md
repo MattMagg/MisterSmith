@@ -55,18 +55,20 @@ pub enum AgentType {
 }
 
 /// Core agent lifecycle interface
+/// Uses &self with interior mutability (Arc/Mutex) per Phase 3 actor pattern
 #[async_trait::async_trait]
 pub trait Agent: Send + Sync {
-    async fn start(&mut self) -> Result<(), AgentError>;
-    async fn stop(&mut self) -> Result<(), AgentError>;
-    async fn handle_message(&mut self, message: Message) -> Result<(), AgentError>;
+    async fn start(&self) -> Result<(), AgentError>;
+    async fn stop(&self) -> Result<(), AgentError>;
+    async fn handle_message(&self, message: Message) -> Result<(), AgentError>;
     fn get_status(&self) -> AgentStatus;
     fn agent_type(&self) -> AgentType;
     fn id(&self) -> AgentId;
 }
 
 /// Agent identifier type
-pub type AgentId = Uuid;
+/// Canonical definition from type-definitions.md and mister-smith-core/src/ids.rs
+pub struct AgentId(pub Uuid);
 
 /// Agent error types
 #[derive(Debug, thiserror::Error)]
@@ -84,6 +86,9 @@ pub enum AgentError {
 }
 
 /// Agent status information
+/// AgentStatus is a composite containing AgentState + health metadata.
+/// AgentState (7 canonical variants in mister-smith-core) tracks lifecycle position.
+/// Different layers (storage, test, wire) may define domain-specific status projections.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentStatus {
     pub state: AgentState,

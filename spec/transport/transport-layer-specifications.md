@@ -258,13 +258,10 @@ WORKFLOW_SUBJECTS: {
   "rollback": "workflow.{workflow_id}.rollback"
 }
 
-CLAUDE_CLI_SUBJECTS: {
-  "startup": "cli.startup",
-  "hooks": "cli.hooks.{hook_type}.{agent_id}",
-  "responses": "cli.responses.{agent_id}",
-  "mutations": "cli.mutations.{agent_id}",
-  "context": "cli.context.{group_id}.{context_type}"
-}
+// REMOVED: CLAUDE_CLI_SUBJECTS (cli.startup, cli.hooks.*, cli.responses.*,
+// cli.mutations.*, cli.context.*). CLI-specific patterns removed.
+// Mister Smith is model-agnostic — LLM backend integration uses the standard
+// agent and task subject hierarchies.
 ```
 
 ### 5.2 Message Payload Schemas

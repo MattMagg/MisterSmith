@@ -492,6 +492,7 @@ async fn message_insert_and_find() {
         processed_at: None,
         expires_at: None,
         error_message: None,
+        message_id: None,
     };
 
     // Insert
@@ -532,6 +533,7 @@ async fn message_update_status() {
         processed_at: None,
         expires_at: None,
         error_message: None,
+        message_id: None,
     };
 
     insert_message(&pool, &record).await.unwrap();
@@ -570,6 +572,7 @@ async fn message_find_by_sender() {
         processed_at: None,
         expires_at: None,
         error_message: None,
+        message_id: None,
     };
 
     insert_message(&pool, &record).await.unwrap();
@@ -607,6 +610,7 @@ async fn message_find_by_correlation() {
         processed_at: Some(Utc::now()),
         expires_at: None,
         error_message: None,
+        message_id: None,
     };
 
     insert_message(&pool, &record).await.unwrap();

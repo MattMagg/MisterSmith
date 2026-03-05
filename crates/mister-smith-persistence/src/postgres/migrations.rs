@@ -25,6 +25,9 @@ const DOWN_00003: &str = include_str!("../../migrations/00003_partitions.down.sq
 /// Down-migration for 00004_audit_schema: drop audit log table and indexes.
 const DOWN_00004: &str = include_str!("../../migrations/00004_audit_schema.down.sql");
 
+/// Down-migration for 00005_message_idempotency: remove dedup column and indexes.
+const DOWN_00005: &str = include_str!("../../migrations/00005_message_idempotency.down.sql");
+
 /// Look up the embedded down-migration SQL for a given version.
 ///
 /// Returns `None` if no down-migration exists for the version.
@@ -34,6 +37,7 @@ fn down_migration_sql(version: i64) -> Option<&'static str> {
         2 => Some(DOWN_00002),
         3 => Some(DOWN_00003),
         4 => Some(DOWN_00004),
+        5 => Some(DOWN_00005),
         _ => None,
     }
 }

@@ -883,7 +883,7 @@ use tokio::sync::{broadcast, mpsc, RwLock};
 use uuid::Uuid;
 
 // Core framework types
-pub type AgentId = Uuid;
+pub struct AgentId(pub Uuid);
 
 /// Deployment category for agents. Distinct from the canonical AgentType enum
 /// (Supervisor, Worker, Coordinator, etc.) which describes agent *roles*.

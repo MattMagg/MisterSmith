@@ -4,6 +4,7 @@
 //! subject taxonomy, and serialization helpers shared by all transport implementations.
 
 pub mod availability;
+pub mod durable;
 pub mod envelope;
 pub mod errors;
 pub mod inmemory;
@@ -26,6 +27,7 @@ pub use messages::{
 pub use priority::MessagePriority;
 pub use serialization::{from_json, from_msgpack, to_json, to_msgpack};
 pub use subject::SubjectTaxonomy;
+pub use durable::{DurableMessage, DurableSubscription, DurableTransport, MessageAcker};
 pub use transport::{ReceivedMessage, Subscription, Transport};
 
 /// Generated protobuf types from `common.proto`, `agent_service.proto`, `system_service.proto`, and `health_service.proto`.
