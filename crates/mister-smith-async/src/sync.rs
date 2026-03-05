@@ -114,10 +114,27 @@ impl CountdownLatch {
     /// Decrement the count by one. If this brings the count to zero, all
     /// waiters are notified.
     pub fn count_down(&self) {
-        let prev = self.count.fetch_sub(1, Ordering::SeqCst);
-        if prev == 1 {
-            // Count just reached zero — notify all waiters.
-            self.notify.notify_waiters();
+        let mut current = self.count.load(Ordering::SeqCst);
+        loop {
+            if current == 0 {
+                return;
+            }
+
+            match self.count.compare_exchange(
+                current,
+                current - 1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => {
+                    if current == 1 {
+                        // Count just reached zero — notify all waiters.
+                        self.notify.notify_waiters();
+                    }
+                    return;
+                }
+                Err(observed) => current = observed,
+            }
         }
     }
 
@@ -230,6 +247,30 @@ mod tests {
     async fn latch_zero_count_returns_immediately() {
         let latch = CountdownLatch::new(0);
         // Should not hang.
+        latch.wait().await;
+        assert_eq!(latch.remaining(), 0);
+    }
+
+    #[tokio::test]
+    async fn latch_extra_count_down_does_not_underflow() {
+        let latch = CountdownLatch::new(1);
+
+        latch.count_down();
+        assert_eq!(latch.remaining(), 0);
+
+        latch.count_down();
+        latch.count_down();
+        assert_eq!(latch.remaining(), 0);
+    }
+
+    #[tokio::test]
+    async fn latch_wait_immediate_after_extra_decrements_at_zero() {
+        let latch = CountdownLatch::new(1);
+
+        latch.count_down();
+        latch.count_down();
+
+        // Should still return immediately even after extra decrements.
         latch.wait().await;
         assert_eq!(latch.remaining(), 0);
     }
