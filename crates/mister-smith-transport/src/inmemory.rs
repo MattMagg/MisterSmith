@@ -23,8 +23,8 @@ const DEFAULT_CHANNEL_CAPACITY: usize = 1024;
 struct InternalMessage {
     envelope: MessageEnvelope,
     reply_subject: Option<String>,
-    /// For queue groups: the index of the intended receiver.
-    queue_index: Option<usize>,
+    /// For queue groups: intended receiver index by queue-group key.
+    queue_indices: HashMap<String, usize>,
 }
 
 /// Tracks queue group membership for round-robin delivery.
@@ -122,27 +122,29 @@ impl Transport for InMemoryTransport {
 
         let sender = self.get_or_create_sender(subject).await;
 
-        // Determine queue group round-robin index if any queue groups exist for this subject.
-        let queue_index = {
+        // Determine queue group round-robin indices for all queue groups on this subject.
+        let queue_indices = {
             let groups = self.queue_groups.read().await;
-            // Check for queue groups with keys that start with the subject.
-            let mut idx = None;
+            let mut indices = HashMap::new();
+            let subject_prefix = format!("{subject}:");
             for (key, group) in groups.iter() {
-                if key.starts_with(subject) || key.starts_with(&format!("{subject}:")) {
+                if key.starts_with(&subject_prefix) {
                     let count = group.member_count.load(Ordering::Relaxed);
                     if count > 0 {
-                        idx = Some(group.counter.fetch_add(1, Ordering::Relaxed) % count);
+                        indices.insert(
+                            key.clone(),
+                            group.counter.fetch_add(1, Ordering::Relaxed) % count,
+                        );
                     }
-                    break;
                 }
             }
-            idx
+            indices
         };
 
         let msg = InternalMessage {
             envelope,
             reply_subject: None,
-            queue_index,
+            queue_indices,
         };
 
         // Broadcast to all subscribers. Ignore errors (no receivers).
@@ -183,7 +185,7 @@ impl Transport for InMemoryTransport {
         let member_index = {
             let mut groups = self.queue_groups.write().await;
             let group = groups
-                .entry(subject.to_string())
+                .entry(group_key.clone())
                 .or_insert_with(|| {
                     Arc::new(QueueGroup {
                         counter: AtomicUsize::new(0),
@@ -194,14 +196,14 @@ impl Transport for InMemoryTransport {
         };
 
         let mut rx = self.subscribe_to_channel(subject).await;
-        let _group_key = group_key;
+        let group_key = group_key;
 
         let stream = async_stream::stream! {
             loop {
                 match rx.recv().await {
                     Ok(msg) => {
                         // Queue subscribers only receive messages assigned to their index.
-                        if let Some(idx) = msg.queue_index {
+                        if let Some(idx) = msg.queue_indices.get(&group_key) {
                             if idx == member_index {
                                 yield ReceivedMessage {
                                     envelope: msg.envelope,
@@ -250,7 +252,7 @@ impl Transport for InMemoryTransport {
         let msg = InternalMessage {
             envelope,
             reply_subject: Some(reply_subject),
-            queue_index: None,
+            queue_indices: HashMap::new(),
         };
         let _ = sender.send(msg);
 
@@ -344,6 +346,78 @@ mod tests {
             received_count += 1;
         }
         assert_eq!(received_count, 3, "each of 3 messages should go to one subscriber");
+    }
+
+
+
+    #[tokio::test]
+    async fn queue_groups_on_same_subject_route_independently() {
+        let transport = InMemoryTransport::new();
+
+        // workers queue group
+        let mut workers_1 = transport
+            .queue_subscribe("tasks.shared", "workers")
+            .await
+            .unwrap();
+        let mut workers_2 = transport
+            .queue_subscribe("tasks.shared", "workers")
+            .await
+            .unwrap();
+
+        // processors queue group
+        let mut processors_1 = transport
+            .queue_subscribe("tasks.shared", "processors")
+            .await
+            .unwrap();
+        let mut processors_2 = transport
+            .queue_subscribe("tasks.shared", "processors")
+            .await
+            .unwrap();
+
+        for i in 0..4 {
+            transport
+                .publish("tasks.shared", test_envelope(&format!("task.shared.{i}")))
+                .await
+                .unwrap();
+        }
+
+        // Each queue group should receive all 4 messages split 2/2 across its subscribers.
+        let mut workers_count = [0usize; 2];
+        let mut processors_count = [0usize; 2];
+
+        for _ in 0..2 {
+            if tokio::time::timeout(Duration::from_millis(100), workers_1.next())
+                .await
+                .unwrap()
+                .is_some()
+            {
+                workers_count[0] += 1;
+            }
+            if tokio::time::timeout(Duration::from_millis(100), workers_2.next())
+                .await
+                .unwrap()
+                .is_some()
+            {
+                workers_count[1] += 1;
+            }
+            if tokio::time::timeout(Duration::from_millis(100), processors_1.next())
+                .await
+                .unwrap()
+                .is_some()
+            {
+                processors_count[0] += 1;
+            }
+            if tokio::time::timeout(Duration::from_millis(100), processors_2.next())
+                .await
+                .unwrap()
+                .is_some()
+            {
+                processors_count[1] += 1;
+            }
+        }
+
+        assert_eq!(workers_count, [2, 2]);
+        assert_eq!(processors_count, [2, 2]);
     }
 
     #[tokio::test]
