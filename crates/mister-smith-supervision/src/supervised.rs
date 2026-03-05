@@ -137,6 +137,15 @@ impl SupervisedSystem {
         A::State: Send + 'static,
         F: Fn() -> (A, A::State) + Send + Sync + 'static,
     {
+        let supervisor_exists = self
+            .with_tree(|tree| tree.get_node(&supervisor_id).is_some())
+            .await;
+        if !supervisor_exists {
+            return Err(ActorError::StartupFailed(
+                std::io::Error::other(format!("Supervisor {supervisor_id} not found")).into(),
+            ));
+        }
+
         let (actor, state) = factory();
         let actor_id = actor.actor_id();
         let restart_scope = config.restart_scope;
@@ -145,8 +154,14 @@ impl SupervisedSystem {
 
         // Register in supervision tree
         let mut tree = self.tree.write().await;
-        tree.add_child(supervisor_id, actor_id, restart_scope)
-            .map_err(|e| ActorError::StartupFailed(e.to_string().into()))?;
+        if let Err(err) = tree.add_child(supervisor_id, actor_id, restart_scope) {
+            drop(tree);
+            self.system.stop_actor(&actor_id).await;
+            self.factories.write().await.remove(&actor_id);
+            return Err(ActorError::StartupFailed(
+                std::io::Error::other(err.to_string()).into(),
+            ));
+        }
 
         // Store factory for restart
         let restarter: Box<dyn ActorRestarter> = Box::new(TypedRestarter {
@@ -900,5 +915,34 @@ mod tests {
         assert_eq!(starts.load(Ordering::SeqCst), 1);
 
         supervised.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn spawn_supervised_fails_atomically_for_missing_supervisor() {
+        let supervised = SupervisedSystem::new(ActorSystemConfig::default());
+        let initial_actor_count = supervised.system().actor_count().await;
+
+        let starts = Arc::new(AtomicU32::new(0));
+        let actor_id = AgentId::new();
+        let s = Arc::clone(&starts);
+
+        let result = supervised
+            .spawn_supervised::<TestActor, _>(
+                AgentId::new(),
+                move || {
+                    (
+                        TestActor {
+                            id: actor_id,
+                            pre_start_count: Arc::clone(&s),
+                        },
+                        0,
+                    )
+                },
+                SpawnConfig::default(),
+            )
+            .await;
+
+        assert!(matches!(result, Err(ActorError::StartupFailed(_))));
+        assert_eq!(supervised.system().actor_count().await, initial_actor_count);
     }
 }
