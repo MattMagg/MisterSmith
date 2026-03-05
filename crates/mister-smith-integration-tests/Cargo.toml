@@ -33,3 +33,7 @@ async-trait = { workspace = true }
 uuid = { workspace = true }
 tonic = { workspace = true }
 tonic-health = { workspace = true }
+chrono = { workspace = true }
+async-nats = { workspace = true }
+tokio-stream = { version = "0.1", features = ["net"] }
+tokio-tungstenite = "0.24"
