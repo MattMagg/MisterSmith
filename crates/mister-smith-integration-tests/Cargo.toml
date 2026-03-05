@@ -31,3 +31,5 @@ serde_json = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
+tonic = { workspace = true }
+tonic-health = { workspace = true }
