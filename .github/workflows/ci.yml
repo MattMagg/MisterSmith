@@ -25,6 +25,23 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           version: "27.x"
+      - name: Start NATS with JetStream
+        run: |
+          docker run -d --name nats-server \
+            -p 4222:4222 \
+            -p 8222:8222 \
+            nats:2.12-alpine \
+            -js -m 8222
+
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8222/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs nats-server
+          exit 1
       - name: Build
         run: cargo build --workspace
       - name: Test
