@@ -619,9 +619,15 @@ mod tests {
             .build(&test_config())
             .expect("should initialize");
 
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
         manager.spawn_blocking_task(move || {
+            started_tx.send(()).unwrap();
             std::thread::sleep(Duration::from_millis(250));
         });
+
+        started_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("blocking task should start before shutdown");
 
         let err = manager
             .graceful_shutdown()
