@@ -21,7 +21,8 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 5. Security | Complete | `mister-smith-security` |
 | 6. Persistence & State | Complete | `mister-smith-persistence` |
 | 7. Agent System | Complete | `mister-smith-agents` |
-| 8 | Not started | See `ROADMAP.md` |
+| 8. Operations | Not started | See `ROADMAP.md` |
+| 9. LLM Providers | Not started | `mister-smith-llm` — see `ROADMAP.md` |
 
 ## Workspace Crate Dependencies
 
