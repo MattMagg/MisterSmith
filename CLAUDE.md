@@ -6,7 +6,7 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-a
 
 ```bash
 cargo build --workspace                    # Build all crates
-cargo test --workspace                     # Run all tests (882 as of Phase 6 complete)
+cargo test --workspace                     # Run all tests (950 as of Phase 7 complete)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 ```
 
@@ -20,7 +20,9 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 4. Transport & Messaging | Complete | `mister-smith-transport`, `mister-smith-nats`, `mister-smith-http`, `mister-smith-grpc`, `mister-smith-mcp` |
 | 5. Security | Complete | `mister-smith-security` |
 | 6. Persistence & State | Complete | `mister-smith-persistence` |
-| 7–8 | Not started | See `ROADMAP.md` |
+| 7. Agent System | Complete | `mister-smith-agents` |
+| 8. Operations | Not started | See `ROADMAP.md` |
+| 9. LLM Providers | Not started | `mister-smith-llm` — see `ROADMAP.md` |
 
 ## Workspace Crate Dependencies
 
@@ -41,6 +43,7 @@ mister-smith-core (foundation types, traits, errors)
 ├── mister-smith-mcp (MCP client/server, tool registry, NATS bridge)
 ├── mister-smith-security (JWT auth, RBAC, TLS/mTLS, audit logging)
 ├── mister-smith-persistence (PostgreSQL + JetStream KV dual-store, repositories, audit bridge)
+├── mister-smith-agents (AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles)
 └── mister-smith-integration-tests (cross-crate validation)
 ```
 
@@ -48,14 +51,16 @@ mister-smith-core (foundation types, traits, errors)
 
 | Directory | Contents |
 |-----------|----------|
-| `crates/` | Rust workspace — 17 crates (Phase 1-6: foundation, runtime/async, actor/supervision, transport, security, persistence) |
-| `specs/` | SpecKit feature directories with spec, plan, and task artifacts |
+| `crates/` | Rust workspace — 18 crates (Phase 1-7: foundation, runtime/async, actor/supervision, transport, security, persistence, agents) |
+| `spec/` | Canonical architecture specifications — 65+ files across 8 domains (the system contract) |
+| `specs/` | SpecKit implementation artifacts — per-phase spec, plan, and task files (the build instructions) |
 | `ROADMAP.md` | 8-phase build roadmap — dependency-aware implementation order |
-| `spec/` | Framework specifications — 65+ files across 8 domains |
 | `plans/` | Implementation plans — batch 1 (core architecture) 7 of 8 agents complete, batch 2 partial |
 | `archive/` | Completed validation work, historical operations, and research |
 | `nats.rs/` | Official NATS Rust client (cloned from nats-io/nats.rs) — reference for async-nats API |
 | `.github/workflows/` | CI/CD pipelines |
+
+> **`spec/` vs `specs/` — these are different directories.** `spec/` contains the canonical architecture specifications defining *what* the system is (types, patterns, interfaces, message schemas). `specs/` contains SpecKit-generated implementation artifacts defining *how* each phase is built (feature specs, plans, task breakdowns). The `ROADMAP.md` bridges them by referencing `spec/` docs for each phase.
 
 ## Key Entry Points
 
@@ -68,22 +73,22 @@ Start here when reading the framework:
 5. **Message contracts**: `spec/data-management/message-schemas.md`
 6. **Type system**: `spec/core-architecture/type-definitions.md`
 
-## Spec Domains
+## Architecture Domains
 
 | Domain | Path | Files | Covers |
 |--------|------|-------|--------|
-| Core Architecture | `spec/core-architecture/` | 21 | System design, async patterns, supervision trees, Tokio runtime, types |
+| Core Architecture | `spec/core-architecture/` | 19 | System design, async patterns, supervision trees, Tokio runtime, types |
 | Data Management | `spec/data-management/` | 19 | Agent orchestration, message schemas, persistence, storage |
 | Transport | `spec/transport/` | 5 | NATS, gRPC, HTTP transport layers |
 | Security | `spec/security/` | 7 | Auth, authorization, TLS, security patterns |
 | Operations | `spec/operations/` | 7 + scripts | Deployment, monitoring, configuration, build |
 | Agent Domains | `spec/agent-domains/` | 1 | Consolidated agent type analysis (9 agent types) |
 | Testing | `spec/testing/` | 2 | Test framework, test schemas |
-| Research | `spec/research/` | 3 | Claude CLI integration analysis |
+| Research | `spec/research/` | 0 | Claude CLI files archived to `archive/claude-cli-research/` |
 
 ## High-Impact Files
 
-Changes to these files cascade across the spec:
+Changes to these files cascade across the architecture:
 
 - `spec/core-architecture/system-architecture.md` — foundation for all specs
 - `spec/core-architecture/type-definitions.md` — core types referenced everywhere
@@ -131,8 +136,8 @@ The following apps are connected and available for use. Select the most appropri
 - In-memory (audit persistence deferred to Phase 6) (005-phase5-security)
 - Rust, MSRV 1.88.0 + sqlx 0.8.6 (new), async-nats 0.46.0 (existing), tokio 1.49.0 (existing), serde 1.x (existing) (006-phase6-persistence-state)
 - PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) (006-phase6-persistence-state)
-- Rust, MSRV 1.88.0 + mister-smith-core (types, traits), mister-smith-actor (ActorCell, ActorRef, mailbox), mister-smith-supervision (SupervisedSystem, restart strategies), mister-smith-transport (Transport, DurableTransport, MessageEnvelope), mister-smith-nats (NatsTransport, JetStream), mister-smith-mcp (MCP client/server, tool bridge), mister-smith-security (PolicyEngine, JwtManager, AuditLogger), mister-smith-persistence (repositories, state persistence), mister-smith-events (EventBus), mister-smith-monitoring (HealthMonitor, phi accrual) (008-agent-system)
-- PostgreSQL (via Phase 6 persistence layer), JetStream KV (via Phase 6 dual-store) (008-agent-system)
+- Rust, MSRV 1.88.0 + mister-smith-core (types, traits), mister-smith-actor (ActorCell, ActorRef, mailbox), mister-smith-supervision (SupervisedSystem, restart strategies), mister-smith-transport (Transport, DurableTransport, MessageEnvelope), mister-smith-nats (NatsTransport, JetStream), mister-smith-mcp (MCP client/server, tool bridge), mister-smith-security (PolicyEngine, JwtManager, AuditLogger), mister-smith-persistence (repositories, state persistence), mister-smith-events (EventBus), mister-smith-monitoring (HealthMonitor, phi accrual) (007-phase7-agent-system)
+- PostgreSQL (via Phase 6 persistence layer), JetStream KV (via Phase 6 dual-store) (007-phase7-agent-system)
 
 ## Recent Changes
 - 006-phase6-persistence-state: Added sqlx 0.8.6, chrono 0.4 — PR #108

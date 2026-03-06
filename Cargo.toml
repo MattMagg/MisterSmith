@@ -17,6 +17,7 @@ members = [
     "crates/mister-smith-mcp",
     "crates/mister-smith-security",
     "crates/mister-smith-persistence",
+    "crates/mister-smith-agents",
     "crates/mister-smith-integration-tests",
 ]
 

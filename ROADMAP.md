@@ -583,6 +583,85 @@ Container images, Kubernetes manifests, and deployment configuration.
 
 ---
 
+## Phase 9: LLM Provider Integration
+
+Model-agnostic LLM connectivity — the layer that turns the orchestration framework into a system that can call real models.
+
+### 9.1 Core Types & MockProvider
+
+`ModelProvider` trait, unified message types, and a mock provider for testing.
+
+- `ModelProvider` trait: `complete()`, `stream()`, `embed()`, `capabilities()`
+- `CompletionRequest` / `CompletionResponse` / `ChatMessage` unified types
+- `ToolDefinition` / `ToolCall` / `ToolResult` for function calling
+- `StreamChunk` with async `Stream` support (SSE parsing)
+- `MockProvider` for deterministic testing (always available, no feature flag)
+- `LlmError` in mister-smith-core (follows SecurityError/PersistenceError pattern)
+
+**References**:
+- [agent-orchestration.md](spec/data-management/agent-orchestration.md) §10.4 — LLM task coordination patterns
+- [message-schemas.md](spec/data-management/message-schemas.md) §5 — Hook event schemas (informational, not implemented here)
+
+**Depends on**: Phase 1 (core types)
+**Produces**: `mister-smith-llm` crate with `MockProvider`, all trait tests passing
+
+### 9.2 Anthropic Provider
+
+Claude integration via the Anthropic Messages API.
+
+- `AnthropicProvider` implementing `ModelProvider`
+- Completions + streaming (SSE)
+- Tool use support
+- Embeddings
+- Rate limit handling with retry-after
+
+**Depends on**: 9.1
+**Produces**: Working Claude provider, env-gated integration tests
+
+### 9.3 OpenAI Provider
+
+GPT integration via the OpenAI Chat Completions API.
+
+- `OpenAiProvider` implementing `ModelProvider`
+- Completions + streaming (SSE)
+- Function calling / tool use
+- Embeddings API
+
+**Depends on**: 9.1
+**Produces**: Working GPT provider, env-gated integration tests
+
+### 9.4 Agent–LLM Bridge
+
+Wire `ModelProvider` into the agent system as an optional capability.
+
+- `llm` feature flag in `mister-smith-agents`
+- `AgentRuntime::with_model()` constructor
+- Planner, Critic, Executor roles gain LLM-powered implementations
+- Orchestrator can call models during decompose/aggregate phases
+
+**References**:
+- [agent-orchestration.md](spec/data-management/agent-orchestration.md) — Agent trait, orchestration flow
+- [SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md](spec/agent-domains/SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md) §15 — Neural/AI Ops domain (informational)
+
+**Depends on**: 9.1, Phase 7 (agents)
+**Produces**: Agent roles that call real models
+
+### 9.5 Tool Calling Bridge
+
+Bidirectional bridge between `ToolBus` and LLM tool calling.
+
+- `ToolBus::to_tool_definitions()` exports registered tools as JSON Schema
+- `ToolBus::execute_tool_call()` dispatches LLM tool calls to handlers
+- Round-trip: model requests tool → ToolBus executes → result returns to model
+
+**Depends on**: 9.2 or 9.3 (needs a real provider), 9.4
+**Produces**: End-to-end tool calling
+
+> **Gate 9**: A Planner agent receives a task, calls a real LLM via `ModelProvider`, gets a structured subtask decomposition, and the Orchestrator assigns subtasks to Workers. The same flow works with at least 2 providers (Anthropic + OpenAI). Tool calls round-trip through the ToolBus. No provider-specific code leaks outside the providers/ module.
+> Design document: [LLM Provider Integration Design](docs/plans/2026-03-05-llm-provider-integration-design.md).
+
+---
+
 ## Phase Summary
 
 | Phase | What | Depends On | Key Risk |
@@ -595,6 +674,7 @@ Container images, Kubernetes manifests, and deployment configuration.
 | 6. Persistence | PostgreSQL, JetStream KV | Phases 2, 4, 5 | Schema migrations, distributed state consistency |
 | 7. Agents | Lifecycle, communication, orchestration, tools | Phases 3-6 | Multi-agent coordination, the supervision-to-orchestration bridge |
 | 8. Operations | Observability, process mgmt, deployment | All phases | Startup sequencing, graceful shutdown under load |
+| 9. LLM Providers | Model-agnostic LLM connectivity, tool calling | Phases 1, 7 | Provider API instability, streaming reliability |
 
 ## Parallelism Opportunities
 
@@ -603,6 +683,8 @@ While the phases are sequential at the macro level, some work can overlap:
 - **Phases 4 and 5** can proceed in parallel (transport and security are mostly independent until integration)
 - **Phase 6** can begin once 4.2 (NATS) and 5.1 (auth) are done — does not need all of Phase 5
 - **Phase 8.1** (observability) can begin alongside Phase 7 — it depends on Phase 2, not Phase 7
+- **Phase 9.1–9.3** (LLM core + providers) can proceed alongside Phase 8 — they depend only on Phase 1
+- **Phase 9.4–9.5** (agent bridge + tool calling) require Phase 7 but not Phase 8
 - Within any phase, items at the same subphase level with different dependency chains can be built concurrently
 
 ## Critical Path
@@ -618,9 +700,13 @@ The longest dependency chain — the sequence that determines minimum calendar t
      → 7.1 Agent Lifecycle
       → 7.3 Agent Orchestration
        → 8.2 Process Management
+        → 9.4 Agent–LLM Bridge
+         → 9.5 Tool Calling Bridge
 ```
 
-Supervision (3.2) is the architectural chokepoint. It depends on actors, events, and monitoring — and everything downstream (agents, orchestration, operations) depends on it. This is the highest-risk component and the one most likely to force design revisions upstream.
+Supervision (3.2) is the architectural chokepoint. It depends on actors, events, and monitoring — and everything downstream (agents, orchestration, operations, LLM integration) depends on it. This is the highest-risk component and the one most likely to force design revisions upstream.
+
+Note: Phase 9.1–9.3 (LLM core types and providers) are off the critical path — they depend only on Phase 1 and can be built in parallel with Phases 8.
 
 ## Crate Map
 
@@ -638,6 +724,7 @@ Supervision (3.2) is the architectural chokepoint. It depends on actors, events,
 | `mister-smith-security` | 5.1–5.3 | [security-framework.md](spec/security/security-framework.md) |
 | `mister-smith-transport` | 4.1–4.5 | [transport-core.md](spec/transport/transport-core.md) |
 | `mister-smith-agents` | 7.1–7.5 | [agent-orchestration.md](spec/data-management/agent-orchestration.md) |
+| `mister-smith-llm` | 9.1–9.5 | [LLM Provider Integration Design](docs/plans/2026-03-05-llm-provider-integration-design.md) |
 
 ## Existing Implementation Plans
 
@@ -665,6 +752,7 @@ Detailed implementation plans exist for the first batch (core architecture):
 - [Phase 6 — Persistence and State](plans/roadmap-phases/phase-6-persistence-and-state.md)
 - [Phase 7 — Agent System](plans/roadmap-phases/phase-7-agent-system.md)
 - [Phase 8 — Operations and Production Readiness](plans/roadmap-phases/phase-8-operations-and-production-readiness.md)
+- [Phase 9 — LLM Provider Integration](docs/plans/2026-03-05-llm-provider-integration-design.md)
 
 ## Technology Stack
 
@@ -682,6 +770,7 @@ Detailed implementation plans exist for the first batch (core architecture):
 | thiserror | 1.0.69 | 1.1 | Error derives (staying on 1.x) |
 | tracing | 0.1.44 | 8.1 | Structured logging |
 | opentelemetry | 0.31.0 | 8.1 | Distributed tracing |
+| reqwest | 0.12+ | 9.1 | HTTP client for LLM provider APIs (feature-gated per provider) |
 
 See [VERSION_REFERENCE.md](VERSION_REFERENCE.md) for the complete version matrix and migration notes.
 See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) for specification readiness assessment (95/100).
