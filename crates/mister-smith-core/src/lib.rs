@@ -23,7 +23,7 @@ pub use supervision::{
 
 // Error hierarchy
 pub use error::{
-    ActorError, ConfigError, ErrorSeverity, EventError, FrameworkResult, NetworkError,
+    ActorError, ConfigError, ErrorSeverity, EventError, FrameworkResult, LlmError, NetworkError,
     PersistenceError, RecoveryStrategy, ResourceError, RuntimeError, SecurityError, StreamError,
     SupervisionError, SystemError, TaskError, ToolError,
 };

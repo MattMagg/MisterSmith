@@ -31,6 +31,9 @@ pub enum AgentSystemError {
     #[error("Operation timed out: {0}")]
     Timeout(String),
 
+    #[error("Tool unavailable: {0}")]
+    ToolUnavailable(String),
+
     #[error("Agent not found: {0}")]
     AgentNotFound(String),
 

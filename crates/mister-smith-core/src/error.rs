@@ -1,6 +1,6 @@
 //! Error hierarchy for the Mister Smith framework.
 //!
-//! Provides a comprehensive error taxonomy with 11 domain-specific error types
+//! Provides a comprehensive error taxonomy with 12 domain-specific error types
 //! converging to a top-level [`SystemError`] via `#[from]` conversions.
 
 use std::time::Duration;
@@ -153,6 +153,47 @@ pub enum ToolError {
     /// Tool operation timed out.
     #[error("Tool timeout: {0}")]
     Timeout(String),
+}
+
+/// LLM provider and normalization errors.
+#[derive(Debug, Error)]
+pub enum LlmError {
+    /// Provider returned an error response that could be normalized.
+    #[error("LLM provider error ({status}): {message}")]
+    ProviderError {
+        /// Provider HTTP or API status code.
+        status: u16,
+        /// Provider-supplied or normalized error message.
+        message: String,
+        /// Whether the caller may safely retry the request.
+        retryable: bool,
+    },
+    /// Provider rejected the request due to rate limits.
+    #[error("LLM rate limited")]
+    RateLimited {
+        /// Optional server-advertised retry delay in seconds.
+        retry_after_secs: Option<u64>,
+    },
+    /// Serialization or deserialization failed.
+    #[error("LLM serialization error: {0}")]
+    Serialization(String),
+    /// Network transport failed before a provider response was received.
+    #[error("LLM network error: {0}")]
+    Network(String),
+    /// Requested behavior is unsupported for the selected model/provider.
+    #[error("LLM capability '{capability}' is unsupported by model '{model}'")]
+    UnsupportedCapability {
+        /// Capability name, such as `streaming` or `tool_calling`.
+        capability: String,
+        /// Concrete provider/model identifier.
+        model: String,
+    },
+    /// Request was invalid before or after provider normalization.
+    #[error("LLM invalid request: {0}")]
+    InvalidRequest(String),
+    /// Authentication or credential validation failed.
+    #[error("LLM authentication failed: {0}")]
+    Authentication(String),
 }
 
 /// Configuration errors.
@@ -324,6 +365,9 @@ pub enum SystemError {
     /// Tool error.
     #[error("Tool system error: {0}")]
     Tool(#[from] ToolError),
+    /// LLM error.
+    #[error("LLM error: {0}")]
+    Llm(#[from] LlmError),
     /// Security error.
     #[error("Security error: {0}")]
     Security(#[from] SecurityError),
@@ -381,6 +425,7 @@ impl SystemError {
             SystemError::Stream(_) => ErrorSeverity::Medium,
             SystemError::Event(_) => ErrorSeverity::Low,
             SystemError::Tool(_) => ErrorSeverity::Low,
+            SystemError::Llm(_) => ErrorSeverity::Medium,
             SystemError::Security(_) => ErrorSeverity::Medium,
         }
     }
@@ -397,6 +442,10 @@ impl SystemError {
             },
             SystemError::Network(_) => RecoveryStrategy::CircuitBreaker,
             SystemError::Persistence(_) => RecoveryStrategy::Failover,
+            SystemError::Llm(_) => RecoveryStrategy::Retry {
+                max_attempts: 2,
+                delay: Duration::from_millis(250),
+            },
             _ => RecoveryStrategy::Retry {
                 max_attempts: 1,
                 delay: Duration::from_millis(100),
@@ -425,6 +474,7 @@ mod tests {
         let _: SystemError = StreamError::SinkFull.into();
         let _: SystemError = EventError::HandlerFailed("test".into()).into();
         let _: SystemError = ToolError::NotFound("test".into()).into();
+        let _: SystemError = LlmError::InvalidRequest("test".into()).into();
         let _: SystemError = SecurityError::TokenExpired.into();
     }
 

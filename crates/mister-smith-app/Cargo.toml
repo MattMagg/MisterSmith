@@ -26,6 +26,7 @@ mister-smith-http = { workspace = true }
 mister-smith-security = { workspace = true }
 mister-smith-persistence = { workspace = true }
 mister-smith-agents = { workspace = true }
+mister-smith-llm = { workspace = true, features = ["openai-chatgpt"] }
 
 # HTTP server (for direct axum::serve in bootstrap)
 axum = { workspace = true }
@@ -58,3 +59,4 @@ sqlx = { workspace = true }
 # Utilities
 chrono = { workspace = true }
 uuid = { workspace = true }
+webbrowser = { workspace = true }

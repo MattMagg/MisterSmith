@@ -3,7 +3,9 @@
 **Input**: Design documents from `/specs/009-phase9-llm-provider-integration/`  
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `quickstart.md`, `contracts/`
 
-**Tests**: Included. Phase 9 requires deterministic contract tests, env-gated Anthropic/OpenAI integration tests, ToolBus bridge tests, and Gate 9 orchestration validation.
+**Tests**: Included. Phase 9 requires deterministic contract tests, env-gated Anthropic/OpenAI API
+integration tests, stubbed Codex app-server client tests plus manual ChatGPT validation, ToolBus
+bridge tests, and Gate 9 orchestration validation.
 
 **Organization**: Tasks are grouped by approved subphase `9.1` through `9.5` and mapped to
 the Phase 9 user stories. Phase 7.5 hardening remains visible as blocker context and must
@@ -22,6 +24,7 @@ not be redefined as Phase 9 implementation scope.
 - **New crate**: `crates/mister-smith-llm/`
 - **LLM source**: `crates/mister-smith-llm/src/`
 - **LLM tests**: `crates/mister-smith-llm/tests/`
+- **App auth surface**: `crates/mister-smith-app/src/`, `crates/mister-smith-app/tests/`
 - **Agent integration**: `crates/mister-smith-agents/src/`
 - **Agent tests**: `crates/mister-smith-agents/tests/`
 - **Phase docs**: `CLAUDE.md`
@@ -71,32 +74,32 @@ If any unresolved item above prevents reliable `9.4` or `9.5` validation, report
 
 ### Implementation for User Story 1
 
-- [ ] T001 [US1] Add `crates/mister-smith-llm` to workspace members and add shared provider dependencies and feature plumbing in root `Cargo.toml`.
-- [ ] T002 [US1] Create `crates/mister-smith-llm/Cargo.toml` with feature-gated
-  `anthropic` and `openai` provider flags, always-on mock support, and
+- [x] T001 [US1] Add `crates/mister-smith-llm` to workspace members and add shared provider dependencies and feature plumbing in root `Cargo.toml`.
+- [x] T002 [US1] Create `crates/mister-smith-llm/Cargo.toml` with feature-gated
+  `anthropic`, `openai`, and `openai-chatgpt` provider flags, always-on mock support, and
   dependencies aligned with `specs/009-phase9-llm-provider-integration/plan.md`.
-- [ ] T003 [P] [US1] Expand the shared error hierarchy in
+- [x] T003 [P] [US1] Expand the shared error hierarchy in
   `crates/mister-smith-core/src/error.rs` and re-export it from
   `crates/mister-smith-core/src/lib.rs` by adding canonical `LlmError`
   variants consistent with the Phase 9 contracts and
   `spec/core-architecture/type-definitions.md`.
-- [ ] T004 [P] [US1] Create `crates/mister-smith-llm/src/lib.rs` and
+- [x] T004 [P] [US1] Create `crates/mister-smith-llm/src/lib.rs` and
   `crates/mister-smith-llm/src/provider.rs` with crate-level docs, public
   re-exports, and the `ModelProvider` trait for complete, stream, embed,
   `model_id`, and `capabilities`.
-- [ ] T005 [P] [US1] Implement provider-neutral request, response, usage,
+- [x] T005 [P] [US1] Implement provider-neutral request, response, usage,
   stop-reason, capability, and content types in
   `crates/mister-smith-llm/src/types.rs` and provider configuration in
   `crates/mister-smith-llm/src/config.rs`.
-- [ ] T006 [P] [US1] Implement unified tool-calling and streaming surface
+- [x] T006 [P] [US1] Implement unified tool-calling and streaming surface
   types in `crates/mister-smith-llm/src/tool_schema.rs` and
   `crates/mister-smith-llm/src/streaming.rs`, including JSON Schema-backed
   `ToolDefinition`, `ToolCall`, `ToolResult`, and ordered `StreamChunk`
   handling.
-- [ ] T007 [US1] Implement deterministic mock behavior in
+- [x] T007 [US1] Implement deterministic mock behavior in
   `crates/mister-smith-llm/src/mock.rs` for completion, streaming,
   embeddings, and tool-calling flows without network access.
-- [ ] T008 [US1] Add contract and serialization coverage in
+- [x] T008 [US1] Add contract and serialization coverage in
   `crates/mister-smith-llm/tests/mock_tests.rs` and
   `crates/mister-smith-llm/tests/types_tests.rs`, including
   unsupported-capability and typed-error assertions.
@@ -130,30 +133,48 @@ If any unresolved item above prevents reliable `9.4` or `9.5` validation, report
 
 ---
 
-## Phase 3: Subphase 9.3 — OpenAI Provider (User Story 2, Priority: P1)
+## Phase 3: Subphase 9.3 — OpenAI Providers (User Story 2, Priority: P1)
 
-**Goal**: Add a feature-gated `OpenAiProvider` implementing the same public contract as `AnthropicProvider`.
+**Goal**: Add feature-gated OpenAI-family backends for API-key and ChatGPT-subscription access
+while keeping the same public contract as `AnthropicProvider` for supported capabilities.
 
 **Independent Test**: `OPENAI_API_KEY=... cargo test -p mister-smith-llm --features openai -- --ignored`
 passes OpenAI integration coverage using the same public request and response
-types used for Anthropic.
+types used for Anthropic, and manual ChatGPT validation succeeds through
+`cargo test -p mister-smith-llm --features openai-chatgpt` plus
+`cargo test -p mister-smith-app`.
 
 ### Implementation for User Story 2 (OpenAI)
 
-- [ ] T012 [US2] Add OpenAI provider module wiring in
-  `crates/mister-smith-llm/src/providers/mod.rs` and create
+- [X] T012 [US2] Add OpenAI provider module wiring in
+  `crates/mister-smith-llm/src/providers/mod.rs`, create
   `crates/mister-smith-llm/src/providers/openai.rs` behind
-  `#[cfg(feature = "openai")]`.
-- [ ] T013 [US2] Implement request serialization, response normalization,
-  streaming, embeddings, tool-calling support, and shared error mapping in
-  `crates/mister-smith-llm/src/providers/openai.rs` without introducing
-  OpenAI-specific public types.
-- [ ] T014 [US2] Add env-gated real-provider coverage in
-  `crates/mister-smith-llm/tests/integration/openai_tests.rs` for
-  completions, streaming, embeddings, tool use, and retryable authentication
-  or rate-limit failures.
+  `#[cfg(feature = "openai")]`, create
+  `crates/mister-smith-llm/src/providers/openai_chatgpt.rs` behind
+  `#[cfg(feature = "openai-chatgpt")]`, and add the shared Codex app-server
+  client module in `crates/mister-smith-llm/src/app_server.rs`.
+- [X] T013 [US2] Implement API-key `OpenAiProvider` request serialization,
+  response normalization, streaming, embeddings, tool-calling support, and
+  shared error mapping in `crates/mister-smith-llm/src/providers/openai.rs`
+  without introducing OpenAI-specific public types.
+- [X] T014 [US2] Implement `OpenAiChatGptProvider` plus `mister-smith-app`
+  `auth openai-chatgpt login` and `status` support in
+  `crates/mister-smith-llm/src/providers/openai_chatgpt.rs`,
+  `crates/mister-smith-llm/src/app_server.rs`,
+  `crates/mister-smith-app/src/main.rs`, and
+  `crates/mister-smith-app/Cargo.toml`, including typed authentication
+  failures, completion, streaming, and `UnsupportedCapability` behavior for
+  embeddings and tool calling.
+- [X] T014A [US2] Add env-gated OpenAI API coverage in
+  `crates/mister-smith-llm/tests/integration/openai_tests.rs`, add stubbed
+  Codex app-server coverage in `crates/mister-smith-llm/tests/`, and add app
+  CLI coverage in `crates/mister-smith-app/tests/` for login, status, missing
+  auth, and unsupported-capability paths.
 
-**Checkpoint**: OpenAI behavior matches the shared contract and can be swapped with Anthropic without call-site changes outside provider selection.
+**Checkpoint**: OpenAI API-key behavior matches the shared contract, the ChatGPT-backed path works
+through Codex app-server for completion and streaming with typed unsupported-capability behavior for
+embeddings and tool calling, and both can be swapped with Anthropic without call-site changes
+outside provider selection or app auth commands.
 
 ---
 
@@ -240,8 +261,10 @@ behavior, stop and report a blocker instead of expanding Phase 9 scope.
   issues in `crates/mister-smith-llm/src/`.
 - [ ] T027 [P] [US2] Run env-gated provider verification for
   `crates/mister-smith-llm/tests/integration/anthropic_tests.rs` and
-  `crates/mister-smith-llm/tests/integration/openai_tests.rs`, confirming
-  identical public contract usage across both providers.
+  `crates/mister-smith-llm/tests/integration/openai_tests.rs`, run
+  `cargo test -p mister-smith-app`, and complete manual ChatGPT login or
+  status validation through Codex app-server, confirming identical public
+  contract usage across supported providers.
 - [ ] T028 [US3] Run feature-gated agent verification:
   `cargo test -p mister-smith-agents --features llm`, including
   `crates/mister-smith-agents/tests/role_tests.rs`, `team_tests.rs`,

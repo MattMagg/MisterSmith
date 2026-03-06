@@ -3,6 +3,7 @@
 //! Orchestrates process lifecycle: deterministic startup, graceful shutdown,
 //! signal handling, observability initialization, and cross-phase integration wiring.
 
+mod auth;
 mod bootstrap;
 #[allow(dead_code)]
 mod bridges;
@@ -10,9 +11,10 @@ mod config;
 mod observability;
 mod shutdown;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use mister_smith_config::LogFormat;
 use mister_smith_core::ProcessLifecycle;
+use std::error::Error;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use tracing::{error, info};
@@ -21,17 +23,49 @@ use tracing::{error, info};
 #[derive(Parser, Debug)]
 #[command(name = "mister-smith", version, about)]
 struct Cli {
+    /// Subcommand to execute. Omit to run the framework runtime.
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// Path to the configuration file.
-    #[arg(short, long)]
+    #[arg(short, long, global = true)]
     config: Option<String>,
 
     /// Override log level (trace, debug, info, warn, error).
-    #[arg(long)]
+    #[arg(long, global = true)]
     log_level: Option<String>,
 
     /// Override log format (json, pretty).
-    #[arg(long)]
+    #[arg(long, global = true)]
     log_format: Option<String>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Run the Mister Smith framework runtime.
+    Run,
+    /// Authentication helpers for provider-backed integrations.
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AuthCommand {
+    /// Manage ChatGPT-backed OpenAI authentication.
+    OpenaiChatgpt {
+        #[command(subcommand)]
+        command: OpenaiChatgptAuthCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum OpenaiChatgptAuthCommand {
+    /// Start the ChatGPT browser-login flow.
+    Login,
+    /// Show the current ChatGPT authentication state.
+    Status,
 }
 
 /// Thread-safe process state tracker.
@@ -86,31 +120,40 @@ fn parse_log_format(s: &str) -> Option<LogFormat> {
 async fn main() {
     let cli = Cli::parse();
 
+    let result = match &cli.command {
+        None | Some(Command::Run) => run_runtime(cli).await,
+        Some(Command::Auth { command }) => execute_auth_command(command).await,
+    };
+
+    if let Err(error) = result {
+        eprintln!("ERROR: {error}");
+        std::process::exit(1);
+    }
+}
+
+async fn run_runtime(cli: Cli) -> Result<(), Box<dyn Error>> {
+    let Cli {
+        command: _,
+        config,
+        log_level,
+        log_format,
+    } = cli;
+
     // Build CLI overrides
     let overrides = config::CliOverrides {
-        config_path: cli.config,
-        log_level: cli.log_level,
-        log_format: cli.log_format.as_deref().and_then(parse_log_format),
+        config_path: config,
+        log_level,
+        log_format: log_format.as_deref().and_then(parse_log_format),
     };
 
     // Load configuration
-    let config = match config::load_framework_config(&overrides) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("ERROR: Failed to load configuration: {e}");
-            std::process::exit(1);
-        }
-    };
+    let config = config::load_framework_config(&overrides)
+        .map_err(|error| format!("Failed to load configuration: {error}"))?;
 
     // Initialize the observability pipeline (tracing, metrics, OTel)
     // Must happen before any logging.
-    let otel_guard = match observability::init_observability(&config.observability) {
-        Ok(guard) => guard,
-        Err(e) => {
-            eprintln!("ERROR: Failed to initialize observability: {e}");
-            std::process::exit(1);
-        }
-    };
+    let otel_guard = observability::init_observability(&config.observability)
+        .map_err(|error| format!("Failed to initialize observability: {error}"))?;
 
     // Initialize process state tracker and shutdown coordinator
     let state_tracker = ProcessStateTracker::new();
@@ -124,7 +167,7 @@ async fn main() {
         Err(e) => {
             error!(error = %e, "Bootstrap failed");
             state_tracker.set(ProcessLifecycle::Failed);
-            std::process::exit(1);
+            return Err(format!("Bootstrap failed: {e}").into());
         }
     };
 
@@ -152,5 +195,65 @@ async fn main() {
 
     // Cancel the forced shutdown listener (we're done gracefully)
     forced_handle.abort();
-    std::process::exit(0);
+    Ok(())
+}
+
+async fn execute_auth_command(command: &AuthCommand) -> Result<(), Box<dyn Error>> {
+    match command {
+        AuthCommand::OpenaiChatgpt { command } => execute_openai_chatgpt_auth(command).await,
+    }
+}
+
+async fn execute_openai_chatgpt_auth(
+    command: &OpenaiChatgptAuthCommand,
+) -> Result<(), Box<dyn Error>> {
+    match command {
+        OpenaiChatgptAuthCommand::Login => {
+            let status = auth::login_openai_chatgpt().await?;
+            println!("{}", auth::render_openai_chatgpt_status(&status));
+        }
+        OpenaiChatgptAuthCommand::Status => {
+            let status = auth::openai_chatgpt_status().await?;
+            println!("{}", auth::render_openai_chatgpt_status(&status));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_parses_chatgpt_auth_login_subcommand() {
+        let cli = Cli::try_parse_from(["mister-smith", "auth", "openai-chatgpt", "login"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Some(Command::Auth {
+                command: AuthCommand::OpenaiChatgpt {
+                    command: OpenaiChatgptAuthCommand::Login
+                }
+            })
+        ));
+        assert_eq!(cli.config, None);
+        assert_eq!(cli.log_level, None);
+        assert_eq!(cli.log_format, None);
+    }
+
+    #[test]
+    fn cli_parses_chatgpt_auth_status_subcommand() {
+        let cli =
+            Cli::try_parse_from(["mister-smith", "auth", "openai-chatgpt", "status"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Some(Command::Auth {
+                command: AuthCommand::OpenaiChatgpt {
+                    command: OpenaiChatgptAuthCommand::Status
+                }
+            })
+        ));
+    }
 }

@@ -22,16 +22,19 @@ Runtime configuration for a selected model provider.
 
 | Field | Type | Constraints | Description |
 | ------- | ------ | ------------- | ------------- |
-| provider_kind | `String` | Required, enum-like (`anthropic`, `openai`, `mock`) | Selects the backend adapter |
+| provider_kind | `ProviderKind` | Required (`anthropic`, `openai`, `openai_chatgpt`, `mock`) | Selects the backend adapter |
 | model_id | `String` | Required | Canonical provider/model identifier surfaced through the shared contract |
 | api_base_url | `Option<String>` | Optional | Override for provider endpoint or local proxy |
-| api_key_env | `Option<String>` | Optional for `mock`, required for real providers | Environment variable name holding credentials |
+| api_key_env | `Option<String>` | Optional for `mock` and `openai_chatgpt`, required for API-key providers | Environment variable name holding credentials |
 | timeout_ms | `u64` | Default 30000 | Upper bound for provider calls |
 | max_retries | `u32` | Default 0 | Retry budget for retryable provider failures |
-| metadata | `serde_json::Value` | Optional object | Provider-specific configuration that must stay out of the public request types |
+| metadata | `serde_json::Value` | Optional object | Provider-specific configuration that stays out of public request types; `openai_chatgpt` may use it for app-server hints |
 
 **Invariant**: Provider-specific configuration is allowed here, but public call sites outside
 provider modules must continue using unified request and response types.
+
+**Invariant**: `openai_chatgpt` auth state is owned by Codex app-server rather than persisted by
+Mister Smith.
 
 ---
 
@@ -155,6 +158,34 @@ Describes which provider or model features are supported.
 
 **Invariant**: Unsupported capabilities must surface as typed errors rather than implicit no-ops.
 
+**Invariant**: `OpenAiChatGptProvider` reports `embeddings = false` and `tool_calling = false` in
+this phase and surfaces those requests through `LlmError::UnsupportedCapability`.
+
+---
+
+### AppServerAccountStatus
+
+Normalized view of the Codex app-server account state used by `auth openai-chatgpt status` and by
+`OpenAiChatGptProvider` before attempting a turn.
+
+| Field | Type | Constraints | Description |
+| ------- | ------ | ------------- | ------------- |
+| backend | `String` | Const `openai_chatgpt` | Identifies the ChatGPT-backed provider path |
+| account_type | `Option<String>` | Optional (`chatgpt`, `apiKey`, or future Codex account types) | Raw account mode surfaced by Codex `account/read` |
+| authenticated | `bool` | Required | Whether Codex app-server currently has any active OpenAI-family account configured |
+| email | `Option<String>` | Optional | ChatGPT account email when available from app-server |
+| plan_type | `Option<String>` | Optional | Normalized subscription plan reported by app-server |
+| requires_openai_auth | `bool` | Required | Mirrors app-server `account/read`; indicates whether the active provider requires OpenAI auth, not whether login succeeded |
+
+**Invariant**: This is operational status for login and readiness checks. It is not a second source
+of truth for ChatGPT credentials. `OpenAiChatGptProvider` treats `account_type = "chatgpt"` as the
+readiness signal for the ChatGPT-subscription backend and must not misread
+`requires_openai_auth = true` as a failed login.
+
+**Invariant**: `account_type = None` with `requires_openai_auth = false` is a distinct operational
+state meaning the active Codex provider does not currently require OpenAI authentication. The app
+status command must report that state explicitly instead of collapsing it into "login required."
+
 ---
 
 ### AgentLlmBinding
@@ -164,7 +195,7 @@ Feature-gated binding between an agent role and a selected provider.
 | Field | Type | Constraints | Description |
 | ------- | ------ | ------------- | ------------- |
 | agent_type | `AgentType` | Required, limited to Planner/Critic/Executor in Phase 9 | Identifies the role gaining provider-backed behavior |
-| provider_kind | `String` | Required | Selected provider implementation |
+| provider_kind | `ProviderKind` | Required | Selected provider implementation |
 | model_id | `String` | Required | Model used by the role |
 | tool_access | `bool` | Default `false` | Whether tool definitions and tool execution are enabled |
 | feature_flag | `String` | Const `llm` | Guards direct dependency on `mister-smith-llm` |
@@ -224,6 +255,7 @@ CompletionResponse 0──* ToolCall
 ToolCall 0──1 ToolResult
 AgentLlmBinding *──1 ProviderConfig
 AgentLlmBinding *──1 ModelCapabilities
+ProviderConfig 0──1 AppServerAccountStatus
 ```
 
 ## State Transitions

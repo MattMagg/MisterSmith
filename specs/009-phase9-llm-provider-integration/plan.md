@@ -9,10 +9,16 @@
 Phase 9 adds provider-neutral LLM connectivity without breaking Mister Smith's model-agnostic
 architecture. The implementation centers on a new `mister-smith-llm` crate that owns the
 `ModelProvider` trait, unified completion and streaming types, deterministic mock behavior, and
-feature-gated Anthropic/OpenAI adapters. Existing agent orchestration remains the system boundary:
-the `mister-smith-agents` crate gains an optional `llm` feature for Planner, Critic, and Executor,
-while tool calling continues to flow through the current `ToolBus` rather than a provider-specific
-execution path.
+feature-gated Anthropic and OpenAI-family adapters. Existing agent orchestration remains the system
+boundary: the `mister-smith-agents` crate gains an optional `llm` feature for Planner, Critic, and
+Executor, while tool calling continues to flow through the current `ToolBus` rather than a
+provider-specific execution path.
+
+The OpenAI-family work deliberately splits into two backends behind the same trait: `OpenAiProvider`
+for standard API-key access to the OpenAI API and `OpenAiChatGptProvider` for ChatGPT subscription
+access through the official Codex app-server browser-login and turn protocol. That keeps OpenAI API
+auth and ChatGPT auth as separate backends while avoiding a second OAuth, callback, or token-store
+implementation inside Mister Smith.
 
 This plan fixes the traceability gap called out in the 2026-03-05 architectural grounding audit by
 anchoring every major decision to canonical `spec/` sources. It also preserves the approved Phase 9
@@ -24,11 +30,14 @@ and encodes Gate 9 as the real-provider Planner -> Orchestrator -> Worker proof 
 
 - **Language/Version**: Rust, MSRV 1.88.0
 - **Primary Dependencies**: existing workspace crates plus `reqwest` 0.12+ for provider APIs,
-  `tokio`/`futures` for async streaming, `serde`/`serde_json`, `async-trait`
-- **Storage**: N/A inside `mister-smith-llm`; existing PostgreSQL and JetStream integrations remain
+  `tokio`/`futures` for async streaming and process I/O, `serde`/`serde_json`, `async-trait`,
+  `webbrowser` for app-driven ChatGPT login UX
+- **Storage**: no new Mister Smith persistence layer inside `mister-smith-llm`; Codex app-server
+  owns managed ChatGPT auth state while existing PostgreSQL and JetStream integrations remain
   indirect dependencies for Gate 9 orchestration and ToolBus audit boundaries
-- **Testing**: `cargo test`, deterministic mock-provider unit tests, env-gated Anthropic/OpenAI
-  integration tests, Gate 9 orchestration validation
+- **Testing**: `cargo test`, deterministic mock-provider unit tests, env-gated Anthropic and
+  OpenAI API integration tests, stubbed Codex app-server client tests, manual ChatGPT auth and turn
+  validation, Gate 9 orchestration validation
 - **Target Platform**: Linux server runtime, macOS development parity
 - **Project Type**: new workspace library crate plus feature-gated integration into existing library
   crate
@@ -37,9 +46,9 @@ and encodes Gate 9 as the real-provider Planner -> Orchestrator -> Worker proof 
 - **Constraints**: no hook-event system, no `LlmTaskOutputParser`, no Neural/AI Operations
   implementation, no provider-specific public types, and no new tool-execution path outside
   `ToolBus`
-- **Scale/Scope**: 1 new crate, 2 real providers, 1 deterministic mock provider, 1 optional
-  agents feature, Planner/Critic/Executor bridge, and ToolBus JSON Schema export and execution
-  bridge
+- **Scale/Scope**: 1 new crate, 3 provider adapters (Anthropic, OpenAI API-key, OpenAI ChatGPT),
+  1 deterministic mock provider, 1 optional agents feature, 1 explicit app auth surface,
+  Planner/Critic/Executor bridge, and ToolBus JSON Schema export and execution bridge
 
 ## Constitution Check
 
@@ -50,7 +59,7 @@ and encodes Gate 9 as the real-provider Planner -> Orchestrator -> Worker proof 
 | I. Canonical Single Source | PASS | Core keeps canonical IDs and shared errors, ToolBus stays in agents, and the plan cites the required core architecture docs directly. |
 | II. Spec-First Design | PASS | `specs/009-phase9-llm-provider-integration/spec.md` defines scope, clarifications, FRs, SCs, and deferred work before any implementation task breakdown. |
 | III. Phase-Gated Build Order | PASS | The roadmap places Phase 9 after Phases 1-7, and the deviation report keeps Phase 7.5 hardening ahead of risky 9.4 and 9.5 work. |
-| IV. Model-Agnostic Architecture | PASS | Anthropic and OpenAI sit behind `ModelProvider`, and unsupported capabilities return typed `LlmError` values instead of provider-specific leakage. |
+| IV. Model-Agnostic Architecture | PASS | Anthropic, OpenAI API-key, and ChatGPT-backed access sit behind `ModelProvider`, with typed `LlmError` values instead of provider-specific leakage. |
 | V. Erlang/OTP-Style Fault Tolerance | PASS | The plan extends `AgentRuntime`, `Orchestrator`, and `ToolBus` rather than replacing supervision or mailbox boundaries defined by prior phases. |
 | VI. Evidence-Based Validation | PASS | Validation uses mock contract tests, env-gated provider integrations, ToolBus round-trip checks, and Gate 9 orchestration tests with blocker reporting. |
 | VII. Explicit Dependency Management | PASS | Workspace and crate changes are enumerated below: new crate member, provider HTTP dependency, feature flags, and touched core and agent files. |
@@ -89,6 +98,7 @@ crates/mister-smith-llm/
 ├── Cargo.toml                              # New crate manifest and feature flags
 ├── src/
 │   ├── lib.rs                              # Crate docs and re-exports
+│   ├── app_server.rs                       # Codex app-server JSON-RPC client + protocol types
 │   ├── config.rs                           # Provider/model configuration
 │   ├── provider.rs                         # ModelProvider trait
 │   ├── streaming.rs                        # StreamChunk and parser helpers
@@ -98,13 +108,20 @@ crates/mister-smith-llm/
 │   └── providers/
 │       ├── mod.rs
 │       ├── anthropic.rs                    # #[cfg(feature = "anthropic")]
-│       └── openai.rs                       # #[cfg(feature = "openai")]
+│       ├── openai.rs                       # #[cfg(feature = "openai")]
+│       └── openai_chatgpt.rs               # #[cfg(feature = "openai-chatgpt")]
 └── tests/
     ├── mock_tests.rs                       # Contract tests for MockProvider
     ├── types_tests.rs                      # Unified type serialization and invariants
     └── integration/
         ├── anthropic_tests.rs              # Env-gated real-provider tests
         └── openai_tests.rs                 # Env-gated real-provider tests
+
+crates/mister-smith-app/
+├── Cargo.toml                              # Add `mister-smith-llm` + browser-launch dependency
+└── src/
+    ├── main.rs                             # Add `run` default and `auth openai-chatgpt` subcommands
+    └── config.rs                           # Preserve current config loading for runtime entrypoint
 
 crates/mister-smith-agents/
 ├── Cargo.toml                              # Optional llm feature and new dependency
@@ -128,12 +145,24 @@ existing agent crate as an orchestration boundary rather than an API-integration
 
 ### D1: Single `mister-smith-llm` Crate With Feature-Gated Providers
 
-**Decision**: Add one new crate that owns the provider-neutral contract, with `anthropic` and
-`openai` feature flags for real providers and an always-on `MockProvider`.
+**Decision**: Add one new crate that owns the provider-neutral contract, with `anthropic`,
+`openai`, and `openai-chatgpt` feature flags for real providers and an always-on `MockProvider`.
 
 **Rationale**: `docs/plans/2026-03-05-llm-provider-integration-design.md:23-35` already approves
 this shape, and it mirrors how transport abstractions and implementations are separated elsewhere in
 the workspace.
+
+### D1a: ChatGPT Subscription Access Uses Codex App-Server, Not A Second OAuth Stack
+
+**Decision**: Implement `OpenAiChatGptProvider` and the corresponding app auth commands as a thin
+client over Codex app-server's JSON-RPC protocol instead of building browser login, localhost
+callback handling, token refresh, and token persistence directly into Mister Smith.
+
+**Rationale**: The official Codex docs already define `account/login/start`, `account/read`,
+`account/login/completed`, `account/updated`, `thread/start`, and `turn/start` as the supported
+browser-login and turn-execution surface. Re-implementing OAuth and local token storage in Mister
+Smith would duplicate the platform's auth machinery, create a second source of truth for session
+state, and increase maintenance risk without improving the public contract.
 
 ### D2: `LlmError` Lives In `mister-smith-core`
 
@@ -175,6 +204,16 @@ only bridge between model tool calls and framework tools.
 `specs/007-phase7-agent-system/contracts/tool-bus.md:50-89` require permission checks, timeout
 enforcement, and metrics or audit behavior at that boundary.
 
+### D5a: ChatGPT Provider Scope Stops At Completion And Streaming In Phase 9
+
+**Decision**: Keep `OpenAiChatGptProvider` limited to completion and streaming in Phase 9 and
+surface tool calling plus embeddings as typed unsupported capabilities.
+
+**Rationale**: The documented Codex app-server browser-login flow is the correct transport boundary
+for ChatGPT subscription access, but `dynamicTools` and `item/tool/call` remain experimental and do
+not cleanly fit the current provider-neutral tool loop without widening public contracts or hiding a
+second execution boundary inside the provider.
+
 ### D6: Phase 7.5 Hardening Remains Visible As Blockers, Not Scope
 
 **Decision**: Security integration, router balancing, memory metadata, heartbeat receiving,
@@ -190,11 +229,14 @@ and 9.5 when unresolved.
 
 - Add `"crates/mister-smith-llm"` to the `[workspace].members` list in `Cargo.toml`
 - Add `reqwest` 0.12+ with JSON, streaming, and rustls TLS support to `[workspace.dependencies]`
+- Add `webbrowser` for CLI-driven ChatGPT login UX in `mister-smith-app`
 
 ### Existing Crates Touched
 
 - `crates/mister-smith-core`: add and re-export `LlmError`
 - `crates/mister-smith-agents`: add optional `llm` feature and `mister-smith-llm` dependency
+- `crates/mister-smith-app`: add auth subcommands that call Codex app-server for ChatGPT login and
+  account status
 
 ### New Crate Features
 
@@ -203,7 +245,8 @@ and 9.5 when unresolved.
 default = []
 anthropic = ["dep:reqwest"]
 openai = ["dep:reqwest"]
-all-providers = ["anthropic", "openai"]
+openai-chatgpt = []
+all-providers = ["anthropic", "openai", "openai-chatgpt"]
 ```
 
 The Phase 9 spec deliberately excludes non-MVP providers, so the plan omits Google and Ollama even
@@ -281,21 +324,25 @@ though the original design doc discussed them as future extensions.
 - **Depends on**: 9.1
 - **Must not absorb**: Anthropic-specific orchestration logic or public response types
 
-### 9.3 OpenAI Provider
+### 9.3 OpenAI Providers
 
 **Scope**:
 
-- feature-gated `OpenAiProvider`
-- completion, streaming, embeddings, and tool use through unified types
-- parity with 9.2 at the shared contract level
+- feature-gated `OpenAiProvider` for API-key access
+- feature-gated `OpenAiChatGptProvider` for ChatGPT subscription access through Codex app-server
+- `mister-smith-app auth openai-chatgpt login` and `status`
+- completion and streaming parity for the ChatGPT-backed path, with typed unsupported-capability
+  behavior for embeddings and tool calling
 
 **Outputs**:
 
-- env-gated OpenAI integration tests
+- env-gated OpenAI API integration tests
+- stubbed Codex app-server client tests plus manual ChatGPT auth and turn or tool validation
 - shared request and response semantics for supported capabilities
 
 - **Depends on**: 9.1
-- **Must not absorb**: OpenAI-specific orchestration logic or alternate public request types
+- **Must not absorb**: OpenAI-specific orchestration logic, custom OAuth or token storage, or
+  alternate public request types
 
 ### 9.4 Agent-LLM Bridge
 
@@ -309,7 +356,8 @@ though the original design doc discussed them as future extensions.
 
 - provider-backed Planner decomposition
 - provider-backed Critic evaluation and Executor action flow
-- same orchestration surface for Anthropic and OpenAI
+- same orchestration surface for Anthropic, OpenAI API-key access, and supported OpenAI
+  ChatGPT-backed flows
 
 - **Depends on**: 9.1 and Phase 7 baseline
 - **Blocker sensitivity**: unresolved Phase 7.5 security, supervisor, heartbeat, or mailbox
@@ -353,6 +401,9 @@ though the original design doc discussed them as future extensions.
 - RAG retrieval pipeline
 - Guardrails or safety enforcement layer
 - Non-MVP providers beyond Anthropic and OpenAI
+- Custom ChatGPT OAuth, callback, or token persistence outside Codex app-server
+- ChatGPT embeddings
+- Codex app-server approval, file-change, or shell-execution workflows outside the LLM tool bridge
 
 ## Complexity Tracking
 

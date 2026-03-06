@@ -15,6 +15,7 @@ members = [
     "crates/mister-smith-http",
     "crates/mister-smith-grpc",
     "crates/mister-smith-mcp",
+    "crates/mister-smith-llm",
     "crates/mister-smith-security",
     "crates/mister-smith-persistence",
     "crates/mister-smith-agents",
@@ -41,6 +42,7 @@ uuid = { version = "1.11.0", features = ["v4", "serde"] }
 async-trait = "0.1.83"
 tokio = { version = "1.49.0", features = ["full"] }
 futures = "0.3.32"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 
 # Versioning
 semver = "1.0"
@@ -108,6 +110,7 @@ mister-smith-nats = { path = "crates/mister-smith-nats" }
 mister-smith-http = { path = "crates/mister-smith-http" }
 mister-smith-grpc = { path = "crates/mister-smith-grpc" }
 mister-smith-mcp = { path = "crates/mister-smith-mcp" }
+mister-smith-llm = { path = "crates/mister-smith-llm" }
 mister-smith-security = { path = "crates/mister-smith-security" }
 mister-smith-persistence = { path = "crates/mister-smith-persistence" }
 mister-smith-agents = { path = "crates/mister-smith-agents" }
@@ -120,3 +123,4 @@ tracing-opentelemetry = "0.32.1"
 
 # CLI — Phase 8
 clap = { version = "4", features = ["derive"] }
+webbrowser = "1.0.6"

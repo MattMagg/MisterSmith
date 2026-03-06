@@ -45,7 +45,10 @@ Phase 9 artifacts MUST trace back to these architecture sources:
 - `MockProvider`
 - `AnthropicProvider`
 - `OpenAiProvider`
+- `OpenAiChatGptProvider`
+- Codex app-server client integration for ChatGPT subscription auth and turn execution
 - `mister-smith-agents` `llm` feature
+- `mister-smith-app` auth subcommands for `openai-chatgpt` login and status
 - Agent-LLM bridge for Planner, Critic, and Executor roles
 - `ToolBus::to_tool_definitions()`
 - `ToolBus::execute_tool_call()`
@@ -62,6 +65,10 @@ The following items are architecture-adjacent but are not Phase 9 acceptance sco
 - RAG pipeline
 - Guardrails or safety layer
 - Non-MVP providers beyond Anthropic and OpenAI
+- Custom OAuth, browser callback handling, or local ChatGPT token persistence outside Codex
+  app-server
+- ChatGPT-backed embeddings
+- Codex app-server approval, file-change, or shell-execution workflows outside the LLM tool bridge
 
 ### Prerequisites & Blockers
 
@@ -84,7 +91,7 @@ reported as a blocker during analysis instead of being merged into this feature 
 | Subphase | Required Phase 9 scope | Must remain out of scope |
 | -------- | ---------------------- | ------------------------ |
 | `9.1` | Shared `mister-smith-llm` crate, `ModelProvider`, unified types, `MockProvider` | Provider-specific public APIs, role hardening, hook events |
-| `9.2`-`9.3` | Anthropic and OpenAI adapters behind the shared contract | Additional providers, provider-specific orchestration logic, non-neutral public types |
+| `9.2`-`9.3` | Anthropic, OpenAI API-key, and OpenAI ChatGPT-backed adapters behind the shared contract | Additional providers, provider-specific orchestration logic, non-neutral public types |
 | `9.4` | `mister-smith-agents` `llm` feature and provider-backed Planner/Critic/Executor integration | Router/Memory/Supervisor rewrites, heartbeat receiver, priority mailbox, security hardening |
 | `9.5` | `ToolBus::to_tool_definitions()`, `ToolBus::execute_tool_call()`, and Gate 9 tool round-trips | Parallel tool invocation paths, hook-event workflows, prompt-framework features |
 
@@ -111,6 +118,11 @@ reported as a blocker during analysis instead of being merged into this feature 
   → A: No. The unified contract must normalize supported capabilities and surface unsupported ones
   via typed errors. Gate 9 parity is satisfied by the same Planner-to-Orchestrator-to-Worker flow
   and tool-call round-trip working with supported Anthropic and OpenAI configurations.
+- Q: Should Mister Smith implement its own browser callback, OAuth exchange, and token persistence
+  for ChatGPT-subscription auth?
+  → A: No. The ChatGPT-subscription path must stay a thin client of the documented Codex
+  app-server protocol. `mister-smith-app` owns the explicit login command, while the provider uses
+  Codex app-server account and turn methods instead of introducing a second OAuth or session stack.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -144,16 +156,18 @@ flows succeed through the unified public API.
 
 ### User Story 2 — Anthropic and OpenAI Provider Parity (Priority: P1)
 
-A framework operator configures either Anthropic or OpenAI and can execute the same provider-neutral
-request shape through both providers for completions, streaming, embeddings, and tool use.
+A framework operator configures Anthropic, OpenAI API-key access, or OpenAI
+ChatGPT-subscription access and can execute the same provider-neutral request shape through those
+backends for supported capabilities without changing call sites.
 
-**Why this priority**: The roadmap requires at least two real providers. Without parity across
-Anthropic and OpenAI, Mister Smith remains a single-provider experiment instead of a model-agnostic
-framework capability.
+**Why this priority**: The roadmap requires at least two real providers. Without parity across the
+Anthropic backend and the OpenAI-family backends, Mister Smith remains a single-provider
+experiment instead of a model-agnostic framework capability.
 
-**Independent Test**: Run env-gated integration tests once with Anthropic credentials and once with
-OpenAI credentials, using the same unified request/response contract and asserting equivalent
-behavioral outcomes for supported capabilities.
+**Independent Test**: Run env-gated integration tests once with Anthropic credentials and once
+with OpenAI API-key credentials, then run a manual ChatGPT-backed Codex app-server validation
+using the same unified request or response contract and asserting equivalent behavioral outcomes
+for supported capabilities.
 
 **Acceptance Scenarios**:
 
@@ -162,12 +176,20 @@ behavioral outcomes for supported capabilities.
    stop reason, and tool-call structures.
 2. **Given** the same unified completion request, **When** it is executed through `OpenAiProvider`,
    **Then** the result is returned through the same public response types without call-site changes.
-3. **Given** a streaming request, **When** either real provider emits partial output, **Then** the
-   stream is surfaced through unified stream-chunk semantics that preserve ordering and stop-state
-   information.
-4. **Given** provider authentication failure, rate limiting, or invalid parameters, **When** the
-   request fails, **Then** the provider maps the failure into the shared LLM error hierarchy with
-   retryability information when applicable.
+3. **Given** the same unified completion request, **When** it is executed through
+   `OpenAiChatGptProvider`, **Then** the result is returned through the same public response types
+   while ChatGPT-specific authentication remains outside Mister Smith's public contract.
+4. **Given** a streaming request, **When** any supported real provider emits partial output,
+   **Then** the stream is surfaced through unified stream-chunk semantics that preserve ordering
+   and stop-state information.
+5. **Given** provider authentication failure, rate limiting, invalid parameters, or a missing
+   ChatGPT login session, **When** the request fails, **Then** the provider maps the failure into
+   the shared LLM error hierarchy with retryability information when applicable and the
+   ChatGPT-backed path directs the operator to `mister-smith auth openai-chatgpt login` instead of
+   attempting hidden interactive login during request execution.
+6. **Given** a capability that a selected backend does not support, **When** a caller requests it,
+   **Then** the provider returns a typed `LlmError::UnsupportedCapability` instead of pretending
+   parity where the backend contract does not exist.
 
 ---
 
@@ -227,12 +249,19 @@ through the common tool and LLM interfaces.
 ## Edge Cases
 
 - A provider supports completion and streaming but not embeddings or tool calling.
+- A ChatGPT-backed provider requires browser login and the active Codex app-server session is
+  missing, expired, or logged out.
 - Anthropic and OpenAI produce different native stop-reason or tool-call formats for the same
   request.
+- Codex app-server completion and turn streams emit agent-message deltas without a final structured
+  assistant content block until `turn/completed`.
 - A streaming response emits partial tool-call payloads that must be reassembled safely.
 - A Planner receives malformed or semantically incomplete model output for subtask decomposition.
 - `ToolBus::to_tool_definitions()` sees tools whose schemas are valid for the bus but incompatible
   with provider-side JSON Schema restrictions.
+- Codex app-server is used only for ChatGPT-backed completion and streaming in this phase, so
+  ChatGPT tool-calling requests must surface as typed unsupported-capability errors instead of
+  falling back silently.
 - `ToolBus::execute_tool_call()` is invoked while Phase 7.5 permission wiring or audit integration
   is still unresolved.
 - The `llm` feature is disabled in `mister-smith-agents` but downstream code attempts to construct
@@ -259,8 +288,14 @@ through the common tool and LLM interfaces.
   embeddings, and tool use using the unified public types.
 - **FR-007**: `OpenAiProvider` MUST implement the shared contract for completions, streaming,
   embeddings, and tool use using the unified public types.
+- **FR-007A**: `OpenAiChatGptProvider` MUST implement the shared contract for completions and
+  streaming by acting as a thin client of the documented Codex app-server protocol. It MUST surface
+  embeddings and tool calling as `LlmError::UnsupportedCapability` rather than emulating them.
 - **FR-008**: Provider-specific request or response types MUST remain internal to provider modules.
   Public call sites outside `mister-smith-llm` MUST NOT require provider-specific structs or enums.
+- **FR-008A**: `mister-smith-app` MUST expose explicit `auth openai-chatgpt login` and
+  `auth openai-chatgpt status` commands for the ChatGPT-subscription path. Provider execution MUST
+  NOT auto-open the browser or silently start an interactive login flow.
 - **FR-009**: `mister-smith-agents` MUST add an optional `llm` feature that gates all direct
   dependencies on `mister-smith-llm`.
 - **FR-010**: The `llm` feature MUST add provider-backed behavior only to Planner, Critic, and
@@ -278,10 +313,11 @@ through the common tool and LLM interfaces.
   semantics defined by the ToolBus patterns in `spec/core-architecture/async-patterns.md`,
   `spec/data-management/agent-orchestration.md`, and `spec/core-architecture/coding-standards.md`.
 - **FR-016**: Phase 9 MUST include deterministic unit tests around the shared types and
-  `MockProvider`, plus env-gated real-provider integration tests for Anthropic and OpenAI.
-- **FR-017**: The Gate 9 workflow MUST succeed with both Anthropic and OpenAI: Planner calls a real
-  model, receives structured subtasks, Orchestrator assigns subtasks to Workers, and tool calls
-  round-trip through the ToolBus when requested by the model.
+  `MockProvider`, plus env-gated real-provider integration tests for Anthropic and OpenAI API-key
+  access, plus stubbed and manual validation coverage for the ChatGPT-subscription path.
+- **FR-017**: The Gate 9 workflow MUST succeed with Anthropic and at least one OpenAI-family
+  backend: Planner calls a real model, receives structured subtasks, Orchestrator assigns subtasks
+  to Workers, and tool calls round-trip through the ToolBus when requested by the model.
 - **FR-018**: Phase 9 MUST treat hook events, `LlmTaskOutputParser`, Neural/AI Operations work,
   prompt frameworks, RAG, guardrails, and non-MVP providers as deferred scope rather than silent
   acceptance criteria.
@@ -304,6 +340,9 @@ through the common tool and LLM interfaces.
   LLM flow.
 - **ModelCapabilities**: Description of which unified behaviors a configured provider/model
   supports, including completion, streaming, embeddings, and tool use.
+- **ChatGptAuthSession**: Managed authentication state owned by Codex app-server and surfaced to
+  Mister Smith through `account/read` and login notifications rather than a Mister Smith-managed
+  token store.
 - **AgentLlmBridge**: Feature-gated integration boundary inside `mister-smith-agents` that wires
   Planner, Critic, and Executor role behavior to a selected `ModelProvider`.
 
@@ -317,7 +356,8 @@ through the common tool and LLM interfaces.
   and the deferred items remain explicitly out of scope.
 - **SC-003**: Gate 9 is expressible as an independently testable requirement: a Planner calls a
   real LLM, receives structured subtask decomposition, the Orchestrator assigns subtasks to
-  Workers, and the same flow works with both Anthropic and OpenAI.
+  Workers, and the same flow works with Anthropic and an OpenAI-family backend selected through the
+  shared provider contract.
 - **SC-004**: Tool calling is expressible as an independently testable requirement: registered
   tools export through `ToolBus::to_tool_definitions()`, model tool calls execute through
   `ToolBus::execute_tool_call()`, and results round-trip back into the LLM flow.
