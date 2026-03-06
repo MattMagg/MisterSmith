@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mister_smith_actor::system::{ActorSystem, ActorSystemConfig};
-use mister_smith_agents::config::{AgentConfig, HealthLevel};
 use mister_smith_agents::agent::{deregister_agent, register_agent, spawn_agent};
+use mister_smith_agents::config::{AgentConfig, HealthLevel};
 use mister_smith_agents::registry::AgentRegistry;
 use mister_smith_core::{Actor, AgentId, AgentState, AgentType};
 use serde::{Deserialize, Serialize};
@@ -45,9 +45,7 @@ impl Actor for LifecycleActor {
                 state.counter += 1;
                 Ok(serde_json::json!({"pong": state.counter}))
             }
-            LifecycleMessage::GetCounter => {
-                Ok(serde_json::json!({"counter": state.counter}))
-            }
+            LifecycleMessage::GetCounter => Ok(serde_json::json!({"counter": state.counter})),
         }
     }
 

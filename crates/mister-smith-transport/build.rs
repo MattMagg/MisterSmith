@@ -8,10 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Keep `proto/` in the include search path so shared imports such as
     // `import "common.proto";` resolve for all generated modules.
-    let include_paths = [
-        std::path::PathBuf::from(proto_dir),
-        protoc_include,
-    ];
+    let include_paths = [std::path::PathBuf::from(proto_dir), protoc_include];
 
     // Compile protobuf message types only (no gRPC service generation).
     // gRPC service code generation is handled in mister-smith-grpc/build.rs.

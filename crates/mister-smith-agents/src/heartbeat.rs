@@ -34,7 +34,7 @@ impl HeartbeatEmitter {
         self.stop_tx = Some(stop_tx);
 
         let handle = tokio::spawn(async move {
-            let subject = format!("agents.{}.heartbeat", agent_id);
+            let subject = format!("agents.{agent_id}.heartbeat");
             let mut ticker = tokio::time::interval(interval);
 
             loop {

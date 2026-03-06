@@ -227,10 +227,7 @@ mod tests {
     #[tokio::test]
     async fn initial_state_is_idle() {
         let mgr = McpSessionManager::new(&test_config());
-        assert_eq!(
-            mgr.session_state("test-server").await,
-            SessionState::Idle
-        );
+        assert_eq!(mgr.session_state("test-server").await, SessionState::Idle);
     }
 
     #[tokio::test]
@@ -257,10 +254,7 @@ mod tests {
         let mgr = McpSessionManager::new(&test_config());
         mgr.get_or_connect("test-server").await.unwrap();
         mgr.shutdown().await.unwrap();
-        assert_eq!(
-            mgr.session_state("test-server").await,
-            SessionState::Idle
-        );
+        assert_eq!(mgr.session_state("test-server").await, SessionState::Idle);
         assert!(mgr.all_sessions().await.is_empty());
     }
 

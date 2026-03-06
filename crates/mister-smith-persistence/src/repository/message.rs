@@ -77,10 +77,8 @@ impl Repository<MessageRecord> for MessageRepository {
         queries::find_message(&self.pool, entity.id)
             .await?
             .ok_or_else(|| {
-                PersistenceError::NotFound(format!(
-                    "Message {} not found after update",
-                    entity.id
-                ))
+                let entity_id = entity.id;
+                PersistenceError::NotFound(format!("Message {entity_id} not found after update"))
             })
     }
 

@@ -76,7 +76,10 @@ impl CertificateManager {
     pub fn new(config: &TlsConfig) -> Result<Self, SecurityError> {
         let server_cfg = Self::build_server_config_from_tls(config)?;
 
-        info!("CertificateManager initialized (mTLS={})", config.mtls_enabled);
+        info!(
+            "CertificateManager initialized (mTLS={})",
+            config.mtls_enabled
+        );
 
         Ok(Self {
             server_config: ArcSwap::from(server_cfg),

@@ -159,13 +159,19 @@ mod tests {
     #[test]
     fn optimal_workers_cpu_bound_equals_cpus() {
         let cpus = num_cpus::get();
-        assert_eq!(RuntimeBestPractices::optimal_worker_threads(WorkloadType::CpuBound), cpus);
+        assert_eq!(
+            RuntimeBestPractices::optimal_worker_threads(WorkloadType::CpuBound),
+            cpus
+        );
     }
 
     #[test]
     fn optimal_workers_io_bound_doubles_cpus() {
         let cpus = num_cpus::get();
-        assert_eq!(RuntimeBestPractices::optimal_worker_threads(WorkloadType::IoBound), cpus * 2);
+        assert_eq!(
+            RuntimeBestPractices::optimal_worker_threads(WorkloadType::IoBound),
+            cpus * 2
+        );
     }
 
     #[test]
@@ -173,17 +179,27 @@ mod tests {
         let cpus = num_cpus::get();
         let mixed = RuntimeBestPractices::optimal_worker_threads(WorkloadType::Mixed);
         assert!(mixed >= cpus, "mixed ({mixed}) should be >= cpus ({cpus})");
-        assert!(mixed <= cpus * 2, "mixed ({mixed}) should be <= cpus*2 ({})", cpus * 2);
+        assert!(
+            mixed <= cpus * 2,
+            "mixed ({mixed}) should be <= cpus*2 ({})",
+            cpus * 2
+        );
     }
 
     #[test]
     fn optimal_blocking_threads_cpu_bound_is_low() {
-        assert_eq!(RuntimeBestPractices::optimal_blocking_threads(WorkloadType::CpuBound), 64);
+        assert_eq!(
+            RuntimeBestPractices::optimal_blocking_threads(WorkloadType::CpuBound),
+            64
+        );
     }
 
     #[test]
     fn optimal_stack_high_throughput_is_4mib() {
-        assert_eq!(RuntimeBestPractices::optimal_stack_size(WorkloadType::HighThroughput), 4 * 1024 * 1024);
+        assert_eq!(
+            RuntimeBestPractices::optimal_stack_size(WorkloadType::HighThroughput),
+            4 * 1024 * 1024
+        );
     }
 
     #[test]
@@ -212,7 +228,10 @@ mod tests {
         ] {
             let cfg = RuntimeTuning::from_workload(workload);
             // Every preset must produce a non-zero worker count.
-            assert!(cfg.worker_threads.unwrap_or(1) > 0, "workload {workload} produced zero workers");
+            assert!(
+                cfg.worker_threads.unwrap_or(1) > 0,
+                "workload {workload} produced zero workers"
+            );
         }
     }
 

@@ -703,9 +703,8 @@ pub async fn insert_message(
         // If DO NOTHING fired, fetch the existing record by message_id.
         match maybe_inserted {
             Some(row) => Ok(row),
-            None => {
-                sqlx::query_as::<_, MessageRecord>(
-                    r#"
+            None => sqlx::query_as::<_, MessageRecord>(
+                r#"
                     SELECT
                         id, from_agent_id, to_agent_id, message_type, subject,
                         content, priority, status, correlation_id, parent_message_id,
@@ -715,12 +714,11 @@ pub async fn insert_message(
                     WHERE message_id = $1
                     LIMIT 1
                     "#,
-                )
-                .bind(msg_id)
-                .fetch_one(pool)
-                .await
-                .map_err(from_sqlx_error)
-            }
+            )
+            .bind(msg_id)
+            .fetch_one(pool)
+            .await
+            .map_err(from_sqlx_error),
         }
     } else {
         // No message_id — standard insert without dedup.
@@ -949,10 +947,7 @@ pub struct AuditEntry {
 // ---------------------------------------------------------------------------
 
 /// Append an audit entry (insert-only).
-pub async fn insert_audit_entry(
-    pool: &PgPool,
-    entry: &AuditEntry,
-) -> Result<(), PersistenceError> {
+pub async fn insert_audit_entry(pool: &PgPool, entry: &AuditEntry) -> Result<(), PersistenceError> {
     sqlx::query(
         r#"
         INSERT INTO audit_log (
@@ -1410,8 +1405,7 @@ mod tests {
 
         // Round-trip through JSON
         let json = serde_json::to_string(&record).expect("serialize TaskRecord");
-        let deserialized: TaskRecord =
-            serde_json::from_str(&json).expect("deserialize TaskRecord");
+        let deserialized: TaskRecord = serde_json::from_str(&json).expect("deserialize TaskRecord");
         assert_eq!(deserialized.task_id, record.task_id);
         assert_eq!(deserialized.task_type, record.task_type);
         assert_eq!(deserialized.payload, record.payload);

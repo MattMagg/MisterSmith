@@ -8,13 +8,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rmcp::{
-    ClientHandler, ServiceExt,
     model::{CallToolRequestParams, ClientInfo},
     service::{Peer, RoleClient, RunningService},
     transport::{StreamableHttpClientTransport, TokioChildProcess},
+    ClientHandler, ServiceExt,
 };
 use tokio::process::Command;
-use tokio::sync::{RwLock, watch};
+use tokio::sync::{watch, RwLock};
 
 use crate::config::{McpClientConfig, McpTransportType};
 use crate::errors::McpError;
@@ -109,11 +109,9 @@ impl McpClient {
 
         let session = match self.config.transport {
             McpTransportType::Stdio => {
-                let command = self
-                    .config
-                    .command
-                    .as_deref()
-                    .ok_or_else(|| McpError::ConnectionFailed("stdio transport requires command".into()))?;
+                let command = self.config.command.as_deref().ok_or_else(|| {
+                    McpError::ConnectionFailed("stdio transport requires command".into())
+                })?;
 
                 let mut parts = command.split_whitespace();
                 let program = parts
@@ -130,11 +128,9 @@ impl McpClient {
                     .map_err(|e| McpError::ConnectionFailed(e.to_string()))?
             }
             McpTransportType::StreamableHttp => {
-                let url = self
-                    .config
-                    .url
-                    .as_ref()
-                    .ok_or_else(|| McpError::ConnectionFailed("streamable-http transport requires url".into()))?;
+                let url = self.config.url.as_ref().ok_or_else(|| {
+                    McpError::ConnectionFailed("streamable-http transport requires url".into())
+                })?;
                 let transport = StreamableHttpClientTransport::from_uri(url.clone());
                 handler
                     .serve(transport)
@@ -221,10 +217,7 @@ impl McpClient {
             .filter(|tool| self.tool_allowed(tool.name.as_ref()))
             .map(|tool| McpTool {
                 name: tool.name.into_owned(),
-                description: tool
-                    .description
-                    .map(|d| d.into_owned())
-                    .unwrap_or_default(),
+                description: tool.description.map(|d| d.into_owned()).unwrap_or_default(),
                 input_schema: serde_json::Value::Object((*tool.input_schema).clone()),
             })
             .collect();
@@ -232,7 +225,9 @@ impl McpClient {
         let mut cache = self.tool_cache.write().await;
         cache.clear();
         for tool in &discovered {
-            let namespaced = format!("{}.{}", self.config.namespace, tool.name);
+            let namespace = &self.config.namespace;
+            let name = &tool.name;
+            let namespaced = format!("{namespace}.{name}");
             cache.insert(namespaced, tool.clone());
         }
 
@@ -250,7 +245,9 @@ impl McpClient {
 
     /// Register a tool in the cache (used during discovery).
     pub async fn register_tool(&self, tool: McpTool) {
-        let namespaced = format!("{}.{}", self.config.namespace, tool.name);
+        let namespace = &self.config.namespace;
+        let name = &tool.name;
+        let namespaced = format!("{namespace}.{name}");
         let mut cache = self.tool_cache.write().await;
         cache.insert(namespaced, tool);
     }
@@ -267,7 +264,8 @@ impl McpClient {
 
         self.handle_tools_changed_notification().await;
 
-        let namespaced = format!("{}.{}", self.config.namespace, tool_name);
+        let namespace = &self.config.namespace;
+        let namespaced = format!("{namespace}.{tool_name}");
         let _tool = self.get_tool(&namespaced).await?;
 
         let peer = self.peer().await?;
@@ -288,23 +286,22 @@ impl McpClient {
             Ok(inner) => inner.map_err(|e| McpError::ToolCallFailed(e.to_string()))?,
             Err(_) => {
                 return Err(McpError::BridgeTimeout(format!(
-                    "tool '{}' timed out after {:?}",
-                    tool_name, TOOL_CALL_TIMEOUT
+                    "tool '{tool_name}' timed out after {TOOL_CALL_TIMEOUT:?}"
                 )))
             }
         };
 
         if result.is_error.unwrap_or(false) {
             return Err(McpError::ToolCallFailed(
-                serde_json::to_string(&result).unwrap_or_else(|_| "tool returned error".to_string()),
+                serde_json::to_string(&result)
+                    .unwrap_or_else(|_| "tool returned error".to_string()),
             ));
         }
 
         if let Some(structured) = result.structured_content {
             Ok(structured)
         } else {
-            serde_json::to_value(result)
-                .map_err(|e| McpError::SerializationError(e.to_string()))
+            serde_json::to_value(result).map_err(|e| McpError::SerializationError(e.to_string()))
         }
     }
 
@@ -355,13 +352,18 @@ fn wildcard_match(pattern: &str, input: &str) -> bool {
         first = false;
     }
 
-    pattern.ends_with('*') || remaining.is_empty() || pattern.split('*').next_back().is_some_and(|last| input.ends_with(last))
+    pattern.ends_with('*')
+        || remaining.is_empty()
+        || pattern
+            .split('*')
+            .next_back()
+            .is_some_and(|last| input.ends_with(last))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmcp::{ServerHandler, model::*, serve_server};
+    use rmcp::{model::*, serve_server, ServerHandler};
 
     fn test_config() -> McpClientConfig {
         McpClientConfig {
@@ -428,7 +430,9 @@ mod tests {
                 }
 
                 if request.name.as_ref() == "fail" {
-                    return Ok(CallToolResult::structured_error(serde_json::json!({"reason": "boom"})));
+                    return Ok(CallToolResult::structured_error(
+                        serde_json::json!({"reason": "boom"}),
+                    ));
                 }
 
                 Ok(CallToolResult::structured(serde_json::json!({

@@ -13,16 +13,16 @@ mod tests {
     use sqlx::PgPool;
     use uuid::Uuid;
 
-    use mister_smith_persistence::postgres::queries::{
-        AuditEntry, AgentRecord, ConfigRecord, MessageRecord, TaskRecord,
-    };
+    use mister_smith_persistence::postgres::queries::AuditEntry;
     use mister_smith_persistence::repository::audit::AuditRepository;
 
     /// Create a test pool from DATABASE_URL or skip the test.
     async fn test_pool() -> PgPool {
         let url = std::env::var("DATABASE_URL")
             .expect("DATABASE_URL must be set for repository integration tests");
-        PgPool::connect(&url).await.expect("Failed to connect to database")
+        PgPool::connect(&url)
+            .await
+            .expect("Failed to connect to database")
     }
 
     // -----------------------------------------------------------------------
@@ -74,7 +74,10 @@ mod tests {
             })
             .collect();
 
-        let count = repo.append_batch(&entries).await.expect("batch append should succeed");
+        let count = repo
+            .append_batch(&entries)
+            .await
+            .expect("batch append should succeed");
         assert_eq!(count, 5);
     }
 
@@ -84,7 +87,10 @@ mod tests {
         let pool = test_pool().await;
         let repo = AuditRepository::new(pool);
 
-        let count = repo.append_batch(&[]).await.expect("empty batch should succeed");
+        let count = repo
+            .append_batch(&[])
+            .await
+            .expect("empty batch should succeed");
         assert_eq!(count, 0);
     }
 
@@ -118,7 +124,11 @@ mod tests {
 
         // Query back
         let results = repo
-            .find_by_agent(agent_id, now - chrono::Duration::seconds(10), now + chrono::Duration::seconds(10))
+            .find_by_agent(
+                agent_id,
+                now - chrono::Duration::seconds(10),
+                now + chrono::Duration::seconds(10),
+            )
             .await
             .expect("find_by_agent should succeed");
 
@@ -140,18 +150,22 @@ mod tests {
 
         // Insert
         let version = mister_smith_persistence::postgres::queries::upsert_config(
-            &pool, &key, value.clone(), "testing", None, Some("Test config"),
+            &pool,
+            &key,
+            value.clone(),
+            "testing",
+            None,
+            Some("Test config"),
         )
         .await
         .expect("upsert should succeed");
         assert_eq!(version, 1);
 
         // Read back
-        let config = mister_smith_persistence::postgres::queries::get_config(
-            &pool, &key, "testing", None,
-        )
-        .await
-        .expect("get_config should succeed");
+        let config =
+            mister_smith_persistence::postgres::queries::get_config(&pool, &key, "testing", None)
+                .await
+                .expect("get_config should succeed");
 
         assert!(config.is_some());
         let config = config.unwrap();
@@ -161,7 +175,12 @@ mod tests {
 
         // Upsert again — version should increment
         let version2 = mister_smith_persistence::postgres::queries::upsert_config(
-            &pool, &key, serde_json::json!({"timeout": 60}), "testing", None, None,
+            &pool,
+            &key,
+            serde_json::json!({"timeout": 60}),
+            "testing",
+            None,
+            None,
         )
         .await
         .expect("second upsert should succeed");
@@ -178,12 +197,26 @@ mod tests {
         let key2 = format!("app.setting2.{}", Uuid::new_v4());
 
         mister_smith_persistence::postgres::queries::upsert_config(
-            &pool, &key1, serde_json::json!(1), &env_name, None, None,
-        ).await.unwrap();
+            &pool,
+            &key1,
+            serde_json::json!(1),
+            &env_name,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         mister_smith_persistence::postgres::queries::upsert_config(
-            &pool, &key2, serde_json::json!(2), &env_name, None, None,
-        ).await.unwrap();
+            &pool,
+            &key2,
+            serde_json::json!(2),
+            &env_name,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
 
         let results = mister_smith_persistence::postgres::queries::get_config_by_environment(
             &pool, &env_name,
@@ -204,15 +237,20 @@ mod tests {
         // Create 3 versions
         for i in 1..=3 {
             mister_smith_persistence::postgres::queries::upsert_config(
-                &pool, &key, serde_json::json!({"v": i}), "testing", None, None,
-            ).await.unwrap();
+                &pool,
+                &key,
+                serde_json::json!({"v": i}),
+                "testing",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
         }
 
-        let history = mister_smith_persistence::postgres::queries::get_config_history(
-            &pool, &key,
-        )
-        .await
-        .expect("get_config_history should succeed");
+        let history = mister_smith_persistence::postgres::queries::get_config_history(&pool, &key)
+            .await
+            .expect("get_config_history should succeed");
 
         // Should have 1 entry (upserts update in-place), but version should be 3
         assert!(!history.is_empty());

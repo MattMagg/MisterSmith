@@ -99,10 +99,9 @@ mod tests {
         });
 
         {
-            let _guard =
-                TaskGuard::new(handle).with_cleanup(move || {
-                    cleaned_up_clone.store(true, Ordering::SeqCst);
-                });
+            let _guard = TaskGuard::new(handle).with_cleanup(move || {
+                cleaned_up_clone.store(true, Ordering::SeqCst);
+            });
             // guard drops here.
         }
 

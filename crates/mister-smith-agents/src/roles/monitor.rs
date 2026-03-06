@@ -91,17 +91,13 @@ impl Actor for MonitorAgent {
                     "active_alerts": state.active_alerts,
                 }))
             }
-            MonitorMessage::SetThreshold { metric, value } => {
-                Ok(serde_json::json!({
-                    "threshold_set": metric,
-                    "value": value,
-                }))
-            }
-            MonitorMessage::QueryAlerts => {
-                Ok(serde_json::json!({
-                    "active_alerts": state.active_alerts,
-                }))
-            }
+            MonitorMessage::SetThreshold { metric, value } => Ok(serde_json::json!({
+                "threshold_set": metric,
+                "value": value,
+            })),
+            MonitorMessage::QueryAlerts => Ok(serde_json::json!({
+                "active_alerts": state.active_alerts,
+            })),
         }
     }
 

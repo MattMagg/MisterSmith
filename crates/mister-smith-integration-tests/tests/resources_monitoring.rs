@@ -81,7 +81,11 @@ async fn connection_pool_resource_manager_health_monitor() {
     manager.register_pool("mock_pool", Arc::clone(&pool));
 
     // 6. Verify pool_count is 1 and pool_names contains "mock_pool".
-    assert_eq!(manager.pool_count(), 1, "ResourceManager should have 1 pool");
+    assert_eq!(
+        manager.pool_count(),
+        1,
+        "ResourceManager should have 1 pool"
+    );
     let names = manager.pool_names();
     assert!(
         names.contains(&"mock_pool".to_string()),

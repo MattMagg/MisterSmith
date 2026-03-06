@@ -39,6 +39,4 @@ pub use dead_letter::DeadLetterQueue;
 pub use error::EventBusError;
 pub use handler::{EventFilter, EventHandler};
 pub use store::{EventStore, InMemoryEventStore};
-pub use types::{
-    AgentEventType, Event, EventType, SystemEventType, ToolEventType,
-};
+pub use types::{AgentEventType, Event, EventType, SystemEventType, ToolEventType};

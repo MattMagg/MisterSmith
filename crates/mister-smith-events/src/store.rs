@@ -22,11 +22,7 @@ pub trait EventStore: Send + Sync + 'static {
     async fn append(&self, event: Event) -> Result<(), EventBusError>;
 
     /// Query events within a time range.
-    async fn query(
-        &self,
-        from: SystemTime,
-        to: SystemTime,
-    ) -> Result<Vec<Event>, EventBusError>;
+    async fn query(&self, from: SystemTime, to: SystemTime) -> Result<Vec<Event>, EventBusError>;
 
     /// Retrieve a specific event by its ID.
     async fn get_by_id(&self, id: Uuid) -> Result<Option<Event>, EventBusError>;
@@ -76,11 +72,7 @@ impl EventStore for InMemoryEventStore {
         Ok(())
     }
 
-    async fn query(
-        &self,
-        from: SystemTime,
-        to: SystemTime,
-    ) -> Result<Vec<Event>, EventBusError> {
+    async fn query(&self, from: SystemTime, to: SystemTime) -> Result<Vec<Event>, EventBusError> {
         let events = self.events.read().await;
         let results = events
             .iter()
@@ -95,10 +87,7 @@ impl EventStore for InMemoryEventStore {
         Ok(events.iter().find(|e| e.id == id).cloned())
     }
 
-    async fn get_by_correlation(
-        &self,
-        correlation_id: Uuid,
-    ) -> Result<Vec<Event>, EventBusError> {
+    async fn get_by_correlation(&self, correlation_id: Uuid) -> Result<Vec<Event>, EventBusError> {
         let events = self.events.read().await;
         let results = events
             .iter()

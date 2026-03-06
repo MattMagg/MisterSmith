@@ -38,14 +38,9 @@ impl<M: Send + 'static, R: Send + 'static> ActorRef<M, R> {
     ///
     /// Returns `ActorError::AskTimeout` if the actor does not reply within the timeout.
     /// Returns `ActorError::ActorStopped` if the actor has terminated.
-    pub async fn ask(
-        &self,
-        message: M,
-        timeout: Duration,
-    ) -> Result<R, ActorError> {
+    pub async fn ask(&self, message: M, timeout: Duration) -> Result<R, ActorError> {
         let (reply_tx, reply_rx) = oneshot::channel::<Result<R, String>>();
-        self.sender
-            .try_send(Envelope::ask(message, reply_tx))?;
+        self.sender.try_send(Envelope::ask(message, reply_tx))?;
 
         match tokio::time::timeout(timeout, reply_rx).await {
             Ok(Ok(Ok(response))) => Ok(response),
@@ -64,7 +59,6 @@ impl<M: Send + 'static, R: Send + 'static> ActorRef<M, R> {
     pub fn actor_id(&self) -> AgentId {
         self.actor_id
     }
-
 }
 
 #[cfg(test)]

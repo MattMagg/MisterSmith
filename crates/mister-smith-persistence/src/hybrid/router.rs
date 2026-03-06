@@ -71,9 +71,9 @@ impl DataRouter {
     /// TTL values come from the KV bucket configuration in the data model.
     pub fn get_ttl(data_type: DataType) -> Option<Duration> {
         match data_type {
-            DataType::SessionData => Some(Duration::from_secs(3600)),    // 60 min
-            DataType::AgentState => Some(Duration::from_secs(1800)),     // 30 min
-            DataType::QueryCache => Some(Duration::from_secs(300)),      // 5 min
+            DataType::SessionData => Some(Duration::from_secs(3600)), // 60 min
+            DataType::AgentState => Some(Duration::from_secs(1800)),  // 30 min
+            DataType::QueryCache => Some(Duration::from_secs(300)),   // 5 min
             // SQL-only types have no KV TTL
             DataType::AgentRegistry
             | DataType::TaskRecord

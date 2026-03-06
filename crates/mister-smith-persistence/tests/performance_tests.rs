@@ -52,7 +52,10 @@ async fn setup_pool() -> sqlx::PgPool {
 }
 
 /// Connect to NATS and initialize KV buckets.
-async fn setup_kv() -> (async_nats::jetstream::Context, async_nats::jetstream::kv::Store) {
+async fn setup_kv() -> (
+    async_nats::jetstream::Context,
+    async_nats::jetstream::kv::Store,
+) {
     let url = nats_url().expect("NATS_URL required");
     let client = async_nats::connect(&url)
         .await
@@ -226,9 +229,7 @@ async fn concurrent_state_access_no_deadlocks() {
         "All {concurrency} tasks should complete"
     );
 
-    eprintln!(
-        "SC-005: {concurrency} concurrent write+read tasks completed without deadlocks"
-    );
+    eprintln!("SC-005: {concurrency} concurrent write+read tasks completed without deadlocks");
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +300,9 @@ async fn bulk_task_insert_and_query() {
 
     // Phase 3: Query by correlation_id — should return the first 500
     let corr_start = Instant::now();
-    let by_correlation = find_tasks_by_correlation(&pool, correlation_id).await.unwrap();
+    let by_correlation = find_tasks_by_correlation(&pool, correlation_id)
+        .await
+        .unwrap();
     let corr_query_elapsed = corr_start.elapsed();
 
     assert!(

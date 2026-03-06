@@ -61,8 +61,7 @@ impl From<rmcp::Error> for McpError {
         }
 
         if err.code == rmcp::model::ErrorCode::RESOURCE_NOT_FOUND
-            || (err.code == rmcp::model::ErrorCode::METHOD_NOT_FOUND
-                && lowered.contains("tool"))
+            || (err.code == rmcp::model::ErrorCode::METHOD_NOT_FOUND && lowered.contains("tool"))
             || lowered.contains("tool not found")
         {
             return McpError::ToolNotFound(context);
@@ -145,7 +144,9 @@ mod tests {
         let rmcp_err = rmcp::Error::invalid_request("session expired", None);
         let converted = McpError::from(rmcp_err);
 
-        assert!(matches!(converted, McpError::SessionError(msg) if msg.contains("session expired")));
+        assert!(
+            matches!(converted, McpError::SessionError(msg) if msg.contains("session expired"))
+        );
     }
 
     #[allow(deprecated)]
@@ -166,6 +167,8 @@ mod tests {
         let rmcp_err = rmcp::Error::parse_error("invalid JSON", None);
         let converted = McpError::from(rmcp_err);
 
-        assert!(matches!(converted, McpError::SerializationError(msg) if msg.contains("invalid JSON")));
+        assert!(
+            matches!(converted, McpError::SerializationError(msg) if msg.contains("invalid JSON"))
+        );
     }
 }

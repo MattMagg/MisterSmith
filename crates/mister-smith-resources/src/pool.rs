@@ -283,7 +283,11 @@ impl<R: Send + Sync + 'static> ConnectionPool<R> {
         pool.retain(|entry| is_healthy(&entry.resource));
         let removed = before - pool.len();
         if removed > 0 {
-            debug!(removed, remaining = pool.len(), "health check sweep complete");
+            debug!(
+                removed,
+                remaining = pool.len(),
+                "health check sweep complete"
+            );
         }
         removed
     }
@@ -467,20 +471,19 @@ mod tests {
     #[derive(Debug)]
     struct MockResource {
         id: usize,
-        healthy: bool,
     }
 
     impl MockResource {
         fn new(id: usize) -> Self {
-            Self { id, healthy: true }
+            Self { id }
         }
     }
 
-    fn mock_factory() -> impl Fn() -> Pin<Box<dyn Future<Output = Result<MockResource, PoolError>> + Send>>
+    fn mock_factory(
+    ) -> impl Fn() -> Pin<Box<dyn Future<Output = Result<MockResource, PoolError>> + Send>>
            + Send
            + Sync
-           + 'static
-    {
+           + 'static {
         let counter = Arc::new(AtomicUsize::new(0));
         move || {
             let id = counter.fetch_add(1, Ordering::SeqCst);

@@ -133,11 +133,7 @@ impl TaskScheduler {
     }
 
     /// Assign a task to an agent (Pending → Assigned).
-    pub fn assign(
-        &self,
-        task_id: &TaskId,
-        agent_id: AgentId,
-    ) -> Result<(), AgentSystemError> {
+    pub fn assign(&self, task_id: &TaskId, agent_id: AgentId) -> Result<(), AgentSystemError> {
         let mut entry = self
             .tasks
             .get_mut(task_id)
@@ -199,11 +195,7 @@ impl TaskScheduler {
     }
 
     /// Fail a task (Running → Failed).
-    pub fn fail(
-        &self,
-        task_id: &TaskId,
-        error: impl Into<String>,
-    ) -> Result<(), AgentSystemError> {
+    pub fn fail(&self, task_id: &TaskId, error: impl Into<String>) -> Result<(), AgentSystemError> {
         let mut entry = self
             .tasks
             .get_mut(task_id)
@@ -444,10 +436,7 @@ mod tests {
     #[tokio::test]
     async fn test_array_aggregator() {
         let agg = ArrayAggregator;
-        let results = vec![
-            serde_json::json!({"a": 1}),
-            serde_json::json!({"b": 2}),
-        ];
+        let results = vec![serde_json::json!({"a": 1}), serde_json::json!({"b": 2})];
         let combined = agg.aggregate(results).await.unwrap();
         assert!(combined.is_array());
         assert_eq!(combined.as_array().unwrap().len(), 2);

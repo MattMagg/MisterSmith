@@ -95,12 +95,10 @@ impl Actor for WorkerAgent {
                     Ok(serde_json::json!({ "error": "no such task" }))
                 }
             }
-            WorkerMessage::QueryStatus => {
-                Ok(serde_json::json!({
-                    "current_task": state.current_task.map(|t| t.to_string()),
-                    "tasks_completed": state.tasks_completed,
-                }))
-            }
+            WorkerMessage::QueryStatus => Ok(serde_json::json!({
+                "current_task": state.current_task.map(|t| t.to_string()),
+                "tasks_completed": state.tasks_completed,
+            })),
         }
     }
 

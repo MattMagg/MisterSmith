@@ -189,7 +189,8 @@ fn hs512_support() {
     let config = JwtConfig {
         algorithm: "HS512".to_string(),
         key_source: KeySource::Hmac {
-            secret: b"test-secret-key-for-hmac-512-needs-64-bytes-minimum-so-make-it-long-enough!!".to_vec(),
+            secret: b"test-secret-key-for-hmac-512-needs-64-bytes-minimum-so-make-it-long-enough!!"
+                .to_vec(),
         },
         ..hmac_config()
     };

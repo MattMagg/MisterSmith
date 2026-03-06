@@ -83,11 +83,7 @@ impl PhiAccrualFailureDetector {
         let mean = intervals.iter().sum::<f64>() / n;
 
         // Variance with a small floor to avoid division by zero.
-        let variance = intervals
-            .iter()
-            .map(|&x| (x - mean).powi(2))
-            .sum::<f64>()
-            / n;
+        let variance = intervals.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / n;
         let stddev = variance.sqrt().max(1e-9);
 
         // Time elapsed since the last heartbeat.

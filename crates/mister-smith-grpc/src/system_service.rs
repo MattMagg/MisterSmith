@@ -35,8 +35,14 @@ impl Default for ConfigStore {
         let mut entries = HashMap::new();
         entries.insert("runtime.workers".to_string(), "4".to_string());
         entries.insert("runtime.max_blocking".to_string(), "512".to_string());
-        entries.insert("transport.max_message_size".to_string(), "4194304".to_string());
-        entries.insert("monitoring.health_interval_ms".to_string(), "5000".to_string());
+        entries.insert(
+            "transport.max_message_size".to_string(),
+            "4194304".to_string(),
+        );
+        entries.insert(
+            "monitoring.health_interval_ms".to_string(),
+            "5000".to_string(),
+        );
 
         Self {
             entries: Arc::new(RwLock::new(entries)),
@@ -165,12 +171,12 @@ impl SystemServiceImpl {
         let req = request.into_inner();
 
         if req.component.is_empty() || req.key.is_empty() {
-            return Err(Status::invalid_argument(
-                "component and key are required",
-            ));
+            return Err(Status::invalid_argument("component and key are required"));
         }
 
-        let full_key = format!("{}.{}", req.component, req.key);
+        let component = &req.component;
+        let key = &req.key;
+        let full_key = format!("{component}.{key}");
         debug!(key = %full_key, value = %req.value, "updating config");
 
         let mut entries = self.config.entries.write().await;

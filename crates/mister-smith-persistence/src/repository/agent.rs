@@ -16,8 +16,8 @@ use mister_smith_core::PersistenceError;
 #[cfg(feature = "sqlx")]
 use crate::postgres::queries::{self, AgentRecord};
 
-use crate::hybrid::manager::HybridStateManager;
 use super::Repository;
+use crate::hybrid::manager::HybridStateManager;
 
 /// Repository for agent registry records and agent state.
 ///
@@ -61,10 +61,7 @@ impl AgentRepository {
 
     /// Find agents by status (e.g., "active", "suspended").
     #[cfg(feature = "sqlx")]
-    pub async fn find_by_status(
-        &self,
-        status: &str,
-    ) -> Result<Vec<AgentRecord>, PersistenceError> {
+    pub async fn find_by_status(&self, status: &str) -> Result<Vec<AgentRecord>, PersistenceError> {
         queries::find_agents_by_status(&self.pool, status).await
     }
 
@@ -153,7 +150,8 @@ impl AgentRepository {
         let mut hydrated = 0usize;
 
         for row in &rows {
-            let kv_key = format!("{agent_id}:{}", row.state_key);
+            let state_key = &row.state_key;
+            let kv_key = format!("{agent_id}:{state_key}");
             match self.hybrid.kv().save(&kv_key, &row.state_value).await {
                 Ok(_) => {
                     hydrated += 1;
@@ -196,7 +194,10 @@ impl Repository<AgentRecord> for AgentRepository {
         queries::find_agent(&self.pool, entity.agent_id)
             .await?
             .ok_or_else(|| {
-                PersistenceError::NotFound(format!("Agent {} not found after update", entity.agent_id))
+                PersistenceError::NotFound(format!(
+                    "Agent {} not found after update",
+                    entity.agent_id
+                ))
             })
     }
 

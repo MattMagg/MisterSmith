@@ -135,7 +135,10 @@ impl PolicyEngine {
             parent: None,
         });
 
-        debug!("PolicyEngine initialized with {} default roles", engine.roles.len());
+        debug!(
+            "PolicyEngine initialized with {} default roles",
+            engine.roles.len()
+        );
 
         engine
     }
@@ -243,10 +246,10 @@ impl PolicyEngine {
 
             has_allow = true;
             if allow_policy.is_none() {
-                allow_policy = Some(format!(
-                    "{}:{}:{}",
-                    perm.action, perm.resource, perm.scope,
-                ));
+                let action = &perm.action;
+                let resource = &perm.resource;
+                let scope = &perm.scope;
+                allow_policy = Some(format!("{action}:{resource}:{scope}"));
             }
         }
 
@@ -270,12 +273,7 @@ impl PolicyEngine {
     ///
     /// Builds a minimal [`AuthorizationRequest`] with an empty context and
     /// delegates to [`evaluate`](Self::evaluate).
-    pub fn check_permission(
-        &self,
-        claims: &AgentClaims,
-        action: &str,
-        resource: &str,
-    ) -> bool {
+    pub fn check_permission(&self, claims: &AgentClaims, action: &str, resource: &str) -> bool {
         let request = AuthorizationRequest {
             principal: claims.clone(),
             action: action.to_string(),
@@ -321,12 +319,7 @@ impl PolicyEngine {
     // -- private helpers ----------------------------------------------------
 
     /// Recursively collect permissions from a role and its parent chain.
-    fn collect_role_permissions(
-        &self,
-        role_name: &str,
-        perms: &mut Vec<Permission>,
-        depth: usize,
-    ) {
+    fn collect_role_permissions(&self, role_name: &str, perms: &mut Vec<Permission>, depth: usize) {
         const MAX_DEPTH: usize = 16;
         if depth >= MAX_DEPTH {
             warn!(
@@ -484,10 +477,7 @@ mod tests {
         engine.add_role(Role {
             name: "restricted".to_string(),
             description: None,
-            permissions: vec![
-                Permission::parse("read:*:all").unwrap(),
-                deny_perm,
-            ],
+            permissions: vec![Permission::parse("read:*:all").unwrap(), deny_perm],
             parent: None,
         });
 

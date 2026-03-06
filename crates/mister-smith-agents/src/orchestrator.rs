@@ -28,10 +28,7 @@ impl Orchestrator {
     }
 
     /// Decompose a task into subtasks and register them with the scheduler.
-    pub async fn decompose(
-        &self,
-        task: &TaskAssignment,
-    ) -> Result<Vec<TaskId>, AgentSystemError> {
+    pub async fn decompose(&self, task: &TaskAssignment) -> Result<Vec<TaskId>, AgentSystemError> {
         let subtasks = self.decomposer.decompose(task).await?;
         let mut ids = Vec::with_capacity(subtasks.len());
         for mut subtask in subtasks {
@@ -60,10 +57,7 @@ impl Orchestrator {
     /// Check if all subtasks of a parent task are completed.
     pub fn all_subtasks_completed(&self, parent_task_id: &TaskId) -> bool {
         let subtasks = self.scheduler.subtasks(parent_task_id);
-        !subtasks.is_empty()
-            && subtasks
-                .iter()
-                .all(|t| t.state == TaskState::Completed)
+        !subtasks.is_empty() && subtasks.iter().all(|t| t.state == TaskState::Completed)
     }
 
     /// Get subtasks that are pending and have all dependencies satisfied.

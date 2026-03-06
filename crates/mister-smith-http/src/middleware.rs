@@ -76,7 +76,9 @@ impl RateLimiter {
         });
 
         // Remove timestamps older than the window.
-        entry.request_times.retain(|t| now.duration_since(*t) < window);
+        entry
+            .request_times
+            .retain(|t| now.duration_since(*t) < window);
 
         if entry.request_times.len() >= self.max_rps as usize {
             return false;
@@ -97,10 +99,7 @@ pub async fn rate_limit_middleware(
     next: Next,
 ) -> Response {
     // Extract rate limiter from request extensions.
-    let rate_limiter = request
-        .extensions()
-        .get::<Arc<RateLimiter>>()
-        .cloned();
+    let rate_limiter = request.extensions().get::<Arc<RateLimiter>>().cloned();
 
     if let Some(limiter) = rate_limiter {
         let ip = addr.ip().to_string();
@@ -119,15 +118,11 @@ fn rate_limited_response() -> Response {
         "message": "Rate limit exceeded",
         "request_id": Uuid::new_v4().to_string(),
     });
-    let mut response = (
-        axum::http::StatusCode::TOO_MANY_REQUESTS,
-        axum::Json(body),
-    )
-        .into_response();
-    response.headers_mut().insert(
-        "retry-after",
-        HeaderValue::from_static("1"),
-    );
+    let mut response =
+        (axum::http::StatusCode::TOO_MANY_REQUESTS, axum::Json(body)).into_response();
+    response
+        .headers_mut()
+        .insert("retry-after", HeaderValue::from_static("1"));
     response
 }
 
@@ -193,13 +188,7 @@ mod tests {
     #[test]
     fn rate_limited_response_status() {
         let response = rate_limited_response();
-        assert_eq!(
-            response.status(),
-            axum::http::StatusCode::TOO_MANY_REQUESTS
-        );
-        assert_eq!(
-            response.headers().get("retry-after").unwrap(),
-            "1"
-        );
+        assert_eq!(response.status(), axum::http::StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers().get("retry-after").unwrap(), "1");
     }
 }

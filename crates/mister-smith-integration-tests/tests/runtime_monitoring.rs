@@ -14,7 +14,9 @@ use std::time::Duration;
 
 use mister_smith_config::RuntimeConfig;
 use mister_smith_monitoring::types::{ComponentId, Status};
-use mister_smith_monitoring::{HealthMonitor, MetricsCollector, MonitoringSystem, RuntimeHealthCheck};
+use mister_smith_monitoring::{
+    HealthMonitor, MetricsCollector, MonitoringSystem, RuntimeHealthCheck,
+};
 use mister_smith_runtime::manager::RuntimeManager;
 
 #[tokio::test]

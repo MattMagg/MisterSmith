@@ -45,10 +45,10 @@ impl EventBuilder {
     /// If serialization fails, the payload is set to a JSON string containing
     /// the error message rather than silently dropping the data.
     pub fn with_payload<T: Serialize>(mut self, value: &T) -> Self {
-        self.payload = Some(
-            serde_json::to_value(value)
-                .unwrap_or_else(|e| serde_json::Value::String(format!("serialization error: {e}"))),
-        );
+        self.payload =
+            Some(serde_json::to_value(value).unwrap_or_else(|e| {
+                serde_json::Value::String(format!("serialization error: {e}"))
+            }));
         self
     }
 
@@ -99,10 +99,9 @@ mod tests {
 
     #[test]
     fn build_with_payload() {
-        let event =
-            EventBuilder::new("builder-test", EventType::Agent(AgentEventType::Created))
-                .with_payload(&serde_json::json!({"agent_name": "worker-1"}))
-                .build();
+        let event = EventBuilder::new("builder-test", EventType::Agent(AgentEventType::Created))
+            .with_payload(&serde_json::json!({"agent_name": "worker-1"}))
+            .build();
         assert_eq!(event.payload["agent_name"], "worker-1");
     }
 
@@ -123,8 +122,7 @@ mod tests {
     #[test]
     fn builder_accepts_string_source() {
         let source = String::from("dynamic-source");
-        let event =
-            EventBuilder::new(source, EventType::System(SystemEventType::Stopped)).build();
+        let event = EventBuilder::new(source, EventType::System(SystemEventType::Stopped)).build();
         assert_eq!(event.source, "dynamic-source");
     }
 

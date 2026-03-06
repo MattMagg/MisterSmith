@@ -42,9 +42,7 @@ impl<T> DeadlockPreventingMutex<T> {
     ///
     /// Returns the guard on success, or a [`TaskError::Timeout`] if the lock
     /// could not be acquired within the deadline.
-    pub async fn lock_with_timeout(
-        &self,
-    ) -> Result<tokio::sync::MutexGuard<'_, T>, TaskError> {
+    pub async fn lock_with_timeout(&self) -> Result<tokio::sync::MutexGuard<'_, T>, TaskError> {
         match tokio::time::timeout(self.default_timeout, self.inner.lock()).await {
             Ok(guard) => Ok(guard),
             Err(_) => Err(TaskError::Timeout(format!(
@@ -176,7 +174,11 @@ mod tests {
 
     #[tokio::test]
     async fn mutex_lock_timeout() {
-        let m = Arc::new(DeadlockPreventingMutex::new(0, 1, Duration::from_millis(50)));
+        let m = Arc::new(DeadlockPreventingMutex::new(
+            0,
+            1,
+            Duration::from_millis(50),
+        ));
         // Hold the lock in the background.
         let m2 = Arc::clone(&m);
         let _hold = tokio::spawn(async move {

@@ -33,7 +33,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum WorkerMsg {
-    Execute { task_id: TaskId, input: serde_json::Value },
+    Execute {
+        task_id: TaskId,
+        input: serde_json::Value,
+    },
     Status,
 }
 
@@ -209,7 +212,11 @@ async fn gate7_end_to_end_orchestration() {
 
     // Decompose into 3 subtasks
     let subtask_ids = orchestrator.decompose(&task).await.unwrap();
-    assert_eq!(subtask_ids.len(), 3, "Should decompose into parse, analyze, summarize");
+    assert_eq!(
+        subtask_ids.len(),
+        3,
+        "Should decompose into parse, analyze, summarize"
+    );
 
     // --- 5. Assign subtasks to workers ---
     for (i, sub_id) in subtask_ids.iter().enumerate() {
@@ -230,9 +237,7 @@ async fn gate7_end_to_end_orchestration() {
         )
         .await
         .unwrap();
-    scheduler
-        .complete(&subtask_ids[0], result_0)
-        .unwrap();
+    scheduler.complete(&subtask_ids[0], result_0).unwrap();
 
     // Worker 1 fails (simulated crash)
     scheduler.start(&subtask_ids[1]).unwrap();
@@ -246,7 +251,10 @@ async fn gate7_end_to_end_orchestration() {
         )
         .await;
     // The actor error propagates but the worker is still alive (it returned Err from handle_message)
-    assert!(fail_result.is_err(), "Worker 1 should fail on first attempt");
+    assert!(
+        fail_result.is_err(),
+        "Worker 1 should fail on first attempt"
+    );
     scheduler
         .fail(&subtask_ids[1], "worker failed: simulated failure")
         .unwrap();
@@ -273,9 +281,7 @@ async fn gate7_end_to_end_orchestration() {
         )
         .await
         .unwrap();
-    scheduler
-        .complete(&subtask_ids[1], retry_result)
-        .unwrap();
+    scheduler.complete(&subtask_ids[1], retry_result).unwrap();
 
     // Worker 2 completes
     scheduler.start(&subtask_ids[2]).unwrap();
@@ -289,9 +295,7 @@ async fn gate7_end_to_end_orchestration() {
         )
         .await
         .unwrap();
-    scheduler
-        .complete(&subtask_ids[2], result_2)
-        .unwrap();
+    scheduler.complete(&subtask_ids[2], result_2).unwrap();
 
     // --- 8. Verify all subtasks completed ---
     assert!(
@@ -316,11 +320,18 @@ async fn gate7_end_to_end_orchestration() {
     );
 
     // --- 11. Verify tool bus available (infrastructure check) ---
-    assert_eq!(tool_bus.count(), 0, "No tools registered yet but bus is operational");
+    assert_eq!(
+        tool_bus.count(),
+        0,
+        "No tools registered yet but bus is operational"
+    );
 
     // --- 12. Verify workers still alive ---
     for rt in &worker_runtimes {
-        assert!(rt.is_alive(), "Workers should still be alive after task completion");
+        assert!(
+            rt.is_alive(),
+            "Workers should still be alive after task completion"
+        );
     }
 
     // --- 13. Verify registry state ---
@@ -382,9 +393,7 @@ async fn gate7_scheduler_state_tracking() {
     let agent = AgentId::new();
     scheduler.assign(&id1, agent).unwrap();
     scheduler.start(&id1).unwrap();
-    scheduler
-        .complete(&id1, serde_json::json!("done"))
-        .unwrap();
+    scheduler.complete(&id1, serde_json::json!("done")).unwrap();
 
     assert_eq!(scheduler.tasks_in_state(TaskState::Completed).len(), 1);
     assert_eq!(scheduler.tasks_in_state(TaskState::Pending).len(), 2);

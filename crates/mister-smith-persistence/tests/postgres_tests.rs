@@ -4,9 +4,9 @@
 //! Run with: `DATABASE_URL=postgres://... cargo test -p mister-smith-persistence --test postgres_tests -- --ignored`
 
 use chrono::Utc;
-use mister_smith_persistence::postgres::queries::*;
-use mister_smith_persistence::postgres::migrations::MigrationRunner;
 use mister_smith_core::PersistenceError;
+use mister_smith_persistence::postgres::migrations::MigrationRunner;
+use mister_smith_persistence::postgres::queries::*;
 use uuid::Uuid;
 
 fn database_url() -> Option<String> {
@@ -111,7 +111,9 @@ async fn agent_registry_update_status() {
     insert_agent(&pool, &record).await.unwrap();
 
     // Update status
-    update_agent_status(&pool, record.agent_id, "active").await.unwrap();
+    update_agent_status(&pool, record.agent_id, "active")
+        .await
+        .unwrap();
 
     let found = find_agent(&pool, record.agent_id).await.unwrap().unwrap();
     assert_eq!(found.status, "active");
@@ -376,7 +378,9 @@ async fn task_update_status() {
     insert_task(&pool, &record).await.unwrap();
 
     // Update status
-    update_task_status(&pool, record.task_id, "running").await.unwrap();
+    update_task_status(&pool, record.task_id, "running")
+        .await
+        .unwrap();
 
     let found = find_task(&pool, record.task_id).await.unwrap().unwrap();
     assert_eq!(found.status, "running");
@@ -441,7 +445,9 @@ async fn task_find_by_correlation() {
 
     insert_task(&pool, &record).await.unwrap();
 
-    let tasks = find_tasks_by_correlation(&pool, correlation_id).await.unwrap();
+    let tasks = find_tasks_by_correlation(&pool, correlation_id)
+        .await
+        .unwrap();
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].task_id, record.task_id);
 }
@@ -539,7 +545,9 @@ async fn message_update_status() {
     insert_message(&pool, &record).await.unwrap();
 
     // Update status
-    update_message_status(&pool, record.id, "delivered").await.unwrap();
+    update_message_status(&pool, record.id, "delivered")
+        .await
+        .unwrap();
 
     let found = find_message(&pool, record.id).await.unwrap().unwrap();
     assert_eq!(found.status, "delivered");
@@ -579,7 +587,9 @@ async fn message_find_by_sender() {
 
     let start = now - chrono::Duration::minutes(1);
     let end = now + chrono::Duration::minutes(1);
-    let messages = find_messages_by_sender(&pool, sender_id, start, end).await.unwrap();
+    let messages = find_messages_by_sender(&pool, sender_id, start, end)
+        .await
+        .unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].from_agent_id, Some(sender_id));
 }
@@ -615,7 +625,9 @@ async fn message_find_by_correlation() {
 
     insert_message(&pool, &record).await.unwrap();
 
-    let messages = find_messages_by_correlation(&pool, correlation_id).await.unwrap();
+    let messages = find_messages_by_correlation(&pool, correlation_id)
+        .await
+        .unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].id, record.id);
 }
@@ -660,23 +672,13 @@ async fn checkpoint_latest_returns_most_recent() {
     insert_agent(&pool, &record).await.unwrap();
 
     // Insert two checkpoints
-    let _first = insert_checkpoint(
-        &pool,
-        agent_id,
-        serde_json::json!({"version": 1}),
-        Some(10),
-    )
-    .await
-    .unwrap();
+    let _first = insert_checkpoint(&pool, agent_id, serde_json::json!({"version": 1}), Some(10))
+        .await
+        .unwrap();
 
-    let second = insert_checkpoint(
-        &pool,
-        agent_id,
-        serde_json::json!({"version": 2}),
-        Some(20),
-    )
-    .await
-    .unwrap();
+    let second = insert_checkpoint(&pool, agent_id, serde_json::json!({"version": 2}), Some(20))
+        .await
+        .unwrap();
 
     // Latest should be the second
     let latest = get_latest_checkpoint(&pool, agent_id)

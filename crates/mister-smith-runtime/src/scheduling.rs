@@ -225,7 +225,11 @@ impl TaskScheduler {
         let processor = Arc::new(processor);
         let mut all_results: Vec<Result<R, E>> = Vec::with_capacity(items.len());
 
-        for chunk in items.into_iter().collect::<Vec<_>>().chunks_by_batch(batch_size) {
+        for chunk in items
+            .into_iter()
+            .collect::<Vec<_>>()
+            .chunks_by_batch(batch_size)
+        {
             let mut handles = Vec::with_capacity(chunk.len());
             for item in chunk {
                 let proc = Arc::clone(&processor);
@@ -285,10 +289,7 @@ impl TaskScheduler {
             let sem = Arc::clone(&semaphore);
             let proc = Arc::clone(&processor);
             handles.push(tokio::spawn(async move {
-                let _permit = sem
-                    .acquire()
-                    .await
-                    .expect("semaphore should not be closed");
+                let _permit = sem.acquire().await.expect("semaphore should not be closed");
                 proc(item).await
             }));
         }
@@ -412,10 +413,8 @@ mod tests {
     #[tokio::test]
     async fn fanout_fanin_preserves_order() {
         let items: Vec<u32> = (0..20).collect();
-        let results = TaskScheduler::fanout_fanin_pattern(items.clone(), 4, |x| async move {
-            x * 2
-        })
-        .await;
+        let results =
+            TaskScheduler::fanout_fanin_pattern(items.clone(), 4, |x| async move { x * 2 }).await;
 
         let expected: Vec<u32> = items.iter().map(|x| x * 2).collect();
         assert_eq!(results, expected);
@@ -425,8 +424,7 @@ mod tests {
     async fn batch_processing_collects_results() {
         let items: Vec<u32> = (1..=10).collect();
         let results: Vec<Result<u32, String>> =
-            TaskScheduler::batch_processing_pattern(items, 3, |x| async move { Ok(x + 100) })
-                .await;
+            TaskScheduler::batch_processing_pattern(items, 3, |x| async move { Ok(x + 100) }).await;
 
         assert_eq!(results.len(), 10);
         for (i, r) in results.iter().enumerate() {

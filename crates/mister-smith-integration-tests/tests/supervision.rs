@@ -48,7 +48,11 @@ impl Actor for TrackingActor {
     type Error = TestError;
     type Response = u32;
 
-    async fn handle_message(&mut self, message: TestMsg, state: &mut u32) -> Result<u32, TestError> {
+    async fn handle_message(
+        &mut self,
+        message: TestMsg,
+        state: &mut u32,
+    ) -> Result<u32, TestError> {
         match message {
             TestMsg::Ping => {
                 *state += 1;
@@ -767,15 +771,26 @@ async fn t084_event_bus_lifecycle_events_on_failure_and_restart() {
         })
         .expect("Should have supervision restart Started event");
     let restarted_started = restart_events.iter().any(|e| {
-        e.event_type == EventType::Custom("agent.Started".into())
-            && e.id != started_event.id
+        e.event_type == EventType::Custom("agent.Started".into()) && e.id != started_event.id
     });
 
     assert!(has_cell_failed, "Should have actor-cell Failed event");
-    assert!(has_stopping_transition, "Should have Running->Stopping transition");
-    assert!(has_error_transition, "Should have Stopping->Error transition");
-    assert!(has_supervision_failed, "Should have supervision Failed event");
-    assert!(restarted_started, "Should have restarted agent.Started event");
+    assert!(
+        has_stopping_transition,
+        "Should have Running->Stopping transition"
+    );
+    assert!(
+        has_error_transition,
+        "Should have Stopping->Error transition"
+    );
+    assert!(
+        has_supervision_failed,
+        "Should have supervision Failed event"
+    );
+    assert!(
+        restarted_started,
+        "Should have restarted agent.Started event"
+    );
 
     let failure_event = restart_events
         .iter()

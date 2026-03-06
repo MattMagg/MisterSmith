@@ -96,10 +96,7 @@ impl GrpcServer {
     ///
     /// Returns `TransportError::ConnectionFailed` if the address cannot be
     /// parsed or the server fails to bind.
-    pub async fn serve<F>(
-        &mut self,
-        shutdown_signal: F,
-    ) -> Result<(), TransportError>
+    pub async fn serve<F>(&mut self, shutdown_signal: F) -> Result<(), TransportError>
     where
         F: Future<Output = ()> + Send + 'static,
     {
@@ -120,13 +117,16 @@ impl GrpcServer {
         let mut builder = Server::builder();
 
         #[cfg(feature = "security")]
-        let builder = if let Some(security) = self.security.as_ref().filter(|layer| layer.is_enabled())
+        let builder = if let Some(security) =
+            self.security.as_ref().filter(|layer| layer.is_enabled())
         {
-            let interceptor =
-                mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor(
-                    std::sync::Arc::clone(security),
-                );
-            builder.add_service(tonic::service::interceptor::InterceptedService::new(health_service, interceptor))
+            let interceptor = mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor(
+                std::sync::Arc::clone(security),
+            );
+            builder.add_service(tonic::service::interceptor::InterceptedService::new(
+                health_service,
+                interceptor,
+            ))
         } else {
             builder.add_service(health_service)
         };

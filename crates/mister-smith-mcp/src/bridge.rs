@@ -72,12 +72,14 @@ impl McpNatsBridge {
 
     /// Get the NATS subject for tools/list requests.
     pub fn tools_list_subject(&self) -> String {
-        format!("{}.tools.list", self.subject_prefix)
+        let subject_prefix = &self.subject_prefix;
+        format!("{subject_prefix}.tools.list")
     }
 
     /// Get the NATS subject for tools/call requests.
     pub fn tools_call_subject(&self, tool_name: &str) -> String {
-        format!("{}.tools.call.{tool_name}", self.subject_prefix)
+        let subject_prefix = &self.subject_prefix;
+        format!("{subject_prefix}.tools.call.{tool_name}")
     }
 
     /// Start the bridge (begin listening for MCP requests on NATS).
@@ -89,7 +91,10 @@ impl McpNatsBridge {
             .map_err(|err| map_transport_error("subscribe tools/list", err, self.timeout))?;
         let call_sub = self
             .transport
-            .subscribe(&format!("{}.tools.call.*", self.subject_prefix))
+            .subscribe(&{
+                let subject_prefix = &self.subject_prefix;
+                format!("{subject_prefix}.tools.call.*")
+            })
             .await
             .map_err(|err| map_transport_error("subscribe tools/call", err, self.timeout))?;
 

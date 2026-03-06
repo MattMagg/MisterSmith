@@ -170,7 +170,9 @@ impl TaskExecutor {
         // Check circuit breaker first.
         if let Some(ref cb) = self.circuit_breaker {
             if !cb.can_proceed() {
-                self.metrics.circuit_breaker_trips.fetch_add(1, Ordering::Relaxed);
+                self.metrics
+                    .circuit_breaker_trips
+                    .fetch_add(1, Ordering::Relaxed);
                 return Err(TaskError::CircuitBreakerOpen);
             }
         }
@@ -268,7 +270,9 @@ impl TaskExecutor {
                     Err(join_err) => {
                         // JoinError means the task panicked or was cancelled.
                         last_error = join_err.to_string();
-                        self.metrics.panics_recovered.fetch_add(1, Ordering::Relaxed);
+                        self.metrics
+                            .panics_recovered
+                            .fetch_add(1, Ordering::Relaxed);
                         warn!(
                             task_id = %task.task_id(),
                             attempt = attempt + 1,
@@ -462,8 +466,7 @@ mod tests {
 
     #[tokio::test]
     async fn error_strategy_builder() {
-        let executor = TaskExecutor::new(4)
-            .with_error_strategy(ErrorStrategy::LogAndContinue);
+        let executor = TaskExecutor::new(4).with_error_strategy(ErrorStrategy::LogAndContinue);
         // Just verify it builds.
         let _ = format!("{executor:?}");
     }

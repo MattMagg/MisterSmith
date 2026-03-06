@@ -124,12 +124,13 @@ async fn us5_as5_middleware_rejection_audit_capture() {
     }
 
     let security = test_layer();
-    let app = Router::new()
-        .route("/protected", get(ok_handler))
-        .layer(axum_mw::from_fn_with_state(
-            security.clone(),
-            mister_smith_security::middleware::axum_mw::auth_middleware,
-        ));
+    let app =
+        Router::new()
+            .route("/protected", get(ok_handler))
+            .layer(axum_mw::from_fn_with_state(
+                security.clone(),
+                mister_smith_security::middleware::axum_mw::auth_middleware,
+            ));
 
     let response = app
         .oneshot(
@@ -143,7 +144,11 @@ async fn us5_as5_middleware_rejection_audit_capture() {
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-    let events = security.audit.as_ref().expect("audit enabled").recent_events(10);
+    let events = security
+        .audit
+        .as_ref()
+        .expect("audit enabled")
+        .recent_events(10);
     assert!(events.iter().any(|event| {
         event.event_type == AuditEventType::Authentication
             && event.outcome == AuditOutcome::Failure

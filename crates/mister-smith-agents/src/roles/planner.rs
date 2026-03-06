@@ -88,11 +88,10 @@ impl Actor for PlannerAgent {
                 state.current_plan = Some(plan.clone());
                 Ok(plan)
             }
-            PlannerMessage::QueryPlan => {
-                Ok(state.current_plan.clone().unwrap_or_else(|| {
-                    serde_json::json!({"error": "no plan available"})
-                }))
-            }
+            PlannerMessage::QueryPlan => Ok(state
+                .current_plan
+                .clone()
+                .unwrap_or_else(|| serde_json::json!({"error": "no plan available"}))),
         }
     }
 

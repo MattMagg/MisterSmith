@@ -15,7 +15,10 @@ fn worker_threads_zero_rejected() {
     config.worker_threads = Some(0);
     let err = config.validate().unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("worker_threads"), "error should mention field: {msg}");
+    assert!(
+        msg.contains("worker_threads"),
+        "error should mention field: {msg}"
+    );
 }
 
 #[test]
@@ -108,7 +111,10 @@ fn invalid_log_level_rejected() {
     config.log_level = "verbose".to_string();
     let err = config.validate().unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("log_level"), "error should mention field: {msg}");
+    assert!(
+        msg.contains("log_level"),
+        "error should mention field: {msg}"
+    );
 }
 
 #[test]

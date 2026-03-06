@@ -101,10 +101,8 @@ mod inner {
             }
 
             // Convert to AuditEntry
-            let entries: Vec<AuditEntry> = new_events
-                .iter()
-                .map(|e| Self::convert_event(e))
-                .collect();
+            let entries: Vec<AuditEntry> =
+                new_events.iter().map(|e| Self::convert_event(e)).collect();
 
             // Batch insert
             let count = self.repository.append_batch(&entries).await?;
@@ -139,10 +137,7 @@ mod inner {
             let event_type = format!("{:?}", event.event_type);
 
             // Action: use the event's action field or derive from event_type
-            let action = event
-                .action
-                .clone()
-                .unwrap_or_else(|| event_type.clone());
+            let action = event.action.clone().unwrap_or_else(|| event_type.clone());
 
             // Build metadata from details + source_ip + outcome
             let mut meta = serde_json::Map::new();

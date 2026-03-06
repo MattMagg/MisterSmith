@@ -137,10 +137,7 @@ pub trait Agent: Tool + Send + Sync + 'static {
     type Error: Send + std::error::Error + 'static;
 
     /// Process an incoming message.
-    async fn process(
-        &self,
-        message: serde_json::Value,
-    ) -> Result<serde_json::Value, Self::Error>;
+    async fn process(&self, message: serde_json::Value) -> Result<serde_json::Value, Self::Error>;
 
     /// Returns this agent's role in the system.
     fn role(&self) -> AgentType;

@@ -55,10 +55,7 @@ async fn transport_survives_actor_restart() {
         .payload_raw(b"still works".to_vec())
         .build()
         .unwrap();
-    transport
-        .publish("restart.test", envelope)
-        .await
-        .unwrap();
+    transport.publish("restart.test", envelope).await.unwrap();
 
     let msg = tokio::time::timeout(Duration::from_secs(2), sub2.next())
         .await
@@ -81,10 +78,7 @@ async fn multiple_transport_instances() {
         .payload_raw(b"nats message".to_vec())
         .build()
         .unwrap();
-    nats_sim
-        .publish("test.isolated", envelope)
-        .await
-        .unwrap();
+    nats_sim.publish("test.isolated", envelope).await.unwrap();
 
     let msg = tokio::time::timeout(Duration::from_secs(1), sub_nats.next())
         .await

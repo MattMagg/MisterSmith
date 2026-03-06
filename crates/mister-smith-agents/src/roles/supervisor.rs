@@ -81,8 +81,7 @@ impl Actor for SupervisorAgent {
                 Ok(serde_json::json!({ "removed": child_id.to_string() }))
             }
             SupervisorMessage::QueryChildren => {
-                let ids: Vec<String> =
-                    state.children.iter().map(|id| id.to_string()).collect();
+                let ids: Vec<String> = state.children.iter().map(|id| id.to_string()).collect();
                 let count = ids.len();
                 Ok(serde_json::json!({ "children": ids, "count": count }))
             }

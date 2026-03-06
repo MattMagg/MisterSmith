@@ -45,10 +45,7 @@ impl HealthCheck for ActorSystemHealthCheck {
     async fn check(&self) -> Result<Status, Box<dyn std::error::Error + Send + Sync>> {
         let states = self.system.actor_states().await;
         let total_actors = states.len();
-        let error_count = states
-            .values()
-            .filter(|s| **s == AgentState::Error)
-            .count();
+        let error_count = states.values().filter(|s| **s == AgentState::Error).count();
 
         let tree_status = self.tree.read().await.query_status();
 
@@ -111,10 +108,7 @@ impl ActorSystemMetrics {
     pub async fn collect(&self) {
         let states = self.system.actor_states().await;
         let total_actors = states.len();
-        let error_count = states
-            .values()
-            .filter(|s| **s == AgentState::Error)
-            .count();
+        let error_count = states.values().filter(|s| **s == AgentState::Error).count();
 
         let tree_status = self.tree.read().await.query_status();
 
@@ -144,7 +138,11 @@ impl ActorSystemMetrics {
             .await;
 
         self.collector
-            .set_gauge("actor.tree_depth", tree_status.tree_depth as f64, tags.clone())
+            .set_gauge(
+                "actor.tree_depth",
+                tree_status.tree_depth as f64,
+                tags.clone(),
+            )
             .await;
         self.collector
             .set_gauge(
@@ -183,11 +181,7 @@ mod tests {
         type Error = TestError;
         type Response = ();
 
-        async fn handle_message(
-            &mut self,
-            _: (),
-            _: &mut (),
-        ) -> Result<(), TestError> {
+        async fn handle_message(&mut self, _: (), _: &mut ()) -> Result<(), TestError> {
             Ok(())
         }
 

@@ -43,7 +43,9 @@ where
     {
         Ok(Ok(response)) => MessageHandlingOutcome::Ok(response),
         Ok(Err(error)) => MessageHandlingOutcome::Failed(error),
-        Err(panic_payload) => MessageHandlingOutcome::Panicked(panic_payload_to_string(panic_payload)),
+        Err(panic_payload) => {
+            MessageHandlingOutcome::Panicked(panic_payload_to_string(panic_payload))
+        }
     }
 }
 
@@ -253,11 +255,8 @@ pub async fn run_actor<A>(
     debug!(actor_id = %actor_id, "Actor stopping");
 
     // Drain remaining messages in the mailbox
-    while let Ok(Some(envelope)) = tokio::time::timeout(
-        std::time::Duration::from_millis(100),
-        receiver.recv(),
-    )
-    .await
+    while let Ok(Some(envelope)) =
+        tokio::time::timeout(std::time::Duration::from_millis(100), receiver.recv()).await
     {
         let Envelope { message, reply_tx } = envelope;
         match handle_message_with_panic_capture(&mut actor, message, &mut state).await {
@@ -362,8 +361,8 @@ pub async fn run_actor<A>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mailbox::{create_mailbox, Envelope, MailboxConfig};
     use crate::mailbox::SpawnConfig;
+    use crate::mailbox::{create_mailbox, Envelope, MailboxConfig};
     use crate::system::{ActorSystem, ActorSystemConfig};
     use async_trait::async_trait;
     use mister_smith_core::{ActorError, EventError};
@@ -574,11 +573,7 @@ mod tests {
         type Error = TestError;
         type Response = ();
 
-        async fn handle_message(
-            &mut self,
-            _message: (),
-            _state: &mut (),
-        ) -> Result<(), TestError> {
+        async fn handle_message(&mut self, _message: (), _state: &mut ()) -> Result<(), TestError> {
             Ok(())
         }
 
@@ -605,7 +600,16 @@ mod tests {
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
 
-        let handle = tokio::spawn(run_actor(actor, 0u64, rx, stop_rx, state_tx, None, Some(sup_tx), None));
+        let handle = tokio::spawn(run_actor(
+            actor,
+            0u64,
+            rx,
+            stop_rx,
+            state_tx,
+            None,
+            Some(sup_tx),
+            None,
+        ));
 
         // Wait for Running state
         while *state_rx.borrow() != AgentState::Running {
@@ -613,7 +617,9 @@ mod tests {
         }
 
         // Send increment
-        tx.send(Envelope::tell(CounterMsg::Increment)).await.unwrap();
+        tx.send(Envelope::tell(CounterMsg::Increment))
+            .await
+            .unwrap();
 
         // Ask for count via the actor's internal reply channel
         let (count_tx, count_rx) = oneshot::channel();
@@ -648,7 +654,16 @@ mod tests {
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, None, None));
+        let handle = tokio::spawn(run_actor(
+            actor,
+            (),
+            rx,
+            stop_rx,
+            state_tx,
+            None,
+            None,
+            None,
+        ));
 
         // Wait for Running
         while *state_rx.borrow() != AgentState::Running {
@@ -673,7 +688,16 @@ mod tests {
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, Some(sup_tx), None));
+        let handle = tokio::spawn(run_actor(
+            actor,
+            (),
+            rx,
+            stop_rx,
+            state_tx,
+            None,
+            Some(sup_tx),
+            None,
+        ));
 
         // Wait for Running
         while *state_rx.borrow() != AgentState::Running {
@@ -700,20 +724,30 @@ mod tests {
         let (_stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
 
-        let handle = tokio::spawn(run_actor(actor, 0u64, rx, stop_rx, state_tx, None, None, None));
+        let handle = tokio::spawn(run_actor(
+            actor, 0u64, rx, stop_rx, state_tx, None, None, None,
+        ));
 
         while *state_rx.borrow() != AgentState::Running {
             state_rx.changed().await.unwrap();
         }
 
         // Send increments
-        tx.send(Envelope::tell(CounterMsg::Increment)).await.unwrap();
-        tx.send(Envelope::tell(CounterMsg::Increment)).await.unwrap();
-        tx.send(Envelope::tell(CounterMsg::Increment)).await.unwrap();
+        tx.send(Envelope::tell(CounterMsg::Increment))
+            .await
+            .unwrap();
+        tx.send(Envelope::tell(CounterMsg::Increment))
+            .await
+            .unwrap();
+        tx.send(Envelope::tell(CounterMsg::Increment))
+            .await
+            .unwrap();
 
         // Ask via envelope with reply channel carrying typed payload
         let (ask_reply_tx, ask_reply_rx) = oneshot::channel::<Result<u64, String>>();
-        tx.send(Envelope::ask(CounterMsg::Increment, ask_reply_tx)).await.unwrap();
+        tx.send(Envelope::ask(CounterMsg::Increment, ask_reply_tx))
+            .await
+            .unwrap();
 
         let ask_result = ask_reply_rx.await.unwrap().unwrap();
         assert_eq!(ask_result, 4);
@@ -736,7 +770,16 @@ mod tests {
         let (stop_tx, stop_rx) = mpsc::channel(1);
         let (state_tx, mut state_rx) = watch::channel(AgentState::Initializing);
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, None, None));
+        let handle = tokio::spawn(run_actor(
+            actor,
+            (),
+            rx,
+            stop_rx,
+            state_tx,
+            None,
+            None,
+            None,
+        ));
 
         while *state_rx.borrow() != AgentState::Running {
             state_rx.changed().await.unwrap();
@@ -836,7 +879,16 @@ mod tests {
         let (state_tx, state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, Some(sup_tx), None));
+        let handle = tokio::spawn(run_actor(
+            actor,
+            (),
+            rx,
+            stop_rx,
+            state_tx,
+            None,
+            Some(sup_tx),
+            None,
+        ));
         handle.await.unwrap();
 
         assert_eq!(*state_rx.borrow(), AgentState::Error);
@@ -860,7 +912,16 @@ mod tests {
         let (state_tx, state_rx) = watch::channel(AgentState::Initializing);
         let (sup_tx, mut sup_rx) = mpsc::unbounded_channel();
 
-        let handle = tokio::spawn(run_actor(actor, (), rx, stop_rx, state_tx, None, Some(sup_tx), None));
+        let handle = tokio::spawn(run_actor(
+            actor,
+            (),
+            rx,
+            stop_rx,
+            state_tx,
+            None,
+            Some(sup_tx),
+            None,
+        ));
 
         tx.send(Envelope::tell(PanicMsg::Panic)).await.unwrap();
         handle.await.unwrap();
@@ -869,7 +930,10 @@ mod tests {
         assert!(post_stop_called.load(Ordering::SeqCst));
 
         let notification = sup_rx.recv().await.unwrap();
-        assert!(matches!(notification.reason, TerminationReason::Panicked(_)));
+        assert!(matches!(
+            notification.reason,
+            TerminationReason::Panicked(_)
+        ));
     }
 
     #[tokio::test]

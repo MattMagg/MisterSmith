@@ -5,10 +5,12 @@
 
 use std::time::Duration;
 
-use mister_smith_persistence::config::KvConfig;
-use mister_smith_persistence::kv::buckets::{KvBucketManager, AGENT_STATE, QUERY_CACHE, SESSION_DATA};
-use mister_smith_persistence::kv::state::{ConflictStrategy, StateManager};
 use mister_smith_core::HealthStatus;
+use mister_smith_persistence::config::KvConfig;
+use mister_smith_persistence::kv::buckets::{
+    KvBucketManager, AGENT_STATE, QUERY_CACHE, SESSION_DATA,
+};
+use mister_smith_persistence::kv::state::{ConflictStrategy, StateManager};
 
 fn nats_url() -> Option<String> {
     std::env::var("NATS_URL").ok()
@@ -265,10 +267,7 @@ async fn state_ttl_expiration() {
         ..Default::default()
     };
 
-    let store = context
-        .create_key_value(short_ttl_config)
-        .await
-        .unwrap();
+    let store = context.create_key_value(short_ttl_config).await.unwrap();
 
     let state_mgr = StateManager::new(store, ConflictStrategy::LastWriteWins);
 

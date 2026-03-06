@@ -82,11 +82,9 @@ impl Actor for CriticAgent {
                     "evaluations_completed": state.evaluations_completed,
                 }))
             }
-            CriticMessage::QueryHistory => {
-                Ok(serde_json::json!({
-                    "evaluations_completed": state.evaluations_completed,
-                }))
-            }
+            CriticMessage::QueryHistory => Ok(serde_json::json!({
+                "evaluations_completed": state.evaluations_completed,
+            })),
         }
     }
 

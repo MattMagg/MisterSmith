@@ -118,13 +118,10 @@ impl<M> MailboxSender<M> {
     /// Returns `ActorError::ActorStopped` if the receiver has been dropped.
     pub async fn send(&self, message: M) -> Result<(), ActorError> {
         match self {
-            MailboxSender::Bounded(tx) => tx
-                .send(message)
-                .await
-                .map_err(|_| ActorError::ActorStopped),
-            MailboxSender::Unbounded(tx) => tx
-                .send(message)
-                .map_err(|_| ActorError::ActorStopped),
+            MailboxSender::Bounded(tx) => {
+                tx.send(message).await.map_err(|_| ActorError::ActorStopped)
+            }
+            MailboxSender::Unbounded(tx) => tx.send(message).map_err(|_| ActorError::ActorStopped),
         }
     }
 
@@ -138,9 +135,7 @@ impl<M> MailboxSender<M> {
                 mpsc::error::TrySendError::Full(_) => ActorError::MailboxFull,
                 mpsc::error::TrySendError::Closed(_) => ActorError::ActorStopped,
             }),
-            MailboxSender::Unbounded(tx) => tx
-                .send(message)
-                .map_err(|_| ActorError::ActorStopped),
+            MailboxSender::Unbounded(tx) => tx.send(message).map_err(|_| ActorError::ActorStopped),
         }
     }
 
@@ -187,7 +182,10 @@ impl<M> MailboxReceiver<M> {
 #[allow(clippy::type_complexity)]
 pub fn create_mailbox<M, R>(
     config: &MailboxConfig,
-) -> (MailboxSender<Envelope<M, R>>, MailboxReceiver<Envelope<M, R>>) {
+) -> (
+    MailboxSender<Envelope<M, R>>,
+    MailboxReceiver<Envelope<M, R>>,
+) {
     match config.capacity {
         Some(capacity) => {
             let (tx, rx) = mpsc::channel(capacity);
@@ -195,10 +193,7 @@ pub fn create_mailbox<M, R>(
         }
         None => {
             let (tx, rx) = mpsc::unbounded_channel();
-            (
-                MailboxSender::Unbounded(tx),
-                MailboxReceiver::Unbounded(rx),
-            )
+            (MailboxSender::Unbounded(tx), MailboxReceiver::Unbounded(rx))
         }
     }
 }
@@ -280,7 +275,10 @@ mod tests {
         let env = Envelope::ask("question".to_string(), reply_tx);
         assert!(env.reply_tx.is_some());
         // Send reply through the channel
-        env.reply_tx.unwrap().send(Ok("answer".to_string())).unwrap();
+        env.reply_tx
+            .unwrap()
+            .send(Ok("answer".to_string()))
+            .unwrap();
         let result = reply_rx.await.unwrap();
         assert_eq!(result.unwrap(), "answer");
     }

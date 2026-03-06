@@ -7,22 +7,22 @@ pub mod rate_limiter;
 
 #[cfg(feature = "jwt")]
 pub mod axum_mw;
-#[cfg(feature = "jwt")]
-pub mod tonic_mw;
 #[cfg(all(feature = "jwt", feature = "rbac"))]
 pub mod nats_mw;
+#[cfg(feature = "jwt")]
+pub mod tonic_mw;
 
 use std::sync::Arc;
 
+#[cfg(feature = "audit")]
+use crate::audit::AuditLogger;
 #[cfg(feature = "jwt")]
 use crate::jwt::JwtManager;
 #[cfg(feature = "rbac")]
 use crate::rbac::PolicyEngine;
-#[cfg(feature = "audit")]
-use crate::audit::AuditLogger;
-use mister_smith_config::SecurityConfig as RuntimeSecurityConfig;
 #[cfg(feature = "tls")]
 use crate::tls::CertificateManager;
+use mister_smith_config::SecurityConfig as RuntimeSecurityConfig;
 
 use crate::config;
 use mister_smith_core::SecurityError;
@@ -113,7 +113,10 @@ impl SecurityLayer {
 
         #[cfg(feature = "rbac")]
         let policy = if config.enabled && config.authz_enabled {
-            config.rbac_config.as_ref().map(|cfg| Arc::new(PolicyEngine::new(cfg)))
+            config
+                .rbac_config
+                .as_ref()
+                .map(|cfg| Arc::new(PolicyEngine::new(cfg)))
         } else {
             None
         };

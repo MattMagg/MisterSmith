@@ -19,8 +19,8 @@ use tracing::{debug, info, warn};
 
 use crate::proto::{
     AgentAvailability, AgentInfo, AgentStatusUpdate, GetAgentRequest, GetTaskResultRequest,
-    ListAgentsRequest, ListAgentsResponse, MessageEnvelope, SubmitTaskRequest, SubmitTaskResponse,
-    StreamAgentStatusRequest, TaskResult, TaskStatus,
+    ListAgentsRequest, ListAgentsResponse, MessageEnvelope, StreamAgentStatusRequest,
+    SubmitTaskRequest, SubmitTaskResponse, TaskResult, TaskStatus,
 };
 
 /// Type alias for server-streaming response streams.
@@ -189,9 +189,7 @@ impl AgentServiceImpl {
             Some(info) => Ok(Response::new(info)),
             None => {
                 warn!(agent_id = %agent_id, "agent not found");
-                Err(Status::not_found(format!(
-                    "agent not found: {agent_id}"
-                )))
+                Err(Status::not_found(format!("agent not found: {agent_id}")))
             }
         }
     }
@@ -202,9 +200,9 @@ impl AgentServiceImpl {
         request: Request<SubmitTaskRequest>,
     ) -> Result<Response<SubmitTaskResponse>, Status> {
         let req = request.into_inner();
-        let task = req.task.ok_or_else(|| {
-            Status::invalid_argument("task assignment is required")
-        })?;
+        let task = req
+            .task
+            .ok_or_else(|| Status::invalid_argument("task assignment is required"))?;
 
         let task_id = if task.task_id.is_empty() {
             uuid::Uuid::new_v4().to_string()

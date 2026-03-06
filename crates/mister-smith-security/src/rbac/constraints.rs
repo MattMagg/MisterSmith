@@ -335,10 +335,7 @@ mod tests {
     fn ip_range_multiple() {
         let constraints = PolicyConstraints {
             time_window: None,
-            ip_ranges: Some(vec![
-                "10.0.0.0/8".to_string(),
-                "192.168.0.0/16".to_string(),
-            ]),
+            ip_ranges: Some(vec!["10.0.0.0/8".to_string(), "192.168.0.0/16".to_string()]),
             resource_owner: None,
         };
         assert!(constraints.evaluate(&ctx(&[("ip", "10.1.2.3")])));
@@ -455,10 +452,7 @@ mod tests {
     fn ip_range_overlapping_cidrs() {
         let constraints = PolicyConstraints {
             time_window: None,
-            ip_ranges: Some(vec![
-                "10.0.0.0/8".to_string(),
-                "10.1.0.0/16".to_string(),
-            ]),
+            ip_ranges: Some(vec!["10.0.0.0/8".to_string(), "10.1.0.0/16".to_string()]),
             resource_owner: None,
         };
         assert!(constraints.evaluate(&ctx(&[("ip", "10.1.2.3")])));
@@ -480,10 +474,7 @@ mod tests {
     fn ip_range_malformed_cidr_denies() {
         let constraints = PolicyConstraints {
             time_window: None,
-            ip_ranges: Some(vec![
-                "10.0.0.0/8".to_string(),
-                "not-a-cidr".to_string(),
-            ]),
+            ip_ranges: Some(vec!["10.0.0.0/8".to_string(), "not-a-cidr".to_string()]),
             resource_owner: None,
         };
 

@@ -148,10 +148,7 @@ impl MessageEnvelopeBuilder {
     }
 
     /// Set the payload from a MessagePack-serializable value.
-    pub fn payload_msgpack<T: serde::Serialize>(
-        mut self,
-        val: &T,
-    ) -> Result<Self, TransportError> {
+    pub fn payload_msgpack<T: serde::Serialize>(mut self, val: &T) -> Result<Self, TransportError> {
         self.payload = serialization::to_msgpack(val)?;
         Ok(self)
     }
@@ -218,9 +215,7 @@ mod tests {
 
     #[test]
     fn builder_minimal() {
-        let envelope = MessageEnvelope::builder("test.message")
-            .build()
-            .unwrap();
+        let envelope = MessageEnvelope::builder("test.message").build().unwrap();
         assert_eq!(envelope.message_type, "test.message");
         assert_eq!(envelope.schema_version, SCHEMA_VERSION);
         assert_eq!(envelope.priority, MessagePriority::Normal);
@@ -263,7 +258,10 @@ mod tests {
     fn builder_rejects_empty_message_type() {
         let result = MessageEnvelope::builder("").build();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), TransportError::SubjectInvalid(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            TransportError::SubjectInvalid(_)
+        ));
     }
 
     #[test]

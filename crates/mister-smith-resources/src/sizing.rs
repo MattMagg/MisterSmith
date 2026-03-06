@@ -161,25 +161,46 @@ mod tests {
 
     #[test]
     fn concurrency_factor_low_agent_count() {
-        assert_eq!(ConnectionPoolSizer::calculate_agent_concurrency_factor(1), 1.0);
-        assert_eq!(ConnectionPoolSizer::calculate_agent_concurrency_factor(5), 1.0);
+        assert_eq!(
+            ConnectionPoolSizer::calculate_agent_concurrency_factor(1),
+            1.0
+        );
+        assert_eq!(
+            ConnectionPoolSizer::calculate_agent_concurrency_factor(5),
+            1.0
+        );
     }
 
     #[test]
     fn concurrency_factor_medium_agent_count() {
-        assert_eq!(ConnectionPoolSizer::calculate_agent_concurrency_factor(6), 0.8);
-        assert_eq!(ConnectionPoolSizer::calculate_agent_concurrency_factor(20), 0.8);
+        assert_eq!(
+            ConnectionPoolSizer::calculate_agent_concurrency_factor(6),
+            0.8
+        );
+        assert_eq!(
+            ConnectionPoolSizer::calculate_agent_concurrency_factor(20),
+            0.8
+        );
     }
 
     #[test]
     fn concurrency_factor_high_agent_count() {
-        assert_eq!(ConnectionPoolSizer::calculate_agent_concurrency_factor(21), 0.6);
-        assert_eq!(ConnectionPoolSizer::calculate_agent_concurrency_factor(100), 0.6);
+        assert_eq!(
+            ConnectionPoolSizer::calculate_agent_concurrency_factor(21),
+            0.6
+        );
+        assert_eq!(
+            ConnectionPoolSizer::calculate_agent_concurrency_factor(100),
+            0.6
+        );
     }
 
     #[test]
     fn concurrency_factor_zero_agents() {
-        assert_eq!(ConnectionPoolSizer::calculate_agent_concurrency_factor(0), 1.0);
+        assert_eq!(
+            ConnectionPoolSizer::calculate_agent_concurrency_factor(0),
+            1.0
+        );
     }
 
     #[test]
@@ -214,12 +235,8 @@ mod tests {
 
     #[test]
     fn pool_sizing_never_below_one() {
-        let rec = ConnectionPoolSizer::calculate_optimal_pool_size(
-            0.1,
-            Duration::from_millis(1),
-            1.0,
-            1,
-        );
+        let rec =
+            ConnectionPoolSizer::calculate_optimal_pool_size(0.1, Duration::from_millis(1), 1.0, 1);
         assert!(rec.recommended_size >= 1);
         assert!(rec.min_connections >= 1);
     }

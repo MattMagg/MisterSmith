@@ -16,18 +16,19 @@ pub mod transport;
 
 // Re-export key types at crate root.
 pub use availability::{is_valid_transition, AgentAvailability};
-pub use envelope::{MessageEnvelope, MessageEnvelopeBuilder, DEFAULT_MAX_PAYLOAD_SIZE, SCHEMA_VERSION};
+pub use durable::{DurableMessage, DurableSubscription, DurableTransport, MessageAcker};
+pub use envelope::{
+    MessageEnvelope, MessageEnvelopeBuilder, DEFAULT_MAX_PAYLOAD_SIZE, SCHEMA_VERSION,
+};
 pub use errors::TransportError;
 pub use inmemory::InMemoryTransport;
 pub use messages::{
-    AgentHeartbeat, AgentSpawn, AgentTerminate, ConfigUpdate, Severity, StepComplete,
-    SystemEvent, TaskAssignment, TaskResult, TaskStatus, WorkflowResult, WorkflowStart,
-    WorkflowStatus,
+    AgentHeartbeat, AgentSpawn, AgentTerminate, ConfigUpdate, Severity, StepComplete, SystemEvent,
+    TaskAssignment, TaskResult, TaskStatus, WorkflowResult, WorkflowStart, WorkflowStatus,
 };
 pub use priority::MessagePriority;
 pub use serialization::{from_json, from_msgpack, to_json, to_msgpack};
 pub use subject::SubjectTaxonomy;
-pub use durable::{DurableMessage, DurableSubscription, DurableTransport, MessageAcker};
 pub use transport::{ReceivedMessage, Subscription, Transport};
 
 /// Generated protobuf types from `common.proto`, `agent_service.proto`, `system_service.proto`, and `health_service.proto`.

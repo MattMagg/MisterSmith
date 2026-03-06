@@ -45,9 +45,7 @@ impl<T: Transport> SecureTransport<T> {
         } else {
             Err(TransportError::ConnectionFailed(format!(
                 "{}",
-                SecurityError::InsufficientPermissions(format!(
-                    "{action} on subject '{subject}'"
-                ))
+                SecurityError::InsufficientPermissions(format!("{action} on subject '{subject}'"))
             )))
         }
     }

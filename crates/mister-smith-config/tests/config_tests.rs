@@ -24,14 +24,23 @@ fn default_supervision_config_values() {
     let config = SupervisionConfig::default();
     assert_eq!(config.max_restart_attempts, 3);
     assert_eq!(config.restart_window, std::time::Duration::from_secs(60));
-    assert_eq!(config.escalation_timeout, std::time::Duration::from_secs(30));
+    assert_eq!(
+        config.escalation_timeout,
+        std::time::Duration::from_secs(30)
+    );
 }
 
 #[test]
 fn default_monitoring_config_values() {
     let config = MonitoringConfig::default();
-    assert_eq!(config.health_check_interval, std::time::Duration::from_secs(30));
-    assert_eq!(config.metrics_export_interval, std::time::Duration::from_secs(60));
+    assert_eq!(
+        config.health_check_interval,
+        std::time::Duration::from_secs(30)
+    );
+    assert_eq!(
+        config.metrics_export_interval,
+        std::time::Duration::from_secs(60)
+    );
     assert_eq!(config.log_level, "info");
 }
 
@@ -60,5 +69,7 @@ blocking_threads = 256
 #[test]
 fn empty_toml_uses_all_defaults() {
     let config: FrameworkConfig = toml::from_str("").expect("deserialize empty");
-    config.validate().expect("empty config should be valid with defaults");
+    config
+        .validate()
+        .expect("empty config should be valid with defaults");
 }

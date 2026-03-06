@@ -52,7 +52,11 @@ fn dev_cert_generation_creates_all_files() {
         &certs.client_key_path,
     ] {
         let content = std::fs::read_to_string(path).unwrap();
-        assert!(content.contains("-----BEGIN"), "PEM header missing in {}", path.display());
+        assert!(
+            content.contains("-----BEGIN"),
+            "PEM header missing in {}",
+            path.display()
+        );
     }
 
     drop(dir); // cleanup
@@ -206,11 +210,10 @@ fn build_client_config_with_ca() {
     use mister_smith_security::tls::config_builder;
     use rustls::pki_types::{pem::PemObject, CertificateDer};
 
-    let ca_certs: Vec<CertificateDer<'static>> =
-        CertificateDer::pem_file_iter(&certs.ca_cert_path)
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+    let ca_certs: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(&certs.ca_cert_path)
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
 
     let config = config_builder::build_client_config(ca_certs, None);
     assert!(config.is_ok());

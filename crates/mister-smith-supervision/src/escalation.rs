@@ -115,7 +115,8 @@ mod tests {
         .unwrap();
 
         let worker = AgentId::new();
-        tree.add_child(mid_id, worker, RestartScope::Permanent).unwrap();
+        tree.add_child(mid_id, worker, RestartScope::Permanent)
+            .unwrap();
 
         // First failure — mid-level handles it
         let d1 = tree.handle_failure(worker, TerminationType::Error).unwrap();
@@ -206,8 +207,10 @@ mod tests {
 
         let child1 = AgentId::new();
         let child2 = AgentId::new();
-        tree.add_child(sup_id, child1, RestartScope::Permanent).unwrap();
-        tree.add_child(sup_id, child2, RestartScope::Permanent).unwrap();
+        tree.add_child(sup_id, child1, RestartScope::Permanent)
+            .unwrap();
+        tree.add_child(sup_id, child2, RestartScope::Permanent)
+            .unwrap();
 
         let decision = escalate(&mut tree, sup_id, "need subtree restart").unwrap();
         match decision {

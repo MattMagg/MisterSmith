@@ -380,8 +380,8 @@ impl ActorSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use crate::mailbox::MailboxConfig;
+    use async_trait::async_trait;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::Instant;
 
@@ -447,11 +447,7 @@ mod tests {
         type Error = TestError;
         type Response = ();
 
-        async fn handle_message(
-            &mut self,
-            _: (),
-            _: &mut (),
-        ) -> Result<(), TestError> {
+        async fn handle_message(&mut self, _: (), _: &mut ()) -> Result<(), TestError> {
             tokio::time::sleep(self.block_for).await;
             self.completed_messages.fetch_add(1, Ordering::SeqCst);
             Ok(())
@@ -477,11 +473,7 @@ mod tests {
         type Error = TestError;
         type Response = ();
 
-        async fn handle_message(
-            &mut self,
-            _: (),
-            _: &mut (),
-        ) -> Result<(), TestError> {
+        async fn handle_message(&mut self, _: (), _: &mut ()) -> Result<(), TestError> {
             Ok(())
         }
 
@@ -636,7 +628,6 @@ mod tests {
         assert!(matches!(err, ActorError::ActorStopped));
     }
 
-
     // Regression: shutdown should not hold write lock while awaiting actor stops.
     #[tokio::test]
     async fn shutdown_does_not_starve_readers() {
@@ -698,11 +689,7 @@ mod tests {
                 type Error = TestError;
                 type Response = ();
 
-                async fn handle_message(
-                    &mut self,
-                    _: (),
-                    _: &mut (),
-                ) -> Result<(), TestError> {
+                async fn handle_message(&mut self, _: (), _: &mut ()) -> Result<(), TestError> {
                     Ok(())
                 }
 

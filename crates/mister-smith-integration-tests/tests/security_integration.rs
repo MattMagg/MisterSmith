@@ -235,13 +235,15 @@ fn audit_chain_integrity_integration() {
     assert_eq!(events.len(), 3);
 }
 
-
-
 // -- gRPC auth interceptor integration --------------------------------------
 
 async fn spawn_secure_grpc_server(
     security: Arc<SecurityLayer>,
-) -> (tokio::task::JoinHandle<Result<(), mister_smith_grpc::errors::TransportError>>, String, tokio::sync::oneshot::Sender<()>) {
+) -> (
+    tokio::task::JoinHandle<Result<(), mister_smith_grpc::errors::TransportError>>,
+    String,
+    tokio::sync::oneshot::Sender<()>,
+) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     drop(listener);
@@ -378,9 +380,7 @@ async fn axum_middleware_integration() {
     use axum::Router;
     use tower::ServiceExt;
 
-    let security = Arc::new(
-        test_security_layer_with_authz(true, false),
-    );
+    let security = Arc::new(test_security_layer_with_authz(true, false));
 
     async fn handler() -> impl IntoResponse {
         "authorized"

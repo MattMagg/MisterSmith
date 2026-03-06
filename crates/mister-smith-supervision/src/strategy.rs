@@ -37,17 +37,12 @@ pub enum TerminationType {
 /// - `OneForOne`: Only the failed child.
 /// - `OneForAll`: All children.
 /// - `RestForOne`: The failed child and all children started after it.
-pub fn apply_restart_policy(
-    node: &SupervisorNode,
-    failed_child_id: AgentId,
-) -> Vec<AgentId> {
+pub fn apply_restart_policy(node: &SupervisorNode, failed_child_id: AgentId) -> Vec<AgentId> {
     match node.strategy.restart_policy {
         RestartPolicy::OneForOne => {
             vec![failed_child_id]
         }
-        RestartPolicy::OneForAll => {
-            node.children.iter().map(|c| c.actor_id).collect()
-        }
+        RestartPolicy::OneForAll => node.children.iter().map(|c| c.actor_id).collect(),
         RestartPolicy::RestForOne => {
             // Find the failed child's start_order
             if let Some(failed) = node.find_child(&failed_child_id) {
@@ -114,8 +109,7 @@ pub fn compute_backoff(strategy: &BackoffStrategy, attempt: u32) -> Duration {
             max,
             multiplier,
         } => {
-            let delay_nanos =
-                initial.as_nanos() as f64 * multiplier.powi(attempt as i32);
+            let delay_nanos = initial.as_nanos() as f64 * multiplier.powi(attempt as i32);
             let delay = Duration::from_nanos(delay_nanos.min(u64::MAX as f64) as u64);
             if delay > *max {
                 *max
@@ -123,9 +117,7 @@ pub fn compute_backoff(strategy: &BackoffStrategy, attempt: u32) -> Duration {
                 delay
             }
         }
-        BackoffStrategy::Linear { initial, increment } => {
-            *initial + *increment * attempt
-        }
+        BackoffStrategy::Linear { initial, increment } => *initial + *increment * attempt,
     }
 }
 
@@ -201,8 +193,14 @@ mod tests {
 
     #[test]
     fn permanent_always_restarts() {
-        assert!(should_restart(RestartScope::Permanent, TerminationType::Normal));
-        assert!(should_restart(RestartScope::Permanent, TerminationType::Error));
+        assert!(should_restart(
+            RestartScope::Permanent,
+            TerminationType::Normal
+        ));
+        assert!(should_restart(
+            RestartScope::Permanent,
+            TerminationType::Error
+        ));
     }
 
     #[test]

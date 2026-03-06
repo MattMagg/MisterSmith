@@ -104,15 +104,11 @@ mod tests {
         let actor_id = AgentId::new();
         let correlation_id = Uuid::new_v4();
 
-        let event_id =
-            emit_failure_event(&bus, &actor_id, "test error", correlation_id).await;
+        let event_id = emit_failure_event(&bus, &actor_id, "test error", correlation_id).await;
 
         let event = rx.recv().await.unwrap();
         assert_eq!(event.id, event_id);
-        assert_eq!(
-            event.event_type,
-            EventType::Agent(AgentEventType::Failed)
-        );
+        assert_eq!(event.event_type, EventType::Agent(AgentEventType::Failed));
         assert_eq!(event.correlation_id, Some(correlation_id));
         assert_eq!(event.payload["error"], "test error");
     }
@@ -137,10 +133,7 @@ mod tests {
         .await;
 
         let event = rx.recv().await.unwrap();
-        assert_eq!(
-            event.event_type,
-            EventType::Agent(AgentEventType::Started)
-        );
+        assert_eq!(event.event_type, EventType::Agent(AgentEventType::Started));
         assert_eq!(event.correlation_id, Some(correlation_id));
         assert_eq!(event.causation_id, Some(causation_id));
         assert_eq!(event.payload["action"], "restart");
@@ -166,7 +159,6 @@ mod tests {
         assert_eq!(event.causation_id, Some(cause));
     }
 
-
     #[tokio::test]
     async fn failure_then_restart_chain_preserves_ids() {
         let bus = EventBus::default();
@@ -176,8 +168,7 @@ mod tests {
         let supervisor_id = AgentId::new();
         let correlation_id = Uuid::new_v4();
 
-        let failure_event_id =
-            emit_failure_event(&bus, &actor_id, "boom", correlation_id).await;
+        let failure_event_id = emit_failure_event(&bus, &actor_id, "boom", correlation_id).await;
         emit_restart_event(
             &bus,
             &actor_id,

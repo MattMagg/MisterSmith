@@ -30,7 +30,10 @@ async fn migration_runs_cleanly() {
         .current_version()
         .await
         .expect("current_version should succeed");
-    assert!(version.is_some(), "Should have at least one applied migration");
+    assert!(
+        version.is_some(),
+        "Should have at least one applied migration"
+    );
     assert!(
         version.unwrap() > 0,
         "Latest version should be greater than 0"
@@ -95,7 +98,10 @@ async fn migration_verify_returns_true() {
     runner.run().await.expect("Migrations should succeed");
 
     let verified = runner.verify().await.expect("verify should succeed");
-    assert!(verified, "verify() should return true after all migrations applied");
+    assert!(
+        verified,
+        "verify() should return true after all migrations applied"
+    );
 }
 
 #[tokio::test]

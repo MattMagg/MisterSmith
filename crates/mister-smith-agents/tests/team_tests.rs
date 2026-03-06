@@ -249,10 +249,8 @@ impl TaskDecomposer for SplitDecomposer {
     ) -> Result<Vec<TaskAssignment>, AgentSystemError> {
         let mut subtasks = Vec::with_capacity(self.0);
         for i in 0..self.0 {
-            let sub = TaskAssignment::new(
-                format!("{}-part-{}", task.task_type, i),
-                task.input.clone(),
-            );
+            let sub =
+                TaskAssignment::new(format!("{}-part-{}", task.task_type, i), task.input.clone());
             subtasks.push(sub);
         }
         Ok(subtasks)

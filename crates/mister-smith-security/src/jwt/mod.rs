@@ -3,8 +3,8 @@
 mod claims;
 mod keys;
 
-pub use claims::{AgentClaims, TokenPair};
 pub use crate::config::KeySource;
+pub use claims::{AgentClaims, TokenPair};
 
 use crate::config::JwtConfig;
 use dashmap::DashMap;

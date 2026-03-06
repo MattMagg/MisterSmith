@@ -85,7 +85,10 @@ impl Actor for CoordinatorAgent {
         state: &mut Self::State,
     ) -> Result<Self::Response, Self::Error> {
         match message {
-            CoordinatorMessage::SubmitTask { task_type, input: _ } => {
+            CoordinatorMessage::SubmitTask {
+                task_type,
+                input: _,
+            } => {
                 let task_id = TaskId::new();
                 state.active_tasks.push(task_id);
                 Ok(serde_json::json!({
@@ -101,18 +104,14 @@ impl Actor for CoordinatorAgent {
                     "total_results": state.results_received
                 }))
             }
-            CoordinatorMessage::TeamMemberFailed(agent_id) => {
-                Ok(serde_json::json!({
-                    "failed_member": agent_id.to_string(),
-                    "active_tasks": state.active_tasks.len()
-                }))
-            }
-            CoordinatorMessage::QueryProgress => {
-                Ok(serde_json::json!({
-                    "active_tasks": state.active_tasks.len(),
-                    "results_received": state.results_received
-                }))
-            }
+            CoordinatorMessage::TeamMemberFailed(agent_id) => Ok(serde_json::json!({
+                "failed_member": agent_id.to_string(),
+                "active_tasks": state.active_tasks.len()
+            })),
+            CoordinatorMessage::QueryProgress => Ok(serde_json::json!({
+                "active_tasks": state.active_tasks.len(),
+                "results_received": state.results_received
+            })),
         }
     }
 
@@ -187,10 +186,7 @@ mod tests {
         let failed_id = AgentId::new();
 
         let resp = agent
-            .handle_message(
-                CoordinatorMessage::TeamMemberFailed(failed_id),
-                &mut state,
-            )
+            .handle_message(CoordinatorMessage::TeamMemberFailed(failed_id), &mut state)
             .await
             .unwrap();
 

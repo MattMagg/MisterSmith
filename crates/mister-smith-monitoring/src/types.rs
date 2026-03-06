@@ -170,8 +170,7 @@ mod tests {
 
     #[test]
     fn health_status_with_message() {
-        let hs = HealthStatus::new("db", Status::Degraded)
-            .with_message("high latency");
+        let hs = HealthStatus::new("db", Status::Degraded).with_message("high latency");
         assert_eq!(hs.message.as_deref(), Some("high latency"));
     }
 

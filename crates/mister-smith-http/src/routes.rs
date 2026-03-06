@@ -35,7 +35,8 @@ mod tests {
 
     fn test_app_with_transport(connected: bool) -> Router {
         api_router().with_state(
-            AppState::new().with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(connected))),
+            AppState::new()
+                .with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(connected))),
         )
     }
 

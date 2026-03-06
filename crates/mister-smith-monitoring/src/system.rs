@@ -51,10 +51,7 @@ impl MonitoringSystem {
     pub fn start(
         &self,
         shutdown: Arc<AtomicBool>,
-    ) -> (
-        tokio::task::JoinHandle<()>,
-        tokio::task::JoinHandle<()>,
-    ) {
+    ) -> (tokio::task::JoinHandle<()>, tokio::task::JoinHandle<()>) {
         info!("Starting monitoring system");
 
         let health_monitor = Arc::clone(&self.health_monitor);

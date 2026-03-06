@@ -71,10 +71,7 @@ impl InMemoryTransport {
     }
 
     /// Get or create a broadcast channel for a subject.
-    async fn get_or_create_sender(
-        &self,
-        subject: &str,
-    ) -> broadcast::Sender<InternalMessage> {
+    async fn get_or_create_sender(&self, subject: &str) -> broadcast::Sender<InternalMessage> {
         {
             let channels = self.channels.read().await;
             if let Some(sender) = channels.get(subject) {
@@ -89,10 +86,7 @@ impl InMemoryTransport {
     }
 
     /// Subscribe to a broadcast channel for a subject.
-    async fn subscribe_to_channel(
-        &self,
-        subject: &str,
-    ) -> broadcast::Receiver<InternalMessage> {
+    async fn subscribe_to_channel(&self, subject: &str) -> broadcast::Receiver<InternalMessage> {
         let sender = self.get_or_create_sender(subject).await;
         sender.subscribe()
     }
@@ -184,14 +178,12 @@ impl Transport for InMemoryTransport {
         // Register this subscriber in the queue group.
         let member_index = {
             let mut groups = self.queue_groups.write().await;
-            let group = groups
-                .entry(group_key.clone())
-                .or_insert_with(|| {
-                    Arc::new(QueueGroup {
-                        counter: AtomicUsize::new(0),
-                        member_count: AtomicUsize::new(0),
-                    })
-                });
+            let group = groups.entry(group_key.clone()).or_insert_with(|| {
+                Arc::new(QueueGroup {
+                    counter: AtomicUsize::new(0),
+                    member_count: AtomicUsize::new(0),
+                })
+            });
             group.member_count.fetch_add(1, Ordering::Relaxed)
         };
 
@@ -344,10 +336,11 @@ mod tests {
         if r3.is_ok() && r3.unwrap().is_some() {
             received_count += 1;
         }
-        assert_eq!(received_count, 3, "each of 3 messages should go to one subscriber");
+        assert_eq!(
+            received_count, 3,
+            "each of 3 messages should go to one subscriber"
+        );
     }
-
-
 
     #[tokio::test]
     async fn queue_groups_on_same_subject_route_independently() {
@@ -479,7 +472,10 @@ mod tests {
 
         let envelope = test_envelope("broadcast.msg");
         let msg_id = envelope.message_id;
-        transport.publish("broadcast.topic", envelope).await.unwrap();
+        transport
+            .publish("broadcast.topic", envelope)
+            .await
+            .unwrap();
 
         let r1 = tokio::time::timeout(Duration::from_millis(100), sub1.next())
             .await

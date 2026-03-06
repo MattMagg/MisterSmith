@@ -84,8 +84,7 @@ pub fn grpc_auth_interceptor(
                 #[cfg(feature = "rbac")]
                 {
                     if let Some(policy) = security.policy.as_ref() {
-                        let authz_request =
-                            build_grpc_authorization_request(&request, &claims);
+                        let authz_request = build_grpc_authorization_request(&request, &claims);
                         let decision = policy.evaluate(&authz_request);
 
                         #[cfg(feature = "audit")]

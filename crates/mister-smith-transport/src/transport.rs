@@ -71,11 +71,8 @@ impl std::fmt::Debug for Subscription {
 #[async_trait]
 pub trait Transport: Send + Sync + 'static {
     /// Publish a message to a subject.
-    async fn publish(
-        &self,
-        subject: &str,
-        envelope: MessageEnvelope,
-    ) -> Result<(), TransportError>;
+    async fn publish(&self, subject: &str, envelope: MessageEnvelope)
+        -> Result<(), TransportError>;
 
     /// Subscribe to messages on a subject.
     async fn subscribe(&self, subject: &str) -> Result<Subscription, TransportError>;

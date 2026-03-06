@@ -103,15 +103,12 @@ impl RuntimePerformanceMonitor {
     fn collect_unstable_metrics(&self, m: &tokio::runtime::RuntimeMetrics) {
         // Blocking thread pool
         metrics::gauge!("runtime.blocking_threads").set(m.num_blocking_threads() as f64);
-        metrics::gauge!("runtime.idle_blocking_threads")
-            .set(m.num_idle_blocking_threads() as f64);
+        metrics::gauge!("runtime.idle_blocking_threads").set(m.num_idle_blocking_threads() as f64);
         metrics::gauge!("runtime.active_tasks").set(m.active_tasks_count() as f64);
 
         // Queue depths
-        metrics::gauge!("runtime.injection_queue_depth")
-            .set(m.injection_queue_depth() as f64);
-        metrics::gauge!("runtime.blocking_queue_depth")
-            .set(m.blocking_queue_depth() as f64);
+        metrics::gauge!("runtime.injection_queue_depth").set(m.injection_queue_depth() as f64);
+        metrics::gauge!("runtime.blocking_queue_depth").set(m.blocking_queue_depth() as f64);
 
         // Per-worker extended metrics
         for i in 0..m.num_workers() {

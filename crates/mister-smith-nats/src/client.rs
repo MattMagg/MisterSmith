@@ -193,7 +193,9 @@ impl Transport for NatsTransport {
         let client = self.get_client().await.map_err(TransportError::from)?;
         let payload = envelope.to_bytes()?;
 
-        let request = async_nats::Request::new().timeout(Some(timeout)).payload(payload);
+        let request = async_nats::Request::new()
+            .timeout(Some(timeout))
+            .payload(payload);
 
         let response = client
             .send_request(subject.to_string(), request)
@@ -270,10 +272,7 @@ impl DurableTransport for NatsTransport {
 
         // Set MsgId header for server-side deduplication using the envelope's message_id.
         let mut headers = async_nats::HeaderMap::new();
-        headers.insert(
-            "Nats-Msg-Id",
-            envelope.message_id.to_string().as_str(),
-        );
+        headers.insert("Nats-Msg-Id", envelope.message_id.to_string().as_str());
 
         let ack_future = js
             .publish_with_headers(subject.to_string(), headers, payload)
@@ -298,14 +297,9 @@ impl DurableTransport for NatsTransport {
         let client = self.get_client().await.map_err(TransportError::from)?;
         let js = async_nats::jetstream::new(client);
 
-        let stream = js
-            .get_stream(stream_name)
-            .await
-            .map_err(|e| {
-                TransportError::SubscriptionError(format!(
-                    "stream '{stream_name}' not found: {e}"
-                ))
-            })?;
+        let stream = js.get_stream(stream_name).await.map_err(|e| {
+            TransportError::SubscriptionError(format!("stream '{stream_name}' not found: {e}"))
+        })?;
 
         let consumer_config = async_nats::jetstream::consumer::pull::Config {
             durable_name: Some(consumer_name.to_string()),

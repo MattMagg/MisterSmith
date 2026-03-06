@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use mister_smith_core::SecurityError;
 use rcgen::{
-    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose,
-    IsCa, Issuer, KeyPair, KeyUsagePurpose, SanType,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
+    Issuer, KeyPair, KeyUsagePurpose, SanType,
 };
 
 /// Paths to all generated development certificate and key files.
@@ -99,7 +99,10 @@ pub fn generate_dev_certificates(
             } else {
                 SanType::DnsName(san.clone().try_into().unwrap_or_else(|_| {
                     // Fallback: use "localhost" if the SAN is not a valid DNS name.
-                    "localhost".to_string().try_into().expect("localhost is valid")
+                    "localhost"
+                        .to_string()
+                        .try_into()
+                        .expect("localhost is valid")
                 }))
             }
         })

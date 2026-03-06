@@ -62,8 +62,8 @@ impl AuditLogger {
 
         // Compute the hash of the previous event (if any) for chain integrity.
         event.previous_hash = events.back().map(|prev| {
-            let serialized = serde_json::to_string(prev)
-                .expect("SecurityAuditEvent must be serializable");
+            let serialized =
+                serde_json::to_string(prev).expect("SecurityAuditEvent must be serializable");
             hex::encode(Sha256::digest(serialized.as_bytes()))
         });
 
@@ -153,8 +153,8 @@ impl AuditLogger {
 
             let prev = &events[i - 1];
             let expected = {
-                let serialized = serde_json::to_string(prev)
-                    .expect("SecurityAuditEvent must be serializable");
+                let serialized =
+                    serde_json::to_string(prev).expect("SecurityAuditEvent must be serializable");
                 hex::encode(Sha256::digest(serialized.as_bytes()))
             };
 
@@ -263,8 +263,14 @@ mod tests {
     #[test]
     fn record_and_retrieve() {
         let logger = default_logger();
-        logger.record(make_event(AuditEventType::Authentication, AuditOutcome::Success));
-        logger.record(make_event(AuditEventType::Authorization, AuditOutcome::Failure));
+        logger.record(make_event(
+            AuditEventType::Authentication,
+            AuditOutcome::Success,
+        ));
+        logger.record(make_event(
+            AuditEventType::Authorization,
+            AuditOutcome::Failure,
+        ));
 
         let recent = logger.recent_events(10);
         assert_eq!(recent.len(), 2);
@@ -276,7 +282,10 @@ mod tests {
     fn recent_events_respects_limit() {
         let logger = default_logger();
         for _ in 0..5 {
-            logger.record(make_event(AuditEventType::SystemAccess, AuditOutcome::Success));
+            logger.record(make_event(
+                AuditEventType::SystemAccess,
+                AuditOutcome::Success,
+            ));
         }
         let recent = logger.recent_events(3);
         assert_eq!(recent.len(), 3);
@@ -285,9 +294,18 @@ mod tests {
     #[test]
     fn hash_chain_integrity() {
         let logger = default_logger();
-        logger.record(make_event(AuditEventType::Authentication, AuditOutcome::Success));
-        logger.record(make_event(AuditEventType::Authorization, AuditOutcome::Success));
-        logger.record(make_event(AuditEventType::TokenLifecycle, AuditOutcome::Success));
+        logger.record(make_event(
+            AuditEventType::Authentication,
+            AuditOutcome::Success,
+        ));
+        logger.record(make_event(
+            AuditEventType::Authorization,
+            AuditOutcome::Success,
+        ));
+        logger.record(make_event(
+            AuditEventType::TokenLifecycle,
+            AuditOutcome::Success,
+        ));
 
         assert!(logger.verify_chain().is_ok());
     }
@@ -295,9 +313,18 @@ mod tests {
     #[test]
     fn hash_chain_detects_tampering() {
         let logger = default_logger();
-        logger.record(make_event(AuditEventType::Authentication, AuditOutcome::Success));
-        logger.record(make_event(AuditEventType::Authorization, AuditOutcome::Success));
-        logger.record(make_event(AuditEventType::TokenLifecycle, AuditOutcome::Success));
+        logger.record(make_event(
+            AuditEventType::Authentication,
+            AuditOutcome::Success,
+        ));
+        logger.record(make_event(
+            AuditEventType::Authorization,
+            AuditOutcome::Success,
+        ));
+        logger.record(make_event(
+            AuditEventType::TokenLifecycle,
+            AuditOutcome::Success,
+        ));
 
         // Tamper with the second event.
         {
@@ -319,7 +346,10 @@ mod tests {
         let logger = AuditLogger::new(&config);
 
         for _ in 0..5 {
-            logger.record(make_event(AuditEventType::SystemAccess, AuditOutcome::Success));
+            logger.record(make_event(
+                AuditEventType::SystemAccess,
+                AuditOutcome::Success,
+            ));
         }
 
         let events = logger.recent_events(100);
@@ -337,7 +367,10 @@ mod tests {
         assert_eq!(recent.len(), 1);
         assert_eq!(recent[0].event_type, AuditEventType::Authentication);
         assert_eq!(recent[0].principal.as_deref(), Some("agent-42"));
-        assert_eq!(recent[0].details.get("method").map(String::as_str), Some("jwt"));
+        assert_eq!(
+            recent[0].details.get("method").map(String::as_str),
+            Some("jwt")
+        );
     }
 
     #[test]
@@ -410,7 +443,10 @@ mod tests {
     #[test]
     fn verify_chain_single_event() {
         let logger = default_logger();
-        logger.record(make_event(AuditEventType::Authentication, AuditOutcome::Success));
+        logger.record(make_event(
+            AuditEventType::Authentication,
+            AuditOutcome::Success,
+        ));
         assert!(logger.verify_chain().is_ok());
     }
 
@@ -423,8 +459,14 @@ mod tests {
     #[test]
     fn previous_hash_is_set_on_record() {
         let logger = default_logger();
-        logger.record(make_event(AuditEventType::Authentication, AuditOutcome::Success));
-        logger.record(make_event(AuditEventType::Authorization, AuditOutcome::Success));
+        logger.record(make_event(
+            AuditEventType::Authentication,
+            AuditOutcome::Success,
+        ));
+        logger.record(make_event(
+            AuditEventType::Authorization,
+            AuditOutcome::Success,
+        ));
 
         let events = logger.recent_events(10);
         assert!(events[0].previous_hash.is_none());

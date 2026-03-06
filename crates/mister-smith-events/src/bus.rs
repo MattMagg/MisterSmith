@@ -184,7 +184,10 @@ impl std::fmt::Debug for EventBus {
 /// Converts the minimal [`SystemEvent`] from core into the richer [`Event`] type.
 #[async_trait]
 impl EventPublisher for EventBus {
-    async fn publish(&self, system_event: SystemEvent) -> Result<(), mister_smith_core::EventError> {
+    async fn publish(
+        &self,
+        system_event: SystemEvent,
+    ) -> Result<(), mister_smith_core::EventError> {
         let event = Event::new(
             "system",
             crate::types::EventType::Custom(system_event.event_type),
@@ -247,8 +250,6 @@ mod tests {
             self.filter.clone()
         }
     }
-
-
 
     struct ConcurrentSubscribeHandler {
         bus: Arc<EventBus>,
@@ -319,8 +320,6 @@ mod tests {
         assert_eq!(received.id, event_id);
     }
 
-
-
     #[tokio::test]
     async fn handler_can_subscribe_during_dispatch_without_stall() {
         let bus = Arc::new(EventBus::default());
@@ -331,11 +330,14 @@ mod tests {
 
         let event = Event::new("test", EventType::Custom("concurrent-subscribe".into()));
 
-        let publish_result = tokio::time::timeout(Duration::from_millis(250), bus.publish(event)).await;
-        assert!(publish_result.is_ok(), "publish timed out due to lock contention");
+        let publish_result =
+            tokio::time::timeout(Duration::from_millis(250), bus.publish(event)).await;
+        assert!(
+            publish_result.is_ok(),
+            "publish timed out due to lock contention"
+        );
         assert!(publish_result.unwrap().is_ok());
     }
-
 
     #[tokio::test]
     async fn failing_handler_routes_to_dead_letter() {
@@ -368,7 +370,10 @@ mod tests {
         let store = Arc::new(InMemoryEventStore::new());
         let bus = EventBus::default().with_event_store(store.clone());
 
-        let event = Event::new("test", EventType::System(SystemEventType::ConfigurationChanged));
+        let event = Event::new(
+            "test",
+            EventType::System(SystemEventType::ConfigurationChanged),
+        );
         let event_id = event.id;
         bus.publish(event).await.unwrap();
 

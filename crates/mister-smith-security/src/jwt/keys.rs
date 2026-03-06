@@ -22,9 +22,8 @@ pub(crate) fn load_encoding_key(
                     private_pem.display()
                 ))
             })?;
-            EncodingKey::from_rsa_pem(&pem).map_err(|e| {
-                SecurityError::KeyLoadFailed(format!("invalid RSA private key: {e}"))
-            })
+            EncodingKey::from_rsa_pem(&pem)
+                .map_err(|e| SecurityError::KeyLoadFailed(format!("invalid RSA private key: {e}")))
         }
         KeySource::EcPem { private_pem, .. } => {
             validate_ec_algorithm(algorithm)?;
@@ -34,9 +33,8 @@ pub(crate) fn load_encoding_key(
                     private_pem.display()
                 ))
             })?;
-            EncodingKey::from_ec_pem(&pem).map_err(|e| {
-                SecurityError::KeyLoadFailed(format!("invalid EC private key: {e}"))
-            })
+            EncodingKey::from_ec_pem(&pem)
+                .map_err(|e| SecurityError::KeyLoadFailed(format!("invalid EC private key: {e}")))
         }
         KeySource::EdPem { private_pem, .. } => {
             validate_ed_algorithm(algorithm)?;
@@ -46,9 +44,8 @@ pub(crate) fn load_encoding_key(
                     private_pem.display()
                 ))
             })?;
-            EncodingKey::from_ed_pem(&pem).map_err(|e| {
-                SecurityError::KeyLoadFailed(format!("invalid Ed private key: {e}"))
-            })
+            EncodingKey::from_ed_pem(&pem)
+                .map_err(|e| SecurityError::KeyLoadFailed(format!("invalid Ed private key: {e}")))
         }
     }
 }
@@ -71,9 +68,8 @@ pub(crate) fn load_decoding_key(
                     public_pem.display()
                 ))
             })?;
-            DecodingKey::from_rsa_pem(&pem).map_err(|e| {
-                SecurityError::KeyLoadFailed(format!("invalid RSA public key: {e}"))
-            })
+            DecodingKey::from_rsa_pem(&pem)
+                .map_err(|e| SecurityError::KeyLoadFailed(format!("invalid RSA public key: {e}")))
         }
         KeySource::EcPem { public_pem, .. } => {
             validate_ec_algorithm(algorithm)?;
@@ -83,9 +79,8 @@ pub(crate) fn load_decoding_key(
                     public_pem.display()
                 ))
             })?;
-            DecodingKey::from_ec_pem(&pem).map_err(|e| {
-                SecurityError::KeyLoadFailed(format!("invalid EC public key: {e}"))
-            })
+            DecodingKey::from_ec_pem(&pem)
+                .map_err(|e| SecurityError::KeyLoadFailed(format!("invalid EC public key: {e}")))
         }
         KeySource::EdPem { public_pem, .. } => {
             validate_ed_algorithm(algorithm)?;
@@ -95,9 +90,8 @@ pub(crate) fn load_decoding_key(
                     public_pem.display()
                 ))
             })?;
-            DecodingKey::from_ed_pem(&pem).map_err(|e| {
-                SecurityError::KeyLoadFailed(format!("invalid Ed public key: {e}"))
-            })
+            DecodingKey::from_ed_pem(&pem)
+                .map_err(|e| SecurityError::KeyLoadFailed(format!("invalid Ed public key: {e}")))
         }
     }
 }

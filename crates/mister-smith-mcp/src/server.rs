@@ -26,8 +26,13 @@ pub struct ExposedTool {
 }
 
 /// Handler result for tool invocations.
-pub type ToolHandler =
-    Arc<dyn Fn(serde_json::Value) -> futures::future::BoxFuture<'static, Result<serde_json::Value, McpError>> + Send + Sync>;
+pub type ToolHandler = Arc<
+    dyn Fn(
+            serde_json::Value,
+        ) -> futures::future::BoxFuture<'static, Result<serde_json::Value, McpError>>
+        + Send
+        + Sync,
+>;
 
 /// MCP server that exposes agent tools to external clients.
 pub struct McpServer {
@@ -63,7 +68,9 @@ impl McpServer {
 
     /// Register a tool to be exposed via MCP.
     pub async fn register_tool(&self, tool: ExposedTool, handler: ToolHandler) {
-        let key = format!("{}.{}", tool.namespace, tool.name);
+        let namespace = &tool.namespace;
+        let name = &tool.name;
+        let key = format!("{namespace}.{name}");
         let mut tools = self.tools.write().await;
         tools.insert(key.clone(), tool);
         let mut handlers = self.handlers.write().await;
@@ -87,10 +94,14 @@ impl McpServer {
                     self.config.namespace_views.contains(&t.namespace)
                 }
             })
-            .map(|t| McpTool {
-                name: format!("{}.{}", t.namespace, t.name),
-                description: t.description.clone(),
-                input_schema: t.input_schema.clone(),
+            .map(|t| {
+                let namespace = &t.namespace;
+                let name = &t.name;
+                McpTool {
+                    name: format!("{namespace}.{name}"),
+                    description: t.description.clone(),
+                    input_schema: t.input_schema.clone(),
+                }
             })
             .collect();
         Ok(filtered)
@@ -157,9 +168,8 @@ mod tests {
             namespace: "agent".into(),
         };
 
-        let handler: ToolHandler = Arc::new(|_params| {
-            Box::pin(async { Ok(serde_json::json!({"message": "hello"})) })
-        });
+        let handler: ToolHandler =
+            Arc::new(|_params| Box::pin(async { Ok(serde_json::json!({"message": "hello"})) }));
 
         server.register_tool(tool, handler).await;
 
@@ -211,9 +221,8 @@ mod tests {
             namespace: "agent".into(),
         };
 
-        let handler: ToolHandler = Arc::new(|params| {
-            Box::pin(async move { Ok(serde_json::json!({"echo": params})) })
-        });
+        let handler: ToolHandler =
+            Arc::new(|params| Box::pin(async move { Ok(serde_json::json!({"echo": params})) }));
 
         server.register_tool(tool, handler).await;
 

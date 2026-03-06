@@ -217,7 +217,7 @@ impl RuntimeManager {
     // -- Task spawning -------------------------------------------------------
 
     /// Spawn an async task on the runtime.
-///
+    ///
     /// Returns the task's original [`JoinHandle`] so callers can directly await, abort,
     /// or inspect panic/cancellation outcomes for the submitted task itself.
     ///
@@ -296,8 +296,7 @@ impl RuntimeManager {
     ///
     /// Uses `try_init()` so that repeated calls (e.g., in tests) are harmless.
     fn init_tracing() {
-        let filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("info"));
+        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
         let _ = tracing_subscriber::fmt()
             .with_env_filter(filter)
@@ -311,11 +310,7 @@ impl RuntimeManager {
 
 impl std::fmt::Debug for RuntimeManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let handle_count = self
-            .tracked_tasks
-            .lock()
-            .map(|h| h.len())
-            .unwrap_or(0);
+        let handle_count = self.tracked_tasks.lock().map(|h| h.len()).unwrap_or(0);
         f.debug_struct("RuntimeManager")
             .field("shutting_down", &self.is_shutting_down())
             .field("tracked_tasks", &handle_count)
@@ -464,8 +459,7 @@ mod tests {
 
     #[test]
     fn initialize_creates_manager() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
         assert!(!manager.is_shutting_down());
     }
 
@@ -492,8 +486,7 @@ mod tests {
 
     #[test]
     fn spawn_task_handle_resolves_when_submitted_task_completes() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
 
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let (finish_tx, finish_rx) = tokio::sync::oneshot::channel();
@@ -503,36 +496,44 @@ mod tests {
             let _ = finish_rx.await;
         });
 
-        started_rx.recv_timeout(Duration::from_secs(1))
+        started_rx
+            .recv_timeout(Duration::from_secs(1))
             .expect("task should start");
-        assert!(!handle.is_finished(), "handle should not finish before task completion");
+        assert!(
+            !handle.is_finished(),
+            "handle should not finish before task completion"
+        );
 
         finish_tx.send(()).expect("task should still be waiting");
-        manager.runtime().block_on(handle).expect("task should complete successfully");
+        manager
+            .runtime()
+            .block_on(handle)
+            .expect("task should complete successfully");
     }
 
     #[test]
     fn spawn_blocking_task_runs() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
 
         let (tx, rx) = std::sync::mpsc::channel();
         let handle = manager.spawn_blocking_task(move || {
             tx.send(99).unwrap();
         });
 
-        let val = rx.recv_timeout(Duration::from_secs(5))
+        let val = rx
+            .recv_timeout(Duration::from_secs(5))
             .expect("blocking task should have sent a value");
         assert_eq!(val, 99);
 
-        manager.runtime().block_on(handle).expect("blocking task handle should resolve");
+        manager
+            .runtime()
+            .block_on(handle)
+            .expect("blocking task handle should resolve");
     }
-
 
     #[test]
     fn spawn_task_panic_is_observable_to_caller() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
 
         let handle = manager.spawn_task(async {
             panic!("boom");
@@ -547,8 +548,7 @@ mod tests {
 
     #[test]
     fn spawn_task_abort_is_observable_to_caller() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
 
         let handle = manager.spawn_task(async {
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -564,8 +564,7 @@ mod tests {
 
     #[test]
     fn is_shutting_down_reflects_signal() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
 
         assert!(!manager.is_shutting_down());
         manager.shutdown_signal.store(true, Ordering::SeqCst);
@@ -574,8 +573,7 @@ mod tests {
 
     #[test]
     fn runtime_accessor_returns_arc() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
         let rt = manager.runtime();
         // Verify we can use the runtime.
         rt.block_on(async { 1 + 1 });
@@ -583,8 +581,7 @@ mod tests {
 
     #[test]
     fn shutdown_signal_accessor_shares_flag() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
         let signal = manager.shutdown_signal();
         signal.store(true, Ordering::SeqCst);
         assert!(manager.is_shutting_down());
@@ -592,8 +589,7 @@ mod tests {
 
     #[test]
     fn graceful_shutdown_aborts_outstanding_tasks() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
 
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let handle = manager.spawn_task(async move {
@@ -601,19 +597,20 @@ mod tests {
             tokio::time::sleep(Duration::from_secs(5)).await;
         });
 
-        started_rx.recv_timeout(Duration::from_secs(1))
+        started_rx
+            .recv_timeout(Duration::from_secs(1))
             .expect("task should start before shutdown");
 
         let runtime = Arc::clone(manager.runtime());
-        manager.graceful_shutdown().expect("shutdown should succeed");
+        manager
+            .graceful_shutdown()
+            .expect("shutdown should succeed");
 
         let join_err = runtime
             .block_on(handle)
             .expect_err("task should be cancelled by shutdown");
         assert!(join_err.is_cancelled());
     }
-
-
 
     #[test]
     fn graceful_shutdown_returns_err_on_timeout() {
@@ -626,7 +623,9 @@ mod tests {
             std::thread::sleep(Duration::from_millis(250));
         });
 
-        let err = manager.graceful_shutdown().expect_err("shutdown should fail");
+        let err = manager
+            .graceful_shutdown()
+            .expect_err("shutdown should fail");
         match err {
             RuntimeError::ShutdownFailed(msg) => {
                 assert!(msg.contains("exceeded shutdown timeout"));
@@ -638,8 +637,7 @@ mod tests {
 
     #[test]
     fn debug_impl_works() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
         let debug = format!("{:?}", manager);
         assert!(debug.contains("RuntimeManager"));
         assert!(debug.contains("shutting_down"));
@@ -647,16 +645,14 @@ mod tests {
 
     #[test]
     fn builder_debug_impl() {
-        let builder = RuntimeManager::builder()
-            .shutdown_timeout(Duration::from_secs(5));
+        let builder = RuntimeManager::builder().shutdown_timeout(Duration::from_secs(5));
         let debug = format!("{:?}", builder);
         assert!(debug.contains("RuntimeManagerBuilder"));
     }
 
     #[test]
     fn start_system_installs_signal_handler() {
-        let manager = RuntimeManager::initialize(&test_config())
-            .expect("should initialize");
+        let manager = RuntimeManager::initialize(&test_config()).expect("should initialize");
         // start_system should not panic.
         manager.start_system();
         // Signal handler is running — verify the manager is still not shutting down.

@@ -312,11 +312,7 @@ impl HybridStateManager {
             match self.kv.get::<Value>(kv_key).await {
                 Ok(Some(value)) => {
                     match crate::postgres::queries::upsert_state(
-                        &self.pool,
-                        agent_id,
-                        state_key,
-                        value,
-                        None,
+                        &self.pool, agent_id, state_key, value, None,
                     )
                     .await
                     {
@@ -340,7 +336,10 @@ impl HybridStateManager {
                 }
                 Err(e) => {
                     warn!(key = %kv_key, error = %e, "Failed to read dirty key from KV during flush");
-                    self.dirty.lock().await.re_mark(kv_key.clone(), saved_oldest);
+                    self.dirty
+                        .lock()
+                        .await
+                        .re_mark(kv_key.clone(), saved_oldest);
                 }
             }
         }
@@ -392,7 +391,9 @@ impl HybridStateManager {
                                 "Background flush failed"
                             );
                             if retries >= manager.flush_config.max_flush_retries {
-                                warn!("Max flush retries exceeded, pausing background flush for 30s");
+                                warn!(
+                                    "Max flush retries exceeded, pausing background flush for 30s"
+                                );
                                 tokio::time::sleep(Duration::from_secs(30)).await;
                                 retries = 0;
                             }

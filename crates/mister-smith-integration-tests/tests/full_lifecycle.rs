@@ -23,7 +23,9 @@ use mister_smith_config::RuntimeConfig;
 use mister_smith_core::EventPublisher;
 use mister_smith_events::{Event, EventBus, EventType, SystemEventType};
 use mister_smith_monitoring::types::{ComponentId, Status};
-use mister_smith_monitoring::{HealthMonitor, MetricsCollector, MonitoringSystem, RuntimeHealthCheck};
+use mister_smith_monitoring::{
+    HealthMonitor, MetricsCollector, MonitoringSystem, RuntimeHealthCheck,
+};
 use mister_smith_runtime::manager::RuntimeManager;
 
 #[tokio::test]
@@ -77,11 +79,9 @@ async fn full_phase2_startup_shutdown_lifecycle() {
     // 6. Create a MonitoringSystem with the health monitor and metrics
     //    collector, and attach the event publisher.
     // -----------------------------------------------------------------------
-    let monitoring_system = MonitoringSystem::new(
-        Arc::clone(&health_monitor),
-        Arc::clone(&metrics_collector),
-    )
-    .with_event_publisher(Arc::clone(&event_bus) as Arc<dyn EventPublisher>);
+    let monitoring_system =
+        MonitoringSystem::new(Arc::clone(&health_monitor), Arc::clone(&metrics_collector))
+            .with_event_publisher(Arc::clone(&event_bus) as Arc<dyn EventPublisher>);
 
     // -----------------------------------------------------------------------
     // 7. Create a shutdown signal (Arc<AtomicBool>).
@@ -100,10 +100,7 @@ async fn full_phase2_startup_shutdown_lifecycle() {
     // 9. Publish a SystemEventType::Started event through the EventBus.
     //    This simulates the framework announcing its startup.
     // -----------------------------------------------------------------------
-    let started_event = Event::new(
-        "mister-smith",
-        EventType::System(SystemEventType::Started),
-    );
+    let started_event = Event::new("mister-smith", EventType::System(SystemEventType::Started));
     event_bus
         .publish(started_event)
         .await

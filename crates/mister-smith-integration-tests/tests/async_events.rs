@@ -14,9 +14,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use mister_smith_async::{
-    AsyncTask, CircuitBreaker, CircuitState, TaskError, TaskExecutor,
-};
+use mister_smith_async::{AsyncTask, CircuitBreaker, CircuitState, TaskError, TaskExecutor};
 use mister_smith_events::{Event, EventBus, EventType, SystemEventType};
 
 // ---------------------------------------------------------------------------
@@ -116,7 +114,9 @@ async fn task_executor_circuit_breaker_and_event_bus() {
     );
     let event_id = event.id;
 
-    bus.publish(event).await.expect("EventBus publish should succeed");
+    bus.publish(event)
+        .await
+        .expect("EventBus publish should succeed");
 
     let received = rx
         .recv()

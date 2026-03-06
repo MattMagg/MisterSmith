@@ -200,8 +200,7 @@ mod tests {
     fn supervisor_node_with_parent() {
         let sup_id = AgentId::new();
         let parent_id = AgentId::new();
-        let node =
-            SupervisorNode::with_parent(sup_id, parent_id, SupervisionStrategy::default());
+        let node = SupervisorNode::with_parent(sup_id, parent_id, SupervisionStrategy::default());
         assert_eq!(node.parent_id, Some(parent_id));
     }
 

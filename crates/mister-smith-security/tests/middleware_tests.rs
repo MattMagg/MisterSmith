@@ -31,7 +31,11 @@ fn test_jwt_config() -> JwtConfig {
     }
 }
 
-fn test_security_layer(enabled: bool, auth_enabled: bool, authz_enabled: bool) -> Arc<SecurityLayer> {
+fn test_security_layer(
+    enabled: bool,
+    auth_enabled: bool,
+    authz_enabled: bool,
+) -> Arc<SecurityLayer> {
     Arc::new(
         SecurityLayer::new(SecurityLayerConfig {
             enabled,
@@ -104,7 +108,8 @@ fn latest_auth_failure_reason(security: &SecurityLayer) -> String {
 #[tokio::test]
 async fn valid_bearer_token_passes() {
     let security = test_security_layer(true, true, true);
-    let token = test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
+    let token =
+        test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
     let app = test_app(security);
 
     let request = Request::builder()
@@ -236,7 +241,8 @@ async fn security_disabled_passes_through() {
 #[tokio::test]
 async fn rate_limiter_returns_429() {
     let security = test_security_layer(true, true, true);
-    let token = test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
+    let token =
+        test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
 
     // The SecurityLayer creates a rate limiter with 100 requests/60s.
     // Let's test the rate limiter directly instead.
@@ -356,10 +362,8 @@ async fn authenticated_but_unauthorized_http_request_returns_403() {
 #[tokio::test]
 async fn authorized_http_request_succeeds() {
     let security = test_security_layer(true, true, true);
-    let token = test_token_with_permissions(
-        &security,
-        vec!["get:/protected:/protected".to_string()],
-    );
+    let token =
+        test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
     let app = test_app(security);
 
     let request = Request::builder()
@@ -383,9 +387,10 @@ fn authenticated_but_unauthorized_grpc_request_returns_permission_denied() {
     request
         .metadata_mut()
         .insert("authorization", format!("Bearer {token}").parse().unwrap());
-    request
-        .extensions_mut()
-        .insert(tonic::GrpcMethod::new("mistersmith.SecurityService", "Check"));
+    request.extensions_mut().insert(tonic::GrpcMethod::new(
+        "mistersmith.SecurityService",
+        "Check",
+    ));
 
     let result = interceptor(request);
     assert!(result.is_err());
@@ -398,8 +403,10 @@ fn authorized_grpc_request_succeeds() {
     let security = test_security_layer(true, true, true);
     let token = test_token_with_permissions(
         &security,
-        vec!["grpc_call:/mistersmith.SecurityService/Check:/mistersmith.SecurityService/Check"
-            .to_string()],
+        vec![
+            "grpc_call:/mistersmith.SecurityService/Check:/mistersmith.SecurityService/Check"
+                .to_string(),
+        ],
     );
     let interceptor =
         mister_smith_security::middleware::tonic_mw::grpc_auth_interceptor(security.clone());
@@ -408,9 +415,10 @@ fn authorized_grpc_request_succeeds() {
     request
         .metadata_mut()
         .insert("authorization", format!("Bearer {token}").parse().unwrap());
-    request
-        .extensions_mut()
-        .insert(tonic::GrpcMethod::new("mistersmith.SecurityService", "Check"));
+    request.extensions_mut().insert(tonic::GrpcMethod::new(
+        "mistersmith.SecurityService",
+        "Check",
+    ));
 
     let result = interceptor(request);
     assert!(result.is_ok());
@@ -422,10 +430,8 @@ async fn audit_log_contains_authz_events_for_allow_and_deny() {
 
     let security = test_security_layer(true, true, true);
     let denied_token = test_token(&security);
-    let allowed_token = test_token_with_permissions(
-        &security,
-        vec!["get:/protected:/protected".to_string()],
-    );
+    let allowed_token =
+        test_token_with_permissions(&security, vec!["get:/protected:/protected".to_string()]);
 
     let app = test_app(security.clone());
 
@@ -454,16 +460,12 @@ async fn audit_log_contains_authz_events_for_allow_and_deny() {
         .filter(|event| event.event_type == AuditEventType::Authorization)
         .collect();
 
-    assert!(
-        authz_events
-            .iter()
-            .any(|event| event.outcome == AuditOutcome::Failure)
-    );
-    assert!(
-        authz_events
-            .iter()
-            .any(|event| event.outcome == AuditOutcome::Success)
-    );
+    assert!(authz_events
+        .iter()
+        .any(|event| event.outcome == AuditOutcome::Failure));
+    assert!(authz_events
+        .iter()
+        .any(|event| event.outcome == AuditOutcome::Success));
 }
 
 // -- Error response sanitization ------------------------------------------

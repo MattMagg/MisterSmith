@@ -89,12 +89,7 @@ mod tests {
 
     #[test]
     fn test_team_disband() {
-        let mut team = Team::new(
-            AgentId::new(),
-            TeamPattern::Pipeline,
-            TaskId::new(),
-            vec![],
-        );
+        let mut team = Team::new(AgentId::new(), TeamPattern::Pipeline, TaskId::new(), vec![]);
 
         assert!(team.is_active());
         team.disband();

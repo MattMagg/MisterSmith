@@ -55,10 +55,7 @@ struct MockTool {
 
 #[async_trait]
 impl Tool for MockTool {
-    async fn execute(
-        &self,
-        _params: serde_json::Value,
-    ) -> Result<serde_json::Value, ToolError> {
+    async fn execute(&self, _params: serde_json::Value) -> Result<serde_json::Value, ToolError> {
         Ok(serde_json::json!({"status": "ok"}))
     }
 
@@ -86,10 +83,7 @@ struct MockAgent {
 
 #[async_trait]
 impl Tool for MockAgent {
-    async fn execute(
-        &self,
-        params: serde_json::Value,
-    ) -> Result<serde_json::Value, ToolError> {
+    async fn execute(&self, params: serde_json::Value) -> Result<serde_json::Value, ToolError> {
         self.tool.execute(params).await
     }
 
@@ -115,10 +109,7 @@ impl Agent for MockAgent {
     type Context = String;
     type Error = ToolError;
 
-    async fn process(
-        &self,
-        _message: serde_json::Value,
-    ) -> Result<serde_json::Value, Self::Error> {
+    async fn process(&self, _message: serde_json::Value) -> Result<serde_json::Value, Self::Error> {
         Ok(serde_json::json!({"agent": "mock"}))
     }
 
@@ -283,9 +274,7 @@ impl EventPublisher for MockEventPublisher {
 
 #[test]
 fn actor_trait_compiles() {
-    let actor = MockActor {
-        id: AgentId::new(),
-    };
+    let actor = MockActor { id: AgentId::new() };
     assert_ne!(actor.actor_id().to_string(), "");
 }
 
@@ -311,10 +300,16 @@ fn supervisor_trait_compiles() {
         id: AgentId::new(),
         strategy: SupervisionStrategy::default(),
     };
-    assert_eq!(
-        supervisor.restart_policy(),
-        RestartPolicy::OneForOne
-    );
+    assert_eq!(supervisor.restart_policy(), RestartPolicy::OneForOne);
+}
+
+#[test]
+fn resource_trait_compiles() {
+    let resource = MockResource {
+        id: ResourceId::new(),
+    };
+    assert!(resource.is_healthy());
+    assert_ne!(resource.resource_id().to_string(), "");
 }
 
 #[test]
@@ -322,7 +317,10 @@ fn transport_trait_compiles() {
     let transport = MockTransport {
         status: ConnectionStatus::Disconnected,
     };
-    assert_eq!(transport.connection_status(), ConnectionStatus::Disconnected);
+    assert_eq!(
+        transport.connection_status(),
+        ConnectionStatus::Disconnected
+    );
 }
 
 #[test]

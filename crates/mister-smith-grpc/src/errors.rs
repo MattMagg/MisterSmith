@@ -58,9 +58,7 @@ impl From<TransportError> for Status {
     fn from(err: TransportError) -> Self {
         match &err {
             TransportError::Timeout(_) => Status::new(Code::DeadlineExceeded, err.to_string()),
-            TransportError::ConnectionFailed(_) => {
-                Status::new(Code::Unavailable, err.to_string())
-            }
+            TransportError::ConnectionFailed(_) => Status::new(Code::Unavailable, err.to_string()),
             TransportError::SubjectInvalid(_) => {
                 Status::new(Code::InvalidArgument, err.to_string())
             }

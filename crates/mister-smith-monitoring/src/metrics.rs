@@ -194,10 +194,7 @@ impl MetricsCollector {
 
     async fn push_metric(&self, metric: Metric) {
         let mut buffer = self.buffer.write().await;
-        buffer
-            .entry(metric.name.clone())
-            .or_default()
-            .push(metric);
+        buffer.entry(metric.name.clone()).or_default().push(metric);
     }
 
     /// Returns the number of buffered metric observations (across all names).
@@ -266,9 +263,7 @@ mod tests {
     #[tokio::test]
     async fn set_gauge_buffers() {
         let collector = MetricsCollector::new(Duration::from_secs(60));
-        collector
-            .set_gauge("cpu_usage", 0.75, HashMap::new())
-            .await;
+        collector.set_gauge("cpu_usage", 0.75, HashMap::new()).await;
         assert_eq!(collector.buffered_count().await, 1);
     }
 
@@ -285,14 +280,12 @@ mod tests {
     async fn flush_sends_to_backend() {
         let collector = MetricsCollector::new(Duration::from_secs(60));
         let backend = Arc::new(CapturingBackend::new());
-        collector.add_backend(Arc::clone(&backend) as Arc<dyn MetricsBackend>).await;
+        collector
+            .add_backend(Arc::clone(&backend) as Arc<dyn MetricsBackend>)
+            .await;
 
-        collector
-            .increment_counter("a", HashMap::new())
-            .await;
-        collector
-            .set_gauge("b", 1.0, HashMap::new())
-            .await;
+        collector.increment_counter("a", HashMap::new()).await;
+        collector.set_gauge("b", 1.0, HashMap::new()).await;
 
         collector.flush().await;
 
@@ -304,7 +297,9 @@ mod tests {
     async fn flush_empty_buffer_is_noop() {
         let collector = MetricsCollector::new(Duration::from_secs(60));
         let backend = Arc::new(CapturingBackend::new());
-        collector.add_backend(Arc::clone(&backend) as Arc<dyn MetricsBackend>).await;
+        collector
+            .add_backend(Arc::clone(&backend) as Arc<dyn MetricsBackend>)
+            .await;
 
         collector.flush().await;
         assert_eq!(backend.captured_count(), 0);
@@ -317,9 +312,7 @@ mod tests {
             .add_backend(Arc::new(FailingBackend) as Arc<dyn MetricsBackend>)
             .await;
 
-        collector
-            .increment_counter("x", HashMap::new())
-            .await;
+        collector.increment_counter("x", HashMap::new()).await;
 
         // Should log an error but not panic.
         collector.flush().await;
@@ -343,7 +336,9 @@ mod tests {
     async fn metrics_have_tags() {
         let collector = MetricsCollector::new(Duration::from_secs(60));
         let backend = Arc::new(CapturingBackend::new());
-        collector.add_backend(Arc::clone(&backend) as Arc<dyn MetricsBackend>).await;
+        collector
+            .add_backend(Arc::clone(&backend) as Arc<dyn MetricsBackend>)
+            .await;
 
         let mut tags = HashMap::new();
         tags.insert("method".to_string(), "GET".to_string());

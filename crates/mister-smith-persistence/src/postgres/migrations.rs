@@ -93,12 +93,11 @@ impl MigrationRunner {
     /// Returns the highest applied migration version, or `None` if no
     /// migrations have been applied.
     pub async fn current_version(&self) -> Result<Option<i64>, PersistenceError> {
-        let row: Option<(i64,)> = sqlx::query_as(
-            "SELECT version FROM _sqlx_migrations ORDER BY version DESC LIMIT 1",
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
+        let row: Option<(i64,)> =
+            sqlx::query_as("SELECT version FROM _sqlx_migrations ORDER BY version DESC LIMIT 1")
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
 
         Ok(row.map(|(v,)| v))
     }
@@ -151,14 +150,9 @@ impl MigrationRunner {
     ///   if no down-migration exists for the version, or if the SQL fails.
     pub async fn revert(&self) -> Result<i64, PersistenceError> {
         // Find the latest applied migration version
-        let version = self
-            .current_version()
-            .await?
-            .ok_or_else(|| {
-                PersistenceError::MigrationFailed(
-                    "No migrations to revert".to_string(),
-                )
-            })?;
+        let version = self.current_version().await?.ok_or_else(|| {
+            PersistenceError::MigrationFailed("No migrations to revert".to_string())
+        })?;
 
         // Look up the embedded down-migration SQL
         let sql = down_migration_sql(version).ok_or_else(|| {
@@ -174,14 +168,11 @@ impl MigrationRunner {
             .await
             .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
 
-        sqlx::query(sql)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| {
-                PersistenceError::MigrationFailed(format!(
-                    "Down-migration for version {version} failed: {e}"
-                ))
-            })?;
+        sqlx::query(sql).execute(&mut *tx).await.map_err(|e| {
+            PersistenceError::MigrationFailed(format!(
+                "Down-migration for version {version} failed: {e}"
+            ))
+        })?;
 
         // Remove the migration record
         sqlx::query("DELETE FROM _sqlx_migrations WHERE version = $1")
@@ -203,12 +194,11 @@ impl MigrationRunner {
 
     /// Count successfully applied migrations.
     async fn applied_count(&self) -> Result<usize, PersistenceError> {
-        let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM _sqlx_migrations WHERE success = true",
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
+        let row: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM _sqlx_migrations WHERE success = true")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
 
         Ok(row.0 as usize)
     }

@@ -19,15 +19,15 @@ use mister_smith_transport::{
     TaskResult, TaskStatus, Transport,
 };
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::transport::Server;
-use tonic_health::ServingStatus;
 use tonic_health::pb::health_check_response::ServingStatus as PbServingStatus;
 use tonic_health::pb::health_client::HealthClient;
 use tonic_health::pb::HealthCheckRequest;
+use tonic_health::ServingStatus;
 use uuid::Uuid;
 
 fn external_integration_enabled() -> bool {
@@ -60,19 +60,29 @@ async fn e2e_task_assignment_to_result() {
     let mut subscription = transport.subscribe(&subject).await.unwrap();
 
     let assignment = TaskAssignment {
-        task_id, task_type: "data-processing".to_string(),
-        payload: serde_json::json!({"batch": 42}), priority: MessagePriority::High,
-        deadline: None, assigned_agent: Some(worker_uuid),
-        requester_id: supervisor_uuid, metadata: HashMap::new(),
+        task_id,
+        task_type: "data-processing".to_string(),
+        payload: serde_json::json!({"batch": 42}),
+        priority: MessagePriority::High,
+        deadline: None,
+        assigned_agent: Some(worker_uuid),
+        requester_id: supervisor_uuid,
+        metadata: HashMap::new(),
     };
     let envelope = MessageEnvelope::builder("task.assignment")
-        .source_agent_id(supervisor_uuid).target_agent_id(worker_uuid)
+        .source_agent_id(supervisor_uuid)
+        .target_agent_id(worker_uuid)
         .priority(MessagePriority::High)
-        .payload_msgpack(&assignment).unwrap().build().unwrap();
+        .payload_msgpack(&assignment)
+        .unwrap()
+        .build()
+        .unwrap();
     transport.publish(&subject, envelope.clone()).await.unwrap();
 
     let received = tokio::time::timeout(Duration::from_secs(2), subscription.next())
-        .await.expect("should not timeout").expect("should receive message");
+        .await
+        .expect("should not timeout")
+        .expect("should receive message");
     assert_eq!(received.envelope.message_type, "task.assignment");
     assert_eq!(received.envelope.source_agent_id, Some(supervisor_uuid));
     assert_eq!(received.envelope.target_agent_id, Some(worker_uuid));
@@ -85,18 +95,31 @@ async fn e2e_task_assignment_to_result() {
     let result_subject = SubjectTaxonomy::task_result(&task_id.to_string()).unwrap();
     let mut result_sub = transport.subscribe(&result_subject).await.unwrap();
     let result = TaskResult {
-        task_id, status: TaskStatus::Success,
+        task_id,
+        status: TaskStatus::Success,
         result: Some(serde_json::json!({"rows_processed": 1000})),
-        error: None, duration_ms: 1500, agent_id: worker_uuid,
+        error: None,
+        duration_ms: 1500,
+        agent_id: worker_uuid,
     };
     let result_envelope = MessageEnvelope::builder("task.result")
-        .source_agent_id(worker_uuid).target_agent_id(supervisor_uuid)
-        .priority(MessagePriority::Normal).correlation_id(received.envelope.message_id)
-        .payload_msgpack(&result).unwrap().build().unwrap();
-    transport.publish(&result_subject, result_envelope).await.unwrap();
+        .source_agent_id(worker_uuid)
+        .target_agent_id(supervisor_uuid)
+        .priority(MessagePriority::Normal)
+        .correlation_id(received.envelope.message_id)
+        .payload_msgpack(&result)
+        .unwrap()
+        .build()
+        .unwrap();
+    transport
+        .publish(&result_subject, result_envelope)
+        .await
+        .unwrap();
 
     let result_msg = tokio::time::timeout(Duration::from_secs(2), result_sub.next())
-        .await.expect("should not timeout").expect("should receive result");
+        .await
+        .expect("should not timeout")
+        .expect("should receive result");
     let received_result: TaskResult =
         mister_smith_transport::from_msgpack(&result_msg.envelope.payload).unwrap();
     assert_eq!(received_result.task_id, task_id);
@@ -125,36 +148,61 @@ async fn nats_task_assignment_to_result() {
     let mut supervisor_result_sub = transport.subscribe(&result_subject).await.unwrap();
 
     let assignment = TaskAssignment {
-        task_id, task_type: task_kind.clone(),
-        payload: serde_json::json!({"batch": 42}), priority: MessagePriority::High,
-        deadline: None, assigned_agent: Some(worker_uuid),
-        requester_id: supervisor_uuid, metadata: HashMap::new(),
+        task_id,
+        task_type: task_kind.clone(),
+        payload: serde_json::json!({"batch": 42}),
+        priority: MessagePriority::High,
+        deadline: None,
+        assigned_agent: Some(worker_uuid),
+        requester_id: supervisor_uuid,
+        metadata: HashMap::new(),
     };
     let assignment_envelope = MessageEnvelope::builder("task.assignment")
-        .source_agent_id(supervisor_uuid).target_agent_id(worker_uuid)
+        .source_agent_id(supervisor_uuid)
+        .target_agent_id(worker_uuid)
         .priority(MessagePriority::High)
-        .payload_msgpack(&assignment).unwrap().build().unwrap();
-    transport.publish(&subject, assignment_envelope).await.unwrap();
+        .payload_msgpack(&assignment)
+        .unwrap()
+        .build()
+        .unwrap();
+    transport
+        .publish(&subject, assignment_envelope)
+        .await
+        .unwrap();
 
     let received = tokio::time::timeout(Duration::from_secs(5), worker_sub.next())
-        .await.expect("worker should not timeout").expect("worker should receive assignment");
+        .await
+        .expect("worker should not timeout")
+        .expect("worker should receive assignment");
     let decoded_assignment: TaskAssignment =
         mister_smith_transport::from_msgpack(&received.envelope.payload).unwrap();
     assert_eq!(decoded_assignment.task_id, task_id);
 
     let result = TaskResult {
-        task_id, status: TaskStatus::Success,
+        task_id,
+        status: TaskStatus::Success,
         result: Some(serde_json::json!({"rows_processed": 1000})),
-        error: None, duration_ms: 750, agent_id: worker_uuid,
+        error: None,
+        duration_ms: 750,
+        agent_id: worker_uuid,
     };
     let result_envelope = MessageEnvelope::builder("task.result")
-        .source_agent_id(worker_uuid).target_agent_id(supervisor_uuid)
+        .source_agent_id(worker_uuid)
+        .target_agent_id(supervisor_uuid)
         .correlation_id(received.envelope.message_id)
-        .payload_msgpack(&result).unwrap().build().unwrap();
-    transport.publish(&result_subject, result_envelope).await.unwrap();
+        .payload_msgpack(&result)
+        .unwrap()
+        .build()
+        .unwrap();
+    transport
+        .publish(&result_subject, result_envelope)
+        .await
+        .unwrap();
 
     let result_msg = tokio::time::timeout(Duration::from_secs(5), supervisor_result_sub.next())
-        .await.expect("supervisor should not timeout").expect("supervisor should receive result");
+        .await
+        .expect("supervisor should not timeout")
+        .expect("supervisor should receive result");
     let decoded_result: TaskResult =
         mister_smith_transport::from_msgpack(&result_msg.envelope.payload).unwrap();
     assert_eq!(decoded_result.task_id, task_id);
@@ -167,14 +215,30 @@ async fn nats_task_assignment_to_result() {
 async fn e2e_queue_group_task_distribution() {
     let transport = Arc::new(InMemoryTransport::new());
     let subject = SubjectTaxonomy::task_assignment("batch").unwrap();
-    let mut w1 = transport.queue_subscribe(&subject, "worker-pool").await.unwrap();
-    let mut w2 = transport.queue_subscribe(&subject, "worker-pool").await.unwrap();
+    let mut w1 = transport
+        .queue_subscribe(&subject, "worker-pool")
+        .await
+        .unwrap();
+    let mut w2 = transport
+        .queue_subscribe(&subject, "worker-pool")
+        .await
+        .unwrap();
     for _i in 0..10 {
-        let a = TaskAssignment { task_id: Uuid::new_v4(), task_type: "batch".to_string(),
-            payload: serde_json::json!({}), priority: MessagePriority::Normal,
-            deadline: None, assigned_agent: None, requester_id: Uuid::new_v4(), metadata: HashMap::new() };
+        let a = TaskAssignment {
+            task_id: Uuid::new_v4(),
+            task_type: "batch".to_string(),
+            payload: serde_json::json!({}),
+            priority: MessagePriority::Normal,
+            deadline: None,
+            assigned_agent: None,
+            requester_id: Uuid::new_v4(),
+            metadata: HashMap::new(),
+        };
         let e = MessageEnvelope::builder("task.assignment")
-            .payload_msgpack(&a).unwrap().build().unwrap();
+            .payload_msgpack(&a)
+            .unwrap()
+            .build()
+            .unwrap();
         transport.publish(&subject, e).await.unwrap();
     }
     let (mut c1, mut c2) = (0usize, 0usize);
@@ -204,15 +268,22 @@ async fn e2e_request_reply() {
                 let response = MessageEnvelope::builder("tool.response")
                     .correlation_id(msg.envelope.correlation_id.unwrap())
                     .payload_msgpack(&serde_json::json!({"content": "file data"}))
-                    .unwrap().build().unwrap();
+                    .unwrap()
+                    .build()
+                    .unwrap();
                 t2.publish(&reply, response).await.unwrap();
             }
         }
     });
     let request = MessageEnvelope::builder("tool.call")
         .payload_msgpack(&serde_json::json!({"tool": "read_file", "path": "/tmp/test"}))
-        .unwrap().build().unwrap();
-    let response = transport.request(request_subject, request, Duration::from_secs(5)).await.unwrap();
+        .unwrap()
+        .build()
+        .unwrap();
+    let response = transport
+        .request(request_subject, request, Duration::from_secs(5))
+        .await
+        .unwrap();
     assert_eq!(response.message_type, "tool.response");
     let body: serde_json::Value = mister_smith_transport::from_msgpack(&response.payload).unwrap();
     assert_eq!(body["content"], "file data");
@@ -225,9 +296,14 @@ async fn cross_transport_envelope_roundtrip() {
     let task_id = Uuid::new_v4();
     let requester_id = Uuid::new_v4();
     let assignment = TaskAssignment {
-        task_id, task_type: "analysis".to_string(),
-        payload: serde_json::json!({"key": "value"}), priority: MessagePriority::High,
-        deadline: None, assigned_agent: None, requester_id, metadata: HashMap::new(),
+        task_id,
+        task_type: "analysis".to_string(),
+        payload: serde_json::json!({"key": "value"}),
+        priority: MessagePriority::High,
+        deadline: None,
+        assigned_agent: None,
+        requester_id,
+        metadata: HashMap::new(),
     };
     let msgpack_bytes = mister_smith_transport::to_msgpack(&assignment).unwrap();
     let decoded: TaskAssignment = mister_smith_transport::from_msgpack(&msgpack_bytes).unwrap();
@@ -241,7 +317,10 @@ async fn cross_transport_envelope_roundtrip() {
 
     let envelope = MessageEnvelope::builder("task.assignment")
         .priority(MessagePriority::High)
-        .payload_msgpack(&assignment).unwrap().build().unwrap();
+        .payload_msgpack(&assignment)
+        .unwrap()
+        .build()
+        .unwrap();
     let bytes = envelope.to_bytes().unwrap();
     let restored = MessageEnvelope::from_bytes(&bytes).unwrap();
     assert_eq!(restored.message_type, "task.assignment");
@@ -253,10 +332,22 @@ async fn cross_transport_envelope_roundtrip() {
 /// T049: Subject taxonomy generates consistent subjects across transports.
 #[tokio::test]
 async fn subject_taxonomy_consistency() {
-    assert_eq!(SubjectTaxonomy::task_assignment("default").unwrap(), "tasks.default.assignment");
-    assert_eq!(SubjectTaxonomy::task_result("task-123").unwrap(), "tasks.task-123.result");
-    assert_eq!(SubjectTaxonomy::agent_heartbeat("agent-1").unwrap(), "agents.agent-1.heartbeat");
-    assert_eq!(SubjectTaxonomy::agent_status("worker-1").unwrap(), "agents.worker-1.status");
+    assert_eq!(
+        SubjectTaxonomy::task_assignment("default").unwrap(),
+        "tasks.default.assignment"
+    );
+    assert_eq!(
+        SubjectTaxonomy::task_result("task-123").unwrap(),
+        "tasks.task-123.result"
+    );
+    assert_eq!(
+        SubjectTaxonomy::agent_heartbeat("agent-1").unwrap(),
+        "agents.agent-1.heartbeat"
+    );
+    assert_eq!(
+        SubjectTaxonomy::agent_status("worker-1").unwrap(),
+        "agents.worker-1.status"
+    );
     assert_eq!(SubjectTaxonomy::system_health(), "system.health");
 }
 
@@ -299,8 +390,11 @@ async fn websocket_receives_event_from_transport_message() {
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_task = tokio::spawn(async move {
         axum::serve(listener, app)
-            .with_graceful_shutdown(async { let _ = shutdown_rx.await; })
-            .await.unwrap();
+            .with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+            })
+            .await
+            .unwrap();
     });
     let subject = format!("events.{}", Uuid::new_v4());
     let mut sub = transport.subscribe(&subject).await.unwrap();
@@ -312,7 +406,8 @@ async fn websocket_receives_event_from_transport_message() {
             let payload: serde_json::Value =
                 mister_smith_transport::from_msgpack(&msg.envelope.payload).unwrap();
             let event = WsEvent {
-                event_type: "transport.event".to_string(), payload,
+                event_type: "transport.event".to_string(),
+                payload,
                 timestamp: chrono::Utc::now().to_rfc3339(),
             };
             let _ = event_tx.send(event);
@@ -323,10 +418,15 @@ async fn websocket_receives_event_from_transport_message() {
     let (mut socket, _) = tokio_tungstenite::connect_async(ws_url).await.unwrap();
     let envelope = MessageEnvelope::builder("event.transport")
         .payload_msgpack(&serde_json::json!({"key": "value-from-nats"}))
-        .unwrap().build().unwrap();
+        .unwrap()
+        .build()
+        .unwrap();
     transport.publish(&subject, envelope).await.unwrap();
     let msg = tokio::time::timeout(Duration::from_secs(5), socket.next())
-        .await.expect("ws recv").expect("stream open").expect("valid frame");
+        .await
+        .expect("ws recv")
+        .expect("stream open")
+        .expect("valid frame");
     let text = msg.into_text().unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(parsed["event_type"], "transport.event");
@@ -347,15 +447,24 @@ async fn grpc_health_tracks_transport_state() {
     }
     let transport = NatsTransport::new(nats_test_config("grpc-health"));
     let (reporter, health_service) = health::create_health_service().await;
-    reporter.set_service_status(health::service_names::SYSTEM_SERVICE, ServingStatus::NotServing).await;
+    reporter
+        .set_service_status(
+            health::service_names::SYSTEM_SERVICE,
+            ServingStatus::NotServing,
+        )
+        .await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
     let server_task = tokio::spawn(async move {
-        Server::builder().add_service(health_service)
-            .serve_with_incoming_shutdown(incoming, async { let _ = shutdown_rx.await; })
-            .await.unwrap();
+        Server::builder()
+            .add_service(health_service)
+            .serve_with_incoming_shutdown(incoming, async {
+                let _ = shutdown_rx.await;
+            })
+            .await
+            .unwrap();
     });
     let channel = tonic::transport::Endpoint::from_shared(format!("http://{addr}"))
         .unwrap()
@@ -363,27 +472,49 @@ async fn grpc_health_tracks_transport_state() {
         .await
         .unwrap();
     let mut client = HealthClient::new(channel);
-    let initial = client.check(HealthCheckRequest {
-        service: health::service_names::SYSTEM_SERVICE.to_string(),
-    }).await.unwrap().into_inner();
+    let initial = client
+        .check(HealthCheckRequest {
+            service: health::service_names::SYSTEM_SERVICE.to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
     assert_eq!(initial.status(), PbServingStatus::NotServing);
 
     transport.connect().await.unwrap();
     if transport.connection_state().await == async_nats::connection::State::Connected {
-        reporter.set_service_status(health::service_names::SYSTEM_SERVICE, ServingStatus::Serving).await;
+        reporter
+            .set_service_status(
+                health::service_names::SYSTEM_SERVICE,
+                ServingStatus::Serving,
+            )
+            .await;
     }
-    let connected = client.check(HealthCheckRequest {
-        service: health::service_names::SYSTEM_SERVICE.to_string(),
-    }).await.unwrap().into_inner();
+    let connected = client
+        .check(HealthCheckRequest {
+            service: health::service_names::SYSTEM_SERVICE.to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
     assert_eq!(connected.status(), PbServingStatus::Serving);
 
     transport.disconnect().await.unwrap();
     if transport.connection_state().await != async_nats::connection::State::Connected {
-        reporter.set_service_status(health::service_names::SYSTEM_SERVICE, ServingStatus::NotServing).await;
+        reporter
+            .set_service_status(
+                health::service_names::SYSTEM_SERVICE,
+                ServingStatus::NotServing,
+            )
+            .await;
     }
-    let disconnected = client.check(HealthCheckRequest {
-        service: health::service_names::SYSTEM_SERVICE.to_string(),
-    }).await.unwrap().into_inner();
+    let disconnected = client
+        .check(HealthCheckRequest {
+            service: health::service_names::SYSTEM_SERVICE.to_string(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
     assert_eq!(disconnected.status(), PbServingStatus::NotServing);
     let _ = shutdown_tx.send(());
     server_task.await.unwrap();
@@ -393,7 +524,10 @@ async fn grpc_health_tracks_transport_state() {
 #[tokio::test]
 async fn health_route_still_returns_ok() {
     let app = mister_smith_http::routes::api_router().with_state(AppState::new());
-    let request = Request::builder().uri("/api/v1/health").body(Body::empty()).unwrap();
+    let request = Request::builder()
+        .uri("/api/v1/health")
+        .body(Body::empty())
+        .unwrap();
     let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }

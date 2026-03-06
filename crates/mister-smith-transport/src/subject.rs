@@ -231,7 +231,10 @@ mod tests {
     #[test]
     fn wildcard_subjects() {
         assert_eq!(SubjectTaxonomy::all_agents(), "agents.>");
-        assert_eq!(SubjectTaxonomy::all_task_assignments(), "tasks.*.assignment");
+        assert_eq!(
+            SubjectTaxonomy::all_task_assignments(),
+            "tasks.*.assignment"
+        );
         assert_eq!(SubjectTaxonomy::all_system(), "system.>");
         assert_eq!(SubjectTaxonomy::all_workflows(), "workflow.>");
     }

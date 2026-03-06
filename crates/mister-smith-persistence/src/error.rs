@@ -57,7 +57,11 @@ pub fn from_kv_error(err: impl std::fmt::Display) -> PersistenceError {
 }
 
 /// Convert a KV update error with revision context into a `PersistenceError`.
-pub fn from_kv_version_error(key: &str, expected: u64, _err: impl std::fmt::Display) -> PersistenceError {
+pub fn from_kv_version_error(
+    key: &str,
+    expected: u64,
+    _err: impl std::fmt::Display,
+) -> PersistenceError {
     PersistenceError::VersionConflict {
         key: key.to_string(),
         expected,

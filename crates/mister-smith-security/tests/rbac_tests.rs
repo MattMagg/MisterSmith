@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use mister_smith_security::config::RbacConfig;
 use mister_smith_security::jwt::AgentClaims;
-use mister_smith_security::rbac::{AuthorizationRequest, Permission, PolicyConstraints, PolicyEngine, Role, TimeWindow};
+use mister_smith_security::rbac::{
+    AuthorizationRequest, Permission, PolicyConstraints, PolicyEngine, Role, TimeWindow,
+};
 
 fn claims_with_type(agent_type: &str) -> AgentClaims {
     AgentClaims {

@@ -92,9 +92,7 @@ pub fn apply_env_overlay(config: &mut FrameworkConfig, prefix: &str) {
 /// 3. `./mister-smith.toml`
 /// 4. Environment-specific via `MS_ENVIRONMENT` (e.g., `./mister-smith.production.toml`)
 pub fn discover_config_paths() -> Vec<PathBuf> {
-    let mut paths = vec![
-        PathBuf::from("/etc/mister-smith/config.toml"),
-    ];
+    let mut paths = vec![PathBuf::from("/etc/mister-smith/config.toml")];
 
     if let Some(home) = home_dir() {
         paths.push(home.join(".mister-smith/config.toml"));
@@ -136,7 +134,5 @@ pub fn load_config() -> Result<FrameworkConfig, ConfigValidationError> {
 
 /// Get the user's home directory.
 fn home_dir() -> Option<PathBuf> {
-    std::env::var("HOME")
-        .ok()
-        .map(PathBuf::from)
+    std::env::var("HOME").ok().map(PathBuf::from)
 }

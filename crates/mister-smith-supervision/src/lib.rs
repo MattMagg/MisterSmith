@@ -21,11 +21,11 @@ pub mod tree;
 
 // Public re-exports for convenience
 pub use escalation::escalate;
+pub use health::{ActorSystemHealthCheck, ActorSystemMetrics};
 pub use strategy::{
     apply_restart_policy, check_restart_budget, compute_backoff, should_restart,
     SupervisionDecision, TerminationType,
 };
-pub use health::{ActorSystemHealthCheck, ActorSystemMetrics};
 pub use supervised::SupervisedSystem;
 pub use supervisor::{ChildEntry, SupervisionEvent, SupervisionEventType, SupervisorNode};
 pub use tree::{SupervisionTree, TreeStatus};

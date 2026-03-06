@@ -177,10 +177,7 @@ mod persistence_tests {
             // Metadata should include details, source_ip, and outcome
             let meta = entry.metadata.as_object().unwrap();
             assert_eq!(meta.get("method").unwrap().as_str().unwrap(), "jwt");
-            assert_eq!(
-                meta.get("source_ip").unwrap().as_str().unwrap(),
-                "10.0.0.1"
-            );
+            assert_eq!(meta.get("source_ip").unwrap().as_str().unwrap(), "10.0.0.1");
             assert_eq!(meta.get("outcome").unwrap().as_str().unwrap(), "Success");
         }
 
@@ -245,17 +242,8 @@ mod persistence_tests {
             let logger = AuditLogger::new(&AuditConfig::default());
 
             // Record several events
-            logger.record_auth(
-                "agent-1",
-                AuditOutcome::Success,
-                HashMap::new(),
-            );
-            logger.record_authz(
-                "agent-1",
-                "read",
-                "config",
-                AuditOutcome::Success,
-            );
+            logger.record_auth("agent-1", AuditOutcome::Success, HashMap::new());
+            logger.record_authz("agent-1", "read", "config", AuditOutcome::Success);
             logger.record_auth(
                 "agent-2",
                 AuditOutcome::Failure,

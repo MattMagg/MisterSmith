@@ -102,14 +102,17 @@ mod tests {
     }
 
     #[derive(Debug)]
-    struct OtherPool {
-        count: usize,
-    }
+    struct OtherPool;
 
     #[test]
     fn register_and_retrieve() {
         let mgr = ResourceManager::new();
-        mgr.register_pool("db", FakePool { name: "postgres".into() });
+        mgr.register_pool(
+            "db",
+            FakePool {
+                name: "postgres".into(),
+            },
+        );
 
         let pool = mgr.get_pool::<FakePool>("db").unwrap();
         assert_eq!(pool.name, "postgres");
@@ -131,7 +134,7 @@ mod tests {
     #[test]
     fn remove_pool() {
         let mgr = ResourceManager::new();
-        mgr.register_pool("cache", OtherPool { count: 42 });
+        mgr.register_pool("cache", OtherPool);
         assert_eq!(mgr.pool_count(), 1);
 
         let removed = mgr.remove_pool("cache");
@@ -149,7 +152,7 @@ mod tests {
     fn pool_names() {
         let mgr = ResourceManager::new();
         mgr.register_pool("a", FakePool { name: "a".into() });
-        mgr.register_pool("b", OtherPool { count: 1 });
+        mgr.register_pool("b", OtherPool);
 
         let mut names = mgr.pool_names();
         names.sort();

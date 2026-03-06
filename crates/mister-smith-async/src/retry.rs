@@ -132,8 +132,14 @@ mod tests {
         // Attempt 5: 1s * 10^5 = 100_000s, should be capped to ~5s +/- jitter.
         let d = p.delay_for_attempt(5);
         // With +/- 10% jitter of 5s, result should be in [4.5s, 5.5s].
-        assert!(d >= Duration::from_millis(4500), "d={d:?} should be >= 4.5s");
-        assert!(d <= Duration::from_millis(5500), "d={d:?} should be <= 5.5s");
+        assert!(
+            d >= Duration::from_millis(4500),
+            "d={d:?} should be >= 4.5s"
+        );
+        assert!(
+            d <= Duration::from_millis(5500),
+            "d={d:?} should be <= 5.5s"
+        );
     }
 
     #[test]
@@ -160,7 +166,10 @@ mod tests {
             v.dedup();
             v.len()
         };
-        assert!(unique_count > 1, "Expected jitter variation, got {delays:?}");
+        assert!(
+            unique_count > 1,
+            "Expected jitter variation, got {delays:?}"
+        );
     }
 
     #[test]

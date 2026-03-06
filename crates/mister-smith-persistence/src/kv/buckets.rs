@@ -63,7 +63,7 @@ impl KvBucketManager {
     /// | `AGENT_STATE` | `config.agent_state_ttl_secs` (default 1800s) | `config.replicas` |
     /// | `QUERY_CACHE` | `config.cache_ttl_secs` (default 300s) | always 1 |
     pub async fn initialize_buckets(&mut self) -> Result<(), PersistenceError> {
-        let bucket_specs: [(& str, u64, usize); 3] = [
+        let bucket_specs: [(&str, u64, usize); 3] = [
             (
                 SESSION_DATA,
                 self.config.session_ttl_secs,

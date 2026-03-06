@@ -189,8 +189,7 @@ mod tests {
         stopped.state = AgentState::Terminated;
         registry.register(stopped);
 
-        let available =
-            registry.find_available(AgentType::Worker, &["analysis".to_string()]);
+        let available = registry.find_available(AgentType::Worker, &["analysis".to_string()]);
         assert_eq!(available.len(), 1);
     }
 

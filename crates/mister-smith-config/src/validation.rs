@@ -22,9 +22,10 @@ impl RuntimeConfig {
             }
         }
         if self.blocking_threads == 0 || self.blocking_threads > 512 {
+            let blocking_threads = self.blocking_threads;
             return Err(ConfigValidationError::InvalidValue {
                 field: "blocking_threads".to_string(),
-                reason: format!("must be 1..=512, got {}", self.blocking_threads),
+                reason: format!("must be 1..=512, got {blocking_threads}"),
             });
         }
         Ok(())
@@ -35,9 +36,10 @@ impl SupervisionConfig {
     /// Validate supervision configuration values.
     pub fn validate(&self) -> Result<(), ConfigValidationError> {
         if self.max_restart_attempts > 100 {
+            let max_restart_attempts = self.max_restart_attempts;
             return Err(ConfigValidationError::InvalidValue {
                 field: "max_restart_attempts".to_string(),
-                reason: format!("must be 0..=100, got {}", self.max_restart_attempts),
+                reason: format!("must be 0..=100, got {max_restart_attempts}"),
             });
         }
         if self.restart_window < Duration::from_secs(1)
@@ -45,10 +47,7 @@ impl SupervisionConfig {
         {
             return Err(ConfigValidationError::InvalidValue {
                 field: "restart_window".to_string(),
-                reason: format!(
-                    "must be 1s..=3600s, got {:?}",
-                    self.restart_window
-                ),
+                reason: format!("must be 1s..=3600s, got {:?}", self.restart_window),
             });
         }
         if self.escalation_timeout < Duration::from_secs(1)
@@ -56,10 +55,7 @@ impl SupervisionConfig {
         {
             return Err(ConfigValidationError::InvalidValue {
                 field: "escalation_timeout".to_string(),
-                reason: format!(
-                    "must be 1s..=300s, got {:?}",
-                    self.escalation_timeout
-                ),
+                reason: format!("must be 1s..=300s, got {:?}", self.escalation_timeout),
             });
         }
         Ok(())
@@ -74,10 +70,7 @@ impl MonitoringConfig {
         {
             return Err(ConfigValidationError::InvalidValue {
                 field: "health_check_interval".to_string(),
-                reason: format!(
-                    "must be 1s..=300s, got {:?}",
-                    self.health_check_interval
-                ),
+                reason: format!("must be 1s..=300s, got {:?}", self.health_check_interval),
             });
         }
         if self.metrics_export_interval < Duration::from_secs(1)
@@ -85,10 +78,7 @@ impl MonitoringConfig {
         {
             return Err(ConfigValidationError::InvalidValue {
                 field: "metrics_export_interval".to_string(),
-                reason: format!(
-                    "must be 1s..=600s, got {:?}",
-                    self.metrics_export_interval
-                ),
+                reason: format!("must be 1s..=600s, got {:?}", self.metrics_export_interval),
             });
         }
         let valid_levels = ["trace", "debug", "info", "warn", "error"];

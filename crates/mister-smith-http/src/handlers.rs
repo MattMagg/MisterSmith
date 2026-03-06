@@ -314,7 +314,8 @@ mod tests {
 
     #[tokio::test]
     async fn health_check_returns_healthy_when_transport_connected() {
-        let state = test_state().with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(true)));
+        let state =
+            test_state().with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(true)));
         let Json(response) = health_check(State(state)).await;
 
         assert_eq!(response.status, "healthy");
@@ -327,7 +328,8 @@ mod tests {
 
     #[tokio::test]
     async fn health_check_returns_unhealthy_when_transport_disconnected() {
-        let state = test_state().with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(false)));
+        let state =
+            test_state().with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(false)));
         let Json(response) = health_check(State(state)).await;
 
         assert_eq!(response.status, "unhealthy");

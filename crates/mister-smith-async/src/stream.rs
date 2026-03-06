@@ -76,10 +76,7 @@ impl std::fmt::Debug for StreamMetrics {
                 "items_processed",
                 &self.items_processed.load(Ordering::Relaxed),
             )
-            .field(
-                "items_dropped",
-                &self.items_dropped.load(Ordering::Relaxed),
-            )
+            .field("items_dropped", &self.items_dropped.load(Ordering::Relaxed))
             .field(
                 "backpressure_events",
                 &self.backpressure_events.load(Ordering::Relaxed),
@@ -138,7 +135,9 @@ impl<T: Send + Sync + 'static> StreamProcessor<T> {
             match processor.process(current).await {
                 Ok(result) => current = result,
                 Err(e) => {
-                    self.metrics.processing_errors.fetch_add(1, Ordering::Relaxed);
+                    self.metrics
+                        .processing_errors
+                        .fetch_add(1, Ordering::Relaxed);
                     return Err(e);
                 }
             }

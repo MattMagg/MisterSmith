@@ -60,9 +60,7 @@ impl From<EventBusError> for mister_smith_core::EventError {
             EventBusError::SerializationFailed(msg) => {
                 mister_smith_core::EventError::SerializationFailed(msg)
             }
-            EventBusError::HandlerFailed(msg) => {
-                mister_smith_core::EventError::HandlerFailed(msg)
-            }
+            EventBusError::HandlerFailed(msg) => mister_smith_core::EventError::HandlerFailed(msg),
             // Core EventError lacks these variants; map to closest equivalent.
             EventBusError::Timeout(msg) => {
                 mister_smith_core::EventError::PublicationFailed(format!("timeout: {msg}"))

@@ -150,7 +150,10 @@ pub async fn auth_middleware(
 }
 
 #[cfg(feature = "rbac")]
-fn build_http_authorization_request<B>(request: &Request<B>, claims: &AgentClaims) -> AuthorizationRequest {
+fn build_http_authorization_request<B>(
+    request: &Request<B>,
+    claims: &AgentClaims,
+) -> AuthorizationRequest {
     let route = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
@@ -165,7 +168,10 @@ fn build_http_authorization_request<B>(request: &Request<B>, claims: &AgentClaim
         resource_id: Some(route.to_string()),
         context: [
             ("scope".to_string(), route.to_string()),
-            ("http_method".to_string(), request.method().as_str().to_string()),
+            (
+                "http_method".to_string(),
+                request.method().as_str().to_string(),
+            ),
             ("transport".to_string(), "http".to_string()),
         ]
         .into_iter()

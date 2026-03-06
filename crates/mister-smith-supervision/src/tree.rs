@@ -105,9 +105,7 @@ impl SupervisionTree {
             .get(&child_id)
             .copied()
             .ok_or_else(|| {
-                SupervisionError::TreeCorrupted(format!(
-                    "No supervisor found for child {child_id}"
-                ))
+                SupervisionError::TreeCorrupted(format!("No supervisor found for child {child_id}"))
             })?;
 
         let node = self.nodes.get_mut(&supervisor_id).ok_or_else(|| {
@@ -298,8 +296,10 @@ mod tests {
 
         let child1 = AgentId::new();
         let child2 = AgentId::new();
-        tree.add_child(sup_id, child1, RestartScope::Permanent).unwrap();
-        tree.add_child(sup_id, child2, RestartScope::Transient).unwrap();
+        tree.add_child(sup_id, child1, RestartScope::Permanent)
+            .unwrap();
+        tree.add_child(sup_id, child2, RestartScope::Transient)
+            .unwrap();
 
         assert_eq!(tree.total_nodes(), 3); // 1 supervisor + 2 children
         assert_eq!(tree.find_supervisor(&child1), Some(sup_id));
@@ -385,7 +385,8 @@ mod tests {
         tree.add_supervisor(sup_id, default_strategy(RestartPolicy::OneForOne));
 
         let child = AgentId::new();
-        tree.add_child(sup_id, child, RestartScope::Transient).unwrap();
+        tree.add_child(sup_id, child, RestartScope::Transient)
+            .unwrap();
 
         let decision = tree.handle_failure(child, TerminationType::Normal).unwrap();
         assert_eq!(decision, SupervisionDecision::Stop(child));
@@ -398,7 +399,8 @@ mod tests {
         tree.add_supervisor(sup_id, default_strategy(RestartPolicy::OneForOne));
 
         let child = AgentId::new();
-        tree.add_child(sup_id, child, RestartScope::Temporary).unwrap();
+        tree.add_child(sup_id, child, RestartScope::Temporary)
+            .unwrap();
 
         let decision = tree.handle_failure(child, TerminationType::Error).unwrap();
         assert_eq!(decision, SupervisionDecision::Stop(child));
@@ -418,7 +420,8 @@ mod tests {
         );
 
         let child = AgentId::new();
-        tree.add_child(sup_id, child, RestartScope::Permanent).unwrap();
+        tree.add_child(sup_id, child, RestartScope::Permanent)
+            .unwrap();
 
         // First two failures succeed
         assert!(matches!(
@@ -442,7 +445,8 @@ mod tests {
         let mut tree = SupervisionTree::new();
         let sup_id = AgentId::new();
         tree.add_supervisor(sup_id, default_strategy(RestartPolicy::OneForOne));
-        tree.add_child(sup_id, AgentId::new(), RestartScope::Permanent).unwrap();
+        tree.add_child(sup_id, AgentId::new(), RestartScope::Permanent)
+            .unwrap();
 
         assert_eq!(tree.tree_depth(), 2); // supervisor + 1 level of children
     }
@@ -456,7 +460,8 @@ mod tests {
         tree.add_supervisor(root, default_strategy(RestartPolicy::OneForOne));
         tree.add_supervisor_under(mid, root, default_strategy(RestartPolicy::OneForOne))
             .unwrap();
-        tree.add_child(mid, AgentId::new(), RestartScope::Permanent).unwrap();
+        tree.add_child(mid, AgentId::new(), RestartScope::Permanent)
+            .unwrap();
 
         assert_eq!(tree.tree_depth(), 3);
     }
@@ -495,8 +500,10 @@ mod tests {
         let mut tree = SupervisionTree::new();
         let sup_id = AgentId::new();
         tree.add_supervisor(sup_id, default_strategy(RestartPolicy::OneForOne));
-        tree.add_child(sup_id, AgentId::new(), RestartScope::Permanent).unwrap();
-        tree.add_child(sup_id, AgentId::new(), RestartScope::Permanent).unwrap();
+        tree.add_child(sup_id, AgentId::new(), RestartScope::Permanent)
+            .unwrap();
+        tree.add_child(sup_id, AgentId::new(), RestartScope::Permanent)
+            .unwrap();
 
         let status = tree.query_status();
         assert_eq!(status.total_nodes, 3);
@@ -512,7 +519,8 @@ mod tests {
         tree.add_supervisor(sup_id, default_strategy(RestartPolicy::OneForOne));
 
         let child = AgentId::new();
-        tree.add_child(sup_id, child, RestartScope::Permanent).unwrap();
+        tree.add_child(sup_id, child, RestartScope::Permanent)
+            .unwrap();
         assert_eq!(tree.total_nodes(), 2);
 
         tree.remove_child(&child);

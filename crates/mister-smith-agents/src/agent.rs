@@ -277,7 +277,9 @@ mod tests {
             state: &mut Self::State,
         ) -> Result<Self::Response, Self::Error> {
             state.counter += 1;
-            Ok(format!("handled: {} (count: {})", msg.0, state.counter))
+            let handled = &msg.0;
+            let count = state.counter;
+            Ok(format!("handled: {handled} (count: {count})"))
         }
 
         fn pre_start(&mut self) -> Result<(), Self::Error> {

@@ -25,7 +25,10 @@ pub mod service_names {
 /// `add_service`.
 ///
 /// All services are initially set to `Serving`.
-pub async fn create_health_service() -> (HealthReporter, HealthServer<impl tonic_health::pb::health_server::Health>) {
+pub async fn create_health_service() -> (
+    HealthReporter,
+    HealthServer<impl tonic_health::pb::health_server::Health>,
+) {
     let (reporter, server) = tonic_health::server::health_reporter();
 
     // Register all known services as serving.
@@ -59,10 +62,7 @@ mod tests {
     #[tokio::test]
     async fn service_name_constants() {
         assert_eq!(service_names::SERVER, "");
-        assert_eq!(
-            service_names::AGENT_SERVICE,
-            "mister_smith.v1.AgentService"
-        );
+        assert_eq!(service_names::AGENT_SERVICE, "mister_smith.v1.AgentService");
         assert_eq!(
             service_names::SYSTEM_SERVICE,
             "mister_smith.v1.SystemService"

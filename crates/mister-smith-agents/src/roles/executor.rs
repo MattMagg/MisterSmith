@@ -97,12 +97,10 @@ impl Actor for ExecutorAgent {
                     "result": result,
                 }))
             }
-            ExecutorMessage::QueryProgress => {
-                Ok(serde_json::json!({
-                    "executing": state.executing,
-                    "steps_completed": state.steps_completed,
-                }))
-            }
+            ExecutorMessage::QueryProgress => Ok(serde_json::json!({
+                "executing": state.executing,
+                "steps_completed": state.steps_completed,
+            })),
         }
     }
 
