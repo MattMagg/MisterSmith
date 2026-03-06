@@ -51,13 +51,15 @@ mister-smith-core (foundation types, traits, errors)
 | Directory | Contents |
 |-----------|----------|
 | `crates/` | Rust workspace — 18 crates (Phase 1-7: foundation, runtime/async, actor/supervision, transport, security, persistence, agents) |
-| `specs/` | SpecKit feature directories with spec, plan, and task artifacts |
+| `spec/` | Canonical architecture specifications — 65+ files across 8 domains (the system contract) |
+| `specs/` | SpecKit implementation artifacts — per-phase spec, plan, and task files (the build instructions) |
 | `ROADMAP.md` | 8-phase build roadmap — dependency-aware implementation order |
-| `spec/` | Framework specifications — 65+ files across 8 domains |
 | `plans/` | Implementation plans — batch 1 (core architecture) 7 of 8 agents complete, batch 2 partial |
 | `archive/` | Completed validation work, historical operations, and research |
 | `nats.rs/` | Official NATS Rust client (cloned from nats-io/nats.rs) — reference for async-nats API |
 | `.github/workflows/` | CI/CD pipelines |
+
+> **`spec/` vs `specs/` — these are different directories.** `spec/` contains the canonical architecture specifications defining *what* the system is (types, patterns, interfaces, message schemas). `specs/` contains SpecKit-generated implementation artifacts defining *how* each phase is built (feature specs, plans, task breakdowns). The `ROADMAP.md` bridges them by referencing `spec/` docs for each phase.
 
 ## Key Entry Points
 
@@ -70,22 +72,22 @@ Start here when reading the framework:
 5. **Message contracts**: `spec/data-management/message-schemas.md`
 6. **Type system**: `spec/core-architecture/type-definitions.md`
 
-## Spec Domains
+## Architecture Domains
 
 | Domain | Path | Files | Covers |
 |--------|------|-------|--------|
-| Core Architecture | `spec/core-architecture/` | 21 | System design, async patterns, supervision trees, Tokio runtime, types |
+| Core Architecture | `spec/core-architecture/` | 19 | System design, async patterns, supervision trees, Tokio runtime, types |
 | Data Management | `spec/data-management/` | 19 | Agent orchestration, message schemas, persistence, storage |
 | Transport | `spec/transport/` | 5 | NATS, gRPC, HTTP transport layers |
 | Security | `spec/security/` | 7 | Auth, authorization, TLS, security patterns |
 | Operations | `spec/operations/` | 7 + scripts | Deployment, monitoring, configuration, build |
 | Agent Domains | `spec/agent-domains/` | 1 | Consolidated agent type analysis (9 agent types) |
 | Testing | `spec/testing/` | 2 | Test framework, test schemas |
-| Research | `spec/research/` | 3 | Claude CLI integration analysis |
+| Research | `spec/research/` | 0 | Claude CLI files archived to `archive/claude-cli-research/` |
 
 ## High-Impact Files
 
-Changes to these files cascade across the spec:
+Changes to these files cascade across the architecture:
 
 - `spec/core-architecture/system-architecture.md` — foundation for all specs
 - `spec/core-architecture/type-definitions.md` — core types referenced everywhere
