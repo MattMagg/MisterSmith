@@ -12,6 +12,7 @@
 pub mod failure_detector;
 pub mod health;
 pub mod metrics;
+pub mod prometheus;
 pub mod registry;
 pub mod system;
 pub mod types;
@@ -21,5 +22,6 @@ pub use failure_detector::PhiAccrualFailureDetector;
 pub use health::{HealthCheck, HealthMonitor, RuntimeHealthCheck};
 pub use metrics::{Metric, MetricValue, MetricsBackend, MetricsCollector};
 pub use registry::{MetricsRegistry, OverheadMonitor};
+pub use prometheus::PrometheusBackend;
 pub use system::MonitoringSystem;
 pub use types::{ComponentId, HealthStatus, Status};

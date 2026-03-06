@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mister-smith
+  labels:
+    app.kubernetes.io/name: mister-smith
+    app.kubernetes.io/part-of: mister-smith

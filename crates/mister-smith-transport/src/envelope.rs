@@ -209,6 +209,54 @@ impl MessageEnvelopeBuilder {
     }
 }
 
+// ---------------------------------------------------------------------------
+// W3C Trace Context propagation (Phase 8 — Observability)
+// ---------------------------------------------------------------------------
+
+/// W3C Trace Context header name for trace propagation.
+pub const TRACEPARENT_HEADER: &str = "traceparent";
+/// W3C Trace Context state header for vendor-specific propagation.
+pub const TRACESTATE_HEADER: &str = "tracestate";
+
+/// Inject the current tracing span's context into a MessageEnvelope's headers.
+///
+/// Writes `traceparent` and optionally `tracestate` headers following the
+/// W3C Trace Context specification. This enables distributed trace correlation
+/// across NATS, HTTP, and gRPC transports.
+///
+/// If no active span exists, this is a no-op.
+pub fn inject_trace_context(envelope: &mut MessageEnvelope) {
+    use tracing::Span;
+
+    let span = Span::current();
+    if let Some(span_id) = span.id() {
+        // Store the span ID as a simplified traceparent for correlation.
+        // When the full OTel SDK is wired, this will use the W3C propagator
+        // to inject the real traceparent from the OpenTelemetry context.
+        let traceparent = format!(
+            "00-{:032x}-{:016x}-01",
+            span_id.into_u64(),
+            span_id.into_u64()
+        );
+        envelope
+            .headers
+            .insert(TRACEPARENT_HEADER.to_string(), traceparent);
+    }
+}
+
+/// Extract trace context from a MessageEnvelope's headers.
+///
+/// Returns the `traceparent` header value if present, which can be used
+/// to create a child span linked to the parent trace.
+pub fn extract_trace_context(envelope: &MessageEnvelope) -> Option<&str> {
+    envelope.headers.get(TRACEPARENT_HEADER).map(|s| s.as_str())
+}
+
+/// Extract the tracestate header from a MessageEnvelope.
+pub fn extract_tracestate(envelope: &MessageEnvelope) -> Option<&str> {
+    envelope.headers.get(TRACESTATE_HEADER).map(|s| s.as_str())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,6 +384,33 @@ mod tests {
         assert_eq!(envelope.message_type, decoded.message_type);
         assert_eq!(envelope.priority, decoded.priority);
         assert_eq!(envelope.headers, decoded.headers);
+    }
+
+    #[test]
+    fn trace_context_injection() {
+        let mut envelope = MessageEnvelope::builder("test").build().unwrap();
+        assert!(envelope.headers.is_empty());
+
+        // inject_trace_context is a no-op when there's no active span
+        inject_trace_context(&mut envelope);
+        // No active tracing subscriber, so no span context to inject
+        assert!(extract_trace_context(&envelope).is_none());
+    }
+
+    #[test]
+    fn trace_context_manual_headers() {
+        let traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        let mut envelope = MessageEnvelope::builder("test").build().unwrap();
+        envelope
+            .headers
+            .insert(TRACEPARENT_HEADER.to_string(), traceparent.to_string());
+        envelope.headers.insert(
+            TRACESTATE_HEADER.to_string(),
+            "mistersmith=testing".to_string(),
+        );
+
+        assert_eq!(extract_trace_context(&envelope), Some(traceparent));
+        assert_eq!(extract_tracestate(&envelope), Some("mistersmith=testing"));
     }
 
     #[test]

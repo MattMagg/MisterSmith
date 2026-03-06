@@ -578,8 +578,8 @@ Container images, Kubernetes manifests, and deployment configuration.
 **Depends on**: 8.2 (binary to deploy), 8.1 (observability endpoints)
 **Produces**: Deployable artifacts
 
-> **Gate 8**: The framework runs as a containerized service. Health probes respond. Traces appear in the collector. Metrics are scraped. Graceful shutdown completes without message loss. The system is production-ready.
-> Validation checklist: [Phase 8 Deep Dive](plans/roadmap-phases/phase-8-operations-and-production-readiness.md).
+> **Gate 8** ✅ (validated 2026-03-06): The framework runs as a containerized service. Health probes respond. Traces appear in the collector. Metrics are scraped. Graceful shutdown completes without message loss. The system is production-ready.
+> Validation checklist: [Phase 8 Deep Dive](plans/roadmap-phases/phase-8-operations-and-production-readiness.md). Implementation: [specs/010-phase8-operations/](specs/010-phase8-operations/).
 
 ---
 

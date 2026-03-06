@@ -109,9 +109,13 @@ impl Transport for NatsTransport {
     async fn publish(
         &self,
         subject: &str,
-        envelope: MessageEnvelope,
+        mut envelope: MessageEnvelope,
     ) -> Result<(), TransportError> {
         let client = self.get_client().await.map_err(TransportError::from)?;
+
+        // Inject W3C trace context into the envelope before publishing
+        mister_smith_transport::inject_trace_context(&mut envelope);
+
         let payload = envelope.to_bytes()?;
 
         client
@@ -136,6 +140,10 @@ impl Transport for NatsTransport {
             while let Some(msg) = subscriber.next().await {
                 match MessageEnvelope::from_bytes(&msg.payload) {
                     Ok(envelope) => {
+                        // Extract W3C trace context for span correlation
+                        if let Some(traceparent) = mister_smith_transport::extract_trace_context(&envelope) {
+                            debug!(traceparent, "Extracted trace context from received message");
+                        }
                         yield ReceivedMessage {
                             envelope,
                             reply_subject: msg.reply.map(|s| s.to_string()),
@@ -169,6 +177,9 @@ impl Transport for NatsTransport {
             while let Some(msg) = subscriber.next().await {
                 match MessageEnvelope::from_bytes(&msg.payload) {
                     Ok(envelope) => {
+                        if let Some(traceparent) = mister_smith_transport::extract_trace_context(&envelope) {
+                            debug!(traceparent, "Extracted trace context from queue message");
+                        }
                         yield ReceivedMessage {
                             envelope,
                             reply_subject: msg.reply.map(|s| s.to_string()),
@@ -187,10 +198,14 @@ impl Transport for NatsTransport {
     async fn request(
         &self,
         subject: &str,
-        envelope: MessageEnvelope,
+        mut envelope: MessageEnvelope,
         timeout: Duration,
     ) -> Result<MessageEnvelope, TransportError> {
         let client = self.get_client().await.map_err(TransportError::from)?;
+
+        // Inject W3C trace context before sending request
+        mister_smith_transport::inject_trace_context(&mut envelope);
+
         let payload = envelope.to_bytes()?;
 
         let request = async_nats::Request::new()
@@ -263,10 +278,13 @@ impl DurableTransport for NatsTransport {
     async fn durable_publish(
         &self,
         subject: &str,
-        envelope: MessageEnvelope,
+        mut envelope: MessageEnvelope,
     ) -> Result<(), TransportError> {
         let client = self.get_client().await.map_err(TransportError::from)?;
         let js = async_nats::jetstream::new(client);
+
+        // Inject W3C trace context before durable publish
+        mister_smith_transport::inject_trace_context(&mut envelope);
 
         let payload = envelope.to_bytes()?;
 

@@ -302,33 +302,23 @@ pub struct FrameworkConfig {
 }
 
 /// Log output format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LogFormat {
     /// JSON-structured log output (production default).
+    #[default]
     Json,
     /// Human-readable pretty-printed output (development).
     Pretty,
 }
 
-impl Default for LogFormat {
-    fn default() -> Self {
-        Self::Json
-    }
-}
-
 /// OTLP export protocol.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OtlpProtocol {
     /// gRPC transport (default).
+    #[default]
     Grpc,
     /// HTTP/protobuf transport.
     Http,
-}
-
-impl Default for OtlpProtocol {
-    fn default() -> Self {
-        Self::Grpc
-    }
 }
 
 fn default_trace_sampling_ratio() -> f64 {

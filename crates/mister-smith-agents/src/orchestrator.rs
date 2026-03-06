@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use mister_smith_core::{AgentId, TaskId};
+use tracing::instrument;
 
 use crate::config::TaskState;
 use crate::errors::AgentSystemError;
@@ -28,6 +29,7 @@ impl Orchestrator {
     }
 
     /// Decompose a task into subtasks and register them with the scheduler.
+    #[instrument(skip(self, task), fields(task.id = %task.task_id, task.type = %task.task_type))]
     pub async fn decompose(&self, task: &TaskAssignment) -> Result<Vec<TaskId>, AgentSystemError> {
         let subtasks = self.decomposer.decompose(task).await?;
         let mut ids = Vec::with_capacity(subtasks.len());
@@ -40,6 +42,7 @@ impl Orchestrator {
     }
 
     /// Aggregate results from completed subtasks of a parent task.
+    #[instrument(skip(self), fields(task.id = %parent_task_id))]
     pub async fn aggregate(
         &self,
         parent_task_id: &TaskId,
@@ -79,6 +82,7 @@ impl Orchestrator {
     ///
     /// This is the high-level entry point that coordinates the entire task lifecycle.
     /// Workers are assigned from the provided agent IDs (pre-assembled team members).
+    #[instrument(skip(self, task, worker_ids), fields(task.id = %task.task_id, task.type = %task.task_type, worker_count = worker_ids.len()))]
     pub async fn execute(
         &self,
         task: &TaskAssignment,

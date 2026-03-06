@@ -6,7 +6,7 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-a
 
 ```bash
 cargo build --workspace                    # Build all crates
-cargo test --workspace                     # Run all tests (950 as of Phase 7 complete)
+cargo test --workspace                     # Run all tests (983 as of Phase 8 complete)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 ```
 
@@ -21,7 +21,7 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 5. Security | Complete | `mister-smith-security` |
 | 6. Persistence & State | Complete | `mister-smith-persistence` |
 | 7. Agent System | Complete | `mister-smith-agents` |
-| 8. Operations | Not started | See `ROADMAP.md` |
+| 8. Operations | Complete | `mister-smith-app` (binary entry point, bootstrap, shutdown, health probes, observability, cross-phase bridges) |
 | 9. LLM Providers | Not started | `mister-smith-llm` — see `ROADMAP.md` |
 
 ## Workspace Crate Dependencies
@@ -44,6 +44,7 @@ mister-smith-core (foundation types, traits, errors)
 ├── mister-smith-security (JWT auth, RBAC, TLS/mTLS, audit logging)
 ├── mister-smith-persistence (PostgreSQL + JetStream KV dual-store, repositories, audit bridge)
 ├── mister-smith-agents (AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles)
+├── mister-smith-app (binary entry point, bootstrap, shutdown, observability, health probes, cross-phase bridges)
 └── mister-smith-integration-tests (cross-crate validation)
 ```
 
@@ -51,12 +52,13 @@ mister-smith-core (foundation types, traits, errors)
 
 | Directory | Contents |
 |-----------|----------|
-| `crates/` | Rust workspace — 18 crates (Phase 1-7: foundation, runtime/async, actor/supervision, transport, security, persistence, agents) |
+| `crates/` | Rust workspace — 19 crates (Phase 1-8: foundation, runtime/async, actor/supervision, transport, security, persistence, agents, operations) |
 | `spec/` | Canonical architecture specifications — 65+ files across 8 domains (the system contract) |
 | `specs/` | SpecKit implementation artifacts — per-phase spec, plan, and task files (the build instructions) |
-| `ROADMAP.md` | 8-phase build roadmap — dependency-aware implementation order |
+| `ROADMAP.md` | 9-phase build roadmap — dependency-aware implementation order |
 | `plans/` | Implementation plans — batch 1 (core architecture) 7 of 8 agents complete, batch 2 partial |
 | `archive/` | Completed validation work, historical operations, and research |
+| `deploy/` | Deployment artifacts — Dockerfile, docker-compose, Kubernetes manifests, Grafana dashboards, Prometheus alerts |
 | `nats.rs/` | Official NATS Rust client (cloned from nats-io/nats.rs) — reference for async-nats API |
 | `.github/workflows/` | CI/CD pipelines |
 

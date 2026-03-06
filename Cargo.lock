@@ -1653,10 +1653,12 @@ name = "mister-smith-app"
 version = "0.1.0"
 dependencies = [
  "async-nats",
+ "axum",
  "chrono",
  "clap",
  "metrics",
  "metrics-exporter-prometheus",
+ "mister-smith-actor",
  "mister-smith-agents",
  "mister-smith-config",
  "mister-smith-core",
@@ -1678,6 +1680,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -1789,6 +1792,7 @@ dependencies = [
  "chrono",
  "futures",
  "mister-smith-actor",
+ "mister-smith-agents",
  "mister-smith-async",
  "mister-smith-config",
  "mister-smith-core",

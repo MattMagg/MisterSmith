@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mister-smith
+  namespace: mister-smith
+  labels:
+    app.kubernetes.io/name: mister-smith
+    app.kubernetes.io/component: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mister-smith
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mister-smith
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: mister-smith
+          image: mister-smith:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: mister-smith-config
+          env:
+            - name: MISTER_SMITH_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mister-smith-secrets
+                  key: database-url
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi

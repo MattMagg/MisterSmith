@@ -18,7 +18,9 @@ pub mod transport;
 pub use availability::{is_valid_transition, AgentAvailability};
 pub use durable::{DurableMessage, DurableSubscription, DurableTransport, MessageAcker};
 pub use envelope::{
-    MessageEnvelope, MessageEnvelopeBuilder, DEFAULT_MAX_PAYLOAD_SIZE, SCHEMA_VERSION,
+    extract_trace_context, extract_tracestate, inject_trace_context, MessageEnvelope,
+    MessageEnvelopeBuilder, DEFAULT_MAX_PAYLOAD_SIZE, SCHEMA_VERSION, TRACEPARENT_HEADER,
+    TRACESTATE_HEADER,
 };
 pub use errors::TransportError;
 pub use inmemory::InMemoryTransport;

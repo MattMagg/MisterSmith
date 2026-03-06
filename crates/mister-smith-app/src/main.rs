@@ -3,7 +3,11 @@
 //! Orchestrates process lifecycle: deterministic startup, graceful shutdown,
 //! signal handling, observability initialization, and cross-phase integration wiring.
 
+mod bootstrap;
+#[allow(dead_code)]
+mod bridges;
 mod config;
+mod observability;
 mod shutdown;
 
 use clap::Parser;
@@ -36,6 +40,12 @@ struct Cli {
 #[derive(Clone)]
 pub struct ProcessStateTracker {
     state: Arc<AtomicU8>,
+}
+
+impl Default for ProcessStateTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProcessStateTracker {
@@ -92,24 +102,17 @@ async fn main() {
         }
     };
 
-    // Initialize basic tracing (will be enhanced in Phase 4/US2 with OTel)
-    let filter = tracing_subscriber::EnvFilter::try_new(&config.observability.log_level)
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-
-    let subscriber = tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true);
-
-    match config.observability.log_format {
-        LogFormat::Json => {
-            subscriber.json().init();
+    // Initialize the observability pipeline (tracing, metrics, OTel)
+    // Must happen before any logging.
+    let otel_guard = match observability::init_observability(&config.observability) {
+        Ok(guard) => guard,
+        Err(e) => {
+            eprintln!("ERROR: Failed to initialize observability: {e}");
+            std::process::exit(1);
         }
-        LogFormat::Pretty => {
-            subscriber.pretty().init();
-        }
-    }
+    };
 
-    // Initialize process state tracker
+    // Initialize process state tracker and shutdown coordinator
     let state_tracker = ProcessStateTracker::new();
     let shutdown_coordinator = shutdown::ShutdownCoordinator::new();
 
@@ -118,10 +121,15 @@ async fn main() {
         "Mister Smith starting"
     );
 
-    // TODO: Phase 3 (US1) — implement full bootstrap sequence
-    // For now, just mark as ready and wait for signal
-    state_tracker.set(ProcessLifecycle::Ready);
-    info!("Mister Smith ready (stub — full bootstrap pending US1 implementation)");
+    // Run the deterministic bootstrap sequence
+    let ctx = match bootstrap::bootstrap(&config, &state_tracker, &otel_guard).await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            error!(error = %e, "Bootstrap failed");
+            state_tracker.set(ProcessLifecycle::Failed);
+            std::process::exit(1);
+        }
+    };
 
     // Wait for termination signal
     let signal_name = shutdown::wait_for_signal().await;
@@ -131,7 +139,7 @@ async fn main() {
     shutdown_coordinator.begin_graceful_shutdown();
     state_tracker.set(ProcessLifecycle::Draining);
 
-    // Spawn forced shutdown listener
+    // Spawn forced shutdown listener (second signal → immediate exit)
     let forced_flag = shutdown_coordinator.shutdown_in_progress.clone();
     let forced_handle = tokio::spawn(async move {
         shutdown::wait_for_forced_signal(forced_flag).await;
@@ -139,11 +147,13 @@ async fn main() {
         std::process::exit(2);
     });
 
-    // TODO: Phase 3 (US1) — implement full graceful shutdown sequence
-    // For now, just mark as stopped
-    state_tracker.set(ProcessLifecycle::Stopped);
-    info!("Mister Smith stopped");
+    // Execute the graceful shutdown sequence
+    shutdown::graceful_shutdown(ctx, &state_tracker, &config).await;
 
+    // Flush and shut down observability providers
+    observability::shutdown_observability(otel_guard);
+
+    // Cancel the forced shutdown listener (we're done gracefully)
     forced_handle.abort();
     std::process::exit(0);
 }
