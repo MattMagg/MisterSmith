@@ -229,3 +229,97 @@ async fn jetstream_publish_and_consume() {
     // Cleanup.
     js.delete_stream(&stream_name).await.unwrap();
 }
+
+#[tokio::test]
+async fn durable_transport_ack_nak_term_in_progress() {
+    use mister_smith_transport::DurableTransport;
+
+    let transport = NatsTransport::new(test_config());
+    transport.connect().await.unwrap();
+
+    let client = transport.inner_client().await.unwrap();
+    let js = JetStreamManager::new(client, JetStreamConfig::default());
+
+    let stream_name = format!("ACKTEST_{}", uuid::Uuid::new_v4().simple());
+    let filter = format!("{stream_name}.>");
+
+    js.create_stream(
+        &stream_name,
+        vec![filter.clone()],
+        async_nats::jetstream::stream::RetentionPolicy::WorkQueue,
+    )
+    .await
+    .unwrap();
+
+    let subject = format!("{stream_name}.tasks");
+
+    // --- Test in_progress: resets ack deadline without acknowledging ---
+    let env1 = test_envelope("ack-test.in-progress");
+    transport.durable_publish(&subject, env1).await.unwrap();
+
+    let mut sub = transport
+        .durable_subscribe(&stream_name, "test-ack-consumer", &filter)
+        .await
+        .unwrap();
+
+    let msg1 = tokio::time::timeout(Duration::from_secs(5), sub.next())
+        .await
+        .expect("timed out waiting for message")
+        .expect("subscription ended");
+    assert_eq!(msg1.envelope.message_type, "ack-test.in-progress");
+
+    // Signal work-in-progress (should succeed without error).
+    msg1.in_progress().await.unwrap();
+    // Then acknowledge to clear the message.
+    msg1.ack().await.unwrap();
+
+    // --- Test nak: message is redelivered ---
+    let env2 = test_envelope("ack-test.nak");
+    transport.durable_publish(&subject, env2).await.unwrap();
+
+    let msg2 = tokio::time::timeout(Duration::from_secs(5), sub.next())
+        .await
+        .expect("timed out waiting for message")
+        .expect("subscription ended");
+    assert_eq!(msg2.envelope.message_type, "ack-test.nak");
+
+    // Nak without delay — requests immediate redelivery.
+    msg2.nak(None).await.unwrap();
+
+    // The same message should be redelivered.
+    let msg2_redelivered = tokio::time::timeout(Duration::from_secs(5), sub.next())
+        .await
+        .expect("timed out waiting for redelivered message")
+        .expect("subscription ended after nak");
+    assert_eq!(msg2_redelivered.envelope.message_type, "ack-test.nak");
+    msg2_redelivered.ack().await.unwrap();
+
+    // --- Test term: message is NOT redelivered ---
+    let env3 = test_envelope("ack-test.term");
+    transport.durable_publish(&subject, env3).await.unwrap();
+
+    let msg3 = tokio::time::timeout(Duration::from_secs(5), sub.next())
+        .await
+        .expect("timed out waiting for message")
+        .expect("subscription ended");
+    assert_eq!(msg3.envelope.message_type, "ack-test.term");
+
+    // Term — marks as terminal failure, no redelivery.
+    msg3.term().await.unwrap();
+
+    // Publish another message to prove the subscription is alive but the
+    // termed message is gone.
+    let env4 = test_envelope("ack-test.after-term");
+    transport.durable_publish(&subject, env4).await.unwrap();
+
+    let msg4 = tokio::time::timeout(Duration::from_secs(5), sub.next())
+        .await
+        .expect("timed out waiting for message after term")
+        .expect("subscription ended");
+    // We should get the NEW message, not a redelivery of the termed one.
+    assert_eq!(msg4.envelope.message_type, "ack-test.after-term");
+    msg4.ack().await.unwrap();
+
+    // Cleanup.
+    js.delete_stream(&stream_name).await.unwrap();
+}
