@@ -139,6 +139,10 @@ The following apps are connected and available for use. Select the most appropri
 - Rust, MSRV 1.88.0 + mister-smith-core (types, traits), mister-smith-actor (ActorCell, ActorRef, mailbox), mister-smith-supervision (SupervisedSystem, restart strategies), mister-smith-transport (Transport, DurableTransport, MessageEnvelope), mister-smith-nats (NatsTransport, JetStream), mister-smith-mcp (MCP client/server, tool bridge), mister-smith-security (PolicyEngine, JwtManager, AuditLogger), mister-smith-persistence (repositories, state persistence), mister-smith-events (EventBus), mister-smith-monitoring (HealthMonitor, phi accrual) (007-phase7-agent-system)
 - PostgreSQL (via Phase 6 persistence layer), JetStream KV (via Phase 6 dual-store) (007-phase7-agent-system)
 
+- Rust, MSRV 1.88.0 + opentelemetry 0.31.0, opentelemetry_sdk 0.31.0, opentelemetry-otlp 0.31.0, tracing-opentelemetry 0.32.1, clap 4.x (new); tokio 1.49.0, tracing 0.1.44, metrics-exporter-prometheus 0.18.1 (existing) (010-phase8-operations)
+- New crate: mister-smith-app (binary entry point, process lifecycle, bootstrap, shutdown, observability init) (010-phase8-operations)
+- Extends: mister-smith-http (/health/live, /health/ready, /metrics), mister-smith-transport (W3C TraceContext), mister-smith-agents (#[instrument] spans), mister-smith-monitoring (Prometheus MetricsBackend) (010-phase8-operations)
+
 ## Recent Changes
 - 006-phase6-persistence-state: Added sqlx 0.8.6, chrono 0.4 — PR #108
 - 005-phase5-security: Added Rust, MSRV 1.88.0

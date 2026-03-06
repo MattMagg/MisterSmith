@@ -19,6 +19,7 @@ members = [
     "crates/mister-smith-persistence",
     "crates/mister-smith-agents",
     "crates/mister-smith-integration-tests",
+    "crates/mister-smith-app",
 ]
 
 [workspace.package]
@@ -109,3 +110,13 @@ mister-smith-grpc = { path = "crates/mister-smith-grpc" }
 mister-smith-mcp = { path = "crates/mister-smith-mcp" }
 mister-smith-security = { path = "crates/mister-smith-security" }
 mister-smith-persistence = { path = "crates/mister-smith-persistence" }
+mister-smith-agents = { path = "crates/mister-smith-agents" }
+
+# Observability — Phase 8
+opentelemetry = "0.31.0"
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31.0", features = ["tonic"] }
+tracing-opentelemetry = "0.32.1"
+
+# CLI — Phase 8
+clap = { version = "4", features = ["derive"] }
