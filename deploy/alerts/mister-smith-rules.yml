@@ -1,0 +1,56 @@
+groups:
+  - name: mister-smith-alerts
+    rules:
+      - alert: AgentFailureRateSpike
+        expr: rate(mistersmith_agent_restarts_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent restart rate exceeds 1/s over 5m window"
+          description: "Agent restarts are occurring at {{ $value | humanize }}/s. Investigate supervision tree and root cause."
+
+      - alert: MessageQueueDepthHigh
+        expr: mistersmith_message_queue_depth > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Message queue depth exceeds 100 for 2+ minutes"
+          description: "Queue depth is {{ $value }}. Consumers may be falling behind or disconnected."
+
+      - alert: HeartbeatLossDetected
+        expr: increase(mistersmith_agent_heartbeat_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Agent heartbeat loss detected"
+          description: "{{ $value }} heartbeat failure(s) detected in the last 5 minutes. Agents may be unresponsive."
+
+      - alert: HighTaskErrorRate
+        expr: rate(mistersmith_tasks_failed_total[5m]) / (rate(mistersmith_tasks_completed_total[5m]) + rate(mistersmith_tasks_failed_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Task error rate exceeds 10% over 5m window"
+          description: "Task failure rate is {{ $value | humanizePercentage }}. Check agent logs and task definitions."
+
+      - alert: UnauthorizedOperations
+        expr: increase(mistersmith_unauthorized_operations_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Multiple unauthorized operations detected"
+          description: "{{ $value }} unauthorized operations in the last 5 minutes. Possible credential compromise or misconfiguration."
+
+      - alert: HighMessageLatency
+        expr: histogram_quantile(0.99, rate(mistersmith_message_latency_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p99 message latency exceeds 1 second"
+          description: "p99 message latency is {{ $value | humanizeDuration }}. Check NATS connectivity and network."

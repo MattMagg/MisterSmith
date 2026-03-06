@@ -6,7 +6,7 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-a
 
 ```bash
 cargo build --workspace                    # Build all crates
-cargo test --workspace                     # Run all tests (950 as of Phase 7 complete)
+cargo test --workspace                     # Run all tests (983 as of Phase 8 complete)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 ```
 
@@ -21,7 +21,7 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 5. Security | Complete | `mister-smith-security` |
 | 6. Persistence & State | Complete | `mister-smith-persistence` |
 | 7. Agent System | Complete | `mister-smith-agents` |
-| 8. Operations | Not started | See `ROADMAP.md` |
+| 8. Operations | Complete | `mister-smith-app` (binary entry point, bootstrap, shutdown, health probes, observability, cross-phase bridges) |
 | 9. LLM Providers | Not started | `mister-smith-llm` — see `ROADMAP.md` |
 
 ## Workspace Crate Dependencies
@@ -44,6 +44,7 @@ mister-smith-core (foundation types, traits, errors)
 ├── mister-smith-security (JWT auth, RBAC, TLS/mTLS, audit logging)
 ├── mister-smith-persistence (PostgreSQL + JetStream KV dual-store, repositories, audit bridge)
 ├── mister-smith-agents (AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles)
+├── mister-smith-app (binary entry point, bootstrap, shutdown, observability, health probes, cross-phase bridges)
 └── mister-smith-integration-tests (cross-crate validation)
 ```
 
@@ -51,12 +52,13 @@ mister-smith-core (foundation types, traits, errors)
 
 | Directory | Contents |
 |-----------|----------|
-| `crates/` | Rust workspace — 18 crates (Phase 1-7: foundation, runtime/async, actor/supervision, transport, security, persistence, agents) |
+| `crates/` | Rust workspace — 19 crates (Phase 1-8: foundation, runtime/async, actor/supervision, transport, security, persistence, agents, operations) |
 | `spec/` | Canonical architecture specifications — 65+ files across 8 domains (the system contract) |
 | `specs/` | SpecKit implementation artifacts — per-phase spec, plan, and task files (the build instructions) |
-| `ROADMAP.md` | 8-phase build roadmap — dependency-aware implementation order |
+| `ROADMAP.md` | 9-phase build roadmap — dependency-aware implementation order |
 | `plans/` | Implementation plans — batch 1 (core architecture) 7 of 8 agents complete, batch 2 partial |
 | `archive/` | Completed validation work, historical operations, and research |
+| `deploy/` | Deployment artifacts — Dockerfile, docker-compose, Kubernetes manifests, Grafana dashboards, Prometheus alerts |
 | `nats.rs/` | Official NATS Rust client (cloned from nats-io/nats.rs) — reference for async-nats API |
 | `.github/workflows/` | CI/CD pipelines |
 
@@ -138,6 +140,10 @@ The following apps are connected and available for use. Select the most appropri
 - PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) (006-phase6-persistence-state)
 - Rust, MSRV 1.88.0 + mister-smith-core (types, traits), mister-smith-actor (ActorCell, ActorRef, mailbox), mister-smith-supervision (SupervisedSystem, restart strategies), mister-smith-transport (Transport, DurableTransport, MessageEnvelope), mister-smith-nats (NatsTransport, JetStream), mister-smith-mcp (MCP client/server, tool bridge), mister-smith-security (PolicyEngine, JwtManager, AuditLogger), mister-smith-persistence (repositories, state persistence), mister-smith-events (EventBus), mister-smith-monitoring (HealthMonitor, phi accrual) (007-phase7-agent-system)
 - PostgreSQL (via Phase 6 persistence layer), JetStream KV (via Phase 6 dual-store) (007-phase7-agent-system)
+
+- Rust, MSRV 1.88.0 + opentelemetry 0.31.0, opentelemetry_sdk 0.31.0, opentelemetry-otlp 0.31.0, tracing-opentelemetry 0.32.1, clap 4.x (new); tokio 1.49.0, tracing 0.1.44, metrics-exporter-prometheus 0.18.1 (existing) (010-phase8-operations)
+- New crate: mister-smith-app (binary entry point, process lifecycle, bootstrap, shutdown, observability init) (010-phase8-operations)
+- Extends: mister-smith-http (/health/live, /health/ready, /metrics), mister-smith-transport (W3C TraceContext), mister-smith-agents (#[instrument] spans), mister-smith-monitoring (Prometheus MetricsBackend) (010-phase8-operations)
 
 ## Recent Changes
 - 006-phase6-persistence-state: Added sqlx 0.8.6, chrono 0.4 — PR #108

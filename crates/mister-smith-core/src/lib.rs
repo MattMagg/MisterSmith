@@ -12,7 +12,9 @@ mod traits;
 pub use ids::{AgentId, MessageId, ResourceId, TaskId, ToolId};
 
 // Core enums
-pub use enums::{AgentAvailability, AgentState, AgentType, MessagePriority};
+pub use enums::{
+    AgentAvailability, AgentState, AgentType, MessagePriority, ProcessLifecycle, ShutdownReason,
+};
 
 // Supervision types
 pub use supervision::{

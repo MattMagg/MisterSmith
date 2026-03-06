@@ -172,9 +172,11 @@ mod tests {
     fn recent_heartbeats_yield_low_phi() {
         let mut detector = PhiAccrualFailureDetector::new(8.0, 100);
         // Record several heartbeats in quick succession.
-        for _ in 0..5 {
+        for i in 0..5 {
             detector.record_heartbeat("node-1");
-            thread::sleep(Duration::from_millis(10));
+            if i < 4 {
+                thread::sleep(Duration::from_millis(10));
+            }
         }
 
         let phi = detector.phi("node-1").expect("should have phi");
@@ -185,9 +187,11 @@ mod tests {
     #[test]
     fn is_available_with_recent_heartbeats() {
         let mut detector = PhiAccrualFailureDetector::new(8.0, 100);
-        for _ in 0..5 {
+        for i in 0..5 {
             detector.record_heartbeat("node-1");
-            thread::sleep(Duration::from_millis(10));
+            if i < 4 {
+                thread::sleep(Duration::from_millis(10));
+            }
         }
         assert!(detector.is_available("node-1"));
     }

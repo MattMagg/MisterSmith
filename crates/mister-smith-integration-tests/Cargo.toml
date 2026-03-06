@@ -23,6 +23,7 @@ mister-smith-http = { workspace = true }
 mister-smith-grpc = { workspace = true }
 mister-smith-mcp = { workspace = true }
 mister-smith-security = { workspace = true }
+mister-smith-agents = { workspace = true }
 mister-smith-persistence = { workspace = true, optional = true, features = ["sqlx", "security"] }
 tokio = { workspace = true, features = ["test-util"] }
 axum = { workspace = true }

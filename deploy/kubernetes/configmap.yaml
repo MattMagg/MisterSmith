@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mister-smith-config
+  namespace: mister-smith
+  labels:
+    app.kubernetes.io/name: mister-smith
+    app.kubernetes.io/component: config
+data:
+  MISTER_SMITH_LOG_LEVEL: "info"
+  MISTER_SMITH_LOG_FORMAT: "json"
+  MISTER_SMITH_HTTP_PORT: "8080"
+  MISTER_SMITH_OTLP_ENDPOINT: "http://otel-collector.monitoring:4317"
+  MISTER_SMITH_NATS_URL: "nats://nats.mister-smith:4222"
+  MISTER_SMITH_PROMETHEUS_ENABLED: "true"
+  MISTER_SMITH_TRACE_SAMPLING_RATIO: "1.0"
+  MISTER_SMITH_STARTUP_TIMEOUT_SECS: "30"
+  MISTER_SMITH_SHUTDOWN_TIMEOUT_SECS: "30"

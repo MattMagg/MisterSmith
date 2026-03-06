@@ -296,6 +296,132 @@ pub struct FrameworkConfig {
     /// Persistence configuration.
     #[serde(default)]
     pub persistence: PersistenceConfig,
+    /// Observability configuration (Phase 8).
+    #[serde(default)]
+    pub observability: ObservabilityConfig,
+}
+
+/// Log output format.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LogFormat {
+    /// JSON-structured log output (production default).
+    #[default]
+    Json,
+    /// Human-readable pretty-printed output (development).
+    Pretty,
+}
+
+/// OTLP export protocol.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OtlpProtocol {
+    /// gRPC transport (default).
+    #[default]
+    Grpc,
+    /// HTTP/protobuf transport.
+    Http,
+}
+
+fn default_trace_sampling_ratio() -> f64 {
+    1.0
+}
+fn default_metrics_export_interval_secs() -> u64 {
+    60
+}
+fn default_buffer_size() -> usize {
+    8192
+}
+fn default_startup_timeout_secs() -> u64 {
+    30
+}
+fn default_shutdown_timeout_secs() -> u64 {
+    30
+}
+
+/// Observability and telemetry configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObservabilityConfig {
+    /// OTLP collector endpoint (e.g., "http://localhost:4317").
+    /// If None, OTLP export is disabled (logs and metrics still available locally).
+    #[serde(default)]
+    pub otlp_endpoint: Option<String>,
+
+    /// OTLP export protocol.
+    #[serde(default)]
+    pub otlp_protocol: OtlpProtocol,
+
+    /// Trace sampling ratio (0.0 to 1.0).
+    #[serde(default = "default_trace_sampling_ratio")]
+    pub trace_sampling_ratio: f64,
+
+    /// How often to push metrics via OTLP (seconds).
+    #[serde(default = "default_metrics_export_interval_secs")]
+    pub metrics_export_interval_secs: u64,
+
+    /// Log output format.
+    #[serde(default)]
+    pub log_format: LogFormat,
+
+    /// Tracing filter directive (e.g., "info", "mister_smith=debug").
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
+
+    /// Local telemetry buffer size when collector is unreachable.
+    #[serde(default = "default_buffer_size")]
+    pub buffer_size: usize,
+
+    /// Expose Prometheus /metrics endpoint.
+    #[serde(default = "default_true")]
+    pub prometheus_enabled: bool,
+
+    /// Startup timeout in seconds before the process exits with failure.
+    #[serde(default = "default_startup_timeout_secs")]
+    pub startup_timeout_secs: u64,
+
+    /// Graceful shutdown timeout in seconds.
+    #[serde(default = "default_shutdown_timeout_secs")]
+    pub shutdown_timeout_secs: u64,
+}
+
+impl Default for ObservabilityConfig {
+    fn default() -> Self {
+        Self {
+            otlp_endpoint: None,
+            otlp_protocol: OtlpProtocol::default(),
+            trace_sampling_ratio: default_trace_sampling_ratio(),
+            metrics_export_interval_secs: default_metrics_export_interval_secs(),
+            log_format: LogFormat::default(),
+            log_level: default_log_level(),
+            buffer_size: default_buffer_size(),
+            prometheus_enabled: true,
+            startup_timeout_secs: default_startup_timeout_secs(),
+            shutdown_timeout_secs: default_shutdown_timeout_secs(),
+        }
+    }
+}
+
+impl ObservabilityConfig {
+    /// Validate observability configuration values.
+    pub fn validate(&self) -> Result<(), crate::error::ConfigValidationError> {
+        if !(0.0..=1.0).contains(&self.trace_sampling_ratio) {
+            return Err(crate::error::ConfigValidationError::InvalidValue {
+                field: "trace_sampling_ratio".to_string(),
+                reason: "must be between 0.0 and 1.0".to_string(),
+            });
+        }
+        if self.metrics_export_interval_secs < 5 {
+            return Err(crate::error::ConfigValidationError::InvalidValue {
+                field: "metrics_export_interval_secs".to_string(),
+                reason: "must be >= 5".to_string(),
+            });
+        }
+        if !(1024..=65536).contains(&self.buffer_size) {
+            return Err(crate::error::ConfigValidationError::InvalidValue {
+                field: "buffer_size".to_string(),
+                reason: "must be between 1024 and 65536".to_string(),
+            });
+        }
+        Ok(())
+    }
 }
 
 /// Persistence configuration (re-exported from mister-smith-persistence).

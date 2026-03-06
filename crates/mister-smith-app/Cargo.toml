@@ -1,0 +1,60 @@
+[package]
+name = "mister-smith-app"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Mister Smith framework binary — process lifecycle, bootstrap, and operational entry point"
+
+[[bin]]
+name = "mister-smith"
+path = "src/main.rs"
+
+[dependencies]
+# Internal crates
+mister-smith-core = { workspace = true }
+mister-smith-config = { workspace = true }
+mister-smith-runtime = { workspace = true }
+mister-smith-monitoring = { workspace = true }
+mister-smith-events = { workspace = true }
+mister-smith-actor = { workspace = true }
+mister-smith-supervision = { workspace = true }
+mister-smith-transport = { workspace = true }
+mister-smith-nats = { workspace = true }
+mister-smith-http = { workspace = true }
+mister-smith-security = { workspace = true }
+mister-smith-persistence = { workspace = true }
+mister-smith-agents = { workspace = true }
+
+# HTTP server (for direct axum::serve in bootstrap)
+axum = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+
+# Observability
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+
+# Metrics
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+
+# External service clients
+async-nats = { workspace = true }
+sqlx = { workspace = true }
+
+# Utilities
+chrono = { workspace = true }
+uuid = { workspace = true }

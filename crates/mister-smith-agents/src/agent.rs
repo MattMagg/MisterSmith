@@ -9,6 +9,7 @@ use mister_smith_actor::ActorRef;
 use mister_smith_core::{Actor, ActorError, AgentId, AgentState, AgentType, RestartScope};
 use mister_smith_supervision::SupervisedSystem;
 use tokio::sync::RwLock;
+use tracing::instrument;
 
 use crate::config::{AgentConfig, HealthLevel};
 use crate::errors::AgentSystemError;
@@ -61,6 +62,7 @@ impl<M: Send + Clone + 'static, R: Send + Clone + 'static> AgentRuntime<M, R> {
     }
 
     /// Get the agent's current lifecycle state from the actor system.
+    #[instrument(skip(self), fields(agent.id = %self.context.agent_id, agent.type = ?self.context.agent_type))]
     pub async fn state(&self) -> AgentState {
         self.system
             .get_actor_state(&self.context.agent_id)
@@ -84,11 +86,13 @@ impl<M: Send + Clone + 'static, R: Send + Clone + 'static> AgentRuntime<M, R> {
     }
 
     /// Send a message and await a typed response.
+    #[instrument(skip(self, message), fields(agent.id = %self.context.agent_id, agent.type = ?self.context.agent_type))]
     pub async fn ask(&self, message: M, timeout: Duration) -> Result<R, ActorError> {
         self.actor_ref.ask(message, timeout).await
     }
 
     /// Request graceful stop of the agent.
+    #[instrument(skip(self), fields(agent.id = %self.context.agent_id, agent.type = ?self.context.agent_type))]
     pub async fn stop(&self) -> Result<(), AgentSystemError> {
         let stopped = self.system.stop_actor(&self.context.agent_id).await;
         if stopped {

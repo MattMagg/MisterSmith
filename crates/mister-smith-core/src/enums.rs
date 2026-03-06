@@ -81,6 +81,37 @@ pub enum AgentType {
     Memory,
 }
 
+/// Process lifecycle state machine for the application binary.
+///
+/// Tracks the overall framework process from startup through shutdown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum ProcessLifecycle {
+    /// Process is starting — loading config, connecting services.
+    Starting = 0,
+    /// Process is fully initialized and accepting work.
+    Ready = 1,
+    /// Process is draining — graceful shutdown in progress.
+    Draining = 2,
+    /// Process has stopped cleanly.
+    Stopped = 3,
+    /// Process failed to start or encountered an unrecoverable error.
+    Failed = 4,
+}
+
+/// Reason for process shutdown.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ShutdownReason {
+    /// Shutdown triggered by OS signal (SIGTERM, SIGINT).
+    Signal(String),
+    /// Shutdown triggered by an unrecoverable error.
+    Error(String),
+    /// Startup timeout exceeded before reaching Ready state.
+    StartupTimeout,
+    /// Forced shutdown via second signal during graceful shutdown.
+    Forced,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
