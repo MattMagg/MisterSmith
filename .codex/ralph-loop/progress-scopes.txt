@@ -1,3 +1,0 @@
-specs/001-phase1-foundation/
-specs/002-phase2-runtime-async/
-docs/
