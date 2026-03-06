@@ -19,9 +19,7 @@ use tokio::sync::Mutex;
 
 #[tokio::test]
 async fn audit_logger_drain_events_returns_recorded_events() {
-    use mister_smith_security::audit::events::{
-        AuditEventType, AuditOutcome, SecurityAuditEvent,
-    };
+    use mister_smith_security::audit::events::{AuditEventType, AuditOutcome, SecurityAuditEvent};
 
     let logger = AuditLogger::new(&AuditConfig::default());
 
@@ -160,9 +158,7 @@ async fn phi_accrual_detects_heartbeat_absence() {
 
 #[tokio::test]
 async fn supervision_event_audit_trail() {
-    use mister_smith_security::audit::events::{
-        AuditEventType, AuditOutcome, SecurityAuditEvent,
-    };
+    use mister_smith_security::audit::events::{AuditEventType, AuditOutcome, SecurityAuditEvent};
 
     let logger = Arc::new(AuditLogger::new(&AuditConfig::default()));
 

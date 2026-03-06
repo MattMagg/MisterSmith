@@ -27,10 +27,8 @@ use crate::ProcessStateTracker;
 ///
 /// Returns the signal name that was received.
 pub async fn wait_for_signal() -> &'static str {
-    let mut sigterm =
-        signal(SignalKind::terminate()).expect("failed to register SIGTERM handler");
-    let mut sigint =
-        signal(SignalKind::interrupt()).expect("failed to register SIGINT handler");
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to register SIGTERM handler");
+    let mut sigint = signal(SignalKind::interrupt()).expect("failed to register SIGINT handler");
 
     tokio::select! {
         _ = sigterm.recv() => "SIGTERM",
@@ -47,10 +45,8 @@ pub async fn wait_for_forced_signal(shutdown_in_progress: Arc<AtomicBool>) {
         return;
     }
 
-    let mut sigterm =
-        signal(SignalKind::terminate()).expect("failed to register SIGTERM handler");
-    let mut sigint =
-        signal(SignalKind::interrupt()).expect("failed to register SIGINT handler");
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to register SIGTERM handler");
+    let mut sigint = signal(SignalKind::interrupt()).expect("failed to register SIGINT handler");
 
     tokio::select! {
         _ = sigterm.recv() => {

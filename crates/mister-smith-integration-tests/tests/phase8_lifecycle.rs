@@ -14,9 +14,9 @@ use std::time::Duration;
 use mister_smith_agents::AgentRegistry;
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::ProcessLifecycle;
+use mister_smith_core::SupervisionStrategy;
 use mister_smith_events::EventBus;
 use mister_smith_monitoring::{HealthMonitor, MetricsCollector};
-use mister_smith_core::SupervisionStrategy;
 use mister_smith_supervision::SupervisedSystem;
 
 /// Minimal process state tracker for test assertions.
@@ -61,8 +61,10 @@ async fn bootstrap_core_subsystems_without_external_services() {
     let health_monitor = Arc::new(HealthMonitor::new(Duration::from_secs(30)));
     let _metrics_collector = Arc::new(MetricsCollector::new(Duration::from_secs(60)));
     let actor_config = mister_smith_actor::ActorSystemConfig::default();
-    let supervised_system =
-        Arc::new(SupervisedSystem::with_event_bus(actor_config, event_bus.clone()));
+    let supervised_system = Arc::new(SupervisedSystem::with_event_bus(
+        actor_config,
+        event_bus.clone(),
+    ));
     let agent_registry = Arc::new(AgentRegistry::new());
 
     // Verify NATS is not configured (no URL in default config)
@@ -156,11 +158,9 @@ async fn monitoring_background_tasks_respond_to_shutdown_flag() {
     shutdown_flag.store(true, std::sync::atomic::Ordering::SeqCst);
 
     // Both tasks should complete within a reasonable time
-    let monitor_result =
-        tokio::time::timeout(Duration::from_secs(5), monitor_handle).await;
+    let monitor_result = tokio::time::timeout(Duration::from_secs(5), monitor_handle).await;
     assert!(monitor_result.is_ok(), "Monitor task did not stop in time");
 
-    let metrics_result =
-        tokio::time::timeout(Duration::from_secs(5), metrics_handle).await;
+    let metrics_result = tokio::time::timeout(Duration::from_secs(5), metrics_handle).await;
     assert!(metrics_result.is_ok(), "Metrics task did not stop in time");
 }

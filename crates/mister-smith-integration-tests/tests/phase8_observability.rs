@@ -74,9 +74,7 @@ async fn trace_context_roundtrip_through_envelope() {
     let traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
     let tracestate = "mistersmith=production";
 
-    let mut envelope = MessageEnvelope::builder("test.traced")
-        .build()
-        .unwrap();
+    let mut envelope = MessageEnvelope::builder("test.traced").build().unwrap();
 
     envelope
         .headers
@@ -99,9 +97,7 @@ async fn trace_context_roundtrip_through_envelope() {
 
 #[tokio::test]
 async fn inject_trace_context_is_safe_without_active_span() {
-    let mut envelope = MessageEnvelope::builder("test.noop")
-        .build()
-        .unwrap();
+    let mut envelope = MessageEnvelope::builder("test.noop").build().unwrap();
 
     // Without an active tracing subscriber/span, inject should be a no-op
     inject_trace_context(&mut envelope);
@@ -123,10 +119,7 @@ async fn envelope_preserves_headers_with_trace_and_custom() {
 
     // Both custom and trace headers should coexist
     assert_eq!(envelope.headers.get("x-custom").unwrap(), "value1");
-    assert_eq!(
-        extract_trace_context(&envelope),
-        Some("00-abc-def-01")
-    );
+    assert_eq!(extract_trace_context(&envelope), Some("00-abc-def-01"));
 }
 
 #[tokio::test]

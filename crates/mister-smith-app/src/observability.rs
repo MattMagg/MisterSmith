@@ -59,20 +59,16 @@ pub fn init_observability(
     use tracing_subscriber::prelude::*;
 
     let fmt_layer = match config.log_format {
-        mister_smith_config::LogFormat::Json => {
-            tracing_subscriber::fmt::layer()
-                .json()
-                .with_target(true)
-                .with_thread_ids(true)
-                .with_span_list(true)
-                .boxed()
-        }
-        mister_smith_config::LogFormat::Pretty => {
-            tracing_subscriber::fmt::layer()
-                .pretty()
-                .with_target(true)
-                .boxed()
-        }
+        mister_smith_config::LogFormat::Json => tracing_subscriber::fmt::layer()
+            .json()
+            .with_target(true)
+            .with_thread_ids(true)
+            .with_span_list(true)
+            .boxed(),
+        mister_smith_config::LogFormat::Pretty => tracing_subscriber::fmt::layer()
+            .pretty()
+            .with_target(true)
+            .boxed(),
     };
 
     tracing_subscriber::registry()

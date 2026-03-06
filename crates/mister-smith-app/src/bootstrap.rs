@@ -119,8 +119,10 @@ async fn bootstrap_inner(
 
     // Step 4: Initialize supervision tree
     let actor_config = mister_smith_actor::ActorSystemConfig::default();
-    let supervised_system =
-        Arc::new(SupervisedSystem::with_event_bus(actor_config, event_bus.clone()));
+    let supervised_system = Arc::new(SupervisedSystem::with_event_bus(
+        actor_config,
+        event_bus.clone(),
+    ));
     info!("Supervision tree initialized");
 
     // Step 5: Initialize agent registry

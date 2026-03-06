@@ -333,6 +333,8 @@ mod tests {
     #[test]
     fn security_bridge_allows_when_no_jwt_configured() {
         let bridge = SecurityBridge::new(None, None, None);
-        assert!(bridge.check_authorization("token", "read", "/agents").is_ok());
+        assert!(bridge
+            .check_authorization("token", "read", "/agents")
+            .is_ok());
     }
 }

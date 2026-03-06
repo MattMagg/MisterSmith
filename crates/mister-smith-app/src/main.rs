@@ -116,10 +116,7 @@ async fn main() {
     let state_tracker = ProcessStateTracker::new();
     let shutdown_coordinator = shutdown::ShutdownCoordinator::new();
 
-    info!(
-        version = env!("CARGO_PKG_VERSION"),
-        "Mister Smith starting"
-    );
+    info!(version = env!("CARGO_PKG_VERSION"), "Mister Smith starting");
 
     // Run the deterministic bootstrap sequence
     let ctx = match bootstrap::bootstrap(&config, &state_tracker, &otel_guard).await {
