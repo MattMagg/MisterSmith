@@ -1,4 +1,6 @@
-use mister_smith_llm::{AppServerAccountStatus, CodexAppServerClient, LlmError};
+use mister_smith_llm::{
+    AppServerAccountStatus, ClaudeOAuthCredentials, CodexAppServerClient, LlmError,
+};
 
 /// Start the ChatGPT browser login flow and return the resulting account status.
 pub async fn login_openai_chatgpt() -> Result<AppServerAccountStatus, LlmError> {
@@ -28,6 +30,38 @@ pub fn render_openai_chatgpt_status(status: &AppServerAccountStatus) -> String {
     } else {
         "ChatGPT authentication required. Run `mister-smith auth openai-chatgpt login`.".to_string()
     }
+}
+
+// ---------------------------------------------------------------------------
+// Claude subscription authentication
+// ---------------------------------------------------------------------------
+
+/// Read the current Claude subscription credential status.
+pub fn claude_subscription_status() -> Result<ClaudeOAuthCredentials, LlmError> {
+    mister_smith_llm::claude_credentials::read_credentials()
+}
+
+/// Render a human-readable Claude subscription status line.
+pub fn render_claude_subscription_status(creds: &ClaudeOAuthCredentials) -> String {
+    let source = &creds.source;
+    let masked = creds.masked_token();
+    let expiry = if creds.is_expired() {
+        " (EXPIRED — re-run `claude setup-token` to refresh)"
+    } else {
+        ""
+    };
+    format!("Claude subscription authenticated via {source}: {masked}{expiry}")
+}
+
+/// Render Claude subscription auth guidance when credentials are missing.
+pub fn render_claude_subscription_missing() -> String {
+    "No Claude subscription credentials found.\n\
+     \n\
+     To authenticate:\n\
+     1. Install Claude Code CLI: https://docs.anthropic.com/en/docs/claude-code\n\
+     2. Run `claude setup-token` to complete the OAuth login flow\n\
+     3. Re-run `mister-smith auth claude status` to verify"
+        .to_string()
 }
 
 async fn login_openai_chatgpt_with<F>(open: F) -> Result<AppServerAccountStatus, LlmError>

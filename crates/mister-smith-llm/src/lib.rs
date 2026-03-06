@@ -6,6 +6,8 @@
 //! [`MockProvider`] without depending on vendor-specific payload shapes.
 
 mod app_server;
+#[cfg(feature = "claude-subscription")]
+pub mod claude_credentials;
 mod config;
 mod mock;
 mod provider;
@@ -15,6 +17,8 @@ mod tool_schema;
 mod types;
 
 pub use app_server::{AppServerAccountStatus, ChatGptLoginHandle, CodexAppServerClient};
+#[cfg(feature = "claude-subscription")]
+pub use claude_credentials::{ClaudeOAuthCredentials, CredentialSource};
 pub use config::{ProviderConfig, ProviderKind};
 pub use mister_smith_core::LlmError;
 pub use mock::MockProvider;

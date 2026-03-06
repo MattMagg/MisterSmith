@@ -53,11 +53,22 @@ enum Command {
 
 #[derive(Subcommand, Debug)]
 enum AuthCommand {
+    /// Manage Claude subscription authentication.
+    Claude {
+        #[command(subcommand)]
+        command: ClaudeAuthCommand,
+    },
     /// Manage ChatGPT-backed OpenAI authentication.
     OpenaiChatgpt {
         #[command(subcommand)]
         command: OpenaiChatgptAuthCommand,
     },
+}
+
+#[derive(Subcommand, Debug)]
+enum ClaudeAuthCommand {
+    /// Show the current Claude subscription authentication state.
+    Status,
 }
 
 #[derive(Subcommand, Debug)]
@@ -200,8 +211,24 @@ async fn run_runtime(cli: Cli) -> Result<(), Box<dyn Error>> {
 
 async fn execute_auth_command(command: &AuthCommand) -> Result<(), Box<dyn Error>> {
     match command {
+        AuthCommand::Claude { command } => execute_claude_auth(command),
         AuthCommand::OpenaiChatgpt { command } => execute_openai_chatgpt_auth(command).await,
     }
+}
+
+fn execute_claude_auth(command: &ClaudeAuthCommand) -> Result<(), Box<dyn Error>> {
+    match command {
+        ClaudeAuthCommand::Status => match auth::claude_subscription_status() {
+            Ok(creds) => {
+                println!("{}", auth::render_claude_subscription_status(&creds));
+            }
+            Err(_) => {
+                println!("{}", auth::render_claude_subscription_missing());
+            }
+        },
+    }
+
+    Ok(())
 }
 
 async fn execute_openai_chatgpt_auth(

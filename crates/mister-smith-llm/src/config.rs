@@ -29,7 +29,7 @@ pub struct ProviderConfig {
 }
 
 /// Supported LLM provider backends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ProviderKind {
     /// Anthropic API-key provider.
     #[serde(rename = "anthropic")]
@@ -40,7 +40,11 @@ pub enum ProviderKind {
     /// ChatGPT-subscription provider backed by Codex app-server.
     #[serde(rename = "openai_chatgpt")]
     OpenAiChatGpt,
+    /// Claude subscription provider using OAuth Bearer tokens from Claude Code CLI.
+    #[serde(rename = "claude_subscription")]
+    ClaudeSubscription,
     /// Deterministic mock provider used for tests and local development.
+    #[default]
     #[serde(rename = "mock")]
     Mock,
 }
@@ -52,6 +56,7 @@ impl ProviderKind {
             Self::Anthropic => "anthropic",
             Self::OpenAi => "openai",
             Self::OpenAiChatGpt => "openai_chatgpt",
+            Self::ClaudeSubscription => "claude_subscription",
             Self::Mock => "mock",
         }
     }
@@ -59,12 +64,6 @@ impl ProviderKind {
     /// Whether the provider requires an API key environment variable.
     pub const fn requires_api_key(self) -> bool {
         matches!(self, Self::Anthropic | Self::OpenAi)
-    }
-}
-
-impl Default for ProviderKind {
-    fn default() -> Self {
-        Self::Mock
     }
 }
 

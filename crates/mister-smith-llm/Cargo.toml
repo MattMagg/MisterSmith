@@ -10,9 +10,10 @@ description = "Provider-neutral LLM contract, shared types, and deterministic mo
 [features]
 default = []
 anthropic = ["dep:reqwest"]
+claude-subscription = ["dep:reqwest"]
 openai = ["dep:reqwest"]
 openai-chatgpt = []
-all-providers = ["anthropic", "openai", "openai-chatgpt"]
+all-providers = ["anthropic", "claude-subscription", "openai", "openai-chatgpt"]
 
 [dependencies]
 mister-smith-core = { workspace = true }
