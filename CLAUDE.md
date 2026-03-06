@@ -68,7 +68,7 @@ mister-smith-core (foundation types, traits, errors)
 
 Start here when reading the framework:
 
-1. **Build roadmap**: `ROADMAP.md` — 8-phase implementation order with gate criteria
+1. **Build roadmap**: `ROADMAP.md` — 9-phase implementation order with gate criteria
 2. **Architecture overview**: `spec/core-architecture/system-architecture.md`
 3. **Component design**: `spec/core-architecture/component-architecture.md`
 4. **Agent types and orchestration**: `spec/data-management/agent-orchestration.md`
@@ -132,19 +132,19 @@ The following apps are connected and available for use. Select the most appropri
 | **Tavily** | AI-optimized search and data retrieval. Use for quickly searching the web or filtering relevant information from documents and databases. Load the Tavily-best-practices skill whenever you need to use Tavily > .claude/skills/tavily-best-practices |
 
 ## Active Technologies
-- Phase 3 (complete): Rust MSRV 1.88.0, Tokio 1.49.0 (mpsc, oneshot, sync, time), async-trait 0.1.83, mister-smith-core (Actor/Supervisor traits, supervision types, error types), mister-smith-events (EventBus, AgentEventType), mister-smith-monitoring (HealthCheck, HealthMonitor, MetricsCollector)
-- Phase 4 (next): async-nats 0.46.0 (jetstream, kv, service), rmcp 1.1.0 (client, server, streamable-HTTP), rmp-serde 1.3.1, Axum 0.8.8, Tonic 0.14.x, prost 0.14.x, tonic-build 0.14.x, serde 1.x, serde_json 1.x, bytes 1.x, uuid 1.x
-- Rust, MSRV 1.88.0 (005-phase5-security)
-- In-memory (audit persistence deferred to Phase 6) (005-phase5-security)
-- Rust, MSRV 1.88.0 + sqlx 0.8.6 (new), async-nats 0.46.0 (existing), tokio 1.49.0 (existing), serde 1.x (existing) (006-phase6-persistence-state)
-- PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) (006-phase6-persistence-state)
-- Rust, MSRV 1.88.0 + mister-smith-core (types, traits), mister-smith-actor (ActorCell, ActorRef, mailbox), mister-smith-supervision (SupervisedSystem, restart strategies), mister-smith-transport (Transport, DurableTransport, MessageEnvelope), mister-smith-nats (NatsTransport, JetStream), mister-smith-mcp (MCP client/server, tool bridge), mister-smith-security (PolicyEngine, JwtManager, AuditLogger), mister-smith-persistence (repositories, state persistence), mister-smith-events (EventBus), mister-smith-monitoring (HealthMonitor, phi accrual) (007-phase7-agent-system)
-- PostgreSQL (via Phase 6 persistence layer), JetStream KV (via Phase 6 dual-store) (007-phase7-agent-system)
 
-- Rust, MSRV 1.88.0 + opentelemetry 0.31.0, opentelemetry_sdk 0.31.0, opentelemetry-otlp 0.31.0, tracing-opentelemetry 0.32.1, clap 4.x (new); tokio 1.49.0, tracing 0.1.44, metrics-exporter-prometheus 0.18.1 (existing) (010-phase8-operations)
-- New crate: mister-smith-app (binary entry point, process lifecycle, bootstrap, shutdown, observability init) (010-phase8-operations)
-- Extends: mister-smith-http (/health/live, /health/ready, /metrics), mister-smith-transport (W3C TraceContext), mister-smith-agents (#[instrument] spans), mister-smith-monitoring (Prometheus MetricsBackend) (010-phase8-operations)
-
-## Recent Changes
-- 006-phase6-persistence-state: Added sqlx 0.8.6, chrono 0.4 — PR #108
-- 005-phase5-security: Added Rust, MSRV 1.88.0
+| Category | Technology | Version |
+|----------|-----------|---------|
+| Language | Rust (MSRV) | 1.88.0 |
+| Runtime | Tokio | 1.49.0 |
+| Messaging | async-nats (JetStream, KV, service) | 0.46.0 |
+| HTTP | Axum | 0.8.8 |
+| gRPC | Tonic + Prost | 0.14.x |
+| MCP | rmcp (client, server, streamable-HTTP) | 1.1.0 |
+| Database | sqlx (PostgreSQL, runtime-tokio-rustls) | 0.8.6 |
+| Security | jsonwebtoken, ring, aes-gcm, rustls | 10.x, 0.17, 0.10, 0.23 |
+| Observability | opentelemetry + tracing + metrics-exporter-prometheus | 0.31.0, 0.1.44, 0.18.1 |
+| CLI | clap | 4.x |
+| Serialization | serde, serde_json, rmp-serde | 1.x |
+| Errors | thiserror | 1.x |
+| Storage | PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) | — |

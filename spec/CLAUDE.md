@@ -6,14 +6,14 @@ Framework specifications for Mister Smith. These documents define the contract f
 
 ```
 spec/
-├── core-architecture/   # System design, async patterns, supervision trees, types (21 files)
+├── core-architecture/   # System design, async patterns, supervision trees, types (19 files)
 ├── data-management/     # Agent orchestration, message schemas, persistence (19 files)
 ├── transport/           # NATS, gRPC, HTTP transport layers (5 files)
 ├── security/            # Authentication, authorization, TLS, patterns (7 files)
-├── operations/          # Deployment, monitoring, configuration, build scripts (7 + scripts/)
+├── operations/          # Deployment, monitoring, configuration, build scripts (13 files)
 ├── agent-domains/       # Consolidated agent type analysis (1 file)
 ├── testing/             # Test framework and schemas (2 files)
-└── research/            # LLM CLI integration analysis (3 files, legacy — to be archived)
+└── research/            # (empty — Claude CLI files archived to archive/claude-cli-research/)
 ```
 
 ## Document Interconnections

@@ -8,15 +8,21 @@ Phased implementation plans for building Mister Smith from the specifications in
 |-------|--------|--------|--------|
 | 1 | Core Architecture | 7 (01-02, 04-08) | Complete |
 | 2 | Data Management | 1 (16) | Partial |
-| 3-5 | Security, Transport, Operations | — | Not started |
+| 3-5 | Security, Transport, Operations | — | Superseded by SpecKit pipeline |
 
 ## SpecKit Feature Directories
 
 Implementation specs are generated via SpecKit into `specs/`:
-- `specs/001-phase1-foundation/` — Phase 1 spec, plan, tasks (all complete)
-- `specs/002-phase2-runtime-async/` — Phase 2 spec, plan, tasks (all complete)
-- `specs/003-phase3-actor-supervision/` — Phase 3 spec, plan, tasks (all complete)
-- `specs/004-phase4-transport-messaging/` — Phase 4 spec, plan, data-model, research (in progress)
+- `specs/001-phase1-foundation/` — Phase 1 spec, plan, tasks (complete)
+- `specs/002-phase2-runtime-async/` — Phase 2 spec, plan, tasks (complete)
+- `specs/003-phase3-actor-supervision/` — Phase 3 spec, plan, tasks (complete)
+- `specs/004-phase4-transport-messaging/` — Phase 4 spec, plan, data-model, research (complete)
+- `specs/005-phase5-security/` — Phase 5 spec, plan, tasks (complete)
+- `specs/006-phase6-persistence-state/` — Phase 6 spec, plan, tasks (complete)
+- `specs/007-phase7-agent-system/` — Phase 7 spec, plan, tasks (complete)
+- `specs/008-agent-system/` — Phase 7 additional agent system artifacts (complete)
+- `specs/009-phase9-llm-provider-integration/` — Phase 9 LLM provider spec, plan, tasks, contracts (spec complete, implementation not started)
+- `specs/010-phase8-operations/` — Phase 8 operations spec, plan, tasks, contracts (complete)
 
 ## Usage
 

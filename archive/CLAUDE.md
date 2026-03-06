@@ -11,9 +11,11 @@ Completed and historical work preserved for reference. This content informed the
 | `validation-bridge/` | 30-agent cross-validation — organized by team (alpha through omega) |
 | `operations/` | Working prompts, deployment plans, SuperClaude orchestration, optimization reports |
 | `research/` | Multi-agent patterns, messaging backplanes, memory persistence, Rust observability |
+| `claude-cli-research/` | Archived Claude CLI integration files (5 files) — moved from `spec/research/` as project is model-agnostic |
 
 ## Why Archived
 
 - **Validation work** — Completed assessment producing the 82/100 readiness score. Findings are incorporated into the specs; the raw agent reports are preserved here as evidence.
 - **Operations** — Multi-agent deployment plans, working prompts, and orchestration tooling used during the documentation phase. No longer needed for day-to-day work.
 - **Research** — Background research on agent patterns, NATS messaging, and Rust async patterns that informed the specifications.
+- **Claude CLI research** — Analysis of Claude Code CLI integration. Archived when the framework pivoted to model-agnostic design (not Claude-specific).

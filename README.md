@@ -10,12 +10,13 @@ A multi-agent orchestration framework built in Rust with NATS messaging and Erla
 | 2. Runtime & Async | Complete | `mister-smith-runtime`, `mister-smith-monitoring`, `mister-smith-events`, `mister-smith-async`, `mister-smith-resources` | 243 |
 | 3. Actor & Supervision | Complete | `mister-smith-actor`, `mister-smith-supervision` | 389 |
 | 4. Transport & Messaging | Complete | `mister-smith-transport`, `mister-smith-nats`, `mister-smith-http`, `mister-smith-grpc`, `mister-smith-mcp` | 605 |
-| 5. Security | In progress | — | — |
-| 6. Persistence & State | Not started | — | — |
-| 7. Agent System | Not started | — | — |
-| 8. Operations | Not started | — | — |
+| 5. Security | Complete | `mister-smith-security` | 717 |
+| 6. Persistence & State | Complete | `mister-smith-persistence` | 882 |
+| 7. Agent System | Complete | `mister-smith-agents` | 951 |
+| 8. Operations | Complete | `mister-smith-app` | 983 |
+| 9. LLM Providers | Spec complete | `mister-smith-llm` (planned) | — |
 
-**14 crates** in the workspace, **605 tests** passing, zero clippy warnings.
+**19 crates** in the workspace (17 library + 1 binary + 1 integration test), **983 tests** passing, zero clippy warnings.
 
 ## Architecture
 
@@ -55,10 +56,14 @@ mister-smith-core          Foundation types, traits, error hierarchy
 ├── mister-smith-actor     ActorCell, ActorRef, lifecycle, mailbox
 ├── mister-smith-supervision  SupervisedSystem, restart strategies, health checks
 ├── mister-smith-transport MessageEnvelope, Transport trait, serialization, InMemoryTransport
-├── mister-smith-nats      NATS pub/sub, request-reply, JetStream
+├── mister-smith-nats      NATS pub/sub, request-reply, JetStream, W3C TraceContext
 ├── mister-smith-http      Axum REST API, WebSocket, middleware, rate limiting
 ├── mister-smith-grpc      Tonic gRPC services, health, protobuf
 ├── mister-smith-mcp       MCP client/server, tool registry, NATS bridge
+├── mister-smith-security  JWT auth, RBAC, TLS/mTLS, audit logging
+├── mister-smith-persistence  PostgreSQL + JetStream KV dual-store, repositories, audit bridge
+├── mister-smith-agents    AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles
+├── mister-smith-app       Binary entry point, bootstrap, shutdown, observability, health probes
 └── mister-smith-integration-tests  Cross-crate validation
 ```
 
@@ -72,9 +77,25 @@ mister-smith-core          Foundation types, traits, error hierarchy
 | Axum | 0.8.8 | HTTP/WebSocket transport |
 | Tonic | 0.14 | gRPC transport |
 | Prost | 0.14 | Protobuf serialization |
+| rmcp | 1.1.0 | MCP client/server |
+| sqlx | 0.8.6 | PostgreSQL async driver |
+| jsonwebtoken | 10.x | JWT authentication |
+| rustls | 0.23 | TLS/mTLS |
+| opentelemetry | 0.31.0 | Distributed tracing |
+| metrics-exporter-prometheus | 0.18.1 | Prometheus metrics |
+| clap | 4.x | CLI argument parsing |
 | serde | 1.0 | JSON/MessagePack serialization |
 | thiserror | 1.0 | Error hierarchy |
 | tracing | 0.1 | Structured logging |
+
+## Production Features (Phase 8)
+
+- **Process lifecycle**: Deterministic bootstrap sequence with configurable startup timeout
+- **Health probes**: `/health/live` (always 200), `/health/ready` (200 when Ready, 503 otherwise)
+- **Prometheus metrics**: `/metrics` endpoint with framework-level counters, gauges, histograms
+- **Distributed tracing**: W3C TraceContext propagation through NATS message envelopes
+- **Graceful shutdown**: Signal handling (SIGTERM graceful, second signal forced), connection draining
+- **Deployment**: Multi-stage Dockerfile (<100MB), Kubernetes manifests, Grafana dashboards, Prometheus alert rules
 
 ## Documentation
 
@@ -87,7 +108,9 @@ mister-smith-core          Foundation types, traits, error hierarchy
 | Message schemas | [`spec/data-management/message-schemas.md`](spec/data-management/message-schemas.md) |
 | Transport layer | [`spec/transport/transport-layer-specifications.md`](spec/transport/transport-layer-specifications.md) |
 | Security framework | [`spec/security/security-framework.md`](spec/security/security-framework.md) |
+| Phase 9 LLM design | [`specs/009-phase9-llm-provider-integration/`](specs/009-phase9-llm-provider-integration/) |
 | Version baseline | [`VERSION_REFERENCE.md`](VERSION_REFERENCE.md) |
+| Deployment artifacts | [`deploy/`](deploy/) |
 
 ## Design Principles
 
@@ -95,6 +118,7 @@ mister-smith-core          Foundation types, traits, error hierarchy
 - **Event-driven architecture** — Loose coupling via pub/sub messaging
 - **Resource-bounded execution** — Memory-bounded contexts, connection pooling, backpressure handling
 - **Model-agnostic** — No LLM vendor lock-in; works with any backend
+- **Observable by default** — Structured logs, distributed traces, and Prometheus metrics from day one
 
 ## License
 
