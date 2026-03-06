@@ -167,6 +167,16 @@ impl AuditLogger {
         Ok(())
     }
 
+    /// Drain all events from the buffer, returning them for external persistence.
+    ///
+    /// The events are removed from the in-memory ring buffer. Callers (such as
+    /// the Phase 6 audit bridge) should persist the drained events to durable
+    /// storage before they are lost.
+    pub fn drain_events(&self) -> Vec<SecurityAuditEvent> {
+        let mut events = self.events.write();
+        events.drain(..).collect()
+    }
+
     /// Detect sources with authentication failures exceeding the alert threshold.
     ///
     /// Scans events from the last 60 seconds, groups `Authentication` failures

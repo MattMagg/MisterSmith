@@ -14,18 +14,26 @@ use std::collections::HashMap;
 // ---------------------------------------------------------------------------
 
 /// Message priority levels (maps to proto `MessagePriority`).
+///
+/// Wire values follow proto3 convention (0 = unspecified/default). Semantic
+/// conversion to/from `mister_smith_core::MessagePriority` is done via the
+/// `From` impls below — **never compare discriminant integers across types**.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum MessagePriority {
-    /// Normal priority.
+    /// Unspecified — treated as Normal.
     #[default]
-    Normal = 0,
-    /// Low priority.
-    Low = 1,
-    /// High priority.
-    High = 2,
-    /// Critical priority.
-    Critical = 3,
+    Unspecified = 0,
+    /// Normal priority — standard message processing.
+    Normal = 1,
+    /// Low priority — background operations.
+    Low = 2,
+    /// High priority — time-sensitive operations.
+    High = 3,
+    /// Critical priority — system-critical messages.
+    Critical = 4,
+    /// Bulk priority — batch operations.
+    Bulk = 5,
 }
 
 impl MessagePriority {
@@ -33,10 +41,12 @@ impl MessagePriority {
     #[must_use]
     pub fn from_i32(value: i32) -> Option<Self> {
         match value {
-            0 => Some(Self::Normal),
-            1 => Some(Self::Low),
-            2 => Some(Self::High),
-            3 => Some(Self::Critical),
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Normal),
+            2 => Some(Self::Low),
+            3 => Some(Self::High),
+            4 => Some(Self::Critical),
+            5 => Some(Self::Bulk),
             _ => None,
         }
     }
@@ -54,17 +64,43 @@ impl From<MessagePriority> for i32 {
     }
 }
 
+impl From<mister_smith_core::MessagePriority> for MessagePriority {
+    fn from(core: mister_smith_core::MessagePriority) -> Self {
+        match core {
+            mister_smith_core::MessagePriority::Critical => Self::Critical,
+            mister_smith_core::MessagePriority::High => Self::High,
+            mister_smith_core::MessagePriority::Normal => Self::Normal,
+            mister_smith_core::MessagePriority::Low => Self::Low,
+            mister_smith_core::MessagePriority::Bulk => Self::Bulk,
+        }
+    }
+}
+
+impl From<MessagePriority> for mister_smith_core::MessagePriority {
+    fn from(proto: MessagePriority) -> Self {
+        match proto {
+            MessagePriority::Critical => Self::Critical,
+            MessagePriority::High => Self::High,
+            MessagePriority::Normal | MessagePriority::Unspecified => Self::Normal,
+            MessagePriority::Low => Self::Low,
+            MessagePriority::Bulk => Self::Bulk,
+        }
+    }
+}
+
 /// Agent availability (maps to proto `AgentAvailability`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum AgentAvailability {
-    /// Agent is idle.
+    /// Unspecified — treated as Idle.
     #[default]
-    Idle = 0,
+    Unspecified = 0,
+    /// Agent is idle.
+    Idle = 1,
     /// Agent is busy.
-    Busy = 1,
+    Busy = 2,
     /// Agent is offline.
-    Offline = 2,
+    Offline = 3,
 }
 
 impl AgentAvailability {
@@ -72,9 +108,10 @@ impl AgentAvailability {
     #[must_use]
     pub fn from_i32(value: i32) -> Option<Self> {
         match value {
-            0 => Some(Self::Idle),
-            1 => Some(Self::Busy),
-            2 => Some(Self::Offline),
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Idle),
+            2 => Some(Self::Busy),
+            3 => Some(Self::Offline),
             _ => None,
         }
     }
@@ -92,17 +129,25 @@ impl From<AgentAvailability> for i32 {
     }
 }
 
-/// Task completion status (maps to proto `TaskStatus`).
+/// Task status (maps to proto `TaskStatus`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum TaskStatus {
-    /// Task completed successfully.
+    /// Unspecified — treated as Pending.
     #[default]
-    Success = 0,
+    Unspecified = 0,
+    /// Task is waiting to be assigned.
+    Pending = 1,
+    /// Task is currently being executed.
+    Running = 2,
+    /// Task completed successfully.
+    Success = 3,
     /// Task failed.
-    Failure = 1,
+    Failure = 4,
     /// Task partially completed.
-    Partial = 2,
+    Partial = 5,
+    /// Task was cancelled.
+    Cancelled = 6,
 }
 
 impl TaskStatus {
@@ -110,9 +155,13 @@ impl TaskStatus {
     #[must_use]
     pub fn from_i32(value: i32) -> Option<Self> {
         match value {
-            0 => Some(Self::Success),
-            1 => Some(Self::Failure),
-            2 => Some(Self::Partial),
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Pending),
+            2 => Some(Self::Running),
+            3 => Some(Self::Success),
+            4 => Some(Self::Failure),
+            5 => Some(Self::Partial),
+            6 => Some(Self::Cancelled),
             _ => None,
         }
     }
@@ -134,15 +183,17 @@ impl From<TaskStatus> for i32 {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum Severity {
-    /// Informational event.
+    /// Unspecified — treated as Info.
     #[default]
-    Info = 0,
+    Unspecified = 0,
+    /// Informational event.
+    Info = 1,
     /// Warning event.
-    Warning = 1,
+    Warning = 2,
     /// Error event.
-    Error = 2,
+    Error = 3,
     /// Critical event.
-    Critical = 3,
+    Critical = 4,
 }
 
 impl Severity {
@@ -150,10 +201,11 @@ impl Severity {
     #[must_use]
     pub fn from_i32(value: i32) -> Option<Self> {
         match value {
-            0 => Some(Self::Info),
-            1 => Some(Self::Warning),
-            2 => Some(Self::Error),
-            3 => Some(Self::Critical),
+            0 => Some(Self::Unspecified),
+            1 => Some(Self::Info),
+            2 => Some(Self::Warning),
+            3 => Some(Self::Error),
+            4 => Some(Self::Critical),
             _ => None,
         }
     }
@@ -478,28 +530,59 @@ mod tests {
 
     #[test]
     fn message_priority_from_i32() {
-        assert_eq!(MessagePriority::from_i32(0), Some(MessagePriority::Normal));
-        assert_eq!(MessagePriority::from_i32(1), Some(MessagePriority::Low));
-        assert_eq!(MessagePriority::from_i32(2), Some(MessagePriority::High));
         assert_eq!(
-            MessagePriority::from_i32(3),
+            MessagePriority::from_i32(0),
+            Some(MessagePriority::Unspecified)
+        );
+        assert_eq!(MessagePriority::from_i32(1), Some(MessagePriority::Normal));
+        assert_eq!(MessagePriority::from_i32(2), Some(MessagePriority::Low));
+        assert_eq!(MessagePriority::from_i32(3), Some(MessagePriority::High));
+        assert_eq!(
+            MessagePriority::from_i32(4),
             Some(MessagePriority::Critical)
         );
+        assert_eq!(MessagePriority::from_i32(5), Some(MessagePriority::Bulk));
         assert_eq!(MessagePriority::from_i32(99), None);
+    }
+
+    #[test]
+    fn message_priority_core_roundtrip() {
+        use mister_smith_core::MessagePriority as CorePriority;
+
+        // Core → gRPC → Core roundtrip preserves semantics.
+        for core in [
+            CorePriority::Critical,
+            CorePriority::High,
+            CorePriority::Normal,
+            CorePriority::Low,
+            CorePriority::Bulk,
+        ] {
+            let proto: MessagePriority = core.into();
+            let back: CorePriority = proto.into();
+            assert_eq!(back, core, "roundtrip failed for {core:?}");
+        }
+
+        // Unspecified maps to Normal.
+        let normal: CorePriority = MessagePriority::Unspecified.into();
+        assert_eq!(normal, CorePriority::Normal);
     }
 
     #[test]
     fn agent_availability_from_i32() {
         assert_eq!(
             AgentAvailability::from_i32(0),
-            Some(AgentAvailability::Idle)
+            Some(AgentAvailability::Unspecified)
         );
         assert_eq!(
             AgentAvailability::from_i32(1),
-            Some(AgentAvailability::Busy)
+            Some(AgentAvailability::Idle)
         );
         assert_eq!(
             AgentAvailability::from_i32(2),
+            Some(AgentAvailability::Busy)
+        );
+        assert_eq!(
+            AgentAvailability::from_i32(3),
             Some(AgentAvailability::Offline)
         );
         assert_eq!(AgentAvailability::from_i32(42), None);
@@ -507,19 +590,24 @@ mod tests {
 
     #[test]
     fn task_status_from_i32() {
-        assert_eq!(TaskStatus::from_i32(0), Some(TaskStatus::Success));
-        assert_eq!(TaskStatus::from_i32(1), Some(TaskStatus::Failure));
-        assert_eq!(TaskStatus::from_i32(2), Some(TaskStatus::Partial));
+        assert_eq!(TaskStatus::from_i32(0), Some(TaskStatus::Unspecified));
+        assert_eq!(TaskStatus::from_i32(1), Some(TaskStatus::Pending));
+        assert_eq!(TaskStatus::from_i32(2), Some(TaskStatus::Running));
+        assert_eq!(TaskStatus::from_i32(3), Some(TaskStatus::Success));
+        assert_eq!(TaskStatus::from_i32(4), Some(TaskStatus::Failure));
+        assert_eq!(TaskStatus::from_i32(5), Some(TaskStatus::Partial));
+        assert_eq!(TaskStatus::from_i32(6), Some(TaskStatus::Cancelled));
         assert_eq!(TaskStatus::from_i32(-1), None);
     }
 
     #[test]
     fn severity_from_i32() {
-        assert_eq!(Severity::from_i32(0), Some(Severity::Info));
-        assert_eq!(Severity::from_i32(1), Some(Severity::Warning));
-        assert_eq!(Severity::from_i32(2), Some(Severity::Error));
-        assert_eq!(Severity::from_i32(3), Some(Severity::Critical));
-        assert_eq!(Severity::from_i32(4), None);
+        assert_eq!(Severity::from_i32(0), Some(Severity::Unspecified));
+        assert_eq!(Severity::from_i32(1), Some(Severity::Info));
+        assert_eq!(Severity::from_i32(2), Some(Severity::Warning));
+        assert_eq!(Severity::from_i32(3), Some(Severity::Error));
+        assert_eq!(Severity::from_i32(4), Some(Severity::Critical));
+        assert_eq!(Severity::from_i32(5), None);
     }
 
     #[test]
@@ -592,10 +680,11 @@ mod tests {
     }
 
     #[test]
-    fn default_enums() {
-        assert_eq!(MessagePriority::default(), MessagePriority::Normal);
-        assert_eq!(AgentAvailability::default(), AgentAvailability::Idle);
-        assert_eq!(TaskStatus::default(), TaskStatus::Success);
-        assert_eq!(Severity::default(), Severity::Info);
+    fn default_enums_are_unspecified() {
+        // Proto3 convention: default (0) is always UNSPECIFIED.
+        assert_eq!(MessagePriority::default(), MessagePriority::Unspecified);
+        assert_eq!(AgentAvailability::default(), AgentAvailability::Unspecified);
+        assert_eq!(TaskStatus::default(), TaskStatus::Unspecified);
+        assert_eq!(Severity::default(), Severity::Unspecified);
     }
 }
