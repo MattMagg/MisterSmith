@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use mister_smith_llm::{
+    budget::{BudgetEnforcer, BudgetNode, BudgetPolicy},
     CascadePolicy, CascadeTier, CircuitBreakerConfig, CircuitState, CompletionRequest,
     ModelRouter, MockProvider, ModelProvider, ProviderConfig, ProviderKind, RoutingPolicy,
 };
@@ -222,6 +223,67 @@ mod circuit_breaker {
 // Cascade routing tests (T051-T053)
 mod cascade {
     use super::*;
+    use async_trait::async_trait;
+    use mister_smith_core::LlmError;
+    use mister_smith_llm::budget::BudgetStore;
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    struct SharedBudgetStore {
+        nodes: Arc<Mutex<HashMap<String, BudgetNode>>>,
+    }
+
+    impl SharedBudgetStore {
+        fn with_budget() -> (Self, Arc<Mutex<HashMap<String, BudgetNode>>>) {
+            let nodes = Arc::new(Mutex::new(HashMap::new()));
+            nodes.lock().unwrap().insert(
+                "budget/test".to_string(),
+                BudgetNode {
+                    key: "budget/test".to_string(),
+                    limit_tokens: 50_000,
+                    used_tokens: 0,
+                    period: "test".to_string(),
+                    policy: BudgetPolicy::HardCap,
+                    revision: 1,
+                },
+            );
+
+            (
+                Self {
+                    nodes: nodes.clone(),
+                },
+                nodes,
+            )
+        }
+    }
+
+    #[async_trait]
+    impl BudgetStore for SharedBudgetStore {
+        async fn get(&self, key: &str) -> Result<Option<BudgetNode>, LlmError> {
+            Ok(self.nodes.lock().unwrap().get(key).cloned())
+        }
+
+        async fn cas_update(
+            &self,
+            node: &BudgetNode,
+            expected_revision: u64,
+        ) -> Result<u64, LlmError> {
+            let mut nodes = self.nodes.lock().unwrap();
+            if let Some(existing) = nodes.get(&node.key) {
+                if existing.revision != expected_revision {
+                    return Err(LlmError::InvalidRequest(format!(
+                        "CAS conflict on budget key '{}': expected revision {}, actual {}",
+                        node.key, expected_revision, existing.revision
+                    )));
+                }
+            }
+
+            let mut updated = node.clone();
+            updated.revision = expected_revision + 1;
+            nodes.insert(node.key.clone(), updated);
+            Ok(expected_revision + 1)
+        }
+    }
 
     fn cascade_policy(threshold: f32, max_escalations: u32) -> CascadePolicy {
         CascadePolicy {
@@ -310,6 +372,71 @@ mod cascade {
 
         // max_escalations=0 means 1 attempt total, so it returns the first tier's response
         assert_eq!(decision.tier_label.as_deref(), Some("only-tier"));
+    }
+
+    #[tokio::test]
+    async fn cascade_reserves_and_reconciles_budget_on_accept() {
+        let policy = cascade_policy(0.3, 1);
+
+        let (store, nodes) = SharedBudgetStore::with_budget();
+
+        let router = ModelRouter::new(RoutingPolicy::Cascade(policy))
+            .with_budget(BudgetEnforcer::new(Box::new(store)), "budget/test");
+
+        let slm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("slm-model"));
+        let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
+
+        router
+            .add_provider(mock_config("slm"), slm, CircuitBreakerConfig::default())
+            .await;
+        router
+            .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+            .await;
+
+        let (response, _decision) = router.route_completion(mock_request()).await.unwrap();
+
+        let used_tokens = nodes
+            .lock()
+            .unwrap()
+            .get("budget/test")
+            .unwrap()
+            .used_tokens;
+
+        assert_eq!(used_tokens, response.usage.total_tokens);
+        assert!(response.usage.total_tokens < 1024);
+    }
+
+    #[tokio::test]
+    async fn cascade_reconciles_budget_when_escalating_to_second_tier() {
+        let policy = cascade_policy(1.1, 1);
+
+        let (store, nodes) = SharedBudgetStore::with_budget();
+        let enforcer = BudgetEnforcer::new(Box::new(store));
+
+        let router = ModelRouter::new(RoutingPolicy::Cascade(policy))
+            .with_budget(enforcer, "budget/test");
+
+        let slm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("slm-model"));
+        let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
+
+        router
+            .add_provider(mock_config("slm"), slm, CircuitBreakerConfig::default())
+            .await;
+        router
+            .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+            .await;
+
+        let (response, decision) = router.route_completion(mock_request()).await.unwrap();
+        assert_eq!(decision.tier_label.as_deref(), Some("llm-tier"));
+
+        let used_tokens = nodes
+            .lock()
+            .unwrap()
+            .get("budget/test")
+            .unwrap()
+            .used_tokens;
+        assert_eq!(used_tokens, response.usage.total_tokens);
+        assert_eq!(decision.estimated_cost_tokens, Some(1027));
     }
 
     #[tokio::test]

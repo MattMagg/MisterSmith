@@ -128,6 +128,8 @@ pub struct BudgetEnforcer {
 }
 
 impl BudgetEnforcer {
+    const RECONCILE_MAX_RETRIES: usize = 3;
+
     pub fn new(store: Box<dyn BudgetStore>) -> Self {
         Self { store }
     }
@@ -179,21 +181,36 @@ impl BudgetEnforcer {
         reservation: &BudgetReservation,
         actual_tokens: u64,
     ) -> Result<(), LlmError> {
-        let node = self.store.get(&reservation.budget_key).await?.ok_or_else(|| {
-            LlmError::InvalidRequest(format!(
-                "Budget key '{}' not found during reconciliation",
-                reservation.budget_key
-            ))
-        })?;
+        for attempt in 0..=Self::RECONCILE_MAX_RETRIES {
+            let node = self.store.get(&reservation.budget_key).await?.ok_or_else(|| {
+                LlmError::InvalidRequest(format!(
+                    "Budget key '{}' not found during reconciliation",
+                    reservation.budget_key
+                ))
+            })?;
 
-        let adjustment = actual_tokens as i64 - reservation.estimated_tokens as i64;
-        let new_used = (node.used_tokens as i64 + adjustment).max(0) as u64;
+            let adjustment = actual_tokens as i64 - reservation.estimated_tokens as i64;
+            let new_used = (node.used_tokens as i64 + adjustment).max(0) as u64;
 
-        let mut updated = node.clone();
-        updated.used_tokens = new_used;
+            let mut updated = node.clone();
+            updated.used_tokens = new_used;
 
-        self.store.cas_update(&updated, node.revision).await?;
-        Ok(())
+            match self.store.cas_update(&updated, node.revision).await {
+                Ok(_) => return Ok(()),
+                Err(err)
+                    if Self::is_cas_conflict(&err) && attempt < Self::RECONCILE_MAX_RETRIES =>
+                {
+                    continue;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        unreachable!("reconcile loop exits via return")
+    }
+
+    fn is_cas_conflict(err: &LlmError) -> bool {
+        matches!(err, LlmError::InvalidRequest(message) if message.contains("CAS conflict"))
     }
 
     /// Get the current budget state for a key.
@@ -217,6 +234,7 @@ impl BudgetEnforcer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn test_store() -> InMemoryBudgetStore {
         let store = InMemoryBudgetStore::new();
@@ -297,6 +315,67 @@ mod tests {
         // SoftCap allows the request even though it would exceed
         let result = enforcer.reserve("budget/soft", 500).await;
         assert!(result.is_ok());
+    }
+
+    struct ConflictOnceStore {
+        inner: InMemoryBudgetStore,
+        cas_attempts: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl BudgetStore for ConflictOnceStore {
+        async fn get(&self, key: &str) -> Result<Option<BudgetNode>, LlmError> {
+            self.inner.get(key).await
+        }
+
+        async fn cas_update(
+            &self,
+            node: &BudgetNode,
+            expected_revision: u64,
+        ) -> Result<u64, LlmError> {
+            let attempt = self.cas_attempts.fetch_add(1, Ordering::SeqCst);
+            if attempt == 1 {
+                // First reconcile CAS update fails once to simulate contention.
+                return Err(LlmError::InvalidRequest(
+                    "CAS conflict on budget key 'budget/org1/team-alpha': expected revision 2, actual 3"
+                        .to_string(),
+                ));
+            }
+
+            self.inner.cas_update(node, expected_revision).await
+        }
+    }
+
+    #[tokio::test]
+    async fn reconcile_retries_transient_cas_conflicts() {
+        let store = InMemoryBudgetStore::new();
+        store.insert(BudgetNode {
+            key: "budget/org1/team-alpha".to_string(),
+            limit_tokens: 10000,
+            used_tokens: 0,
+            period: "2026-03-daily".to_string(),
+            policy: BudgetPolicy::HardCap,
+            revision: 1,
+        });
+
+        let store = ConflictOnceStore {
+            inner: store,
+            cas_attempts: AtomicUsize::new(0),
+        };
+        let enforcer = BudgetEnforcer::new(Box::new(store));
+
+        let reservation = enforcer
+            .reserve("budget/org1/team-alpha", 500)
+            .await
+            .unwrap();
+        enforcer.reconcile(&reservation, 300).await.unwrap();
+
+        let node = enforcer
+            .get_budget("budget/org1/team-alpha")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(node.used_tokens, 300);
     }
 
     #[test]

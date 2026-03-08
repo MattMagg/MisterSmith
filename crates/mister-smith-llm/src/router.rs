@@ -132,6 +132,17 @@ pub struct ModelRouter {
     round_robin_counter: std::sync::atomic::AtomicUsize,
 }
 
+struct BudgetReservationContext<'a> {
+    enforcer: &'a BudgetEnforcer,
+    reservation: crate::budget::BudgetReservation,
+}
+
+impl<'a> BudgetReservationContext<'a> {
+    async fn reconcile(self, actual_tokens: u64) {
+        let _ = self.enforcer.reconcile(&self.reservation, actual_tokens).await;
+    }
+}
+
 impl ModelRouter {
     /// Create a new router with the given policy.
     pub fn new(routing_policy: RoutingPolicy) -> Self {
@@ -248,21 +259,18 @@ impl ModelRouter {
         &self,
         request: CompletionRequest,
     ) -> Result<(CompletionResponse, RoutingDecision), LlmError> {
+        let estimated = Self::estimate_tokens(&request);
+        let reservation = self.reserve_budget(estimated).await?;
+
         // Delegate to cascade routing when policy is Cascade
         if let RoutingPolicy::Cascade(ref policy) = self.routing_policy {
             let policy = policy.clone();
-            return self.route_cascade(request, &policy).await;
+            let result = self.route_cascade(request, &policy, estimated).await;
+            if let (Ok((response, _)), Some(context)) = (&result, reservation) {
+                context.reconcile(response.usage.total_tokens).await;
+            }
+            return result;
         }
-
-        let estimated = Self::estimate_tokens(&request);
-
-        // Budget check
-        let reservation =
-            if let (Some(enforcer), Some(root)) = (&self.budget_enforcer, &self.budget_root) {
-                Some(enforcer.reserve(root, estimated).await?)
-            } else {
-                None
-            };
 
         let idx = self.select_provider(None).await?;
         let providers = self.providers.read().await;
@@ -290,12 +298,8 @@ impl ModelRouter {
                 drop(providers);
 
                 // Reconcile budget
-                if let Some(reservation) = &reservation {
-                    if let Some(enforcer) = &self.budget_enforcer {
-                        let _ = enforcer
-                            .reconcile(reservation, response.usage.total_tokens)
-                            .await;
-                    }
+                if let Some(context) = reservation {
+                    context.reconcile(response.usage.total_tokens).await;
                 }
 
                 Ok((response, decision))
@@ -321,6 +325,7 @@ impl ModelRouter {
         &self,
         request: CompletionRequest,
         policy: &CascadePolicy,
+        estimated_tokens: u64,
     ) -> Result<(CompletionResponse, RoutingDecision), LlmError> {
         let provider_count = self.providers.read().await.len();
         let max_attempts = provider_count.min(policy.max_escalations as usize + 1);
@@ -384,7 +389,7 @@ impl ModelRouter {
                                 tier_label, confidence.score, policy.escalation_threshold
                             )
                         },
-                        estimated_cost_tokens: None,
+                        estimated_cost_tokens: Some(estimated_tokens),
                     };
 
                     if confidence.score >= policy.escalation_threshold || is_last_tier {
@@ -414,6 +419,22 @@ impl ModelRouter {
     /// Get the number of registered providers.
     pub async fn provider_count(&self) -> usize {
         self.providers.read().await.len()
+    }
+
+    async fn reserve_budget(
+        &self,
+        estimated_tokens: u64,
+    ) -> Result<Option<BudgetReservationContext<'_>>, LlmError> {
+        match (&self.budget_enforcer, &self.budget_root) {
+            (Some(enforcer), Some(root)) => {
+                let reservation = enforcer.reserve(root, estimated_tokens).await?;
+                Ok(Some(BudgetReservationContext {
+                    enforcer,
+                    reservation,
+                }))
+            }
+            _ => Ok(None),
+        }
     }
 }
 
