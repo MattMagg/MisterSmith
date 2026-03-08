@@ -157,10 +157,8 @@ impl Actor for ExecutorAgent {
                     }
                     .await;
 
-                    if let Ok(strategy) = result {
-                        return Ok(strategy);
-                    }
-                    // On error, fall through to the stub implementation below.
+                    let strategy = result?;
+                    return Ok(strategy);
                 }
 
                 // Stub implementation — deterministic response without an LLM.

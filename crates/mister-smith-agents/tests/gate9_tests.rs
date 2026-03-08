@@ -6,14 +6,17 @@
 
 use std::sync::Arc;
 
-use mister_smith_agents::roles::planner::{PlannerAgent, PlannerMessage, PlannerState};
+use async_trait::async_trait;
+use futures::stream;
 use mister_smith_agents::roles::critic::{CriticAgent, CriticMessage, CriticState};
 use mister_smith_agents::roles::executor::{ExecutorAgent, ExecutorMessage, ExecutorState};
+use mister_smith_agents::roles::planner::{PlannerAgent, PlannerMessage, PlannerState};
 use mister_smith_agents::tool_bus::ToolBus;
-use mister_smith_core::{Actor, AgentId};
+use mister_smith_core::{Actor, AgentId, LlmError};
 use mister_smith_llm::{
-    CircuitBreakerConfig, MockProvider, ModelProvider, ModelRouter, ProviderConfig, ProviderKind,
-    RoutingPolicy, ToolCall,
+    CircuitBreakerConfig, CompletionRequest, CompletionResponse, CompletionStream,
+    EmbeddingResponse, MockProvider, ModelCapabilities, ModelProvider, ModelRouter,
+    ProviderConfig, ProviderKind, RoutingPolicy, ToolCall,
 };
 
 async fn mock_router() -> Arc<ModelRouter> {
@@ -22,6 +25,56 @@ async fn mock_router() -> Arc<ModelRouter> {
     let config = ProviderConfig {
         provider_kind: ProviderKind::Mock,
         model_id: "mock-gate9".to_string(),
+        ..Default::default()
+    };
+    router
+        .add_provider(config, provider, CircuitBreakerConfig::default())
+        .await;
+    Arc::new(router)
+}
+
+fn empty_router() -> Arc<ModelRouter> {
+    Arc::new(ModelRouter::new(RoutingPolicy::RoundRobin))
+}
+
+#[derive(Debug)]
+struct AlwaysFailProvider {
+    model_id: String,
+}
+
+#[async_trait]
+impl ModelProvider for AlwaysFailProvider {
+    async fn complete(&self, _request: CompletionRequest) -> Result<CompletionResponse, LlmError> {
+        Err(LlmError::Network("provider completion failure".to_string()))
+    }
+
+    fn stream(&self, _request: CompletionRequest) -> CompletionStream {
+        Box::pin(stream::once(async {
+            Err(LlmError::Network("provider stream failure".to_string()))
+        }))
+    }
+
+    async fn embed(&self, _input: Vec<String>) -> Result<EmbeddingResponse, LlmError> {
+        Err(LlmError::Network("provider embedding failure".to_string()))
+    }
+
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    fn capabilities(&self) -> ModelCapabilities {
+        ModelCapabilities::all()
+    }
+}
+
+async fn failing_provider_router() -> Arc<ModelRouter> {
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin);
+    let provider: Arc<dyn ModelProvider> = Arc::new(AlwaysFailProvider {
+        model_id: "always-fail".to_string(),
+    });
+    let config = ProviderConfig {
+        provider_kind: ProviderKind::Mock,
+        model_id: "always-fail".to_string(),
         ..Default::default()
     };
     router
@@ -47,8 +100,6 @@ async fn planner_produces_plan_via_mock_provider() {
         .await
         .unwrap();
 
-    // MockProvider returns a text response; planner should produce a plan (either
-    // parsed JSON or a wrapped raw response)
     assert!(result.is_object());
     assert!(state.current_plan.is_some());
 }
@@ -96,7 +147,6 @@ async fn executor_analyzes_plan_via_mock_provider() {
 
 #[tokio::test]
 async fn tool_bus_round_trip_with_mock_provider() {
-    // Register a tool, export definitions, execute a tool call
     let bus = ToolBus::new();
     let agent_id = AgentId::new();
 
@@ -109,13 +159,10 @@ async fn tool_bus_round_trip_with_mock_provider() {
         serde_json::json!({}),
     );
 
-    // Export definitions for model consumption
     let defs = bus.to_tool_definitions();
     assert_eq!(defs.len(), 1);
     assert_eq!(defs[0].name, "data.analyzer");
 
-    // Simulate a model-emitted tool call (tool not invocable since no backend registered,
-    // but the execute_tool_call path should still work and return an error result)
     let call = ToolCall {
         call_id: "call-gate9".into(),
         name: "data.analyzer".into(),
@@ -129,7 +176,6 @@ async fn tool_bus_round_trip_with_mock_provider() {
 
 #[tokio::test]
 async fn planner_falls_back_to_stub_without_router() {
-    // Without a router, planner should use stub behavior
     let mut planner = PlannerAgent::new(AgentId::new());
     let mut state = PlannerState::default();
 
@@ -144,7 +190,65 @@ async fn planner_falls_back_to_stub_without_router() {
         .await
         .unwrap();
 
-    // Stub produces a structured plan with goal, steps, and context
     assert_eq!(result["goal"], "test goal");
     assert!(result["steps"].is_array());
+}
+
+#[tokio::test]
+async fn planner_returns_error_when_router_has_no_providers() {
+    let mut planner = PlannerAgent::with_router(AgentId::new(), empty_router());
+    let mut state = PlannerState::default();
+
+    let err = planner
+        .handle_message(
+            PlannerMessage::PlanGoal {
+                goal: "no providers".into(),
+                context: serde_json::json!({}),
+            },
+            &mut state,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(err.to_string().starts_with("planner error:"));
+    assert!(state.current_plan.is_none());
+}
+
+#[tokio::test]
+async fn critic_returns_error_when_router_provider_fails() {
+    let router = failing_provider_router().await;
+    let mut critic = CriticAgent::with_router(AgentId::new(), router);
+    let mut state = CriticState::default();
+
+    let err = critic
+        .handle_message(
+            CriticMessage::Evaluate {
+                output: serde_json::json!("bad output"),
+                criteria: serde_json::json!(["accuracy"]),
+            },
+            &mut state,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(err.to_string().starts_with("critic error:"));
+    assert_eq!(state.evaluations_completed, 1);
+}
+
+#[tokio::test]
+async fn executor_returns_error_when_router_has_no_providers() {
+    let mut executor = ExecutorAgent::with_router(AgentId::new(), empty_router());
+    let mut state = ExecutorState::default();
+
+    let err = executor
+        .handle_message(
+            ExecutorMessage::ExecutePlan {
+                plan: serde_json::json!({"steps": ["x"]}),
+            },
+            &mut state,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(err.to_string().starts_with("executor error:"));
 }

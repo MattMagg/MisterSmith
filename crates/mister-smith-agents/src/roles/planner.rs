@@ -142,11 +142,9 @@ impl Actor for PlannerAgent {
                     }
                     .await;
 
-                    if let Ok(plan) = result {
-                        state.current_plan = Some(plan.clone());
-                        return Ok(plan);
-                    }
-                    // On error, fall through to the stub implementation below.
+                    let plan = result?;
+                    state.current_plan = Some(plan.clone());
+                    return Ok(plan);
                 }
 
                 // Stub implementation — deterministic plan without an LLM.
