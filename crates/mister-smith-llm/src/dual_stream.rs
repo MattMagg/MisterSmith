@@ -41,7 +41,13 @@ pub struct DualStreamActor {
     pending_text: Option<String>,
     coalesce_count: usize,
     // Tool call assembly state
-    active_tool_calls: std::collections::HashMap<String, String>,
+    active_tool_calls: std::collections::HashMap<String, ActiveToolCall>,
+}
+
+#[derive(Debug, Clone)]
+struct ActiveToolCall {
+    name: String,
+    accumulated_input: String,
 }
 
 impl DualStreamActor {
@@ -92,13 +98,19 @@ impl DualStreamActor {
                 vec![ModelEvent::TextDelta { text }]
             }
             ChunkDelta::ToolUseStart { call_id, name } => {
-                self.active_tool_calls.insert(call_id.clone(), String::new());
+                self.active_tool_calls.insert(
+                    call_id.clone(),
+                    ActiveToolCall {
+                        name: name.clone(),
+                        accumulated_input: String::new(),
+                    },
+                );
                 vec![ModelEvent::ToolCallStart { call_id, name }]
             }
             ChunkDelta::ToolUseInput { call_id, input } => {
                 // Accumulate input for the tool call
                 if let Some(accumulated) = self.active_tool_calls.get_mut(&call_id) {
-                    accumulated.push_str(&input.to_string());
+                    accumulated.accumulated_input.push_str(&input.to_string());
                 }
                 vec![ModelEvent::ToolCallDelta {
                     call_id,
@@ -110,12 +122,12 @@ impl DualStreamActor {
                 let mut events: Vec<ModelEvent> = self
                     .active_tool_calls
                     .drain()
-                    .map(|(call_id, accumulated_input)| {
-                        let input = serde_json::from_str(&accumulated_input)
-                            .unwrap_or_else(|_| serde_json::json!(accumulated_input));
+                    .map(|(call_id, active_tool_call)| {
+                        let input = serde_json::from_str(&active_tool_call.accumulated_input)
+                            .unwrap_or_else(|_| serde_json::json!(active_tool_call.accumulated_input));
                         ModelEvent::ToolCallCompleted {
                             call_id,
-                            name: String::new(), // Name was in the Start event
+                            name: active_tool_call.name,
                             input,
                         }
                     })
@@ -268,6 +280,66 @@ mod tests {
         assert!(event.is_ok());
         assert!(matches!(
             event.unwrap(),
+            ModelEvent::StreamCompleted { stop_reason, .. } if stop_reason == StopReason::Completed
+        ));
+    }
+
+    #[tokio::test]
+    async fn tool_call_completed_preserves_name_and_input() {
+        let (mut actor, mut handle) = DualStreamActor::new(DualStreamConfig::default());
+
+        actor.process_chunk(
+            StreamChunk {
+                index: 0,
+                delta: ChunkDelta::ToolUseStart {
+                    call_id: "call-1".into(),
+                    name: "search".into(),
+                },
+            },
+            "test-model",
+            "req-1",
+        ).await;
+
+        actor.process_chunk(
+            StreamChunk {
+                index: 1,
+                delta: ChunkDelta::ToolUseInput {
+                    call_id: "call-1".into(),
+                    input: serde_json::json!({"query": "rust"}),
+                },
+            },
+            "test-model",
+            "req-1",
+        ).await;
+
+        actor.process_chunk(
+            StreamChunk::stop(2, StopReason::Completed),
+            "test-model",
+            "req-1",
+        ).await;
+
+        let start_event = handle.semantic_rx.try_recv().unwrap();
+        assert!(matches!(
+            start_event,
+            ModelEvent::ToolCallStart { call_id, name } if call_id == "call-1" && name == "search"
+        ));
+
+        let delta_event = handle.semantic_rx.try_recv().unwrap();
+        assert!(matches!(
+            delta_event,
+            ModelEvent::ToolCallDelta { call_id, input_chunk } if call_id == "call-1" && input_chunk == r#"{"query":"rust"}"#
+        ));
+
+        let completed_event = handle.semantic_rx.try_recv().unwrap();
+        assert!(matches!(
+            completed_event,
+            ModelEvent::ToolCallCompleted { call_id, name, input }
+                if call_id == "call-1" && name == "search" && input == serde_json::json!({"query": "rust"})
+        ));
+
+        let stream_event = handle.semantic_rx.try_recv().unwrap();
+        assert!(matches!(
+            stream_event,
             ModelEvent::StreamCompleted { stop_reason, .. } if stop_reason == StopReason::Completed
         ));
     }
