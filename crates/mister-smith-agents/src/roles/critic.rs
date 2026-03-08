@@ -159,10 +159,8 @@ impl Actor for CriticAgent {
                     }
                     .await;
 
-                    if let Ok(eval) = result {
-                        return Ok(eval);
-                    }
-                    // On error, fall through to the stub implementation below.
+                    let eval = result?;
+                    return Ok(eval);
                 }
 
                 // Stub implementation — deterministic evaluation without an LLM.
