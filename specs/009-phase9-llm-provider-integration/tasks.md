@@ -48,6 +48,14 @@ addressed by Phase 9.1 spec at `specs/011-phase9.1-security-hardening/`.
 - **Supervisor delegation**: remains deferred
 - **Priority mailbox wiring**: remains deferred
 
+## Status Reconciliation (2026-03-08)
+
+- This checklist was reconciled against repository paths to avoid false gate-signoff signals.
+- Any task that references a missing implementation/test path is now unchecked until the
+  deliverable exists (or task scope is rewritten).
+- Gate readiness should be assessed from this reconciled checklist plus fresh command outputs in
+  `T026`-`T029`, not from prior historical checkmarks.
+
 ---
 
 ## Subphase 9.1 — Core Types & `MockProvider` (User Story 1, Priority: P1) — DONE
@@ -115,7 +123,7 @@ correctly manage provider health, budget CAS prevents overruns.
 
 ---
 
-## Subphase 9.2b — Dual-Stream + ModelEvent + MessageEnvelope (User Story 7, Priority: P1) — NEW
+## Subphase 9.2b — Dual-Stream + ModelEvent + MessageEnvelope (User Story 7, Priority: P1) — PARTIALLY DONE
 
 **Goal**: Implement the `ModelEvent` enum, dual-stream delivery, and `MessageEnvelope` additions.
 
@@ -135,14 +143,14 @@ correctly manage provider health, budget CAS prevents overruns.
   `crates/mister-smith-transport/src/envelope.rs` (or appropriate module). Add
   `plane: Option<MessagePlane>` and `stream_class: Option<StreamClass>` to `MessageEnvelope`
   with `#[serde(default)]`. Both enums use `#[non_exhaustive]`.
-- [x] T045 [US7] Add `ModelEvent` serde and forward compatibility tests in
+- [ ] T045 [US7] Add `ModelEvent` serde and forward compatibility tests in
   `crates/mister-smith-llm/tests/model_event_tests.rs`: round-trip serialization for all 28
   variants, `Unknown` variant via `#[serde(other)]` for unrecognized input, `#[non_exhaustive]`
   forward compatibility.
-- [x] T046 [US7] Add dual-stream tests in `crates/mister-smith-llm/tests/dual_stream_tests.rs`:
+- [ ] T046 [US7] Add dual-stream tests in `crates/mister-smith-llm/tests/dual_stream_tests.rs`:
   tool-call events delivered losslessly, text deltas coalesced under backpressure, heartbeats
   dropped under extreme backpressure, backpressure policy matrix enforcement.
-- [x] T047 [US7] Add `MessageEnvelope` backward compatibility tests in
+- [ ] T047 [US7] Add `MessageEnvelope` backward compatibility tests in
   `crates/mister-smith-transport/tests/`: deserialize pre-Phase-9 envelopes without `plane` or
   `stream_class` fields (both default to `None`), `None` treated as `Data`/`Semantic`
   respectively.
@@ -166,7 +174,7 @@ delivers events per backpressure policy, `MessageEnvelope` changes are backward-
 - [x] T010 [US2] Implement request serialization, response normalization, streaming, embeddings,
   tool-calling support, and typed error mapping in
   `crates/mister-smith-llm/src/providers/anthropic.rs`.
-- [x] T011 [US2] Add env-gated real-provider coverage in
+- [ ] T011 [US2] Add env-gated real-provider coverage in
   `crates/mister-smith-llm/tests/integration/anthropic_tests.rs`.
 - [x] T012 [US2] Add OpenAI provider module wiring and create
   `crates/mister-smith-llm/src/providers/openai.rs`.
@@ -180,7 +188,7 @@ delivers events per backpressure policy, `MessageEnvelope` changes are backward-
 
 ---
 
-## Subphase 9.4 — Agent-LLM Bridge (User Story 3, Priority: P2)
+## Subphase 9.4 — Agent-LLM Bridge (User Story 3, Priority: P2) — PARTIALLY DONE
 
 **Goal**: Feature-gated bridge from `mister-smith-agents` to `ModelProvider` via `ModelRouter`
 for Planner, Critic, and Executor.
@@ -199,9 +207,9 @@ for Planner, Critic, and Executor.
   `crates/mister-smith-agents/src/roles/critic.rs`.
 - [x] T019 [P] [US3] Implement Executor role integration in
   `crates/mister-smith-agents/src/roles/executor.rs`.
-- [x] T020 [US3] Update `crates/mister-smith-agents/src/orchestrator.rs` to consume structured
+- [ ] T020 [US3] Update `crates/mister-smith-agents/src/orchestrator.rs` to consume structured
   Planner output through existing scheduler and team paths.
-- [x] T021 [US3] Add feature-gated bridge coverage in
+- [ ] T021 [US3] Add feature-gated bridge coverage in
   `crates/mister-smith-agents/tests/role_tests.rs` and
   `crates/mister-smith-agents/tests/team_tests.rs`.
 
