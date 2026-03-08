@@ -17,6 +17,7 @@ fn request_with_user(prompt: &str) -> CompletionRequest {
         max_tokens: None,
         stop_sequences: None,
         metadata: json!({}),
+        routing_hint: None,
     }
 }
 
