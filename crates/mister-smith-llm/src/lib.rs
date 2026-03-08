@@ -40,12 +40,11 @@ pub use provider::{CompletionStream, ModelProvider};
 ))]
 pub use providers::*;
 pub use router::{
-    CascadePolicy, CascadeTier, ConfidenceSignal, ModelRouter, RoutingDecision, RoutingHint,
-    RoutingPolicy,
+    CascadePolicy, CascadeTier, ConfidenceSignal, ModelRouter, RoutingDecision, RoutingPolicy,
 };
 pub use streaming::{ChunkDelta, StreamChunk};
 pub use tool_schema::{ToolCall, ToolDefinition, ToolResult};
 pub use types::{
     ChatMessage, CompletionRequest, CompletionResponse, ContentBlock, EmbeddingResponse,
-    ModelCapabilities, StopReason, Usage,
+    ModelCapabilities, RoutingHint, StopReason, Usage,
 };

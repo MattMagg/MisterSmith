@@ -5,12 +5,14 @@ use mister_smith_core::LlmError;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::budget::BudgetEnforcer;
+use crate::budget::{BudgetEnforcer, BudgetReservation};
 use crate::config::ProviderConfig;
 use crate::health::{CircuitBreaker, CircuitBreakerConfig, HealthStatus};
+use crate::model_event::ModelEvent;
 use crate::provider::{CompletionStream, ModelProvider};
 use crate::types::{
     ChatMessage, CompletionRequest, CompletionResponse, EmbeddingResponse, ModelCapabilities,
+    RoutingHint,
 };
 
 /// Routing policy for provider selection.
@@ -27,18 +29,6 @@ pub enum RoutingPolicy {
     CapabilityMatched,
     /// Multi-tier escalation (SLM-default, LLM-fallback).
     Cascade(CascadePolicy),
-}
-
-
-/// Caller-provided routing preferences.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct RoutingHint {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preferred_tier: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_cost_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub required_capabilities: Vec<String>,
 }
 
 /// Multi-tier routing configuration for SLM-default / LLM-fallback.
@@ -116,11 +106,38 @@ pub struct RoutingDecision {
     pub estimated_cost_tokens: Option<u64>,
 }
 
+/// Sink interface for router-emitted model events.
+pub trait ModelEventSink: Send + Sync {
+    fn publish(&self, event: ModelEvent);
+}
+
 /// Registered provider entry with its circuit breaker.
 struct ProviderEntry {
     config: ProviderConfig,
     provider: Arc<dyn ModelProvider>,
     circuit_breaker: CircuitBreaker,
+}
+
+/// Cascade attempt binding a declared tier to a registered provider.
+#[derive(Debug, Clone)]
+struct CascadeAttempt {
+    tier_order: usize,
+    tier_label: String,
+    provider_index: usize,
+}
+
+/// Budget reservation context for consistent reconciliation.
+struct BudgetReservationContext<'a> {
+    enforcer: &'a BudgetEnforcer,
+    reservation: BudgetReservation,
+}
+
+impl<'a> BudgetReservationContext<'a> {
+    async fn reconcile(self, actual_tokens: u64) -> Result<(), LlmError> {
+        self.enforcer
+            .reconcile(&self.reservation, actual_tokens)
+            .await
+    }
 }
 
 /// Data-plane router that selects a provider per-request based on policy, health, and budget.
@@ -130,6 +147,7 @@ pub struct ModelRouter {
     budget_enforcer: Option<BudgetEnforcer>,
     budget_root: Option<String>,
     round_robin_counter: std::sync::atomic::AtomicUsize,
+    model_event_sink: Option<Arc<dyn ModelEventSink>>,
 }
 
 impl ModelRouter {
@@ -141,6 +159,7 @@ impl ModelRouter {
             budget_enforcer: None,
             budget_root: None,
             round_robin_counter: std::sync::atomic::AtomicUsize::new(0),
+            model_event_sink: None,
         }
     }
 
@@ -149,6 +168,22 @@ impl ModelRouter {
         self.budget_enforcer = Some(enforcer);
         self.budget_root = Some(root_key.into());
         self
+    }
+
+    /// Set the model event sink for routing observability.
+    pub fn with_model_event_sink(mut self, sink: Arc<dyn ModelEventSink>) -> Self {
+        self.model_event_sink = Some(sink);
+        self
+    }
+
+    fn emit_routing_event(&self, model_id: String, tier: String, reason: String) {
+        if let Some(sink) = &self.model_event_sink {
+            sink.publish(ModelEvent::RoutingDecision {
+                model_id,
+                tier,
+                reason,
+            });
+        }
     }
 
     /// Register a provider.
@@ -176,7 +211,12 @@ impl ModelRouter {
     }
 
     /// Select a healthy provider based on routing policy.
-    async fn select_provider(&self, _hint: Option<&RoutingHint>) -> Result<usize, LlmError> {
+    /// Filters by hint capabilities and cost estimate when provided.
+    async fn select_provider(
+        &self,
+        hint: Option<&RoutingHint>,
+        estimated_tokens: u64,
+    ) -> Result<usize, LlmError> {
         let mut providers = self.providers.write().await;
 
         // First, transition any expired Open circuits to HalfOpen
@@ -199,23 +239,76 @@ impl ModelRouter {
             ));
         }
 
+        // Filter by hint capabilities and cost
+        let filtered_indices: Vec<usize> = if let Some(hint) = hint {
+            healthy_indices
+                .into_iter()
+                .filter(|&i| {
+                    Self::provider_matches_hint(
+                        providers[i].provider.as_ref(),
+                        Some(hint),
+                        estimated_tokens,
+                    )
+                })
+                .collect()
+        } else {
+            healthy_indices
+        };
+
+        if filtered_indices.is_empty() {
+            return Err(LlmError::NoHealthyProvider(
+                "No providers match routing hint requirements".to_string(),
+            ));
+        }
+
         match &self.routing_policy {
             RoutingPolicy::RoundRobin => {
                 let idx = self
                     .round_robin_counter
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                Ok(healthy_indices[idx % healthy_indices.len()])
+                Ok(filtered_indices[idx % filtered_indices.len()])
             }
-            RoutingPolicy::CostOptimized => {
-                // For now, prefer providers earlier in the list (assumed cheaper)
-                Ok(healthy_indices[0])
-            }
-            RoutingPolicy::CapabilityMatched => Ok(healthy_indices[0]),
-            RoutingPolicy::Cascade(_) => {
-                // Cascade routing is handled separately in route_cascade
-                Ok(healthy_indices[0])
+            RoutingPolicy::CostOptimized => Ok(filtered_indices[0]),
+            RoutingPolicy::CapabilityMatched => Ok(filtered_indices[0]),
+            RoutingPolicy::Cascade(_) => Ok(filtered_indices[0]),
+        }
+    }
+
+    fn provider_supports_capability(provider: &dyn ModelProvider, capability: &str) -> bool {
+        let caps = provider.capabilities();
+        match capability {
+            "completion" => caps.completion,
+            "streaming" => caps.streaming,
+            "embeddings" => caps.embeddings,
+            "tool_calling" => caps.tool_calling,
+            _ => false,
+        }
+    }
+
+    fn provider_matches_hint(
+        provider: &dyn ModelProvider,
+        hint: Option<&RoutingHint>,
+        estimated_tokens: u64,
+    ) -> bool {
+        let Some(hint) = hint else { return true };
+        for cap in &hint.required_capabilities {
+            if !Self::provider_supports_capability(provider, cap) {
+                return false;
             }
         }
+        if let Some(max_cost) = hint.max_cost_tokens {
+            if estimated_tokens > max_cost {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Clone the request with routing_hint stripped before dispatch to a provider.
+    fn provider_request(request: &CompletionRequest) -> CompletionRequest {
+        let mut clean = request.clone();
+        clean.routing_hint = None;
+        clean
     }
 
     /// Estimate token cost for a request.
@@ -243,28 +336,89 @@ impl ModelRouter {
         input_estimate + output_estimate
     }
 
+    /// Reserve budget tokens. Returns None if no enforcer is configured.
+    async fn reserve_budget(
+        &self,
+        estimated_tokens: u64,
+    ) -> Result<Option<BudgetReservationContext<'_>>, LlmError> {
+        if let (Some(enforcer), Some(root)) = (&self.budget_enforcer, &self.budget_root) {
+            let reservation = enforcer.reserve(root, estimated_tokens).await?;
+            Ok(Some(BudgetReservationContext {
+                enforcer,
+                reservation,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Build a tier-to-provider mapping from the cascade policy.
+    fn build_cascade_attempt_plan(
+        providers: &[ProviderEntry],
+        policy: &CascadePolicy,
+    ) -> Result<Vec<CascadeAttempt>, LlmError> {
+        let mut plan = Vec::with_capacity(policy.tiers.len());
+        for (order, tier) in policy.tiers.iter().enumerate() {
+            let provider_index = providers
+                .iter()
+                .position(|entry| {
+                    entry.config.model_id == tier.provider_config.model_id
+                        && entry.config.provider_kind == tier.provider_config.provider_kind
+                })
+                .ok_or_else(|| {
+                    LlmError::InvalidRequest(format!(
+                        "Cascade tier '{}' has no matching registered provider \
+                         (model_id: '{}', provider_kind: {:?})",
+                        tier.label, tier.provider_config.model_id, tier.provider_config.provider_kind
+                    ))
+                })?;
+            plan.push(CascadeAttempt {
+                tier_order: order,
+                tier_label: tier.label.clone(),
+                provider_index,
+            });
+        }
+        Ok(plan)
+    }
+
     /// Route a completion request through the data plane.
     pub async fn route_completion(
         &self,
         request: CompletionRequest,
     ) -> Result<(CompletionResponse, RoutingDecision), LlmError> {
+        let estimated = Self::estimate_tokens(&request);
+        let hint = request.routing_hint.as_ref();
+
+        // Budget reservation — covers both cascade and non-cascade paths
+        let reservation = self.reserve_budget(estimated).await?;
+
         // Delegate to cascade routing when policy is Cascade
         if let RoutingPolicy::Cascade(ref policy) = self.routing_policy {
             let policy = policy.clone();
-            return self.route_cascade(request, &policy).await;
+            let result = self.route_cascade(request, &policy, estimated).await;
+
+            // Reconcile budget after cascade
+            if let Some(ctx) = reservation {
+                match &result {
+                    Ok((response, _)) => ctx.reconcile(response.usage.total_tokens).await?,
+                    Err(_) => ctx.reconcile(0).await?,
+                }
+            }
+            return result;
         }
 
-        let estimated = Self::estimate_tokens(&request);
+        // Non-cascade path
+        let idx = match self.select_provider(hint, estimated).await {
+            Ok(idx) => idx,
+            Err(err) => {
+                // Reconcile budget on selection failure
+                if let Some(ctx) = reservation {
+                    ctx.reconcile(0).await?;
+                }
+                return Err(err);
+            }
+        };
 
-        // Budget check
-        let reservation =
-            if let (Some(enforcer), Some(root)) = (&self.budget_enforcer, &self.budget_root) {
-                Some(enforcer.reserve(root, estimated).await?)
-            } else {
-                None
-            };
-
-        let idx = self.select_provider(None).await?;
         let providers = self.providers.read().await;
         let entry = &providers[idx];
 
@@ -277,7 +431,7 @@ impl ModelRouter {
         };
 
         let start = std::time::Instant::now();
-        let result = entry.provider.complete(request).await;
+        let result = entry.provider.complete(Self::provider_request(&request)).await;
         let latency_ms = start.elapsed().as_millis() as u64;
 
         drop(providers);
@@ -289,13 +443,9 @@ impl ModelRouter {
                 providers[idx].circuit_breaker.record_success(latency_ms);
                 drop(providers);
 
-                // Reconcile budget
-                if let Some(reservation) = &reservation {
-                    if let Some(enforcer) = &self.budget_enforcer {
-                        let _ = enforcer
-                            .reconcile(reservation, response.usage.total_tokens)
-                            .await;
-                    }
+                // Reconcile budget — propagate errors
+                if let Some(ctx) = reservation {
+                    ctx.reconcile(response.usage.total_tokens).await?;
                 }
 
                 Ok((response, decision))
@@ -307,6 +457,13 @@ impl ModelRouter {
                 };
                 let mut providers = self.providers.write().await;
                 providers[idx].circuit_breaker.record_failure(retry_after);
+                drop(providers);
+
+                // Reconcile budget on provider failure
+                if let Some(ctx) = reservation {
+                    ctx.reconcile(0).await?;
+                }
+
                 Err(err)
             }
         }
@@ -314,25 +471,49 @@ impl ModelRouter {
 
     /// Route a completion via cascade (SLM-default / LLM-fallback).
     ///
-    /// Attempts providers in registration order (cheapest first). Each response
-    /// is scored with [`ConfidenceSignal`]; if the score meets the escalation
-    /// threshold or all tiers are exhausted, the response is returned.
-    pub async fn route_cascade(
+    /// Attempts providers in declared tier order (CascadePolicy::tiers), which is
+    /// authoritative for cheapest-first escalation. Budget is managed by the caller
+    /// (`route_completion`).
+    async fn route_cascade(
         &self,
         request: CompletionRequest,
         policy: &CascadePolicy,
+        estimated_tokens: u64,
     ) -> Result<(CompletionResponse, RoutingDecision), LlmError> {
-        let provider_count = self.providers.read().await.len();
-        let max_attempts = provider_count.min(policy.max_escalations as usize + 1);
+        let hint = request.routing_hint.as_ref();
 
-        for tier_idx in 0..max_attempts {
-            // Read provider info under a short-lived lock
+        let providers = self.providers.read().await;
+        let attempt_plan = Self::build_cascade_attempt_plan(&providers, policy)?;
+        drop(providers);
+
+        // Build attempt indices, optionally reordering by preferred_tier hint
+        let mut attempt_indices: Vec<usize> = (0..attempt_plan.len()).collect();
+        if let Some(hint) = hint {
+            if let Some(preferred) = &hint.preferred_tier {
+                if let Some(pos) = attempt_plan
+                    .iter()
+                    .position(|a| a.tier_label == *preferred)
+                {
+                    attempt_indices.retain(|&i| i != pos);
+                    attempt_indices.insert(0, pos);
+                }
+            }
+        }
+
+        let max_attempts = attempt_indices.len().min(policy.max_escalations as usize + 1);
+
+        for (attempt_idx, plan_idx) in attempt_indices.into_iter().take(max_attempts).enumerate() {
+            let attempt = &attempt_plan[plan_idx];
+            let provider_index = attempt.provider_index;
+
+            // Read provider info under a short-lived write lock (for half-open transition)
             let (provider, config_model_id, model_id, allowed) = {
-                let providers = self.providers.read().await;
-                if tier_idx >= providers.len() {
+                let mut providers = self.providers.write().await;
+                if provider_index >= providers.len() {
                     break;
                 }
-                let entry = &providers[tier_idx];
+                let entry = &mut providers[provider_index];
+                entry.circuit_breaker.maybe_transition_to_half_open();
                 let allowed =
                     entry.circuit_breaker.is_allowed() && !entry.circuit_breaker.is_rate_limited();
                 (
@@ -347,47 +528,64 @@ impl ModelRouter {
                 continue;
             }
 
-            let tier_label = policy
-                .tiers
-                .get(tier_idx)
-                .map(|t| t.label.clone())
-                .unwrap_or_else(|| format!("tier-{tier_idx}"));
+            // Check hint filtering
+            if !Self::provider_matches_hint(provider.as_ref(), hint, estimated_tokens) {
+                continue;
+            }
+
+            let tier_label = attempt.tier_label.clone();
 
             let start = std::time::Instant::now();
-            let result = provider.complete(request.clone()).await;
+            let result = provider.complete(Self::provider_request(&request)).await;
             let latency_ms = start.elapsed().as_millis() as u64;
 
             match result {
                 Ok(response) => {
                     {
                         let mut providers = self.providers.write().await;
-                        if tier_idx < providers.len() {
-                            providers[tier_idx].circuit_breaker.record_success(latency_ms);
+                        if provider_index < providers.len() {
+                            providers[provider_index]
+                                .circuit_breaker
+                                .record_success(latency_ms);
                         }
                     }
 
                     let confidence = ConfidenceSignal::from_response(&response);
-                    let is_last_tier = tier_idx + 1 >= max_attempts;
+                    let is_last_tier = attempt_idx + 1 >= max_attempts;
 
                     let decision = RoutingDecision {
                         provider_id: config_model_id,
-                        model_id,
+                        model_id: model_id.clone(),
                         tier_label: Some(tier_label.clone()),
                         reason: if confidence.score >= policy.escalation_threshold || is_last_tier {
                             format!(
-                                "Cascade accepted at tier '{}' (confidence: {:.2})",
-                                tier_label, confidence.score
+                                "Cascade accepted at tier '{}' (order {}, confidence: {:.2})",
+                                tier_label, attempt.tier_order, confidence.score
                             )
                         } else {
                             format!(
-                                "Cascade escalating from tier '{}' (confidence: {:.2} < threshold: {:.2})",
-                                tier_label, confidence.score, policy.escalation_threshold
+                                "Cascade escalating from tier '{}' (order {}, confidence: {:.2} < threshold: {:.2})",
+                                tier_label, attempt.tier_order, confidence.score, policy.escalation_threshold
                             )
                         },
-                        estimated_cost_tokens: None,
+                        estimated_cost_tokens: Some(estimated_tokens),
                     };
 
-                    if confidence.score >= policy.escalation_threshold || is_last_tier {
+                    let accepted = confidence.score >= policy.escalation_threshold || is_last_tier;
+                    let event_reason = if accepted {
+                        format!(
+                            "accepted (confidence: {:.2}, threshold: {:.2}, last_tier: {})",
+                            confidence.score, policy.escalation_threshold, is_last_tier
+                        )
+                    } else {
+                        format!(
+                            "escalated (confidence: {:.2} < threshold: {:.2})",
+                            confidence.score, policy.escalation_threshold
+                        )
+                    };
+                    self.emit_routing_event(model_id, tier_label, event_reason);
+
+                    if accepted {
                         return Ok((response, decision));
                     }
                     // Below threshold — escalate to next tier
@@ -398,9 +596,15 @@ impl ModelRouter {
                         _ => None,
                     };
                     let mut providers = self.providers.write().await;
-                    if tier_idx < providers.len() {
-                        providers[tier_idx].circuit_breaker.record_failure(retry_after);
+                    if provider_index < providers.len() {
+                        providers[provider_index]
+                            .circuit_breaker
+                            .record_failure(retry_after);
                     }
+                    drop(providers);
+
+                    self.emit_routing_event(model_id, tier_label, format!("failed ({err})"));
+
                     // Continue to next tier on error
                 }
             }
@@ -457,7 +661,7 @@ impl ModelProvider for ModelRouter {
     }
 
     async fn embed(&self, input: Vec<String>) -> Result<EmbeddingResponse, LlmError> {
-        let idx = self.select_provider(None).await?;
+        let idx = self.select_provider(None, 0).await?;
         let providers = self.providers.read().await;
         providers[idx].provider.embed(input).await
     }

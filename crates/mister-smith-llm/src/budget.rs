@@ -127,6 +127,8 @@ pub struct BudgetEnforcer {
     store: Box<dyn BudgetStore>,
 }
 
+const CAS_RETRY_LIMIT: usize = 3;
+
 impl BudgetEnforcer {
     pub fn new(store: Box<dyn BudgetStore>) -> Self {
         Self { store }
@@ -174,26 +176,40 @@ impl BudgetEnforcer {
     }
 
     /// Reconcile actual usage after completion. Adjusts the budget if actual differs from estimated.
+    /// Retries up to `CAS_RETRY_LIMIT` times on CAS conflicts.
     pub async fn reconcile(
         &self,
         reservation: &BudgetReservation,
         actual_tokens: u64,
     ) -> Result<(), LlmError> {
-        let node = self.store.get(&reservation.budget_key).await?.ok_or_else(|| {
-            LlmError::InvalidRequest(format!(
-                "Budget key '{}' not found during reconciliation",
-                reservation.budget_key
-            ))
-        })?;
+        for _attempt in 0..=CAS_RETRY_LIMIT {
+            let node = self.store.get(&reservation.budget_key).await?.ok_or_else(|| {
+                LlmError::InvalidRequest(format!(
+                    "Budget key '{}' not found during reconciliation",
+                    reservation.budget_key
+                ))
+            })?;
 
-        let adjustment = actual_tokens as i64 - reservation.estimated_tokens as i64;
-        let new_used = (node.used_tokens as i64 + adjustment).max(0) as u64;
+            let adjustment = actual_tokens as i64 - reservation.estimated_tokens as i64;
+            let new_used = (node.used_tokens as i64 + adjustment).max(0) as u64;
 
-        let mut updated = node.clone();
-        updated.used_tokens = new_used;
+            let mut updated = node.clone();
+            updated.used_tokens = new_used;
 
-        self.store.cas_update(&updated, node.revision).await?;
-        Ok(())
+            match self.store.cas_update(&updated, node.revision).await {
+                Ok(_) => return Ok(()),
+                Err(err) if Self::is_cas_conflict(&err) => continue,
+                Err(err) => return Err(err),
+            }
+        }
+
+        Err(LlmError::InvalidRequest(
+            "Reconcile failed: exceeded CAS conflict retry limit".to_string(),
+        ))
+    }
+
+    fn is_cas_conflict(err: &LlmError) -> bool {
+        matches!(err, LlmError::InvalidRequest(msg) if msg.contains("CAS conflict"))
     }
 
     /// Get the current budget state for a key.
