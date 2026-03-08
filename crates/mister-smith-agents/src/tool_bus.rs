@@ -484,9 +484,11 @@ impl ToolBus {
     /// Execute a model-emitted [`mister_smith_llm::ToolCall`] through the ToolBus,
     /// preserving all existing security, timeout, metrics, and audit boundaries.
     ///
-    /// Returns `Ok(ToolResult)` in both success and tool-error cases (the error is
-    /// captured inside `ToolResult::error`). Returns `Err` only for structural
-    /// problems such as an invalid tool name format.
+    /// Returns `Ok(ToolResult)` only for successful execution payloads.
+    ///
+    /// Structural and execution-boundary failures (invalid tool name format,
+    /// authorization denial, timeout, missing/unavailable tool, etc.) are
+    /// returned as `Err(AgentSystemError)` to preserve ToolBus semantics.
     #[cfg(feature = "llm")]
     pub async fn execute_tool_call(
         &self,
@@ -501,19 +503,30 @@ impl ToolBus {
             ))
         })?;
 
-        // Delegate to existing invoke() with same security/timeout/metrics boundaries
-        match self
+        // Delegate to existing invoke() with same security/timeout/metrics boundaries.
+        // Boundary failures intentionally propagate as Err to preserve ToolBus semantics.
+        let output = self
             .invoke(principal, namespace, name, call.input.clone(), None)
-            .await
-        {
-            Ok(output) => Ok(mister_smith_llm::ToolResult::success(
-                call.call_id.clone(),
-                output,
-            )),
-            Err(err) => Ok(mister_smith_llm::ToolResult::failure(
-                call.call_id.clone(),
-                err.to_string(),
-            )),
+            .await?;
+        Ok(mister_smith_llm::ToolResult::success(
+            call.call_id.clone(),
+            output,
+        ))
+    }
+
+    /// Provider-facing adapter that preserves protocol expectations of always
+    /// returning a [`mister_smith_llm::ToolResult`], even on ToolBus failures.
+    #[cfg(feature = "llm")]
+    pub async fn execute_tool_call_provider_result(
+        &self,
+        principal: Option<&ToolPrincipal>,
+        call: &mister_smith_llm::ToolCall,
+    ) -> mister_smith_llm::ToolResult {
+        match self.execute_tool_call(principal, call).await {
+            Ok(result) => result,
+            Err(err) => {
+                mister_smith_llm::ToolResult::failure(call.call_id.clone(), err.to_string())
+            }
         }
     }
 }
