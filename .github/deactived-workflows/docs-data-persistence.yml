@@ -1,0 +1,296 @@
+name: Documentation - Data Persistence & Storage
+
+on:
+  workflow_dispatch:
+    inputs:
+      focus_area:
+        description: 'Specific data layer to focus on'
+        required: false
+        type: choice
+        options:
+          - 'all'
+          - 'sqlx-patterns'
+          - 'redis-caching'
+          - 'persistence-operations'
+          - 'database-schemas'
+        default: 'all'
+  schedule:
+    # Run daily at 5 AM UTC
+    - cron: '0 5 * * *'
+  push:
+    paths:
+      - 'spec/data-management/*persistence*.md'
+      - 'spec/data-management/*database*.md'
+      - 'spec/data-management/*storage*.md'
+      - 'spec/data-management/postgresql-implementation.md'
+      - 'spec/data-management/jetstream-kv.md'
+
+jobs:
+  improve-data-docs:
+    name: Improve Data Persistence Documentation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH_NAME="docs/data-persistence-improvements-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH_NAME"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+      
+      - name: Improve SQLx Patterns Documentation (Claude)
+        if: github.event.inputs.focus_area == 'all' || github.event.inputs.focus_area == 'sqlx-patterns'
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: "claude-sonnet-4-20250514"
+          direct_prompt: |
+            You are improving the MisterSmith framework SQLx database documentation.
+            
+            CONTEXT7 LIBRARY REFERENCES:
+            - sqlx v0.8.2 (/launchbadge/sqlx) - SQL toolkit
+            - Features: ["runtime-tokio-rustls", "postgres", "sqlite", "any"]
+            
+            TASK: Improve spec/data-management/postgresql-implementation.md by:
+            
+            1. Use Context7 to get REAL SQLx v0.8.2 code:
+               - Search for "sqlx pool postgres"
+               - Search for "sqlx query macro"
+               - Search for "sqlx transaction"
+               - Search for "sqlx migrate"
+               - Get actual database code examples
+            
+            2. Take the REAL SQLx code and adapt:
+               - Convert actual pool configs to pseudocode
+               - Use real query! macro patterns
+               - Base transactions on actual SQLx examples
+               - Keep real error handling patterns
+               - Use actual migration code structure
+            
+            3. Also update database-schemas.md with:
+               - Agent state tables based on real schemas
+               - Message queue tables from actual implementations
+               - Event sourcing patterns from real code
+               - Audit structures from production examples
+            
+            4. Ensure consistency with:
+               - data-persistence.md
+               - persistence-operations.md
+               - storage-patterns.md
+            
+            IMPORTANT: Use Context7's actual SQLx examples,
+            convert to pseudocode preserving real SQL patterns.
+      
+      - name: Improve Redis Caching Documentation (OpenAI)
+        if: github.event.inputs.focus_area == 'all' || github.event.inputs.focus_area == 'redis-caching'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # Create OpenAI request for Redis documentation
+          cat > redis_request.json << 'EOF'
+          {
+            "model": "o4-mini-2025-04-16",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are improving the MisterSmith framework Redis documentation. Only work with files in spec directory."
+              },
+              {
+                "role": "user",
+                "content": "Create/improve Redis caching documentation by:\n\n1. Use Context7 to get REAL redis v0.27.5 code:\n   - Search for 'redis connection manager'\n   - Search for 'redis pubsub'\n   - Search for 'redis pipeline'\n   - Search for 'redis lua script'\n   - Get actual Redis client usage\n\n2. If file doesn't exist, create spec/data-management/redis-caching.md\n3. Take the REAL Redis code and adapt:\n   - Convert actual connection code to pseudocode\n   - Use real pub/sub patterns from examples\n   - Base locking on actual Redis implementations\n   - Keep real caching patterns\n   - Use actual Lua script examples\n\n4. Cross-reference with:\n   - agent-communication.md (pub/sub)\n   - storage-patterns.md\n   - connection-management.md\n\n5. Use REAL cache invalidation from Redis examples\n\nIMPORTANT: Use Context7's actual redis-rs examples, convert to pseudocode preserving real patterns."
+              }
+            ],
+            "max_completion_tokens": 4000
+          }
+          EOF
+          
+          # Call OpenAI API
+          response=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d @redis_request.json)
+          
+          # Check for errors
+          if echo "$response" | jq -e '.error' > /dev/null; then
+            echo "Error from OpenAI API:"
+            echo "$response" | jq '.error'
+            exit 1
+          fi
+          
+          # Extract content and potentially create file
+          content=$(echo "$response" | jq -r '.choices[0].message.content')
+          
+          # Check if redis-caching.md exists
+          if [ ! -f "spec/data-management/redis-caching.md" ]; then
+            echo "Creating redis-caching.md"
+            echo "$content" > spec/data-management/redis-caching.md
+          else
+            echo "$content" > redis_improvements.md
+          fi
+          
+          echo "OpenAI improvements for Redis caching documentation generated"
+      
+      - name: Improve Persistence Operations Documentation (OpenAI)
+        if: github.event.inputs.focus_area == 'all' || github.event.inputs.focus_area == 'persistence-operations'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # Create OpenAI request for persistence operations
+          cat > persistence_ops_request.json << 'EOF'
+          {
+            "model": "o4-mini-2025-04-16",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are improving the MisterSmith framework persistence operations documentation. Only work with files in spec directory."
+              },
+              {
+                "role": "user",
+                "content": "Improve spec/data-management/persistence-operations.md by:\n\n1. Search for REAL database operations code:\n   - Use Context7 to find SQLx/Redis operational patterns\n   - Search web for actual Rust database pooling libraries\n   - Look for real production database code\n\n2. Adapt REAL operational code:\n   - Use actual connection pool configs\n   - Base routing on real read replica code\n   - Take batching from actual implementations\n   - Use real backup scripts as reference\n\n3. Include REAL operation workflows:\n   - Health checks from actual monitoring code\n   - Failover from real HA implementations\n   - Performance tuning from actual configs\n   - Index management from real DBAs\n\n4. Cross-reference with:\n   - postgresql-implementation.md\n   - storage-patterns.md\n   - observability-monitoring-framework.md\n\nIMPORTANT: Use real production patterns, convert to documentation preserving actual practices."
+              }
+            ],
+            "max_completion_tokens": 4000
+          }
+          EOF
+          
+          # Call OpenAI API
+          response=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d @persistence_ops_request.json)
+          
+          # Extract content
+          echo "$response" | jq -r '.choices[0].message.content' > persistence_ops_improvements.md
+          echo "OpenAI improvements for persistence operations generated"
+      
+      - name: Improve JetStream KV Documentation (Claude)
+        if: github.event.inputs.focus_area == 'all' || github.event.inputs.focus_area == 'database-schemas'
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: "claude-sonnet-4-20250514"
+          direct_prompt: |
+            You are improving the MisterSmith JetStream KV documentation.
+            
+            CONTEXT: NATS JetStream KV as distributed state store
+            
+            TASK: Improve spec/data-management/jetstream-kv.md by:
+            
+            1. Get REAL JetStream KV code:
+               - Use Context7 async-nats to search "kv bucket"
+               - Search for "kv watch"
+               - Search for "kv history"
+               - Find actual KV usage examples
+            
+            2. Adapt REAL JetStream KV patterns:
+               - Use actual bucket creation code
+               - Take key patterns from real examples
+               - Base watching on actual KV watchers
+               - Use real TTL configurations
+               - Keep actual revision handling
+            
+            3. Show integration with:
+               - Agent state from real implementations
+               - Config distribution from actual code
+               - Service discovery from real patterns
+            
+            4. Cross-reference with:
+               - nats-transport.md
+               - agent-operations.md
+               - data-persistence.md
+            
+            IMPORTANT: Use Context7's actual JetStream KV examples,
+            convert to pseudocode preserving real patterns.
+      
+      - name: Apply OpenAI improvements
+        if: github.event.inputs.focus_area == 'all' || contains('redis-caching,persistence-operations', github.event.inputs.focus_area)
+        run: |
+          echo "=== Applying OpenAI Improvements ==="
+          
+          # Apply Redis improvements if available
+          if [ -f redis_improvements.md ]; then
+            echo "Applying Redis caching improvements"
+            if [ -f spec/data-management/redis-caching.md ]; then
+              cp redis_improvements.md spec/data-management/redis-caching.md
+            fi
+            rm redis_improvements.md
+          fi
+          
+          # Apply persistence operations improvements
+          if [ -f persistence_ops_improvements.md ]; then
+            echo "Applying persistence operations improvements"
+            cp persistence_ops_improvements.md spec/data-management/persistence-operations.md
+            rm persistence_ops_improvements.md
+          fi
+          
+          # Clean up request files
+          rm -f redis_request.json persistence_ops_request.json
+      
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes made"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected:"
+            git status --short
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            git add -A
+            git commit -m "docs: Improve data persistence documentation
+            
+            - Enhanced SQLx patterns and database schemas (Claude)
+            - Added Redis caching strategies (OpenAI)
+            - Improved persistence operations (OpenAI)
+            - Updated JetStream KV patterns (Claude)
+            
+            Based on Context7 library documentation:
+            - sqlx v0.8.2
+            - redis v0.27.5
+            - NATS JetStream KV
+            
+            Models used:
+            - Claude Sonnet 4 for SQLx and JetStream KV
+            - OpenAI o4-mini-2025-04-16 for Redis and operations"
+          fi
+      
+      - name: Push changes and create PR
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git push origin "${{ env.BRANCH_NAME }}"
+          gh pr create \
+            --title "docs: Data Persistence Documentation Improvements" \
+            --body "## Data Persistence Documentation Updates
+            
+            This PR improves the data persistence documentation based on:
+            - SQLx v0.8.2 (compile-time SQL, connection pooling)
+            - Redis v0.27.5 (caching, pub/sub, distributed locks)
+            - NATS JetStream KV (distributed state)
+            
+            ### Changes
+            - Enhanced database patterns and schemas
+            - Added comprehensive caching strategies
+            - Improved operational procedures
+            - Updated distributed state patterns
+            
+            ### Models Used
+            - **Claude Sonnet 4**: SQLx patterns and JetStream KV
+            - **OpenAI o4-mini-2025-04-16**: Redis caching and persistence operations
+            
+            ### Context7 References
+            - SQLx: /launchbadge/sqlx
+            - Redis: /redis-rs/redis-rs
+            
+            Generated by Data Persistence Documentation workflow" \
+            --base main \
+            --head "${{ env.BRANCH_NAME }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

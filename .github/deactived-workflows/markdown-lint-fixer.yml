@@ -1,0 +1,225 @@
+name: Markdown Lint Auto-Fixer
+
+on:
+  # Run on schedule to automatically fix linting issues
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      target_directory:
+        description: 'Target directory to fix (default: spec)'
+        required: false
+        default: 'spec'
+        type: string
+      create_pr:
+        description: 'Create PR for fixes'
+        required: false
+        default: true
+        type: boolean
+
+  # Trigger on push to specific markdown files
+  push:
+    paths:
+      - 'spec/**/*.md'
+      - '.markdownlint.json'
+      - '.markdownlintignore'
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  markdown-lint-fix:
+    name: Auto-fix Markdown Linting Issues
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install markdownlint-cli2
+        run: npm install -g markdownlint-cli2
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Check current linting status
+        id: lint-check
+        run: |
+          echo "=== Current Markdown Linting Status ==="
+          TARGET_DIR="${{ github.event.inputs.target_directory || 'spec' }}"
+          
+          # Count current errors
+          ERROR_COUNT=$(markdownlint-cli2 "$TARGET_DIR/**/*.md" --config .markdownlint.json 2>&1 | grep -c "MD[0-9]" || echo "0")
+          echo "current_errors=$ERROR_COUNT" >> $GITHUB_OUTPUT
+          echo "target_directory=$TARGET_DIR" >> $GITHUB_OUTPUT
+          
+          echo "Found $ERROR_COUNT markdown linting errors in $TARGET_DIR"
+          
+          if [ "$ERROR_COUNT" -eq 0 ]; then
+            echo "No linting errors found. Workflow will exit."
+            echo "needs_fixing=false" >> $GITHUB_OUTPUT
+          else
+            echo "Linting errors found. Proceeding with fixes."
+            echo "needs_fixing=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run markdown linting with auto-fix
+        if: steps.lint-check.outputs.needs_fixing == 'true'
+        run: |
+          echo "=== Running Markdown Lint Auto-Fix ==="
+          TARGET_DIR="${{ steps.lint-check.outputs.target_directory }}"
+          
+          # Run markdownlint with --fix flag
+          markdownlint-cli2 "$TARGET_DIR/**/*.md" --config .markdownlint.json --fix || true
+          
+          echo "Auto-fix completed"
+
+      - name: Check for changes
+        if: steps.lint-check.outputs.needs_fixing == 'true'
+        id: changes
+        run: |
+          echo "=== Checking for changes after auto-fix ==="
+          
+          if git diff --quiet; then
+            echo "No changes made by auto-fix"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected after auto-fix"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            
+            # Show summary of changes
+            echo "=== Files modified ==="
+            git diff --name-only
+            
+            echo "=== Change summary ==="
+            git diff --stat
+          fi
+
+      - name: Verify fixes
+        if: steps.changes.outputs.has_changes == 'true'
+        id: verify
+        run: |
+          echo "=== Verifying markdown fixes ==="
+          TARGET_DIR="${{ steps.lint-check.outputs.target_directory }}"
+          
+          # Count remaining errors after fix
+          REMAINING_ERRORS=$(markdownlint-cli2 "$TARGET_DIR/**/*.md" --config .markdownlint.json 2>&1 | grep -c "MD[0-9]" || echo "0")
+          ORIGINAL_ERRORS="${{ steps.lint-check.outputs.current_errors }}"
+          FIXED_ERRORS=$((ORIGINAL_ERRORS - REMAINING_ERRORS))
+          
+          echo "original_errors=$ORIGINAL_ERRORS" >> $GITHUB_OUTPUT
+          echo "remaining_errors=$REMAINING_ERRORS" >> $GITHUB_OUTPUT
+          echo "fixed_errors=$FIXED_ERRORS" >> $GITHUB_OUTPUT
+          
+          echo "Original errors: $ORIGINAL_ERRORS"
+          echo "Remaining errors: $REMAINING_ERRORS"
+          echo "Fixed errors: $FIXED_ERRORS"
+          
+          if [ "$REMAINING_ERRORS" -lt "$ORIGINAL_ERRORS" ]; then
+            echo "✅ Successfully fixed $FIXED_ERRORS markdown linting errors"
+            echo "fix_successful=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ No errors were automatically fixable"
+            echo "fix_successful=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true' && (github.event.inputs.create_pr != 'false')
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            fix: Auto-fix markdown linting errors in ${{ steps.lint-check.outputs.target_directory }}
+            
+            - Fixed ${{ steps.verify.outputs.fixed_errors }} markdown linting errors
+            - Remaining errors: ${{ steps.verify.outputs.remaining_errors }}
+            - Target directory: ${{ steps.lint-check.outputs.target_directory }}
+            
+            Auto-generated by markdown-lint-fixer workflow
+          title: "fix: Auto-fix markdown linting errors in ${{ steps.lint-check.outputs.target_directory }}"
+          body: |
+            ## 🔧 Automatic Markdown Linting Fixes
+            
+            This PR contains automatic fixes for markdown linting errors in the `${{ steps.lint-check.outputs.target_directory }}` directory.
+            
+            ### 📊 Fix Summary
+            - **Original errors**: ${{ steps.verify.outputs.original_errors }}
+            - **Fixed errors**: ${{ steps.verify.outputs.fixed_errors }}
+            - **Remaining errors**: ${{ steps.verify.outputs.remaining_errors }}
+            - **Target directory**: `${{ steps.lint-check.outputs.target_directory }}`
+            
+            ### 🔍 Changes Made
+            The following types of markdown issues were automatically fixed:
+            - Line length violations (MD013)
+            - Missing language specifiers in code blocks (MD040)
+            - Trailing whitespace (MD009)
+            - Missing final newlines (MD047)
+            - Other auto-fixable markdown formatting issues
+            
+            ### ✅ Verification
+            - All fixes maintain document content and meaning
+            - No manual content changes required
+            - Ready for review and merge
+            
+            ### 🤖 Automation Details
+            - **Workflow**: `markdown-lint-fixer.yml`
+            - **Tool**: `markdownlint-cli2 --fix`
+            - **Config**: `.markdownlint.json`
+            - **Triggered**: ${{ github.event_name }}
+            
+            ---
+            *This PR was automatically created by the markdown linting workflow. Please review the changes and merge if they look correct.*
+          branch: fix/markdown-lint-auto-${{ github.run_number }}
+          delete-branch: true
+          draft: false
+
+      - name: Direct commit (if no PR requested)
+        if: steps.changes.outputs.has_changes == 'true' && github.event.inputs.create_pr == 'false'
+        run: |
+          echo "=== Committing fixes directly to main branch ==="
+          git add .
+          git commit -m "fix: Auto-fix markdown linting errors in ${{ steps.lint-check.outputs.target_directory }}
+
+          - Fixed ${{ steps.verify.outputs.fixed_errors }} markdown linting errors
+          - Remaining errors: ${{ steps.verify.outputs.remaining_errors }}
+          - Auto-generated by markdown-lint-fixer workflow"
+          
+          git push origin main
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "=== Markdown Lint Auto-Fixer Summary ==="
+          echo "Target directory: ${{ steps.lint-check.outputs.target_directory }}"
+          echo "Original errors: ${{ steps.lint-check.outputs.current_errors }}"
+          
+          if [ "${{ steps.lint-check.outputs.needs_fixing }}" = "true" ]; then
+            if [ "${{ steps.changes.outputs.has_changes }}" = "true" ]; then
+              echo "✅ Fixes applied: ${{ steps.verify.outputs.fixed_errors }} errors fixed"
+              echo "📝 Remaining errors: ${{ steps.verify.outputs.remaining_errors }}"
+              
+              if [ "${{ github.event.inputs.create_pr }}" != "false" ]; then
+                echo "🔄 Pull request created for review"
+              else
+                echo "💾 Changes committed directly to main branch"
+              fi
+            else
+              echo "ℹ️ No auto-fixable errors found"
+            fi
+          else
+            echo "✨ No linting errors found - repository is clean!"
+          fi

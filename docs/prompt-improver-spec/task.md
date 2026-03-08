@@ -1,11 +1,11 @@
-# Task Checklist — Phase 9 Spec Revision Handoff Prompt
+# Task Checklist — Mister Smith Post-Implementation Review Template
 
 ## Steps 1-3: Planning & Initial Draft
-- [x] Step 1: Example identification — prior handoff analyzed, audit reports cataloged
-- [x] Step 2: Planning — intent, deployment, flowchart, variables, structure documented
-- [x] Step 3: Initial draft written to `final-prompts/phase9-spec-revision-handoff-draft.md`
+- [x] Step 1: Example identification — source prompt analyzed, normalized
+- [x] Step 2: Planning — intent, deployment, variables, structure documented
+- [x] Step 3: Initial draft written to `final-prompts/mister-smith-post-implementation-review-draft.md`
 
 ## Steps 4-6: Revision & Polish
-- [x] Step 4: Critique draft, identify issues, plan revisions (8 issues found)
-- [x] Step 5: Apply revisions — 8 issues resolved (field ownership split, LWW moved to known limitations, partial impl check added, canonical specs added, completion checklist added, SpecKit execution order clarified, research.md disposition specified, directory numbering clarified)
-- [x] Step 6: Final polish — saved to `final-prompts/phase9-spec-revision-handoff.md`, draft deleted
+- [x] Step 4: Critique draft — 8 issues identified (gate removal, bidirectional traceability, citation timing, reference dedup, Cargo.toml review, scope elasticity, dimension consolidation, dependency review)
+- [x] Step 5: Applied revisions — consolidated overlapping dimensions, moved citations into Phase 3, added bidirectional spec traceability, added Cargo.toml review, trimmed Framework Reference to CLAUDE.md delta, added scope boundary guidance
+- [x] Step 6: Final polish — saved to `final-prompts/mister-smith-post-implementation-review.md`, draft deleted
