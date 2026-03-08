@@ -164,17 +164,20 @@ Include `MS-###` in commit messages and PR titles to link them to Linear issues.
 
 ## Statuses
 
-| Status | Meaning |
-|--------|---------|
-| Backlog | Acknowledged but not scheduled |
-| Todo | Scheduled for a cycle, ready to start |
-| In Progress | Actively being worked on |
-| In Review | Code written, PR open, awaiting review |
-| Done | Merged and verified |
-| Duplicate | Duplicate of another issue |
-| Canceled | Will not be done |
+| Status | Type | Meaning |
+|--------|------|---------|
+| Backlog | backlog | Acknowledged but not scheduled |
+| Todo | unstarted | Scheduled for a cycle, ready to start |
+| In Progress | started | Actively being worked on |
+| In Review | started | Code written, PR open, awaiting review |
+| Human Review | started | Agent finished, awaiting human approval (Symphony) |
+| Rework | started | Reviewer requested changes, agent restarts (Symphony) |
+| Merging | started | PR approved, agent lands the merge (Symphony) |
+| Done | completed | Merged and verified |
+| Duplicate | canceled | Duplicate of another issue |
+| Canceled | canceled | Will not be done |
 
-### Status Transitions
+### Status Transitions (Manual)
 
 ```
 Backlog → Todo (sprint planning)
@@ -184,6 +187,17 @@ In Review → Done (PR merged)
 ```
 
 With GitHub integration, branch creation moves to In Progress and PR merge moves to Done automatically.
+
+### Status Transitions (Symphony)
+
+```
+Todo → In Progress (agent picks up issue)
+In Progress → Human Review (agent opens PR, requests review)
+Human Review → Merging (reviewer approves)
+Human Review → Rework (reviewer requests changes)
+Rework → In Progress (agent restarts with feedback)
+Merging → Done (agent lands PR merge)
+```
 
 ## Documents
 
@@ -265,3 +279,68 @@ When adding a new crate to the workspace:
 1. Create a new Crate label child (e.g., "crate:new-crate")
 2. Update the Crate Dependency Map document in Linear
 3. Update `CLAUDE.md` workspace structure
+
+## Symphony Integration
+
+[OpenAI Symphony](https://github.com/openai/symphony) orchestrates Codex agents against Linear issues. It polls for `Todo` issues, spawns a Codex `app-server` per issue, and manages the full lifecycle through the status state machine.
+
+### State Machine
+
+```
+┌──────┐    ┌─────────────┐    ┌──────────────┐    ┌─────────┐    ┌──────┐
+│ Todo │───▶│ In Progress │───▶│ Human Review │───▶│ Merging │───▶│ Done │
+└──────┘    └─────────────┘    └──────────────┘    └─────────┘    └──────┘
+                  ▲                    │
+                  │              ┌─────▼────┐
+                  └──────────────│  Rework  │
+                                └──────────┘
+```
+
+- **Todo → In Progress**: Symphony picks up the issue, spawns a Codex agent
+- **In Progress → Human Review**: Agent opens a PR and requests review
+- **Human Review → Merging**: Reviewer approves the PR
+- **Human Review → Rework**: Reviewer requests changes; agent restarts
+- **Rework → In Progress**: Agent re-reads feedback, creates fresh plan
+- **Merging → Done**: Agent lands the PR merge via the `land` skill
+
+### Configuration
+
+Symphony is configured via `WORKFLOW.md` in the repository root:
+
+| Setting | Value |
+|---------|-------|
+| `project_slug` | `agentic-ops` |
+| `active_states` | Todo, In Progress, Merging, Rework |
+| `terminal_states` | Done, Canceled, Duplicate |
+| `polling.interval_ms` | 5000 |
+| `agent.max_concurrent_agents` | 4 |
+| `agent.max_turns` | 20 |
+
+### Required Environment
+
+| Variable | Purpose |
+|----------|---------|
+| `LINEAR_API_KEY` | Linear API access (in `.env`, gitignored) |
+| `OPENAI_API_KEY` | Codex agent LLM access |
+| `GITHUB_TOKEN` | PR creation and merge via `gh` CLI |
+
+### Running Symphony
+
+```bash
+source .env  # or use direnv/dotenv
+# From the symphony repo:
+symphony run --config /path/to/Mister-Smith/WORKFLOW.md
+```
+
+### Codex Skills
+
+Symphony agents use skills defined in `.codex/skills/`:
+
+| Skill | Purpose |
+|-------|---------|
+| `commit` | Create conventional commits with rationale |
+| `linear` | Raw Linear GraphQL operations |
+| `pull` | Merge `origin/main` into current branch |
+| `push` | Publish branch and create/update PR |
+| `land` | Merge PR when issue reaches Merging |
+| `vet` | Run validation checks |

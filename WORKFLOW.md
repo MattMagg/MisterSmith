@@ -1,19 +1,16 @@
 ---
 tracker:
   kind: linear
-  # Replace this with the real Linear project slug before running Symphony.
-  project_slug: "REPLACE_WITH_LINEAR_PROJECT_SLUG"
+  project_slug: "agentic-ops"
   active_states:
     - Todo
     - In Progress
     - Merging
     - Rework
   terminal_states:
-    - Closed
-    - Cancelled
+    - Done
     - Canceled
     - Duplicate
-    - Done
 polling:
   interval_ms: 5000
 workspace:
