@@ -313,6 +313,29 @@ mod cascade {
     }
 
     #[tokio::test]
+    async fn cascade_uses_declared_tier_order_over_registration_order() {
+        // Tier order is slm -> llm, but providers are intentionally registered llm -> slm.
+        let policy = cascade_policy(0.3, 1);
+        let router = ModelRouter::new(RoutingPolicy::Cascade(policy));
+
+        let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
+        let slm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("slm-model"));
+
+        router
+            .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+            .await;
+        router
+            .add_provider(mock_config("slm"), slm, CircuitBreakerConfig::default())
+            .await;
+
+        let (_response, decision) = router.route_completion(mock_request()).await.unwrap();
+
+        // Should still execute tier 0 (slm-tier) first based on declared tier order.
+        assert_eq!(decision.tier_label.as_deref(), Some("slm-tier"));
+        assert_eq!(decision.provider_id, "slm");
+    }
+
+    #[tokio::test]
     async fn cascade_returns_error_when_all_tiers_unhealthy() {
         let policy = cascade_policy(0.5, 1);
         let router = ModelRouter::new(RoutingPolicy::Cascade(policy));

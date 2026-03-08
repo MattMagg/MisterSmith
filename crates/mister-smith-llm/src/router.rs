@@ -123,6 +123,13 @@ struct ProviderEntry {
     circuit_breaker: CircuitBreaker,
 }
 
+#[derive(Debug, Clone)]
+struct CascadeAttempt {
+    tier_order: usize,
+    tier_label: String,
+    provider_index: usize,
+}
+
 /// Data-plane router that selects a provider per-request based on policy, health, and budget.
 pub struct ModelRouter {
     providers: RwLock<Vec<ProviderEntry>>,
@@ -314,25 +321,29 @@ impl ModelRouter {
 
     /// Route a completion via cascade (SLM-default / LLM-fallback).
     ///
-    /// Attempts providers in registration order (cheapest first). Each response
-    /// is scored with [`ConfidenceSignal`]; if the score meets the escalation
-    /// threshold or all tiers are exhausted, the response is returned.
+    /// Attempts providers in declared tier order (`CascadePolicy::tiers`), which
+    /// is authoritative for cheapest-first escalation. Each response is scored
+    /// with [`ConfidenceSignal`]; if the score meets the escalation threshold or
+    /// all tiers are exhausted, the response is returned.
     pub async fn route_cascade(
         &self,
         request: CompletionRequest,
         policy: &CascadePolicy,
     ) -> Result<(CompletionResponse, RoutingDecision), LlmError> {
-        let provider_count = self.providers.read().await.len();
-        let max_attempts = provider_count.min(policy.max_escalations as usize + 1);
+        let attempt_plan = {
+            let providers = self.providers.read().await;
+            Self::build_cascade_attempt_plan(&providers, policy)?
+        };
+        let max_attempts = attempt_plan.len().min(policy.max_escalations as usize + 1);
 
-        for tier_idx in 0..max_attempts {
+        for (attempt_idx, attempt) in attempt_plan.iter().take(max_attempts).enumerate() {
             // Read provider info under a short-lived lock
             let (provider, config_model_id, model_id, allowed) = {
                 let providers = self.providers.read().await;
-                if tier_idx >= providers.len() {
+                if attempt.provider_index >= providers.len() {
                     break;
                 }
-                let entry = &providers[tier_idx];
+                let entry = &providers[attempt.provider_index];
                 let allowed =
                     entry.circuit_breaker.is_allowed() && !entry.circuit_breaker.is_rate_limited();
                 (
@@ -347,11 +358,7 @@ impl ModelRouter {
                 continue;
             }
 
-            let tier_label = policy
-                .tiers
-                .get(tier_idx)
-                .map(|t| t.label.clone())
-                .unwrap_or_else(|| format!("tier-{tier_idx}"));
+            let tier_label = attempt.tier_label.clone();
 
             let start = std::time::Instant::now();
             let result = provider.complete(request.clone()).await;
@@ -361,13 +368,15 @@ impl ModelRouter {
                 Ok(response) => {
                     {
                         let mut providers = self.providers.write().await;
-                        if tier_idx < providers.len() {
-                            providers[tier_idx].circuit_breaker.record_success(latency_ms);
+                        if attempt.provider_index < providers.len() {
+                            providers[attempt.provider_index]
+                                .circuit_breaker
+                                .record_success(latency_ms);
                         }
                     }
 
                     let confidence = ConfidenceSignal::from_response(&response);
-                    let is_last_tier = tier_idx + 1 >= max_attempts;
+                    let is_last_tier = attempt_idx + 1 >= max_attempts;
 
                     let decision = RoutingDecision {
                         provider_id: config_model_id,
@@ -375,13 +384,16 @@ impl ModelRouter {
                         tier_label: Some(tier_label.clone()),
                         reason: if confidence.score >= policy.escalation_threshold || is_last_tier {
                             format!(
-                                "Cascade accepted at tier '{}' (confidence: {:.2})",
-                                tier_label, confidence.score
+                                "Cascade accepted at tier '{}' (order {}, confidence: {:.2})",
+                                tier_label, attempt.tier_order, confidence.score
                             )
                         } else {
                             format!(
-                                "Cascade escalating from tier '{}' (confidence: {:.2} < threshold: {:.2})",
-                                tier_label, confidence.score, policy.escalation_threshold
+                                "Cascade escalating from tier '{}' (order {}, confidence: {:.2} < threshold: {:.2})",
+                                tier_label,
+                                attempt.tier_order,
+                                confidence.score,
+                                policy.escalation_threshold
                             )
                         },
                         estimated_cost_tokens: None,
@@ -398,8 +410,10 @@ impl ModelRouter {
                         _ => None,
                     };
                     let mut providers = self.providers.write().await;
-                    if tier_idx < providers.len() {
-                        providers[tier_idx].circuit_breaker.record_failure(retry_after);
+                    if attempt.provider_index < providers.len() {
+                        providers[attempt.provider_index]
+                            .circuit_breaker
+                            .record_failure(retry_after);
                     }
                     // Continue to next tier on error
                 }
@@ -414,6 +428,43 @@ impl ModelRouter {
     /// Get the number of registered providers.
     pub async fn provider_count(&self) -> usize {
         self.providers.read().await.len()
+    }
+
+    fn build_cascade_attempt_plan(
+        providers: &[ProviderEntry],
+        policy: &CascadePolicy,
+    ) -> Result<Vec<CascadeAttempt>, LlmError> {
+        // The declared order in `policy.tiers` is authoritative and represents
+        // "cheapest first" preference for cascade routing.
+        let mut ordered_tiers: Vec<(usize, &CascadeTier)> = policy.tiers.iter().enumerate().collect();
+        ordered_tiers.sort_by_key(|(declared_order, _)| *declared_order);
+
+        let mut attempts = Vec::with_capacity(ordered_tiers.len());
+        for (tier_order, tier) in ordered_tiers {
+            let provider_index = providers
+                .iter()
+                .position(|entry| {
+                    entry.config.model_id == tier.provider_config.model_id
+                        && entry.config.provider_kind == tier.provider_config.provider_kind
+                })
+                .ok_or_else(|| {
+                    LlmError::InvalidRequest(format!(
+                        "Cascade tier '{}' (order {}) has no matching registered provider for model_id='{}' provider_kind='{}'",
+                        tier.label,
+                        tier_order,
+                        tier.provider_config.model_id,
+                        tier.provider_config.provider_kind
+                    ))
+                })?;
+
+            attempts.push(CascadeAttempt {
+                tier_order,
+                tier_label: tier.label.clone(),
+                provider_index,
+            });
+        }
+
+        Ok(attempts)
     }
 }
 
