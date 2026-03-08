@@ -21,6 +21,7 @@ const ANTHROPIC_VERSION: &str = "2023-06-01";
 struct AnthropicStreamState {
     chunk_index: usize,
     tool_call_ids_by_content_index: HashMap<u64, String>,
+    terminal_stop_emitted: bool,
 }
 
 fn parse_stream_event(
@@ -111,14 +112,18 @@ fn parse_stream_event(
                     "tool_use" => StopReason::ToolCall,
                     _ => StopReason::Completed,
                 };
+                state.terminal_stop_emitted = true;
                 chunks.push(StreamChunk::stop(state.chunk_index, stop_reason));
                 state.chunk_index += 1;
             }
         }
         "message_stop" => {
-            // Terminal event — the message_delta should have
-            // already emitted a stop chunk with the reason.
-            // If not, emit a completed stop as a fallback.
+            // Terminal event — emit a fallback stop if message_delta didn't.
+            if !state.terminal_stop_emitted {
+                state.terminal_stop_emitted = true;
+                chunks.push(StreamChunk::stop(state.chunk_index, StopReason::Completed));
+                state.chunk_index += 1;
+            }
         }
         _ => {}
     }
@@ -642,5 +647,54 @@ mod tests {
                 input: serde_json::json!("\"nyc\"}"),
             }
         );
+    }
+
+    #[test]
+    fn message_delta_sets_terminal_stop_emitted() {
+        let mut state = AnthropicStreamState::default();
+        let event = serde_json::json!({
+            "type": "message_delta",
+            "delta": { "stop_reason": "max_tokens" }
+        });
+
+        let chunks = parse_stream_event(&event, &mut state);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].delta, ChunkDelta::Stop { reason: StopReason::MaxTokens });
+        assert!(state.terminal_stop_emitted);
+    }
+
+    #[test]
+    fn message_stop_emits_fallback_when_no_prior_stop() {
+        let mut state = AnthropicStreamState::default();
+
+        // message_delta without stop_reason
+        let delta = serde_json::json!({ "type": "message_delta", "delta": {} });
+        let chunks = parse_stream_event(&delta, &mut state);
+        assert!(chunks.is_empty());
+        assert!(!state.terminal_stop_emitted);
+
+        // message_stop should emit fallback
+        let stop = serde_json::json!({ "type": "message_stop" });
+        let chunks = parse_stream_event(&stop, &mut state);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].delta, ChunkDelta::Stop { reason: StopReason::Completed });
+        assert!(state.terminal_stop_emitted);
+    }
+
+    #[test]
+    fn message_stop_does_not_duplicate_after_message_delta_stop() {
+        let mut state = AnthropicStreamState::default();
+
+        let delta = serde_json::json!({
+            "type": "message_delta",
+            "delta": { "stop_reason": "end_turn" }
+        });
+        parse_stream_event(&delta, &mut state);
+        assert!(state.terminal_stop_emitted);
+
+        // message_stop should NOT emit another stop
+        let stop = serde_json::json!({ "type": "message_stop" });
+        let chunks = parse_stream_event(&stop, &mut state);
+        assert!(chunks.is_empty());
     }
 }
