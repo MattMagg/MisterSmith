@@ -6,9 +6,11 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-a
 
 ```bash
 cargo build --workspace                    # Build all crates
-cargo test --workspace                     # Run all tests (1100 as of Phase 9 complete)
+cargo test -p <crate>                      # Test a specific crate after changes
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 ```
+
+> **NEVER run `cargo test --workspace` unless the user explicitly asks for it.** The workspace has 20 crates and 1115+ tests — a full run takes minutes and is almost never necessary. Use `cargo test -p <crate>` for targeted testing after changes. Use `cargo build --workspace` (~8s) to check cross-crate compilation. Do not run workspace tests "just to check status" — the test count is tracked in MEMORY.md.
 
 ## Implementation Status
 
@@ -53,7 +55,7 @@ mister-smith-core (foundation types, traits, errors)
 
 | Directory | Contents |
 |-----------|----------|
-| `crates/` | Rust workspace — 19 crates (Phase 1-8: foundation, runtime/async, actor/supervision, transport, security, persistence, agents, operations) |
+| `crates/` | Rust workspace — 20 crates (Phase 1-9: foundation, runtime/async, actor/supervision, transport, security, persistence, agents, operations, LLM providers) |
 | `spec/` | Canonical architecture specifications — 65+ files across 8 domains (the system contract) |
 | `specs/` | SpecKit implementation artifacts — per-phase spec, plan, and task files (the build instructions) |
 | `ROADMAP.md` | 9-phase build roadmap — dependency-aware implementation order |
@@ -61,6 +63,9 @@ mister-smith-core (foundation types, traits, errors)
 | `archive/` | Completed validation work, historical operations, and research |
 | `deploy/` | Deployment artifacts — Dockerfile, docker-compose, Kubernetes manifests, Grafana dashboards, Prometheus alerts |
 | `nats.rs/` | Official NATS Rust client (cloned from nats-io/nats.rs) — reference for async-nats API |
+| `docs/` | Research output, code reviews, session analysis, prompt-improver spec |
+| `scripts/` | Mem0 platform setup (`mem0_setup.py`) |
+| `.agents/workflows/` | Agent workflow templates (bulk PR merge, mandate) |
 | `.github/workflows/` | CI/CD pipelines |
 
 > **`spec/` vs `specs/` — these are different directories.** `spec/` contains the canonical architecture specifications defining *what* the system is (types, patterns, interfaces, message schemas). `specs/` contains SpecKit-generated implementation artifacts defining *how* each phase is built (feature specs, plans, task breakdowns). The `ROADMAP.md` bridges them by referencing `spec/` docs for each phase.
@@ -100,16 +105,22 @@ Changes to these files cascade across the architecture:
 
 ## Technology Stack
 
-| Component | Spec Version | Notes |
-|-----------|-------------|-------|
-| MSRV | **1.88.0** | Driven by async-nats 0.46.0 requirement |
-| Runtime | Tokio 1.49.0 | Full feature set (rt-multi-thread, io, net, time, sync, fs, process, signal) |
-| Messaging | async-nats 0.46.0 | jetstream, kv, object-store, service features |
-| HTTP | Axum 0.8 | |
-| gRPC | Tonic 0.14 | With prost 0.14 for protobuf |
-| Storage | PostgreSQL + Redis | sqlx with runtime-tokio-rustls |
-| Security | JWT, TLS 1.3, mTLS | ring 0.17, jsonwebtoken 10, aes-gcm 0.10 |
-| Orchestration | Kubernetes | |
+| Category | Technology | Version | Notes |
+|----------|-----------|---------|-------|
+| Language | Rust (MSRV) | 1.88.0 | Driven by async-nats 0.46.0 requirement |
+| Runtime | Tokio | 1.49.0 | Full feature set (rt-multi-thread, io, net, time, sync, fs, process, signal) |
+| Messaging | async-nats (JetStream, KV, service) | 0.46.0 | jetstream, kv, object-store, service features |
+| HTTP | Axum | 0.8.8 | |
+| gRPC | Tonic + Prost | 0.14.x | |
+| MCP | rmcp (client, server, streamable-HTTP) | 1.1.0 | |
+| Database | sqlx (PostgreSQL, runtime-tokio-rustls) | 0.8.6 | |
+| Security | jsonwebtoken, rustls | 10.x, 0.23 | JWT, TLS 1.3, mTLS |
+| Observability | opentelemetry + tracing + metrics-exporter-prometheus | 0.31.0, 0.1.44, 0.18.1 | |
+| CLI | clap | 4.x | |
+| Serialization | serde, serde_json, rmp-serde | 1.x | |
+| Errors | thiserror | 1.x | Staying on 1.x per deliberate decision |
+| Storage | PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) | — | |
+| Orchestration | Kubernetes | — | Deploy artifacts in `deploy/` |
 
 > See `VERSION_REFERENCE.md` for the full dependency matrix. Review `nats.rs/async-nats/` for API reference before implementing transport layer.
 
@@ -132,20 +143,3 @@ The following apps are connected and available for use. Select the most appropri
 | **GitHub** | Code hosting and version control platform. Use for managing repositories, creating/reviewing pull requests, tracking issues, and CI/CD workflows. |
 | **Tavily** | AI-optimized search and data retrieval. Use for quickly searching the web or filtering relevant information from documents and databases. Load the Tavily-best-practices skill whenever you need to use Tavily > .claude/skills/tavily-best-practices |
 
-## Active Technologies
-
-| Category | Technology | Version |
-|----------|-----------|---------|
-| Language | Rust (MSRV) | 1.88.0 |
-| Runtime | Tokio | 1.49.0 |
-| Messaging | async-nats (JetStream, KV, service) | 0.46.0 |
-| HTTP | Axum | 0.8.8 |
-| gRPC | Tonic + Prost | 0.14.x |
-| MCP | rmcp (client, server, streamable-HTTP) | 1.1.0 |
-| Database | sqlx (PostgreSQL, runtime-tokio-rustls) | 0.8.6 |
-| Security | jsonwebtoken, ring, aes-gcm, rustls | 10.x, 0.17, 0.10, 0.23 |
-| Observability | opentelemetry + tracing + metrics-exporter-prometheus | 0.31.0, 0.1.44, 0.18.1 |
-| CLI | clap | 4.x |
-| Serialization | serde, serde_json, rmp-serde | 1.x |
-| Errors | thiserror | 1.x |
-| Storage | PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) | — |

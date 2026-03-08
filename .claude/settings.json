@@ -3,7 +3,44 @@
     "defaultMode": "bypassPermissions"
   },
   "enableAllProjectMcpServers": true,
-  "hooks": {},
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/mem0_hook_recall.py",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/mem0_hook_recall.py",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/mem0_hook_capture.py",
+            "timeout": 15000
+          }
+        ]
+      }
+    ]
+  },
   "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
   "enabledPlugins": {
     "skill-creator@claude-plugins-official": true

@@ -1,55 +1,61 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository is primarily a specification and planning workspace for Mister Smith.
 
-- `spec/`: Canonical architecture, transport, security, data, and testing specs (main contribution area).
-- `plans/`: Implementation planning docs and batch trackers.
-- `archive/`: Historical validation/research artifacts; avoid editing unless explicitly needed.
-- `docs/`, `logs/`: Supporting documentation and run logs.
-- `nats.rs/`: Vendored upstream Rust NATS workspace used as API reference and optional implementation/test surface.
+This repository is a Rust workspace implementing the Mister Smith multi-agent orchestration framework. It contains 20 crates across 9 implementation phases.
 
-Use `README.md`, `ROADMAP.md`, and `VALIDATION_REPORT.md` as orientation entry points before editing specs.
+- `crates/`: Rust workspace — 18 library crates + 1 binary + 1 integration test crate
+- `spec/`: Canonical architecture specifications (the system contract)
+- `specs/`: SpecKit-generated per-phase implementation artifacts (build instructions)
+- `plans/`: Implementation plans and batch trackers
+- `docs/`: Research output, code reviews, session analysis
+- `archive/`: Historical validation/research artifacts; avoid editing unless explicitly needed
+- `deploy/`: Deployment artifacts — Dockerfile, K8s manifests, Grafana dashboards, Prometheus alerts
+- `nats.rs/`: Vendored upstream Rust NATS workspace used as API reference
+- `scripts/`: Utility scripts (Mem0 platform setup)
+
+Use `README.md`, `ROADMAP.md`, and `CLAUDE.md` as orientation entry points.
 
 ## Build, Test, and Development Commands
+
 Run from repository root unless noted.
 
-- `npx markdownlint-cli2 "spec/**/*.md" "*.md" --config .markdownlint.json`: lint Markdown against project rules.
-- `git grep -nE "TODO|TBD|FIXME" spec/`: catch unfinished spec language before PR.
-- `cd nats.rs/async-nats && cargo test --features slow_tests,websockets -- --nocapture`: full async-nats test path used by CI.
-- `cd nats.rs && cargo +nightly fmt -- --check && cargo clippy --benches --tests --examples --all-features -- --deny clippy::all`: formatting and lint gates for Rust changes.
+```bash
+cargo build --workspace                    # Build all crates
+cargo test --workspace                     # Run all tests (1115+)
+cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
+cargo test -p <crate-name>                 # Test a single crate
+```
 
-If running `nats.rs` tests locally, install server first: `go install github.com/nats-io/nats-server/v2@main`.
+For markdown linting:
+- `npx markdownlint-cli2 "spec/**/*.md" "*.md" --config .markdownlint.json`
+- `git grep -nE "TODO|TBD|FIXME" spec/`: catch unfinished spec language before PR
 
 ## Coding Style & Naming Conventions
-- Markdown: ATX headings, 2-space list indentation, and 200-char max line length (see `.markdownlint.json`).
-- Spec docs: prefer lowercase kebab-case filenames (for example, `spec/core-architecture/system-architecture.md`).
-- Keep terminology consistent with existing domain docs; update cross-references when renaming files.
-- Rust (only when editing `nats.rs/`): follow rustfmt defaults in `nats.rs/.rustfmt.toml` (`max_width = 100`), no clippy warnings.
+
+- **Rust**: Follow existing workspace conventions — `rustfmt` defaults, zero clippy warnings
+- **Error pattern**: Domain errors defined in `mister-smith-core`, re-exported from domain crates (SecurityError, PersistenceError, LlmError)
+- **Feature flags**: Used for optional integrations (`security`, `sqlx`, `llm`, provider features)
+- **Markdown**: ATX headings, 2-space list indentation, 200-char max line length (see `.markdownlint.json`)
+- **Spec docs**: lowercase kebab-case filenames (e.g., `spec/core-architecture/system-architecture.md`)
+- Keep terminology consistent with existing domain docs; update cross-references when renaming files
 
 ## Testing Guidelines
-- Documentation changes must at minimum pass markdown linting and basic broken-link sanity checks in edited files.
-- Rust changes in `nats.rs/` should run targeted crate tests plus relevant feature/TLS variants when applicable.
-- Test files in `nats.rs` follow `*_tests.rs` / domain-specific naming (`kv_tests.rs`, `service_tests.rs`); mirror that pattern.
+
+- Run `cargo test -p <crate>` for the affected crate during development
+- Full workspace tests only when touching `mister-smith-core` types or when explicitly asked
+- `cargo build --workspace` is a fast (~8s) check for cross-crate compatibility
+- Env-gated integration tests: `#[ignore]` by default, require `DATABASE_URL` / `NATS_URL`
 
 ## Commit & Pull Request Guidelines
-- Follow observed commit style: `docs: ...`, `fix(spec): ...`, `refactor(spec): ...`, `feat: ...`, `chore: ...`.
-- Keep commits atomic and scoped to one concern.
-- PRs should include:
-  - concise problem/solution summary,
-  - touched directories/files,
-  - validation commands run and outcomes,
-  - linked issue (if available).
-- Include screenshots only for workflow/UI-facing changes; not required for spec-only text edits.
+
+- Conventional commits with scope: `feat(llm):`, `fix(agents):`, `docs:`, `chore:`, `style:`
+- Keep commits atomic and scoped to one concern
+- PRs should include: concise problem/solution summary, touched files, validation commands run
+- PR references use `(#NNN)` suffix
 
 ## Security & Configuration Tips
-- Never commit secrets; use GitHub Actions secrets (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) for workflow credentials.
-- Treat `mistersmith-api.json` and workflow files as integration surfaces: validate references and paths after edits.
 
-## Active Technologies
-- Markdown specifications + Rust contract references (MSRV 1.88 context) + Existing canonical docs in `spec/core-architecture/`, `spec/operations/`; repo checks via `rg`, `cargo`, `markdownlint` (001-phase1-foundation)
-- N/A (documentation artifacts only) (001-phase1-foundation)
-- Markdown specifications + Rust-oriented contract references (Tokio 1.49.0 baseline context) + Canonical docs in `spec/core-architecture/`, `spec/data-management/`, `spec/operations/`; repository checks via `rg` and `markdownlint` (002-phase2-runtime-async)
-
-## Recent Changes
-- 001-phase1-foundation: Added Markdown specifications + Rust contract references (MSRV 1.88 context) + Existing canonical docs in `spec/core-architecture/`, `spec/operations/`; repo checks via `rg`, `cargo`, `markdownlint`
+- Never commit secrets; use environment variables or GitHub Actions secrets for credentials
+- Provider API keys: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+- OAuth credentials: Claude subscription uses Keychain/file-based credential sources

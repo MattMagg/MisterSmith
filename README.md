@@ -14,9 +14,9 @@ A multi-agent orchestration framework built in Rust with NATS messaging and Erla
 | 6. Persistence & State | Complete | `mister-smith-persistence` | 882 |
 | 7. Agent System | Complete | `mister-smith-agents` | 951 |
 | 8. Operations | Complete | `mister-smith-app` | 983 |
-| 9. LLM Providers | Spec complete | `mister-smith-llm` (planned) | — |
+| 9. LLM Providers | Complete | `mister-smith-llm`, `mister-smith-agents` (llm feature) | 1115 |
 
-**19 crates** in the workspace (17 library + 1 binary + 1 integration test), **983 tests** passing, zero clippy warnings.
+**20 crates** in the workspace (18 library + 1 binary + 1 integration test), **1,115 tests** passing, zero clippy warnings.
 
 ## Architecture
 
@@ -62,7 +62,8 @@ mister-smith-core          Foundation types, traits, error hierarchy
 ├── mister-smith-mcp       MCP client/server, tool registry, NATS bridge
 ├── mister-smith-security  JWT auth, RBAC, TLS/mTLS, audit logging
 ├── mister-smith-persistence  PostgreSQL + JetStream KV dual-store, repositories, audit bridge
-├── mister-smith-agents    AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles
+├── mister-smith-llm       ModelProvider trait, MockProvider, 4 LLM providers, ModelRouter, dual-stream
+├── mister-smith-agents    AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles, LLM bridge
 ├── mister-smith-app       Binary entry point, bootstrap, shutdown, observability, health probes
 └── mister-smith-integration-tests  Cross-crate validation
 ```
@@ -87,6 +88,16 @@ mister-smith-core          Foundation types, traits, error hierarchy
 | serde | 1.0 | JSON/MessagePack serialization |
 | thiserror | 1.0 | Error hierarchy |
 | tracing | 0.1 | Structured logging |
+
+## LLM Integration (Phase 9)
+
+- **5 providers**: MockProvider (deterministic testing), AnthropicProvider, OpenAiProvider, OpenAiChatGptProvider, ClaudeSubscriptionProvider
+- **Model routing**: Round-robin, cost-optimized, capability-matched, and cascade (SLM-default/LLM-fallback with confidence-based escalation)
+- **Dual-stream architecture**: Semantic channel (lossless tool calls, lifecycle events) + UI channel (best-effort text with backpressure coalescing)
+- **Budget enforcement**: Reserve-before-send / reconcile-after-completion with hierarchical key resolution
+- **Circuit breaker**: Per-provider health tracking with sliding-window error rate and p95 latency
+- **Agent bridge**: Planner, Critic, Executor roles gain LLM-powered implementations via `llm` feature flag
+- **Tool calling**: Bidirectional ToolBus ↔ LLM function calling round-trip
 
 ## Production Features (Phase 8)
 

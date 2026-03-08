@@ -75,7 +75,7 @@ Typed configuration loading, validation, and hot-reload support.
 **Depends on**: 1.1 (config structs reference core types)
 **Produces**: `mister-smith-config` crate
 
-> **Gate 1**: Core types compile. Trait definitions compile. Configuration loads and validates. No runtime behavior yet — this is all compile-time structure. Run `cargo build -p mister-smith-core` and `cargo build -p mister-smith-config` cleanly.
+> **Gate 1** ✅ (validated 2026-03-04): Core types compile. Trait definitions compile. Configuration loads and validates. No runtime behavior yet — this is all compile-time structure. Run `cargo build -p mister-smith-core` and `cargo build -p mister-smith-config` cleanly.
 > Validation checklist: [Phase 1 Deep Dive](plans/roadmap-phases/phase-1-foundation.md).
 
 ---
@@ -165,7 +165,7 @@ Generic connection pooling and resource lifecycle. Used by transport, persistenc
 **Depends on**: 2.2, 1.3 (pool config, health integration)
 **Produces**: `mister-smith-resources` crate
 
-> **Gate 2**: The runtime starts, shuts down gracefully, and reports health. Events flow through the bus. Metrics are collected. You can write `#[tokio::test]` tests that exercise the async patterns. No actors, no agents, no external I/O yet.
+> **Gate 2** ✅ (validated 2026-03-04): The runtime starts, shuts down gracefully, and reports health. Events flow through the bus. Metrics are collected. You can write `#[tokio::test]` tests that exercise the async patterns. No actors, no agents, no external I/O yet.
 > Validation checklist: [Phase 2 Deep Dive](plans/roadmap-phases/phase-2-runtime-and-async-infrastructure.md).
 
 ---
@@ -210,7 +210,7 @@ The fault tolerance layer. Supervisors form a tree; when a child fails, the supe
 **Depends on**: 3.1 (supervises actors), 2.3 (supervision events), 2.2 (failure detection)
 **Produces**: `mister-smith-supervision` crate
 
-> **Gate 3**: Actors can be spawned, communicate via mailboxes, and be supervised. A failing actor triggers its supervisor's restart policy. Supervision trees can be composed hierarchically. This is the architectural proof point — if supervision works, the framework's concurrency model is sound.
+> **Gate 3** ✅ (validated 2026-03-04): Actors can be spawned, communicate via mailboxes, and be supervised. A failing actor triggers its supervisor's restart policy. Supervision trees can be composed hierarchically. This is the architectural proof point — if supervision works, the framework's concurrency model is sound.
 > Validation checklist: [Phase 3 Deep Dive](plans/roadmap-phases/phase-3-actor-system-and-supervision.md).
 
 ---
@@ -304,7 +304,7 @@ High-performance inter-service communication for service mesh deployments.
 **Depends on**: 4.1 (service definitions and transport contracts)
 **Produces**: gRPC service layer
 
-> **Gate 4**: Agents can communicate over NATS. Messages serialize, route, and deserialize
+> **Gate 4** ✅ (validated 2026-03-04): Agents can communicate over NATS. Messages serialize, route, and deserialize
 > correctly. A basic integration test sends a TaskAssignment through NATS and receives a
 > TaskResult back. HTTP and gRPC endpoints accept requests with pluggable security middleware
 > points ready for Phase 5 enforcement. JetStream stores durable messages. Transport status
@@ -367,7 +367,7 @@ Encrypted transport and mutual TLS for agent-to-agent communication.
 **Depends on**: 5.1, 5.2
 **Produces**: `mister-smith-security` crate (TLS configs consumed by transport)
 
-> **Gate 5**: Agents authenticate with JWT tokens. Authorization middleware rejects unauthorized requests. NATS connections use mTLS. HTTP and gRPC endpoints enforce auth. Security is now wired into all transport paths.
+> **Gate 5** ✅ (validated 2026-03-04): Agents authenticate with JWT tokens. Authorization middleware rejects unauthorized requests. NATS connections use mTLS. HTTP and gRPC endpoints enforce auth. Security is now wired into all transport paths.
 > Validation checklist: [Phase 5 Deep Dive](plans/roadmap-phases/phase-5-security.md).
 
 ---
@@ -424,7 +424,7 @@ CRUD patterns, transactions, and event sourcing that sit on top of the storage b
 **Depends on**: 6.1, 6.2
 **Produces**: Persistence layer consumed by the agent system
 
-> **Gate 6**: Agent state persists across restarts. Task history is queryable. JetStream KV provides distributed coordination. Database migrations run cleanly.
+> **Gate 6** ✅ (validated 2026-03-05): Agent state persists across restarts. Task history is queryable. JetStream KV provides distributed coordination. Database migrations run cleanly.
 > Validation checklist: [Phase 6 Deep Dive](plans/roadmap-phases/phase-6-persistence-and-state.md).
 
 ---
@@ -518,7 +518,7 @@ The 9 concrete agent types, each with domain-specific behavior.
 **Depends on**: 7.1–7.4 (all agent infrastructure)
 **Produces**: `mister-smith-agents` crate — the complete agent system
 
-> **Gate 7**: A multi-agent team can be spawned: a Coordinator decomposes a task, assigns subtasks to Workers via NATS, Workers execute and report results, a Supervisor restarts any Worker that fails, and results aggregate back to the Coordinator. This is the end-to-end proof of the framework.
+> **Gate 7** ✅ (validated 2026-03-05): A multi-agent team can be spawned: a Coordinator decomposes a task, assigns subtasks to Workers via NATS, Workers execute and report results, a Supervisor restarts any Worker that fails, and results aggregate back to the Coordinator. This is the end-to-end proof of the framework.
 > Validation checklist: [Phase 7 Deep Dive](plans/roadmap-phases/phase-7-agent-system.md).
 
 ---
@@ -657,8 +657,8 @@ Bidirectional bridge between `ToolBus` and LLM tool calling.
 **Depends on**: 9.2 or 9.3 (needs a real provider), 9.4
 **Produces**: End-to-end tool calling
 
-> **Gate 9**: A Planner agent receives a task, calls a real LLM via `ModelProvider`, gets a structured subtask decomposition, and the Orchestrator assigns subtasks to Workers. The same flow works with at least 2 providers (Anthropic + OpenAI). Tool calls round-trip through the ToolBus. No provider-specific code leaks outside the providers/ module.
-> Design document: [LLM Provider Integration Design](docs/plans/2026-03-05-llm-provider-integration-design.md).
+> **Gate 9** ✅ (validated 2026-03-07, stabilized 2026-03-08 via PRs #118-#128): A Planner agent receives a task, calls a real LLM via `ModelProvider`, gets a structured subtask decomposition, and the Orchestrator assigns subtasks to Workers. The same flow works with at least 2 providers (Anthropic + OpenAI). Tool calls round-trip through the ToolBus. No provider-specific code leaks outside the providers/ module.
+> Design document: [LLM Provider Integration Design](docs/plans/2026-03-05-llm-provider-integration-design.md). Implementation: [specs/009-phase9-llm-provider-integration/](specs/009-phase9-llm-provider-integration/).
 
 ---
 
@@ -723,8 +723,15 @@ Note: Phase 9.1–9.3 (LLM core types and providers) are off the critical path �
 | `mister-smith-supervision` | 3.2 | [supervision-trees.md](spec/core-architecture/supervision-trees.md) |
 | `mister-smith-security` | 5.1–5.3 | [security-framework.md](spec/security/security-framework.md) |
 | `mister-smith-transport` | 4.1–4.5 | [transport-core.md](spec/transport/transport-core.md) |
+| `mister-smith-nats` | 4.2 | [nats-transport.md](spec/transport/nats-transport.md) |
+| `mister-smith-http` | 4.4 | [http-transport.md](spec/transport/http-transport.md) |
+| `mister-smith-grpc` | 4.5 | [grpc-transport.md](spec/transport/grpc-transport.md) |
+| `mister-smith-mcp` | 4.6 | [mcp-specifications.md](spec/transport/mcp-specifications.md) |
+| `mister-smith-persistence` | 6.1–6.3 | [persistence-layer.md](spec/data-management/persistence-layer.md) |
 | `mister-smith-agents` | 7.1–7.5 | [agent-orchestration.md](spec/data-management/agent-orchestration.md) |
-| `mister-smith-llm` | 9.1–9.5 | [LLM Provider Integration Design](docs/plans/2026-03-05-llm-provider-integration-design.md) |
+| `mister-smith-app` | 8.1–8.3 | [process-management-specifications.md](spec/operations/process-management-specifications.md) |
+| `mister-smith-llm` | 9.1–9.6 | [LLM Provider Integration Design](docs/plans/2026-03-05-llm-provider-integration-design.md) |
+| `mister-smith-integration-tests` | All | Cross-crate validation |
 
 ## Existing Implementation Plans
 
@@ -773,4 +780,4 @@ Detailed implementation plans exist for the first batch (core architecture):
 | reqwest | 0.12+ | 9.1 | HTTP client for LLM provider APIs (feature-gated per provider) |
 
 See [VERSION_REFERENCE.md](VERSION_REFERENCE.md) for the complete version matrix and migration notes.
-See [VALIDATION_REPORT.md](VALIDATION_REPORT.md) for specification readiness assessment (95/100).
+See [VALIDATION_REPORT.md](docs/code-review/VALIDATION_REPORT.md) for specification readiness assessment (95/100).
