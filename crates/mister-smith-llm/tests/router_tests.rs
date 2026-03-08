@@ -1,10 +1,14 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use async_trait::async_trait;
+use mister_smith_core::LlmError;
 use mister_smith_llm::{
     CascadePolicy, CascadeTier, CircuitBreakerConfig, CircuitState, CompletionRequest,
-    ModelRouter, MockProvider, ModelProvider, ProviderConfig, ProviderKind, RoutingPolicy,
+    CompletionResponse, EmbeddingResponse, ModelCapabilities, ModelEvent, ModelProvider,
+    ModelRouter, MockProvider, ProviderConfig, ProviderKind, RoutingPolicy,
 };
+use mister_smith_llm::router::ModelEventSink;
 
 fn mock_request() -> CompletionRequest {
     CompletionRequest {
@@ -223,6 +227,74 @@ mod circuit_breaker {
 mod cascade {
     use super::*;
 
+    #[derive(Default)]
+    struct RecordingSink {
+        events: Mutex<Vec<ModelEvent>>,
+    }
+
+    impl RecordingSink {
+        fn events(&self) -> Vec<ModelEvent> {
+            self.events
+                .lock()
+                .expect("recording sink lock poisoned")
+                .clone()
+        }
+    }
+
+    impl ModelEventSink for RecordingSink {
+        fn publish(&self, event: ModelEvent) {
+            self.events
+                .lock()
+                .expect("recording sink lock poisoned")
+                .push(event);
+        }
+    }
+
+    struct FailingProvider {
+        model_id: String,
+    }
+
+    impl FailingProvider {
+        fn new(model_id: impl Into<String>) -> Self {
+            Self {
+                model_id: model_id.into(),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl ModelProvider for FailingProvider {
+        async fn complete(&self, _request: CompletionRequest) -> Result<CompletionResponse, LlmError> {
+            Err(LlmError::Network("synthetic provider failure".to_string()))
+        }
+
+        fn stream(&self, _request: CompletionRequest) -> mister_smith_llm::CompletionStream {
+            Box::pin(futures::stream::once(async {
+                Err(LlmError::Network("streaming not supported".to_string()))
+            }))
+        }
+
+        async fn embed(&self, _input: Vec<String>) -> Result<EmbeddingResponse, LlmError> {
+            Err(LlmError::UnsupportedCapability {
+                capability: "embeddings".to_string(),
+                model: self.model_id.clone(),
+            })
+        }
+
+        fn model_id(&self) -> &str {
+            &self.model_id
+        }
+
+        fn capabilities(&self) -> ModelCapabilities {
+            ModelCapabilities {
+                completion: true,
+                streaming: false,
+                embeddings: false,
+                tool_calling: false,
+            }
+        }
+    }
+
     fn cascade_policy(threshold: f32, max_escalations: u32) -> CascadePolicy {
         CascadePolicy {
             tiers: vec![
@@ -339,5 +411,71 @@ mod cascade {
         let signal = ConfidenceSignal::from_response(&short_response);
         // Short text (< 10 chars) should reduce confidence
         assert!(signal.score < 1.0);
+    }
+
+    #[tokio::test]
+    async fn cascade_emits_routing_events_for_escalation_and_acceptance() {
+        let policy = cascade_policy(1.1, 1);
+        let sink = Arc::new(RecordingSink::default());
+        let router = ModelRouter::new(RoutingPolicy::Cascade(policy))
+            .with_model_event_sink(sink.clone());
+
+        let slm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("slm-model"));
+        let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
+
+        router
+            .add_provider(mock_config("slm"), slm, CircuitBreakerConfig::default())
+            .await;
+        router
+            .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+            .await;
+
+        let _ = router.route_completion(mock_request()).await.unwrap();
+
+        let events = sink.events();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            &events[0],
+            ModelEvent::RoutingDecision { model_id, tier, reason }
+                if model_id == "slm-model" && tier == "slm-tier" && reason.contains("escalated")
+        ));
+        assert!(matches!(
+            &events[1],
+            ModelEvent::RoutingDecision { model_id, tier, reason }
+                if model_id == "llm-model" && tier == "llm-tier" && reason.contains("accepted")
+        ));
+    }
+
+    #[tokio::test]
+    async fn cascade_emits_routing_events_for_failure_then_acceptance() {
+        let policy = cascade_policy(0.3, 1);
+        let sink = Arc::new(RecordingSink::default());
+        let router = ModelRouter::new(RoutingPolicy::Cascade(policy))
+            .with_model_event_sink(sink.clone());
+
+        let failing: Arc<dyn ModelProvider> = Arc::new(FailingProvider::new("slm-failure"));
+        let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
+
+        router
+            .add_provider(mock_config("slm"), failing, CircuitBreakerConfig::default())
+            .await;
+        router
+            .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+            .await;
+
+        let _ = router.route_completion(mock_request()).await.unwrap();
+
+        let events = sink.events();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            &events[0],
+            ModelEvent::RoutingDecision { model_id, tier, reason }
+                if model_id == "slm-failure" && tier == "slm-tier" && reason.contains("failed")
+        ));
+        assert!(matches!(
+            &events[1],
+            ModelEvent::RoutingDecision { model_id, tier, reason }
+                if model_id == "llm-model" && tier == "llm-tier" && reason.contains("accepted")
+        ));
     }
 }

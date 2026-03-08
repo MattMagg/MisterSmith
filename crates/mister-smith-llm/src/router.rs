@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 use crate::budget::BudgetEnforcer;
 use crate::config::ProviderConfig;
 use crate::health::{CircuitBreaker, CircuitBreakerConfig, HealthStatus};
+use crate::model_event::ModelEvent;
 use crate::provider::{CompletionStream, ModelProvider};
 use crate::types::{
     ChatMessage, CompletionRequest, CompletionResponse, EmbeddingResponse, ModelCapabilities,
@@ -116,6 +117,11 @@ pub struct RoutingDecision {
     pub estimated_cost_tokens: Option<u64>,
 }
 
+/// Sink interface for router-emitted model events.
+pub trait ModelEventSink: Send + Sync {
+    fn publish(&self, event: ModelEvent);
+}
+
 /// Registered provider entry with its circuit breaker.
 struct ProviderEntry {
     config: ProviderConfig,
@@ -130,6 +136,7 @@ pub struct ModelRouter {
     budget_enforcer: Option<BudgetEnforcer>,
     budget_root: Option<String>,
     round_robin_counter: std::sync::atomic::AtomicUsize,
+    model_event_sink: Option<Arc<dyn ModelEventSink>>,
 }
 
 impl ModelRouter {
@@ -141,6 +148,7 @@ impl ModelRouter {
             budget_enforcer: None,
             budget_root: None,
             round_robin_counter: std::sync::atomic::AtomicUsize::new(0),
+            model_event_sink: None,
         }
     }
 
@@ -149,6 +157,22 @@ impl ModelRouter {
         self.budget_enforcer = Some(enforcer);
         self.budget_root = Some(root_key.into());
         self
+    }
+
+    /// Set an optional sink to receive routing model events.
+    pub fn with_model_event_sink(mut self, sink: Arc<dyn ModelEventSink>) -> Self {
+        self.model_event_sink = Some(sink);
+        self
+    }
+
+    fn emit_routing_event(&self, model_id: String, tier: String, reason: String) {
+        if let Some(sink) = &self.model_event_sink {
+            sink.publish(ModelEvent::RoutingDecision {
+                model_id,
+                tier,
+                reason,
+            });
+        }
     }
 
     /// Register a provider.
@@ -371,7 +395,7 @@ impl ModelRouter {
 
                     let decision = RoutingDecision {
                         provider_id: config_model_id,
-                        model_id,
+                        model_id: model_id.clone(),
                         tier_label: Some(tier_label.clone()),
                         reason: if confidence.score >= policy.escalation_threshold || is_last_tier {
                             format!(
@@ -387,12 +411,31 @@ impl ModelRouter {
                         estimated_cost_tokens: None,
                     };
 
-                    if confidence.score >= policy.escalation_threshold || is_last_tier {
+                    let accepted = confidence.score >= policy.escalation_threshold || is_last_tier;
+                    let reason = if accepted {
+                        format!(
+                            "accepted (confidence: {:.2}, threshold: {:.2}, last_tier: {})",
+                            confidence.score, policy.escalation_threshold, is_last_tier
+                        )
+                    } else {
+                        format!(
+                            "escalated (confidence: {:.2} < threshold: {:.2})",
+                            confidence.score, policy.escalation_threshold
+                        )
+                    };
+                    self.emit_routing_event(model_id.clone(), tier_label.clone(), reason);
+
+                    if accepted {
                         return Ok((response, decision));
                     }
                     // Below threshold — escalate to next tier
                 }
                 Err(err) => {
+                    self.emit_routing_event(
+                        model_id,
+                        tier_label,
+                        format!("failed ({err})"),
+                    );
                     let retry_after = match &err {
                         LlmError::RateLimited { retry_after_secs } => *retry_after_secs,
                         _ => None,
