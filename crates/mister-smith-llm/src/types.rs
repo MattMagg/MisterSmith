@@ -25,6 +25,9 @@ pub struct CompletionRequest {
     /// Extra provider-neutral request metadata.
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
+    /// Optional routing-only preferences for provider selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_hint: Option<RoutingHint>,
 }
 
 impl Default for CompletionRequest {
@@ -37,8 +40,20 @@ impl Default for CompletionRequest {
             max_tokens: None,
             stop_sequences: None,
             metadata: default_metadata(),
+            routing_hint: None,
         }
     }
+}
+
+/// Caller-provided routing preferences.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoutingHint {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_tier: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_cost_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_capabilities: Vec<String>,
 }
 
 /// Unified chat message roles consumed by completion requests.

@@ -29,6 +29,7 @@ fn completion_request_roundtrip_preserves_tools_and_metadata() {
         max_tokens: Some(256),
         stop_sequences: Some(vec!["END".to_string()]),
         metadata: json!({ "trace_id": "abc123" }),
+        routing_hint: None,
     };
 
     let encoded = serde_json::to_string(&request).unwrap();

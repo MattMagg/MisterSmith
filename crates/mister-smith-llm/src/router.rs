@@ -11,6 +11,7 @@ use crate::health::{CircuitBreaker, CircuitBreakerConfig, HealthStatus};
 use crate::provider::{CompletionStream, ModelProvider};
 use crate::types::{
     ChatMessage, CompletionRequest, CompletionResponse, EmbeddingResponse, ModelCapabilities,
+    RoutingHint,
 };
 
 /// Routing policy for provider selection.
@@ -27,18 +28,6 @@ pub enum RoutingPolicy {
     CapabilityMatched,
     /// Multi-tier escalation (SLM-default, LLM-fallback).
     Cascade(CascadePolicy),
-}
-
-
-/// Caller-provided routing preferences.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct RoutingHint {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preferred_tier: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_cost_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub required_capabilities: Vec<String>,
 }
 
 /// Multi-tier routing configuration for SLM-default / LLM-fallback.
@@ -176,7 +165,11 @@ impl ModelRouter {
     }
 
     /// Select a healthy provider based on routing policy.
-    async fn select_provider(&self, _hint: Option<&RoutingHint>) -> Result<usize, LlmError> {
+    async fn select_provider(
+        &self,
+        hint: Option<&RoutingHint>,
+        estimated_tokens: u64,
+    ) -> Result<usize, LlmError> {
         let mut providers = self.providers.write().await;
 
         // First, transition any expired Open circuits to HalfOpen
@@ -199,23 +192,93 @@ impl ModelRouter {
             ));
         }
 
+        let filtered_indices: Vec<usize> = healthy_indices
+            .iter()
+            .copied()
+            .filter(|idx| {
+                let entry = &providers[*idx];
+                if let Some(hint) = hint {
+                    if hint.required_capabilities.iter().any(|cap| {
+                        !Self::provider_supports_capability(entry.provider.as_ref(), cap)
+                    }) {
+                        return false;
+                    }
+                    if let Some(max_cost_tokens) = hint.max_cost_tokens {
+                        if estimated_tokens > max_cost_tokens {
+                            return false;
+                        }
+                    }
+                }
+                true
+            })
+            .collect();
+
+        if filtered_indices.is_empty() {
+            return Err(LlmError::NoHealthyProvider(
+                "No healthy provider matched routing hint constraints".to_string(),
+            ));
+        }
+
         match &self.routing_policy {
             RoutingPolicy::RoundRobin => {
                 let idx = self
                     .round_robin_counter
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                Ok(healthy_indices[idx % healthy_indices.len()])
+                Ok(filtered_indices[idx % filtered_indices.len()])
             }
             RoutingPolicy::CostOptimized => {
                 // For now, prefer providers earlier in the list (assumed cheaper)
-                Ok(healthy_indices[0])
+                Ok(filtered_indices[0])
             }
-            RoutingPolicy::CapabilityMatched => Ok(healthy_indices[0]),
+            RoutingPolicy::CapabilityMatched => Ok(filtered_indices[0]),
             RoutingPolicy::Cascade(_) => {
                 // Cascade routing is handled separately in route_cascade
-                Ok(healthy_indices[0])
+                Ok(filtered_indices[0])
             }
         }
+    }
+
+    fn provider_supports_capability(provider: &dyn ModelProvider, capability: &str) -> bool {
+        let capabilities = provider.capabilities();
+        match capability {
+            "completion" => capabilities.completion,
+            "streaming" => capabilities.streaming,
+            "embeddings" => capabilities.embeddings,
+            "tool_calling" => capabilities.tool_calling,
+            _ => false,
+        }
+    }
+
+    fn provider_matches_hint(
+        provider: &dyn ModelProvider,
+        hint: Option<&RoutingHint>,
+        estimated_tokens: u64,
+    ) -> bool {
+        let Some(hint) = hint else {
+            return true;
+        };
+
+        if hint
+            .required_capabilities
+            .iter()
+            .any(|cap| !Self::provider_supports_capability(provider, cap))
+        {
+            return false;
+        }
+
+        if let Some(max_cost_tokens) = hint.max_cost_tokens {
+            if estimated_tokens > max_cost_tokens {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn provider_request(request: &CompletionRequest) -> CompletionRequest {
+        let mut provider_request = request.clone();
+        provider_request.routing_hint = None;
+        provider_request
     }
 
     /// Estimate token cost for a request.
@@ -264,7 +327,8 @@ impl ModelRouter {
                 None
             };
 
-        let idx = self.select_provider(None).await?;
+        let hint = request.routing_hint.as_ref();
+        let idx = self.select_provider(hint, estimated).await?;
         let providers = self.providers.read().await;
         let entry = &providers[idx];
 
@@ -277,7 +341,8 @@ impl ModelRouter {
         };
 
         let start = std::time::Instant::now();
-        let result = entry.provider.complete(request).await;
+        let provider_request = Self::provider_request(&request);
+        let result = entry.provider.complete(provider_request).await;
         let latency_ms = start.elapsed().as_millis() as u64;
 
         drop(providers);
@@ -322,19 +387,40 @@ impl ModelRouter {
         request: CompletionRequest,
         policy: &CascadePolicy,
     ) -> Result<(CompletionResponse, RoutingDecision), LlmError> {
+        let estimated = Self::estimate_tokens(&request);
+        let hint = request.routing_hint.as_ref();
         let provider_count = self.providers.read().await.len();
-        let max_attempts = provider_count.min(policy.max_escalations as usize + 1);
 
-        for tier_idx in 0..max_attempts {
+        let mut attempt_indices: Vec<usize> = (0..provider_count).collect();
+        if let Some(preferred_tier) = hint.and_then(|h| h.preferred_tier.as_deref()) {
+            if let Some(preferred_idx) = policy
+                .tiers
+                .iter()
+                .position(|tier| tier.label == preferred_tier)
+                .filter(|idx| *idx < attempt_indices.len())
+            {
+                let preferred = attempt_indices.remove(preferred_idx);
+                attempt_indices.insert(0, preferred);
+            }
+        }
+
+        let max_attempts = attempt_indices
+            .len()
+            .min(policy.max_escalations as usize + 1);
+        attempt_indices.truncate(max_attempts);
+
+        for (attempt_idx, provider_idx) in attempt_indices.into_iter().enumerate() {
             // Read provider info under a short-lived lock
             let (provider, config_model_id, model_id, allowed) = {
-                let providers = self.providers.read().await;
-                if tier_idx >= providers.len() {
+                let mut providers = self.providers.write().await;
+                if provider_idx >= providers.len() {
                     break;
                 }
-                let entry = &providers[tier_idx];
-                let allowed =
-                    entry.circuit_breaker.is_allowed() && !entry.circuit_breaker.is_rate_limited();
+                let entry = &mut providers[provider_idx];
+                entry.circuit_breaker.maybe_transition_to_half_open();
+                let allowed = entry.circuit_breaker.is_allowed()
+                    && !entry.circuit_breaker.is_rate_limited()
+                    && Self::provider_matches_hint(entry.provider.as_ref(), hint, estimated);
                 (
                     entry.provider.clone(),
                     entry.config.model_id.clone(),
@@ -349,25 +435,28 @@ impl ModelRouter {
 
             let tier_label = policy
                 .tiers
-                .get(tier_idx)
+                .get(provider_idx)
                 .map(|t| t.label.clone())
-                .unwrap_or_else(|| format!("tier-{tier_idx}"));
+                .unwrap_or_else(|| format!("tier-{provider_idx}"));
 
             let start = std::time::Instant::now();
-            let result = provider.complete(request.clone()).await;
+            let provider_request = Self::provider_request(&request);
+            let result = provider.complete(provider_request).await;
             let latency_ms = start.elapsed().as_millis() as u64;
 
             match result {
                 Ok(response) => {
                     {
                         let mut providers = self.providers.write().await;
-                        if tier_idx < providers.len() {
-                            providers[tier_idx].circuit_breaker.record_success(latency_ms);
+                        if provider_idx < providers.len() {
+                            providers[provider_idx]
+                                .circuit_breaker
+                                .record_success(latency_ms);
                         }
                     }
 
                     let confidence = ConfidenceSignal::from_response(&response);
-                    let is_last_tier = tier_idx + 1 >= max_attempts;
+                    let is_last_tier = attempt_idx + 1 >= max_attempts;
 
                     let decision = RoutingDecision {
                         provider_id: config_model_id,
@@ -384,7 +473,7 @@ impl ModelRouter {
                                 tier_label, confidence.score, policy.escalation_threshold
                             )
                         },
-                        estimated_cost_tokens: None,
+                        estimated_cost_tokens: Some(estimated),
                     };
 
                     if confidence.score >= policy.escalation_threshold || is_last_tier {
@@ -398,8 +487,10 @@ impl ModelRouter {
                         _ => None,
                     };
                     let mut providers = self.providers.write().await;
-                    if tier_idx < providers.len() {
-                        providers[tier_idx].circuit_breaker.record_failure(retry_after);
+                    if provider_idx < providers.len() {
+                        providers[provider_idx]
+                            .circuit_breaker
+                            .record_failure(retry_after);
                     }
                     // Continue to next tier on error
                 }
@@ -457,7 +548,7 @@ impl ModelProvider for ModelRouter {
     }
 
     async fn embed(&self, input: Vec<String>) -> Result<EmbeddingResponse, LlmError> {
-        let idx = self.select_provider(None).await?;
+        let idx = self.select_provider(None, 0).await?;
         let providers = self.providers.read().await;
         providers[idx].provider.embed(input).await
     }

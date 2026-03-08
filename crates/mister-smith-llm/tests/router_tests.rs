@@ -1,9 +1,10 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use mister_smith_llm::{
     CascadePolicy, CascadeTier, CircuitBreakerConfig, CircuitState, CompletionRequest,
-    ModelRouter, MockProvider, ModelProvider, ProviderConfig, ProviderKind, RoutingPolicy,
+    CompletionResponse, ContentBlock, LlmError, MockProvider, ModelCapabilities, ModelProvider,
+    ModelRouter, ProviderConfig, ProviderKind, RoutingHint, RoutingPolicy, StopReason, Usage,
 };
 
 fn mock_request() -> CompletionRequest {
@@ -20,6 +21,71 @@ fn mock_config(model_id: &str) -> ProviderConfig {
         provider_kind: ProviderKind::Mock,
         model_id: model_id.to_string(),
         ..Default::default()
+    }
+}
+
+#[derive(Debug)]
+struct RecordingProvider {
+    model_id: String,
+    capabilities: ModelCapabilities,
+    observed_requests: Arc<Mutex<Vec<CompletionRequest>>>,
+}
+
+impl RecordingProvider {
+    fn new(
+        model_id: &str,
+        capabilities: ModelCapabilities,
+        observed_requests: Arc<Mutex<Vec<CompletionRequest>>>,
+    ) -> Self {
+        Self {
+            model_id: model_id.to_string(),
+            capabilities,
+            observed_requests,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ModelProvider for RecordingProvider {
+    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, LlmError> {
+        self.observed_requests.lock().unwrap().push(request);
+        Ok(CompletionResponse {
+            content: vec![ContentBlock::Text {
+                text: "recorded-response".to_string(),
+            }],
+            model_id: self.model_id.clone(),
+            usage: Usage::new(10, 5),
+            stop_reason: StopReason::Completed,
+            tool_calls: vec![],
+        })
+    }
+
+    fn stream(&self, _request: CompletionRequest) -> mister_smith_llm::CompletionStream {
+        let model_id = self.model_id.clone();
+        Box::pin(futures::stream::once(async move {
+            Err(LlmError::UnsupportedCapability {
+                capability: "streaming".to_string(),
+                model: model_id,
+            })
+        }))
+    }
+
+    async fn embed(
+        &self,
+        _input: Vec<String>,
+    ) -> Result<mister_smith_llm::EmbeddingResponse, LlmError> {
+        Err(LlmError::UnsupportedCapability {
+            capability: "embeddings".to_string(),
+            model: self.model_id.clone(),
+        })
+    }
+
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    fn capabilities(&self) -> ModelCapabilities {
+        self.capabilities
     }
 }
 
@@ -97,6 +163,98 @@ async fn cost_optimized_selects_first_healthy() {
 }
 
 #[tokio::test]
+async fn required_capabilities_hint_filters_providers() {
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin);
+    let no_tools_caps = ModelCapabilities {
+        tool_calling: false,
+        ..ModelCapabilities::all()
+    };
+
+    let p1: Arc<dyn ModelProvider> =
+        Arc::new(MockProvider::new("no-tools").with_capabilities(no_tools_caps));
+    let p2: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("with-tools"));
+
+    router
+        .add_provider(mock_config("no-tools"), p1, CircuitBreakerConfig::default())
+        .await;
+    router
+        .add_provider(
+            mock_config("with-tools"),
+            p2,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let mut request = mock_request();
+    request.routing_hint = Some(RoutingHint {
+        required_capabilities: vec!["tool_calling".to_string()],
+        ..Default::default()
+    });
+
+    let (_, decision) = router.route_completion(request).await.unwrap();
+    assert_eq!(decision.provider_id, "with-tools");
+}
+
+#[tokio::test]
+async fn max_cost_tokens_hint_blocks_over_budget_estimate() {
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin);
+    let provider: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("model-a"));
+
+    router
+        .add_provider(
+            mock_config("model-a"),
+            provider,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let mut request = mock_request();
+    request.max_tokens = Some(200);
+    request.routing_hint = Some(RoutingHint {
+        max_cost_tokens: Some(1),
+        ..Default::default()
+    });
+
+    let result = router.route_completion(request).await;
+    assert!(matches!(
+        result,
+        Err(mister_smith_core::LlmError::NoHealthyProvider(_))
+    ));
+}
+
+#[tokio::test]
+async fn route_completion_strips_routing_hint_before_provider_dispatch() {
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin);
+    let observed_requests = Arc::new(Mutex::new(Vec::new()));
+    let provider: Arc<dyn ModelProvider> = Arc::new(RecordingProvider::new(
+        "recording-model",
+        ModelCapabilities::all(),
+        observed_requests.clone(),
+    ));
+
+    router
+        .add_provider(
+            mock_config("recording-model"),
+            provider,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let mut request = mock_request();
+    request.routing_hint = Some(RoutingHint {
+        preferred_tier: Some("gold".to_string()),
+        max_cost_tokens: None,
+        required_capabilities: vec!["completion".to_string()],
+    });
+
+    let _ = router.route_completion(request).await.unwrap();
+
+    let requests = observed_requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].routing_hint.is_none());
+}
+
+#[tokio::test]
 async fn no_healthy_provider_returns_error() {
     let router = ModelRouter::new(RoutingPolicy::RoundRobin);
     // No providers registered
@@ -134,7 +292,11 @@ async fn provider_count() {
 
     let provider: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("test"));
     router
-        .add_provider(mock_config("test"), provider, CircuitBreakerConfig::default())
+        .add_provider(
+            mock_config("test"),
+            provider,
+            CircuitBreakerConfig::default(),
+        )
         .await;
     assert_eq!(router.provider_count().await, 1);
 }
@@ -290,12 +452,10 @@ mod cascade {
     async fn cascade_honors_max_escalations() {
         // max_escalations=0 means only first tier is tried
         let policy = CascadePolicy {
-            tiers: vec![
-                CascadeTier {
-                    provider_config: mock_config("tier-0"),
-                    label: "only-tier".to_string(),
-                },
-            ],
+            tiers: vec![CascadeTier {
+                provider_config: mock_config("tier-0"),
+                label: "only-tier".to_string(),
+            }],
             escalation_threshold: 1.1, // impossibly high
             max_escalations: 0,
         };
@@ -310,6 +470,31 @@ mod cascade {
 
         // max_escalations=0 means 1 attempt total, so it returns the first tier's response
         assert_eq!(decision.tier_label.as_deref(), Some("only-tier"));
+    }
+
+    #[tokio::test]
+    async fn cascade_preferred_tier_hint_is_prioritized() {
+        let policy = cascade_policy(0.3, 1);
+        let router = ModelRouter::new(RoutingPolicy::Cascade(policy));
+
+        let slm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("slm-model"));
+        let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
+
+        router
+            .add_provider(mock_config("slm"), slm, CircuitBreakerConfig::default())
+            .await;
+        router
+            .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+            .await;
+
+        let mut request = mock_request();
+        request.routing_hint = Some(RoutingHint {
+            preferred_tier: Some("llm-tier".to_string()),
+            ..Default::default()
+        });
+
+        let (_response, decision) = router.route_completion(request).await.unwrap();
+        assert_eq!(decision.tier_label.as_deref(), Some("llm-tier"));
     }
 
     #[tokio::test]
