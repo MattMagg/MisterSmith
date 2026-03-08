@@ -39,6 +39,30 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "Explore|Plan|general-purpose",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/mem0_hook_subagent.py",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/mem0_hook_compact.py",
+            "timeout": 15000
+          }
+        ]
+      }
     ]
   }
 }

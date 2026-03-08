@@ -1,74 +1,138 @@
 #!/usr/bin/env python3
 """mem0 Auto-Recall hook for Claude Code (UserPromptSubmit + SessionStart).
 
-Reads the user's prompt (or session start event) from stdin,
-searches mem0 for relevant memories, and returns them as
-additionalContext so Claude sees them before responding.
+Performs dual-scope search (long-term + session), includes graph relations,
+and returns tagged context using <recalled-memories> for easy stripping
+in the capture hook.
 
 Hook events handled:
   - UserPromptSubmit: search using the user's prompt text
-  - SessionStart: search using a broad project query
+  - SessionStart: broad project recall (differentiated by source)
 """
 
 import json
 import os
 import sys
-from pathlib import Path
+
+from mem0_common import (
+    APP_ID,
+    USER_ID,
+    get_client,
+    load_env,
+)
+
+# Single-word commands that don't benefit from memory recall
+_SKIP_PROMPTS = {"yes", "no", "y", "n", "continue", "ok", "done", "stop", "exit", "quit"}
 
 
-def load_env(cwd):
-    """Load .env from the project root."""
-    for candidate in [Path(cwd) / ".env", Path(__file__).resolve().parent.parent / ".env"]:
-        if candidate.exists():
-            for line in candidate.read_text().splitlines():
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, _, value = line.partition("=")
-                    os.environ.setdefault(key.strip(), value.strip())
-            return
+def search_dual_scope(client, query, session_id=None, top_k=5):
+    """Search both long-term (user-scoped) and session-scoped memories.
 
-
-def search_mem0(query, top_k=5):
-    """Search mem0 and return formatted memory context string."""
-    api_key = os.environ.get("MEM0_API_KEY")
-    if not api_key:
-        return None
-
-    from mem0 import MemoryClient
-
-    client = MemoryClient(
-        api_key=api_key,
-        org_id=os.environ.get("MEM0_ORG_ID"),
-        project_id=os.environ.get("MEM0_PROJECT_ID"),
-    )
-
-    results = client.search(
+    Returns deduplicated results and graph relations.
+    """
+    # Long-term memories (user + app scoped)
+    long_term = client.search(
         query,
         keyword_search=True,
         rerank=True,
         filter_memories=True,
         top_k=top_k,
-        filters={"AND": [{"user_id": "matthewmaggio"}, {"app_id": "mister-smith"}]},
+        enable_graph=True,
+        filters={"AND": [{"user_id": USER_ID}, {"app_id": APP_ID}]},
     )
 
-    if isinstance(results, dict):
-        items = results.get("results", [])
-    elif isinstance(results, list):
-        items = results
+    # Normalize response
+    if isinstance(long_term, dict):
+        lt_items = long_term.get("results", [])
+        relations = long_term.get("relations", [])
+    elif isinstance(long_term, list):
+        lt_items = long_term
+        relations = []
     else:
-        items = []
+        lt_items = []
+        relations = []
 
-    if not items:
-        return None
+    # Session memories (run_id scoped) — only if session_id available
+    session_items = []
+    if session_id:
+        try:
+            session_results = client.search(
+                query,
+                keyword_search=True,
+                top_k=3,
+                filters={"AND": [{"user_id": USER_ID}, {"run_id": session_id}]},
+            )
+            if isinstance(session_results, dict):
+                session_items = session_results.get("results", [])
+            elif isinstance(session_results, list):
+                session_items = session_results
+        except Exception:
+            pass  # Session search is best-effort
 
-    lines = ["## Recalled Memories (mem0)"]
-    for mem in items:
-        memory_text = mem.get("memory", "")
-        categories = mem.get("categories", [])
-        cat_str = f" [{', '.join(categories)}]" if categories else ""
-        lines.append(f"- {memory_text}{cat_str}")
+    # Deduplicate by memory ID
+    seen_ids = set()
+    deduped_lt = []
+    for mem in lt_items:
+        mid = mem.get("id")
+        if mid and mid not in seen_ids:
+            seen_ids.add(mid)
+            deduped_lt.append(mem)
+        elif not mid:
+            deduped_lt.append(mem)
 
+    deduped_session = []
+    for mem in session_items:
+        mid = mem.get("id")
+        if mid and mid not in seen_ids:
+            seen_ids.add(mid)
+            deduped_session.append(mem)
+        elif not mid:
+            deduped_session.append(mem)
+
+    return deduped_lt, deduped_session, relations
+
+
+def format_context(lt_items, session_items, relations):
+    """Format memories into tagged context for easy stripping."""
+    lines = ["<recalled-memories>"]
+
+    if lt_items:
+        lines.append("Long-term:")
+        for mem in lt_items:
+            memory_text = mem.get("memory", "")
+            categories = mem.get("categories", [])
+            cat_str = f" [{', '.join(categories)}]" if categories else ""
+            lines.append(f"- {memory_text}{cat_str}")
+
+    if session_items:
+        lines.append("")
+        lines.append("Session:")
+        for mem in session_items:
+            memory_text = mem.get("memory", "")
+            lines.append(f"- {memory_text}")
+
+    if relations:
+        lines.append("")
+        lines.append("Relations:")
+        for rel in relations:
+            source = rel.get("source", "?")
+            relationship = rel.get("relationship", "?")
+            target = rel.get("target", "?")
+            lines.append(f"- {source} -> {relationship} -> {target}")
+
+    lines.append("</recalled-memories>")
     return "\n".join(lines)
+
+
+def get_session_id(hook_input):
+    """Extract session ID from hook input or transcript path."""
+    sid = hook_input.get("session_id")
+    if sid:
+        return sid
+    tp = hook_input.get("transcript_path", "")
+    if tp:
+        return os.path.basename(os.path.dirname(tp))
+    return None
 
 
 def main():
@@ -79,32 +143,55 @@ def main():
         sys.exit(0)
 
     event = hook_input.get("hook_event_name", "")
-    cwd = hook_input.get("cwd", os.getcwd())
+    cwd = hook_input.get("cwd", "")
 
     load_env(cwd)
 
-    # Determine search query based on event type
+    # Determine search query and strategy based on event type
     if event == "UserPromptSubmit":
         query = hook_input.get("prompt", "").strip()
         if not query or len(query) < 10:
-            # Too short to search meaningfully
+            sys.exit(0)
+        # Skip slash commands
+        if query.startswith("/"):
+            sys.exit(0)
+        # Skip single-word commands
+        if query.lower() in _SKIP_PROMPTS:
             sys.exit(0)
         top_k = 5
     elif event == "SessionStart":
-        # Broad project recall on session start and compaction
-        query = "Mister Smith architecture implementation status decisions"
-        top_k = 10
+        # Differentiate by session source
+        source = hook_input.get("session_source", "startup")
+        if source == "resume":
+            query = "recent session context architecture decisions implementation"
+            top_k = 8
+        elif source == "compact":
+            query = "key architectural facts implementation patterns conventions"
+            top_k = 10
+        else:  # startup
+            query = "Mister Smith architecture implementation status decisions patterns"
+            top_k = 10
     else:
         sys.exit(0)
 
+    session_id = get_session_id(hook_input)
+
     try:
-        context = search_mem0(query, top_k=top_k)
+        client = get_client()
+        if not client:
+            sys.exit(0)
+
+        lt_items, session_items, relations = search_dual_scope(
+            client, query, session_id=session_id, top_k=top_k
+        )
     except Exception:
         # Never block the user on hook failure
         sys.exit(0)
 
-    if not context:
+    if not lt_items and not session_items:
         sys.exit(0)
+
+    context = format_context(lt_items, session_items, relations)
 
     # Return context to Claude Code
     output = {
