@@ -3,6 +3,7 @@ use futures::stream;
 use mister_smith_core::LlmError;
 use reqwest::Client;
 use serde::Deserialize;
+use std::collections::HashMap;
 
 use crate::config::{ProviderConfig, ProviderKind};
 use crate::provider::{CompletionStream, ModelProvider};
@@ -15,6 +16,115 @@ use crate::types::{
 
 const DEFAULT_ANTHROPIC_URL: &str = "https://api.anthropic.com";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
+
+#[derive(Default)]
+struct AnthropicStreamState {
+    chunk_index: usize,
+    tool_call_ids_by_content_index: HashMap<u64, String>,
+}
+
+fn parse_stream_event(
+    event: &serde_json::Value,
+    state: &mut AnthropicStreamState,
+) -> Vec<StreamChunk> {
+    let mut chunks = Vec::new();
+    let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+    match event_type {
+        "content_block_delta" => {
+            if let Some(delta) = event.get("delta") {
+                let delta_type = delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                match delta_type {
+                    "text_delta" => {
+                        if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
+                            chunks.push(StreamChunk {
+                                index: state.chunk_index,
+                                delta: ChunkDelta::Text {
+                                    text: text.to_string(),
+                                },
+                            });
+                            state.chunk_index += 1;
+                        }
+                    }
+                    "input_json_delta" => {
+                        if let Some(partial) = delta.get("partial_json").and_then(|v| v.as_str())
+                        {
+                            let block_index = event.get("index").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let call_id = state
+                                .tool_call_ids_by_content_index
+                                .get(&block_index)
+                                .cloned()
+                                .unwrap_or_else(|| format!("tool-{block_index}"));
+                            chunks.push(StreamChunk {
+                                index: state.chunk_index,
+                                delta: ChunkDelta::ToolUseInput {
+                                    call_id,
+                                    input: serde_json::json!(partial),
+                                },
+                            });
+                            state.chunk_index += 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        "content_block_start" => {
+            if let Some(content_block) = event.get("content_block") {
+                let block_type = content_block
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if block_type == "tool_use" {
+                    let block_index = event.get("index").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let call_id = content_block
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    state
+                        .tool_call_ids_by_content_index
+                        .insert(block_index, call_id.clone());
+
+                    let name = content_block
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    chunks.push(StreamChunk {
+                        index: state.chunk_index,
+                        delta: ChunkDelta::ToolUseStart { call_id, name },
+                    });
+                    state.chunk_index += 1;
+                }
+            }
+        }
+        "message_delta" => {
+            if let Some(stop_reason_str) = event
+                .get("delta")
+                .and_then(|d| d.get("stop_reason"))
+                .and_then(|v| v.as_str())
+            {
+                let stop_reason = match stop_reason_str {
+                    "end_turn" | "stop_sequence" => StopReason::Completed,
+                    "max_tokens" => StopReason::MaxTokens,
+                    "tool_use" => StopReason::ToolCall,
+                    _ => StopReason::Completed,
+                };
+                chunks.push(StreamChunk::stop(state.chunk_index, stop_reason));
+                state.chunk_index += 1;
+            }
+        }
+        "message_stop" => {
+            // Terminal event — the message_delta should have
+            // already emitted a stop chunk with the reason.
+            // If not, emit a completed stop as a fallback.
+        }
+        _ => {}
+    }
+
+    chunks
+}
 
 /// Anthropic provider using API-key authentication via the Messages API.
 pub struct AnthropicProvider {
@@ -345,7 +455,7 @@ impl ModelProvider for AnthropicProvider {
                 unreachable!();
             }
 
-            let mut chunk_index: usize = 0;
+            let mut stream_state = AnthropicStreamState::default();
             let mut bytes_stream = response.bytes_stream();
             let mut buffer = String::new();
 
@@ -369,84 +479,8 @@ impl ModelProvider for AnthropicProvider {
                         }
 
                         if let Ok(event) = serde_json::from_str::<serde_json::Value>(data) {
-                            let event_type = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                            match event_type {
-                                "content_block_delta" => {
-                                    if let Some(delta) = event.get("delta") {
-                                        let delta_type = delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                                        match delta_type {
-                                            "text_delta" => {
-                                                if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
-                                                    yield StreamChunk {
-                                                        index: chunk_index,
-                                                        delta: ChunkDelta::Text { text: text.to_string() },
-                                                    };
-                                                    chunk_index += 1;
-                                                }
-                                            }
-                                            "input_json_delta" => {
-                                                if let Some(partial) = delta.get("partial_json").and_then(|v| v.as_str()) {
-                                                    let call_id = event
-                                                        .get("index")
-                                                        .and_then(|v| v.as_u64())
-                                                        .map(|i| format!("tool-{i}"))
-                                                        .unwrap_or_else(|| "tool-0".to_string());
-                                                    yield StreamChunk {
-                                                        index: chunk_index,
-                                                        delta: ChunkDelta::ToolUseInput {
-                                                            call_id,
-                                                            input: serde_json::json!(partial),
-                                                        },
-                                                    };
-                                                    chunk_index += 1;
-                                                }
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-                                }
-                                "content_block_start" => {
-                                    if let Some(content_block) = event.get("content_block") {
-                                        let block_type = content_block.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                                        if block_type == "tool_use" {
-                                            let call_id = content_block.get("id")
-                                                .and_then(|v| v.as_str())
-                                                .unwrap_or("unknown")
-                                                .to_string();
-                                            let name = content_block.get("name")
-                                                .and_then(|v| v.as_str())
-                                                .unwrap_or("unknown")
-                                                .to_string();
-                                            yield StreamChunk {
-                                                index: chunk_index,
-                                                delta: ChunkDelta::ToolUseStart { call_id, name },
-                                            };
-                                            chunk_index += 1;
-                                        }
-                                    }
-                                }
-                                "message_delta" => {
-                                    if let Some(stop_reason_str) = event
-                                        .get("delta")
-                                        .and_then(|d| d.get("stop_reason"))
-                                        .and_then(|v| v.as_str())
-                                    {
-                                        let stop_reason = match stop_reason_str {
-                                            "end_turn" | "stop_sequence" => StopReason::Completed,
-                                            "max_tokens" => StopReason::MaxTokens,
-                                            "tool_use" => StopReason::ToolCall,
-                                            _ => StopReason::Completed,
-                                        };
-                                        yield StreamChunk::stop(chunk_index, stop_reason);
-                                        chunk_index += 1;
-                                    }
-                                }
-                                "message_stop" => {
-                                    // Terminal event — the message_delta should have
-                                    // already emitted a stop chunk with the reason.
-                                    // If not, emit a completed stop as a fallback.
-                                }
-                                _ => {}
+                            for parsed_chunk in parse_stream_event(&event, &mut stream_state) {
+                                yield parsed_chunk;
                             }
                         }
                     }
@@ -473,5 +507,140 @@ impl ModelProvider for AnthropicProvider {
             embeddings: false,
             tool_calling: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_stream_event_maps_input_deltas_to_real_tool_use_ids() {
+        let mut state = AnthropicStreamState::default();
+
+        let start_event = serde_json::json!({
+            "type": "content_block_start",
+            "index": 3,
+            "content_block": {
+                "type": "tool_use",
+                "id": "call_123",
+                "name": "search_docs"
+            }
+        });
+
+        let start_chunks = parse_stream_event(&start_event, &mut state);
+        assert_eq!(start_chunks.len(), 1);
+        assert_eq!(
+            start_chunks[0].delta,
+            ChunkDelta::ToolUseStart {
+                call_id: "call_123".to_string(),
+                name: "search_docs".to_string(),
+            }
+        );
+
+        let delta_event = serde_json::json!({
+            "type": "content_block_delta",
+            "index": 3,
+            "delta": {
+                "type": "input_json_delta",
+                "partial_json": "{\"query\":\"nats\"}"
+            }
+        });
+
+        let delta_chunks = parse_stream_event(&delta_event, &mut state);
+        assert_eq!(delta_chunks.len(), 1);
+        assert_eq!(
+            delta_chunks[0].delta,
+            ChunkDelta::ToolUseInput {
+                call_id: "call_123".to_string(),
+                input: serde_json::json!("{\"query\":\"nats\"}"),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_stream_event_handles_multi_tool_interleaved_input_deltas() {
+        let mut state = AnthropicStreamState::default();
+
+        let events = vec![
+            serde_json::json!({
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": "call_weather",
+                    "name": "get_weather"
+                }
+            }),
+            serde_json::json!({
+                "type": "content_block_start",
+                "index": 2,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": "call_news",
+                    "name": "get_news"
+                }
+            }),
+            serde_json::json!({
+                "type": "content_block_delta",
+                "index": 2,
+                "delta": {"type": "input_json_delta", "partial_json": "{\"topic\":"}
+            }),
+            serde_json::json!({
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "input_json_delta", "partial_json": "{\"city\":"}
+            }),
+            serde_json::json!({
+                "type": "content_block_delta",
+                "index": 2,
+                "delta": {"type": "input_json_delta", "partial_json": "\"rust\"}"}
+            }),
+            serde_json::json!({
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "input_json_delta", "partial_json": "\"nyc\"}"}
+            }),
+        ];
+
+        let all_chunks: Vec<StreamChunk> = events
+            .iter()
+            .flat_map(|event| parse_stream_event(event, &mut state))
+            .collect();
+
+        let input_chunks: Vec<&StreamChunk> = all_chunks
+            .iter()
+            .filter(|chunk| matches!(chunk.delta, ChunkDelta::ToolUseInput { .. }))
+            .collect();
+        assert_eq!(input_chunks.len(), 4);
+
+        assert_eq!(
+            input_chunks[0].delta,
+            ChunkDelta::ToolUseInput {
+                call_id: "call_news".to_string(),
+                input: serde_json::json!("{\"topic\":"),
+            }
+        );
+        assert_eq!(
+            input_chunks[1].delta,
+            ChunkDelta::ToolUseInput {
+                call_id: "call_weather".to_string(),
+                input: serde_json::json!("{\"city\":"),
+            }
+        );
+        assert_eq!(
+            input_chunks[2].delta,
+            ChunkDelta::ToolUseInput {
+                call_id: "call_news".to_string(),
+                input: serde_json::json!("\"rust\"}"),
+            }
+        );
+        assert_eq!(
+            input_chunks[3].delta,
+            ChunkDelta::ToolUseInput {
+                call_id: "call_weather".to_string(),
+                input: serde_json::json!("\"nyc\"}"),
+            }
+        );
     }
 }
