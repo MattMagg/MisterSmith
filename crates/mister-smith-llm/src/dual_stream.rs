@@ -1,4 +1,5 @@
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::TrySendError;
 
 use crate::model_event::{BackpressurePolicy, ModelEvent, StreamClassification};
 use crate::streaming::{ChunkDelta, StreamChunk};
@@ -171,6 +172,16 @@ impl DualStreamActor {
                     BackpressurePolicy::Coalescible => {
                         // Text deltas can be coalesced under backpressure
                         if let ModelEvent::TextDelta { ref text } = event {
+                            if self.pending_text.is_none() {
+                                match self.ui_tx.try_send(event.clone()) {
+                                    Ok(()) => return,
+                                    Err(TrySendError::Full(_)) => {
+                                        // Start coalescing only after backpressure is observed.
+                                    }
+                                    Err(TrySendError::Closed(_)) => return,
+                                }
+                            }
+
                             self.coalesce_count += 1;
                             if let Some(pending) = &mut self.pending_text {
                                 pending.push_str(text);
@@ -203,9 +214,15 @@ impl DualStreamActor {
 
     /// Flush accumulated text delta to the UI stream.
     async fn flush_pending_text(&mut self) {
-        if let Some(text) = self.pending_text.take() {
-            let _ = self.ui_tx.try_send(ModelEvent::TextDelta { text });
-            self.coalesce_count = 0;
+        if let Some(text) = self.pending_text.as_ref() {
+            if self
+                .ui_tx
+                .try_send(ModelEvent::TextDelta { text: text.clone() })
+                .is_ok()
+            {
+                self.pending_text = None;
+                self.coalesce_count = 0;
+            }
         }
     }
 
@@ -368,27 +385,49 @@ mod tests {
         };
         let (mut actor, mut handle) = DualStreamActor::new(config);
 
-        // Send multiple text deltas — should coalesce
+        // First text is immediately passed through while there is capacity.
+        actor.route_event(ModelEvent::TextDelta { text: "part0".into() }).await;
+
+        let first = handle.ui_rx.try_recv();
+        assert!(matches!(first, Ok(ModelEvent::TextDelta { text }) if text == "part0"));
+
+        // Saturate the UI channel so coalescing is required.
+        actor.route_event(ModelEvent::Heartbeat { sequence: 1 }).await;
+
+        // Send multiple text deltas — these should now coalesce.
         for i in 0..3 {
-            actor.process_chunk(
-                StreamChunk {
-                    index: i,
-                    delta: ChunkDelta::Text { text: format!("part{i}") },
-                },
-                "test-model",
-                "req-1",
-            ).await;
+            actor.route_event(ModelEvent::TextDelta { text: format!("part{}", i + 1) }).await;
         }
 
-        // The coalesced text should be a single event
+        // Channel remains full with the heartbeat; coalesced payload is buffered.
+        assert!(matches!(handle.ui_rx.try_recv(), Ok(ModelEvent::Heartbeat { sequence: 1 })));
+
+        // Freeing capacity allows the pending coalesced payload to flush.
+        actor.finish().await;
+
         let event = handle.ui_rx.try_recv();
-        assert!(event.is_ok());
-        if let ModelEvent::TextDelta { text } = event.unwrap() {
-            assert!(text.contains("part0"));
-            assert!(text.contains("part1"));
-            assert!(text.contains("part2"));
-        } else {
-            panic!("Expected TextDelta");
-        }
+        assert!(matches!(event, Ok(ModelEvent::TextDelta { text }) if text == "part1part2part3"));
+    }
+
+    #[tokio::test]
+    async fn coalesced_text_is_not_lost_when_flush_is_temporarily_full() {
+        let config = DualStreamConfig {
+            ui_capacity: 1,
+            max_coalesce_count: 1,
+            ..Default::default()
+        };
+        let (mut actor, mut handle) = DualStreamActor::new(config);
+
+        // Fill the UI channel and force the first text delta into pending coalesced state.
+        actor.route_event(ModelEvent::Heartbeat { sequence: 1 }).await;
+        actor.route_event(ModelEvent::TextDelta { text: "hello".into() }).await;
+
+        // Flush attempt while full should keep pending text buffered.
+        actor.finish().await;
+        assert!(matches!(handle.ui_rx.try_recv(), Ok(ModelEvent::Heartbeat { sequence: 1 })));
+
+        // A second flush now succeeds and delivers the original buffered text.
+        actor.finish().await;
+        assert!(matches!(handle.ui_rx.try_recv(), Ok(ModelEvent::TextDelta { text }) if text == "hello"));
     }
 }
