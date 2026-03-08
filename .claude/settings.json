@@ -6,7 +6,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|compact",
+        "matcher": "startup|compact|resume",
         "hooks": [
           {
             "type": "command",
@@ -40,6 +40,18 @@
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "matcher": "Explore|Plan|general-purpose",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/mem0_hook_subagent_start.py",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "matcher": "Explore|Plan|general-purpose",
@@ -60,6 +72,18 @@
             "type": "command",
             "command": "python3 scripts/mem0_hook_compact.py",
             "timeout": 15000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/mem0_hook_session_end.py",
+            "timeout": 10000
           }
         ]
       }

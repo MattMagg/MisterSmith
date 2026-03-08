@@ -1,107 +1,36 @@
 #!/usr/bin/env python3
 """mem0 Auto-Capture hook for Claude Code (Stop event).
 
-Uses `last_assistant_message` from the hook input (not JSONL transcript parsing).
-Strips recalled memory context before sending to mem0 to prevent feedback loops.
-Enables graph memory, per-request custom instructions/categories, and session scoping.
-
+Thin shim that delegates to the centralized mem0_claude library.
 Always approves the stop — capture is best-effort.
 """
 
 import json
 import sys
 
-from mem0_common import (
-    AGENT_ID_MAIN,
-    APP_ID,
-    CUSTOM_CATEGORIES,
-    CUSTOM_INSTRUCTIONS,
-    USER_ID,
-    get_client,
-    load_env,
-    strip_recalled_context,
-)
+from mem0_config import CONFIG
+
+# Central library import (path set up by mem0_config)
+from mem0_claude.capture import handle_stop
+from mem0_claude.client import load_env
 
 
 def main():
-    # Read hook input from stdin
     try:
         hook_input = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):
         json.dump({"decision": "approve"}, sys.stdout)
         sys.exit(0)
 
-    # Guard against infinite loops — if a Stop hook is already active, skip capture
-    if hook_input.get("stop_hook_active"):
-        json.dump({"decision": "approve"}, sys.stdout)
-        sys.exit(0)
-
-    cwd = hook_input.get("cwd", "")
-    load_env(cwd)
-
-    last_msg = hook_input.get("last_assistant_message", "")
-    if not last_msg or len(last_msg.strip()) < 50:
-        # Too short to extract meaningful memories
-        json.dump({"decision": "approve"}, sys.stdout)
-        sys.exit(0)
-
-    # Strip any recalled memory blocks to prevent feedback loops
-    cleaned = strip_recalled_context(last_msg)
-    if not cleaned or len(cleaned.strip()) < 50:
-        json.dump({"decision": "approve"}, sys.stdout)
-        sys.exit(0)
-
-    # Truncate very long messages — mem0 extraction works on summaries
-    if len(cleaned) > 8000:
-        cleaned = cleaned[:8000] + "\n... [truncated]"
-
-    # Build message pair for extraction
-    messages = [
-        {"role": "user", "content": "[Session context for memory extraction]"},
-        {"role": "assistant", "content": cleaned},
-    ]
-
-    # Derive session ID from transcript path or hook input
-    session_id = hook_input.get("session_id")
-    if not session_id:
-        tp = hook_input.get("transcript_path", "")
-        if tp:
-            # Extract UUID from path like .../<uuid>/transcript.jsonl
-            import os
-            session_id = os.path.basename(os.path.dirname(tp))
+    load_env(hook_input.get("cwd", ""))
 
     try:
-        client = get_client()
-        if client:
-            add_kwargs = dict(
-                user_id=USER_ID,
-                agent_id=AGENT_ID_MAIN,
-                app_id=APP_ID,
-                enable_graph=True,
-                version="v2",
-                output_format="v1.1",
-                custom_instructions=CUSTOM_INSTRUCTIONS,
-                custom_categories=CUSTOM_CATEGORIES,
-                includes="architectural decisions, implementation patterns, bug fixes, user preferences",
-                excludes="raw code, API keys, recalled memories",
-                metadata={
-                    "source": "claude-code-stop",
-                    "capture": "auto",
-                },
-            )
-            if session_id:
-                add_kwargs["run_id"] = session_id
-                add_kwargs["metadata"]["session_id"] = session_id
-
-            client.add(messages, **add_kwargs)
-            print(f"mem0 capture: sent {len(cleaned)} chars", file=sys.stderr)
-        else:
-            print("mem0 capture: no API key configured", file=sys.stderr)
+        result = handle_stop(hook_input, CONFIG)
+        if result:
+            print("mem0 capture: ok", file=sys.stderr)
     except Exception as exc:
-        # Never block the stop on capture failure
         print(f"mem0 capture error: {exc}", file=sys.stderr)
 
-    # Always approve the stop
     json.dump({"decision": "approve"}, sys.stdout)
 
 

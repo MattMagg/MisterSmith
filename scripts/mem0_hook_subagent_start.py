@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""mem0 Auto-Recall hook for Claude Code (UserPromptSubmit + SessionStart).
+"""mem0 Auto-Recall hook for Claude Code (SubagentStart event).
 
-Thin shim that delegates to the centralized mem0_claude library.
-Returns tagged <recalled-memories> context for injection.
+Thin shim that injects relevant memory context into subagents
+before they begin work. Uses the subagent's task description
+as the search query.
 """
 
 import json
@@ -12,7 +13,7 @@ from mem0_config import CONFIG
 
 # Central library import (path set up by mem0_config)
 from mem0_claude.client import load_env
-from mem0_claude.recall import recall, recall_session_start
+from mem0_claude.recall import recall_subagent_start
 
 
 def main():
@@ -21,16 +22,10 @@ def main():
     except (json.JSONDecodeError, EOFError):
         sys.exit(0)
 
-    event = hook_input.get("hook_event_name", "")
     load_env(hook_input.get("cwd", ""))
 
     try:
-        if event == "UserPromptSubmit":
-            context = recall(hook_input, CONFIG)
-        elif event == "SessionStart":
-            context = recall_session_start(hook_input, CONFIG)
-        else:
-            sys.exit(0)
+        context = recall_subagent_start(hook_input, CONFIG)
     except Exception:
         sys.exit(0)
 
@@ -39,7 +34,7 @@ def main():
 
     output = {
         "hookSpecificOutput": {
-            "hookEventName": event,
+            "hookEventName": "SubagentStart",
             "additionalContext": context,
         }
     }

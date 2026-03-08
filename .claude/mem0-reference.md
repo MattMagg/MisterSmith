@@ -8,6 +8,9 @@
 
 > **Status**: ✅ = implemented, ⬜ = not yet used
 
+> **Architecture**: Central library at `~/Repos/mem0/claude-code/mem0_claude/` with thin
+> hook shims in `scripts/`. Project config in `scripts/mem0_config.py`.
+
 ---
 
 ## 1 · Memory Customization & Extraction
@@ -54,7 +57,7 @@ Fine-tune extraction on a single `add()` call without changing project-level ins
 ```python
 client.add(messages, user_id="u1", includes="dietary preferences", excludes="financial info")
 ```
-**Status**: Used in capture hook (`includes`/`excludes` for domain-specific extraction).
+**Status**: Used in capture hooks with domain-specific directives.
 Docs: https://docs.mem0.ai/api-reference/memory/add-memories (see `includes` / `excludes` params)
 
 ### 1.6 Immutable Memories (`immutable=True`) ✅
@@ -74,7 +77,7 @@ Scope every memory by `user_id`, `agent_id`, `app_id`, and/or `run_id` to isolat
 ```python
 client.add(messages, user_id="customer_6412", agent_id="travel_planner", app_id="portal", run_id="session-42")
 ```
-**Status**: All hooks use `user_id`, `agent_id`, `app_id`. Capture/subagent hooks use `run_id` for session scoping. Recall does dual-scope search (long-term + session).
+**Status**: All hooks use `user_id`, `agent_id`, `app_id`. Capture hooks use `run_id` for session scoping. Recall does dual-scope search (long-term + session).
 Docs: https://docs.mem0.ai/platform/features/entity-scoped-memory
 
 ### 2.2 Organizations & Projects ✅
@@ -136,7 +139,7 @@ filters = {
 }
 client.get_all(filters=filters)
 ```
-**Status**: Used in all searches and stats commands.
+**Status**: Used in all searches, stats, cleanup, and export commands.
 Docs: https://docs.mem0.ai/platform/features/v2-memory-filters
 
 ### 3.5 Criteria Retrieval ✅
@@ -162,7 +165,7 @@ Builds entity-relationship graphs. Graph relations are returned alongside vector
 client.add(messages, user_id="joseph", enable_graph=True)
 client.search("Joseph's work", user_id="joseph", enable_graph=True)
 ```
-**Status**: Enabled in all capture hooks and recall searches. Graph relations displayed in recall context and `graph` command.
+**Status**: Enabled in all capture hooks and recall searches. Graph relations displayed in recall context and `graph` CLI command.
 Docs: https://docs.mem0.ai/platform/features/graph-memory
 
 ### 4.2 Graph Threshold ⬜
@@ -197,8 +200,16 @@ Docs: https://docs.mem0.ai/api-reference/memory/add-memories (see `metadata` par
 
 ### 5.3 Expiration ✅
 Set auto-deletion date on memories.
-**Status**: Pre-compact memories set 7-day expiration. `expire` CLI command available.
+**Status**: Pre-compact = 7-day, auto-captures = 30-day, seeds = permanent. `expire` and `batch-expire` CLI commands.
 Docs: https://docs.mem0.ai/api-reference/memory/add-memories
+
+### 5.4 History ✅
+View edit history for any memory (all add/update/delete events).
+```python
+client.history(memory_id="mem-123")
+```
+**Status**: Available via `history` CLI command.
+Docs: https://docs.mem0.ai/api-reference/memory/memory-history
 
 ---
 
@@ -265,7 +276,7 @@ Docs: https://docs.mem0.ai/api-reference/memory/add-memories (see `version` para
 
 ### 9.1 Webhook Notifications
 Receive POST callbacks when memories are added, updated, deleted, or categorized.
-**Status**: Available via `webhooks` CLI command (list/create/delete).
+**Status**: Available via `webhooks` CLI command (list/create/delete). Uses SDK methods with REST fallback.
 
 ---
 
@@ -277,12 +288,54 @@ Export all project memories as structured JSON for backup or analysis.
 
 ---
 
-## Hook Coverage
+## 11 · Memory Management ✅
+
+### 11.1 Summary
+AI-generated summary of all stored memories.
+**Status**: Available via `summary` CLI command.
+
+### 11.2 Cleanup
+Find and remove duplicate or low-quality memories.
+**Status**: Available via `cleanup` CLI command (dry-run by default).
+
+### 11.3 Batch Expire
+Bulk-set expiration on auto-captured memories by source.
+**Status**: Available via `batch-expire` CLI command.
+
+---
+
+## Hook Coverage (7 events)
 
 | Hook Event | Script | Purpose |
 |------------|--------|---------|
-| SessionStart | `mem0_hook_recall.py` | Broad project recall at session start |
+| SessionStart | `mem0_hook_recall.py` | Broad project recall at session start (startup/resume/compact) |
 | UserPromptSubmit | `mem0_hook_recall.py` | Contextual recall per user prompt |
 | Stop | `mem0_hook_capture.py` | Auto-capture from `last_assistant_message` |
+| SubagentStart | `mem0_hook_subagent_start.py` | Inject relevant context into subagents |
 | SubagentStop | `mem0_hook_subagent.py` | Capture deep analysis from Explore/Plan/general-purpose agents |
-| PreCompact | `mem0_hook_compact.py` | Preserve context before compression (7-day expiration) |
+| PreCompact | `mem0_hook_compact.py` | Preserve context before compression (7-day expiry) |
+| SessionEnd | `mem0_hook_session_end.py` | Final capture on Ctrl+C / session close |
+
+## Architecture
+
+```
+~/Repos/mem0/claude-code/           ← Central library (reusable across projects)
+├── cli.py                          ← Management CLI (14 commands)
+└── mem0_claude/
+    ├── __init__.py                 ← Public API exports
+    ├── types.py                    ← ProjectConfig dataclass
+    ├── client.py                   ← Lazy singleton client factory
+    ├── strip.py                    ← Context stripping (feedback loop prevention)
+    ├── capture.py                  ← Capture engine (Stop, SubagentStop, PreCompact, SessionEnd)
+    └── recall.py                   ← Recall engine (UserPromptSubmit, SessionStart, SubagentStart)
+
+~/Mister-Smith/scripts/             ← Project-specific thin shims
+├── mem0_config.py                  ← Mister Smith ProjectConfig + SEEDS
+├── mem0_setup.py                   ← CLI shim (delegates to central cli.py)
+├── mem0_hook_capture.py            ← Stop hook shim
+├── mem0_hook_recall.py             ← UserPromptSubmit + SessionStart shim
+├── mem0_hook_subagent.py           ← SubagentStop shim
+├── mem0_hook_subagent_start.py     ← SubagentStart shim
+├── mem0_hook_compact.py            ← PreCompact shim
+└── mem0_hook_session_end.py        ← SessionEnd shim
+```
