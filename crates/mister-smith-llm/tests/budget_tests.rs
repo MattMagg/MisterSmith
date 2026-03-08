@@ -1,6 +1,74 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
+
+use async_trait::async_trait;
+use mister_smith_core::LlmError;
 use mister_smith_llm::budget::{
-    BudgetEnforcer, BudgetNode, BudgetPolicy, InMemoryBudgetStore,
+    BudgetEnforcer, BudgetNode, BudgetPolicy, BudgetReservation, BudgetStore,
+    InMemoryBudgetStore,
 };
+
+
+struct FlakyCasStore {
+    node: Mutex<BudgetNode>,
+    conflicts_remaining: AtomicUsize,
+}
+
+impl FlakyCasStore {
+    fn new(node: BudgetNode, conflicts: usize) -> Self {
+        Self {
+            node: Mutex::new(node),
+            conflicts_remaining: AtomicUsize::new(conflicts),
+        }
+    }
+}
+
+#[async_trait]
+impl BudgetStore for FlakyCasStore {
+    async fn get(&self, key: &str) -> Result<Option<BudgetNode>, LlmError> {
+        let node = self.node.lock().unwrap();
+        if node.key == key {
+            Ok(Some(node.clone()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn cas_update(
+        &self,
+        node: &BudgetNode,
+        expected_revision: u64,
+    ) -> Result<u64, LlmError> {
+        let mut current = self.node.lock().unwrap();
+
+        if current.revision != expected_revision {
+            return Err(LlmError::InvalidRequest(format!(
+                "CAS conflict on budget key '{}': expected revision {}, actual {}",
+                node.key, expected_revision, current.revision
+            )));
+        }
+
+        if self
+            .conflicts_remaining
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |remaining| {
+                if remaining > 0 { Some(remaining - 1) } else { None }
+            })
+            .is_ok()
+        {
+            current.revision += 1;
+            return Err(LlmError::InvalidRequest(format!(
+                "CAS conflict on budget key '{}': expected revision {}, actual {}",
+                node.key, expected_revision, current.revision
+            )));
+        }
+
+        let new_revision = expected_revision + 1;
+        let mut updated = node.clone();
+        updated.revision = new_revision;
+        *current = updated;
+        Ok(new_revision)
+    }
+}
 
 fn test_store() -> InMemoryBudgetStore {
     let store = InMemoryBudgetStore::new();
@@ -235,4 +303,56 @@ fn budget_policy_serde_round_trip() {
         let deserialized: BudgetPolicy = serde_json::from_str(&json).unwrap();
         assert_eq!(*policy, deserialized);
     }
+}
+
+#[tokio::test]
+async fn reconcile_retries_on_cas_conflict_and_succeeds() {
+    let store = FlakyCasStore::new(
+        BudgetNode {
+            key: "budget/retry".to_string(),
+            limit_tokens: 10_000,
+            used_tokens: 500,
+            period: "test".to_string(),
+            policy: BudgetPolicy::HardCap,
+            revision: 1,
+        },
+        2,
+    );
+    let enforcer = BudgetEnforcer::new(Box::new(store));
+
+    let reservation = BudgetReservation {
+        budget_key: "budget/retry".to_string(),
+        estimated_tokens: 500,
+        revision: 2,
+    };
+
+    enforcer.reconcile(&reservation, 200).await.unwrap();
+
+    let node = enforcer.get_budget("budget/retry").await.unwrap().unwrap();
+    assert_eq!(node.used_tokens, 200);
+}
+
+#[tokio::test]
+async fn reconcile_returns_error_after_retry_limit_exhausted() {
+    let store = FlakyCasStore::new(
+        BudgetNode {
+            key: "budget/retry-fail".to_string(),
+            limit_tokens: 10_000,
+            used_tokens: 500,
+            period: "test".to_string(),
+            policy: BudgetPolicy::HardCap,
+            revision: 1,
+        },
+        10,
+    );
+    let enforcer = BudgetEnforcer::new(Box::new(store));
+
+    let reservation = BudgetReservation {
+        budget_key: "budget/retry-fail".to_string(),
+        estimated_tokens: 500,
+        revision: 2,
+    };
+
+    let err = enforcer.reconcile(&reservation, 0).await.unwrap_err();
+    assert!(matches!(err, LlmError::InvalidRequest(message) if message.contains("CAS conflict")));
 }

@@ -264,7 +264,17 @@ impl ModelRouter {
                 None
             };
 
-        let idx = self.select_provider(None).await?;
+        let idx = match self.select_provider(None).await {
+            Ok(idx) => idx,
+            Err(err) => {
+                if let Some(reservation) = &reservation {
+                    if let Some(enforcer) = &self.budget_enforcer {
+                        enforcer.reconcile(reservation, 0).await?;
+                    }
+                }
+                return Err(err);
+            }
+        };
         let providers = self.providers.read().await;
         let entry = &providers[idx];
 
@@ -292,9 +302,9 @@ impl ModelRouter {
                 // Reconcile budget
                 if let Some(reservation) = &reservation {
                     if let Some(enforcer) = &self.budget_enforcer {
-                        let _ = enforcer
+                        enforcer
                             .reconcile(reservation, response.usage.total_tokens)
-                            .await;
+                            .await?;
                     }
                 }
 
@@ -307,6 +317,14 @@ impl ModelRouter {
                 };
                 let mut providers = self.providers.write().await;
                 providers[idx].circuit_breaker.record_failure(retry_after);
+                drop(providers);
+
+                if let Some(reservation) = &reservation {
+                    if let Some(enforcer) = &self.budget_enforcer {
+                        enforcer.reconcile(reservation, 0).await?;
+                    }
+                }
+
                 Err(err)
             }
         }

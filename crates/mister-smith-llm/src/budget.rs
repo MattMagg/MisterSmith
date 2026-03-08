@@ -127,6 +127,8 @@ pub struct BudgetEnforcer {
     store: Box<dyn BudgetStore>,
 }
 
+const CAS_RETRY_LIMIT: usize = 3;
+
 impl BudgetEnforcer {
     pub fn new(store: Box<dyn BudgetStore>) -> Self {
         Self { store }
@@ -179,21 +181,40 @@ impl BudgetEnforcer {
         reservation: &BudgetReservation,
         actual_tokens: u64,
     ) -> Result<(), LlmError> {
-        let node = self.store.get(&reservation.budget_key).await?.ok_or_else(|| {
-            LlmError::InvalidRequest(format!(
-                "Budget key '{}' not found during reconciliation",
-                reservation.budget_key
-            ))
-        })?;
-
         let adjustment = actual_tokens as i64 - reservation.estimated_tokens as i64;
-        let new_used = (node.used_tokens as i64 + adjustment).max(0) as u64;
 
-        let mut updated = node.clone();
-        updated.used_tokens = new_used;
+        for attempt in 0..=CAS_RETRY_LIMIT {
+            let node = self.store.get(&reservation.budget_key).await?.ok_or_else(|| {
+                LlmError::InvalidRequest(format!(
+                    "Budget key '{}' not found during reconciliation",
+                    reservation.budget_key
+                ))
+            })?;
 
-        self.store.cas_update(&updated, node.revision).await?;
-        Ok(())
+            let new_used = (node.used_tokens as i64 + adjustment).max(0) as u64;
+            let mut updated = node.clone();
+            updated.used_tokens = new_used;
+
+            match self.store.cas_update(&updated, node.revision).await {
+                Ok(_) => return Ok(()),
+                Err(err)
+                    if attempt < CAS_RETRY_LIMIT
+                        && Self::is_cas_conflict(&err) =>
+                {
+                    continue;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        Err(LlmError::InvalidRequest(format!(
+            "Failed to reconcile budget key '{}' due to repeated CAS conflicts",
+            reservation.budget_key
+        )))
+    }
+
+    fn is_cas_conflict(error: &LlmError) -> bool {
+        matches!(error, LlmError::InvalidRequest(message) if message.contains("CAS conflict"))
     }
 
     /// Get the current budget state for a key.
