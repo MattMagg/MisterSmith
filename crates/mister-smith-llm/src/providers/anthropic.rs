@@ -207,6 +207,42 @@ fn render_content_value(value: &serde_json::Value) -> String {
     }
 }
 
+fn map_anthropic_stream_stop_reason(stop_reason: &str) -> StopReason {
+    match stop_reason {
+        "end_turn" | "stop_sequence" => StopReason::Completed,
+        "max_tokens" => StopReason::MaxTokens,
+        "tool_use" => StopReason::ToolCall,
+        _ => StopReason::Completed,
+    }
+}
+
+fn extract_message_delta_stop_chunk(
+    event: &serde_json::Value,
+    chunk_index: usize,
+    terminal_stop_emitted: &mut bool,
+) -> Option<StreamChunk> {
+    let stop_reason = event
+        .get("delta")
+        .and_then(|d| d.get("stop_reason"))
+        .and_then(|v| v.as_str())
+        .map(map_anthropic_stream_stop_reason)?;
+
+    *terminal_stop_emitted = true;
+    Some(StreamChunk::stop(chunk_index, stop_reason))
+}
+
+fn fallback_message_stop_chunk(
+    chunk_index: usize,
+    terminal_stop_emitted: &mut bool,
+) -> Option<StreamChunk> {
+    if *terminal_stop_emitted {
+        return None;
+    }
+
+    *terminal_stop_emitted = true;
+    Some(StreamChunk::stop(chunk_index, StopReason::Completed))
+}
+
 // ---------------------------------------------------------------------------
 // Internal types for Anthropic API response deserialization
 // ---------------------------------------------------------------------------
@@ -346,6 +382,7 @@ impl ModelProvider for AnthropicProvider {
             }
 
             let mut chunk_index: usize = 0;
+            let mut terminal_stop_emitted = false;
             let mut bytes_stream = response.bytes_stream();
             let mut buffer = String::new();
 
@@ -426,25 +463,23 @@ impl ModelProvider for AnthropicProvider {
                                     }
                                 }
                                 "message_delta" => {
-                                    if let Some(stop_reason_str) = event
-                                        .get("delta")
-                                        .and_then(|d| d.get("stop_reason"))
-                                        .and_then(|v| v.as_str())
-                                    {
-                                        let stop_reason = match stop_reason_str {
-                                            "end_turn" | "stop_sequence" => StopReason::Completed,
-                                            "max_tokens" => StopReason::MaxTokens,
-                                            "tool_use" => StopReason::ToolCall,
-                                            _ => StopReason::Completed,
-                                        };
-                                        yield StreamChunk::stop(chunk_index, stop_reason);
+                                    if let Some(stop_chunk) = extract_message_delta_stop_chunk(
+                                        &event,
+                                        chunk_index,
+                                        &mut terminal_stop_emitted,
+                                    ) {
+                                        yield stop_chunk;
                                         chunk_index += 1;
                                     }
                                 }
                                 "message_stop" => {
-                                    // Terminal event — the message_delta should have
-                                    // already emitted a stop chunk with the reason.
-                                    // If not, emit a completed stop as a fallback.
+                                    if let Some(stop_chunk) = fallback_message_stop_chunk(
+                                        chunk_index,
+                                        &mut terminal_stop_emitted,
+                                    ) {
+                                        yield stop_chunk;
+                                        chunk_index += 1;
+                                    }
                                 }
                                 _ => {}
                             }
@@ -473,5 +508,44 @@ impl ModelProvider for AnthropicProvider {
             embeddings: false,
             tool_calling: true,
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn message_delta_stop_reason_is_preserved() {
+        let event = serde_json::json!({
+            "type": "message_delta",
+            "delta": {
+                "stop_reason": "max_tokens"
+            }
+        });
+        let mut terminal_stop_emitted = false;
+
+        let chunk = extract_message_delta_stop_chunk(&event, 3, &mut terminal_stop_emitted);
+
+        assert_eq!(chunk, Some(StreamChunk::stop(3, StopReason::MaxTokens)));
+        assert!(terminal_stop_emitted);
+    }
+
+    #[test]
+    fn message_stop_emits_completed_fallback_when_delta_has_no_stop_reason() {
+        let delta_without_stop = serde_json::json!({
+            "type": "message_delta",
+            "delta": {}
+        });
+        let mut terminal_stop_emitted = false;
+
+        let delta_chunk =
+            extract_message_delta_stop_chunk(&delta_without_stop, 0, &mut terminal_stop_emitted);
+        let stop_chunk = fallback_message_stop_chunk(1, &mut terminal_stop_emitted);
+
+        assert_eq!(delta_chunk, None);
+        assert_eq!(stop_chunk, Some(StreamChunk::stop(1, StopReason::Completed)));
+        assert!(terminal_stop_emitted);
     }
 }
