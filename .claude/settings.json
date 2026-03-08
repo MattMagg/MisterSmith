@@ -40,9 +40,5 @@
         ]
       }
     ]
-  },
-  "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-  "enabledPlugins": {
-    "skill-creator@claude-plugins-official": true
   }
 }
