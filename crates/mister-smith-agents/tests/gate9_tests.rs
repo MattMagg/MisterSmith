@@ -121,8 +121,8 @@ async fn tool_bus_round_trip_with_mock_provider() {
         name: "data.analyzer".into(),
         input: serde_json::json!({"query": "test"}),
     };
-    let result = bus.execute_tool_call(None, &call).await.unwrap();
-    // No backend registered, so we get an error result (not a panic)
+    let result = bus.execute_tool_call_provider_result(None, &call).await;
+    // No backend registered, so provider adapter returns a failure payload.
     assert!(result.error.is_some());
     assert_eq!(result.call_id, "call-gate9");
 }
