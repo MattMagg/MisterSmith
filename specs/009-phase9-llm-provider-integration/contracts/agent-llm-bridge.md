@@ -65,15 +65,55 @@ The bridge must extend the existing files and seams:
 - Consumes structured Planner output through existing scheduler and team paths.
 - Must not gain provider-specific branching beyond selecting the configured `ModelProvider`.
 
+## Dual-Stream Handling
+
+The agent-LLM bridge consumes `ModelEvent` items (not raw `StreamChunk`), enabling dual-stream
+processing:
+
+- **Semantic stream** (JetStream, lossless): Tool-call events, lifecycle events, errors — the
+  bridge must process all of these completely and in order.
+- **UI stream** (NATS Core, best-effort): Text deltas, heartbeats — the bridge may forward these
+  for rendering without blocking on JetStream acknowledgment.
+
+The bridge must subscribe to the semantic stream for orchestration correctness. UI stream
+subscription is optional and depends on whether the agent role surfaces real-time output.
+
+## Budget Enforcement Interface
+
+The agent-LLM bridge interacts with budget enforcement through the `ModelRouter`:
+
+1. **Before call**: The router checks available budget via JetStream KV and reserves estimated
+   tokens using CAS.
+2. **After call**: The router reconciles actual usage from `CompletionResponse.usage` or
+   accumulated `ModelEvent::UsageUpdate` events.
+3. **On exhaustion**: The router returns `LlmError::BudgetExhausted` or applies the configured
+   `BudgetPolicy` (downgrade, reject) before the request reaches the provider.
+
+The bridge itself does not manage budgets — it delegates to the `ModelRouter`. The bridge observes
+routing decisions through `ModelEvent::RoutingDecision` for logging and observability.
+
+## ModelEvent Consumption
+
+The bridge receives `ModelEvent` items from the stream actor, not raw `StreamChunk`. This ensures:
+
+- Tool-call events are complete and typed (`ToolCallStart`, `ToolCallDelta`, `ToolCallCompleted`)
+- Lifecycle events drive agent state transitions (`StreamStarted`, `StreamCompleted`, `StreamFailed`)
+- Observability events are available for metrics and logging (`UsageUpdate`, `LatencyMarker`)
+- Unknown events from future provider updates are handled gracefully (`Unknown` variant)
+
 ## Gate 9 Contract
 
-The bridge is complete when this flow succeeds for both Anthropic and OpenAI:
+The bridge is complete when this flow succeeds for both Anthropic/Claude and OpenAI:
 
 1. Planner receives a high-level task.
-2. Planner calls a real `ModelProvider`.
+2. Planner calls a real `ModelProvider` through the `ModelRouter`.
 3. The model returns a structured subtask decomposition.
 4. Orchestrator assigns subtasks to Workers through existing orchestration paths.
 5. Tool calls, when requested, round-trip through the ToolBus.
+6. The `ModelRouter` records routing decisions for observability.
+7. Budget enforcement prevents budget overruns under concurrent requests.
+8. Dual-stream processing delivers tool-call events losslessly while allowing text delta
+   coalescence.
 
 ## Blocker Contract
 

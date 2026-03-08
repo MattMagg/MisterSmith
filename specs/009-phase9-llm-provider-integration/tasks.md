@@ -1,20 +1,20 @@
 # Tasks: Phase 9 — LLM Provider Integration
 
-**Input**: Design documents from `/specs/009-phase9-llm-provider-integration/`  
+**Input**: Design documents from `/specs/009-phase9-llm-provider-integration/`
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `quickstart.md`, `contracts/`
 
-**Tests**: Included. Phase 9 requires deterministic contract tests, env-gated Anthropic/OpenAI API
-integration tests, stubbed Codex app-server client tests plus manual ChatGPT validation, ToolBus
-bridge tests, and Gate 9 orchestration validation.
+**Tests**: Included. Phase 9 requires deterministic contract tests, env-gated provider
+integration tests, router/budget/circuit-breaker tests, dual-stream/ModelEvent tests,
+ToolBus bridge tests, and Gate 9 orchestration validation.
 
-**Organization**: Tasks are grouped by approved subphase `9.1` through `9.5` and mapped to
-the Phase 9 user stories. Phase 7.5 hardening remains visible as blocker context and must
-not be redefined as Phase 9 implementation scope.
+**Organization**: Tasks are grouped by subphase `9.1` through `9.6` and mapped to
+user stories. Phase 7.5 hardening remains visible as blocker context. Security items are
+addressed by Phase 9.1 spec at `specs/011-phase9.1-security-hardening/`.
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel when tasks touch different files and have no dependency edge
-- **[Story]**: Which Phase 9 user story the task advances (`US1` through `US4`)
+- **[Story]**: Which Phase 9 user story the task advances (`US1` through `US7`)
 - Include exact file paths in every task description
 
 ## Path Conventions
@@ -24,256 +24,243 @@ not be redefined as Phase 9 implementation scope.
 - **New crate**: `crates/mister-smith-llm/`
 - **LLM source**: `crates/mister-smith-llm/src/`
 - **LLM tests**: `crates/mister-smith-llm/tests/`
+- **Transport**: `crates/mister-smith-transport/src/`
 - **App auth surface**: `crates/mister-smith-app/src/`, `crates/mister-smith-app/tests/`
 - **Agent integration**: `crates/mister-smith-agents/src/`
 - **Agent tests**: `crates/mister-smith-agents/tests/`
-- **Phase docs**: `CLAUDE.md`
 
 ## Canonical Architecture Traceability
-
-This task list inherits the Phase 9 source map from `spec.md` and `plan.md`. When tasks are added,
-split, or reordered, preserve the mapping below instead of introducing uncited scope.
 
 | Source | Task ranges | Why it matters |
 | ------ | ----------- | -------------- |
 | `spec/data-management/agent-orchestration.md` §10.4 | `T015`-`T025`, `T028` | Keeps Planner-to-Orchestrator flow and LLM/ToolBus coordination inside existing agent seams. |
-| `spec/data-management/message-schemas.md` §5 | `T015`-`T025` scope notes | Confirms hook-event schemas and `llm.hooks.*` subjects stay deferred. |
-| `spec/agent-domains/SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md` §15 | `T015`-`T030` scope checks | Keeps Neural/AI Operations work out of the Phase 9 backlog. |
 | `spec/core-architecture/type-definitions.md` | `T003`-`T008`, `T015`-`T021` | Anchors unified IDs, agent-role typing, and shared error conventions. |
-| `spec/core-architecture/async-patterns.md` | `T006`, `T015`-`T025` | Preserves agent-as-tool and ToolBus patterns for tool export and execution. |
-| `spec/core-architecture/coding-standards.md` | `T003`, `T008`, `T011`, `T014`, `T021`, `T024`-`T029` | Requires typed errors, timeout and permission handling, audit posture, and explicit tests. |
+| `spec/core-architecture/async-patterns.md` | `T006`, `T015`-`T025` | Preserves agent-as-tool and ToolBus patterns. |
+| `docs/research-output/consolidated/01-model-routing-and-cost-optimization.md` | `T031`-`T041` | Two-plane router, budget enforcement, SLM-default routing. |
+| `docs/research-output/consolidated/06-streaming-architecture.md` | `T042`-`T050` | Dual-stream, ModelEvent, backpressure policy. |
 
 ## Visible Prerequisites & Blockers (Do Not Absorb Into Phase 9 Scope)
 
-These items stay visible because `9.4` and `9.5` may depend on them, but they are not Phase 9 feature deliverables:
-
-- **Security integration for agent messaging, tool permissions, and audit logging**:
-  if `ToolBus` permission or audit boundaries are still incomplete in
-  `crates/mister-smith-agents/src/tool_bus.rs`, `crates/mister-smith-security/`, or
-  related agent messaging seams, treat that as a blocker for `9.4` and `9.5`
-  validation rather than expanding Phase 9 scope.
-- **Router balancing strategies (`round-robin`, `least-loaded`)**: do not add router hardening work to Phase 9 tasks; only consume the existing router boundary.
-- **Memory metadata, timestamps, versions, and access counts**: do not fold Memory-agent hardening into LLM integration tasks.
-- **Heartbeat receiver and failure detection**: missing receiver-side liveness handling remains prerequisite work, not part of provider integration.
-- **Supervisor delegation to the Phase 3 supervision system**: do not turn provider-backed role work into a supervisor refactor.
-- **Priority mailbox wiring**: do not absorb mailbox-ordering hardening into LLM bridge tasks.
-
-Track the current blocker state in
-[`checklists/phase-7-5-readiness.md`](checklists/phase-7-5-readiness.md) instead of opening
-hidden Phase 9 implementation tasks.
-
-If any unresolved item above prevents reliable `9.4` or `9.5` validation, report it as a blocker during `/speckit.analyze`.
+- **Security integration**: Now addressed by Phase 9.1 spec at
+  `specs/011-phase9.1-security-hardening/`
+- **Memory metadata, timestamps, versions**: remains deferred
+- **Heartbeat receiver and failure detection**: remains deferred
+- **Supervisor delegation**: remains deferred
+- **Priority mailbox wiring**: remains deferred
 
 ---
 
-## Phase 1: Subphase 9.1 — Core Types & `MockProvider` (User Story 1, Priority: P1)
+## Subphase 9.1 — Core Types & `MockProvider` (User Story 1, Priority: P1) — DONE
 
-**Goal**: Create the provider-neutral `mister-smith-llm` crate, the canonical `ModelProvider` contract, unified LLM types, and a deterministic `MockProvider`.
+**Status**: Complete. All tasks implemented and tested.
 
-**Independent Test**: `cargo test -p mister-smith-llm` passes contract and serialization tests with no real-provider feature flags enabled.
-
-### Implementation for User Story 1
-
-- [x] T001 [US1] Add `crates/mister-smith-llm` to workspace members and add shared provider dependencies and feature plumbing in root `Cargo.toml`.
-- [x] T002 [US1] Create `crates/mister-smith-llm/Cargo.toml` with feature-gated
-  `anthropic`, `openai`, and `openai-chatgpt` provider flags, always-on mock support, and
-  dependencies aligned with `specs/009-phase9-llm-provider-integration/plan.md`.
-- [x] T003 [P] [US1] Expand the shared error hierarchy in
-  `crates/mister-smith-core/src/error.rs` and re-export it from
-  `crates/mister-smith-core/src/lib.rs` by adding canonical `LlmError`
-  variants consistent with the Phase 9 contracts and
-  `spec/core-architecture/type-definitions.md`.
+- [x] T001 [US1] Add `crates/mister-smith-llm` to workspace members and add shared provider
+  dependencies and feature plumbing in root `Cargo.toml`.
+- [x] T002 [US1] Create `crates/mister-smith-llm/Cargo.toml` with feature-gated provider flags.
+- [x] T003 [P] [US1] Expand shared error hierarchy in
+  `crates/mister-smith-core/src/error.rs` with canonical `LlmError` variants.
 - [x] T004 [P] [US1] Create `crates/mister-smith-llm/src/lib.rs` and
-  `crates/mister-smith-llm/src/provider.rs` with crate-level docs, public
-  re-exports, and the `ModelProvider` trait for complete, stream, embed,
-  `model_id`, and `capabilities`.
-- [x] T005 [P] [US1] Implement provider-neutral request, response, usage,
-  stop-reason, capability, and content types in
-  `crates/mister-smith-llm/src/types.rs` and provider configuration in
+  `crates/mister-smith-llm/src/provider.rs` with `ModelProvider` trait.
+- [x] T005 [P] [US1] Implement provider-neutral request, response, usage, stop-reason,
+  capability, and content types in `crates/mister-smith-llm/src/types.rs` and
   `crates/mister-smith-llm/src/config.rs`.
-- [x] T006 [P] [US1] Implement unified tool-calling and streaming surface
-  types in `crates/mister-smith-llm/src/tool_schema.rs` and
-  `crates/mister-smith-llm/src/streaming.rs`, including JSON Schema-backed
-  `ToolDefinition`, `ToolCall`, `ToolResult`, and ordered `StreamChunk`
-  handling.
+- [x] T006 [P] [US1] Implement unified tool-calling and streaming surface types in
+  `crates/mister-smith-llm/src/tool_schema.rs` and
+  `crates/mister-smith-llm/src/streaming.rs`.
 - [x] T007 [US1] Implement deterministic mock behavior in
-  `crates/mister-smith-llm/src/mock.rs` for completion, streaming,
-  embeddings, and tool-calling flows without network access.
+  `crates/mister-smith-llm/src/mock.rs`.
 - [x] T008 [US1] Add contract and serialization coverage in
   `crates/mister-smith-llm/tests/mock_tests.rs` and
-  `crates/mister-smith-llm/tests/types_tests.rs`, including
-  unsupported-capability and typed-error assertions.
+  `crates/mister-smith-llm/tests/types_tests.rs`.
 
-**Checkpoint**: `mister-smith-llm` builds with no real-provider features, `MockProvider` exercises the full shared contract, and no provider-specific public types leak outside provider modules.
+**Checkpoint**: Complete.
 
 ---
 
-## Phase 2: Subphase 9.2 — Anthropic Provider (User Story 2, Priority: P1)
+## Subphase 9.2a — Two-Plane Router + Health + Budget (User Story 5, Priority: P1) — NEW
 
-**Goal**: Add a feature-gated `AnthropicProvider` implementing the shared Phase 9 contract.
+**Goal**: Implement the `ModelRouter` with data-plane routing, health-aware circuit breakers,
+and hierarchical budget enforcement via JetStream KV CAS.
 
-**Independent Test**: `ANTHROPIC_API_KEY=... cargo test -p mister-smith-llm --features anthropic -- --ignored` passes Anthropic integration coverage using the shared request and response types.
+**Independent Test**: `cargo test -p mister-smith-llm -- router health circuit budget`
 
-### Implementation for User Story 2 (Anthropic)
+### Implementation for User Story 5
 
-- [ ] T009 [US2] Add Anthropic provider module wiring in
+- [x] T031 [US5] Add `LlmError::BudgetExhausted` and `LlmError::NoHealthyProvider` variants to
+  `crates/mister-smith-core/src/error.rs` and re-export from
+  `crates/mister-smith-core/src/lib.rs`.
+- [x] T032 [P] [US5] Create `crates/mister-smith-llm/src/health.rs` with `HealthStatus`,
+  `CircuitState` enum (`Closed`, `Open`, `HalfOpen`), circuit breaker state machine with
+  configurable thresholds (consecutive failures, error rate window, Retry-After honoring).
+- [x] T033 [P] [US5] Create `crates/mister-smith-llm/src/budget.rs` with `BudgetNode`,
+  `BudgetPolicy` enum (`HardCap`, `SoftCap`, `Conditioned`), JetStream KV CAS
+  reserve-before-send and reconcile-after-completion operations.
+- [x] T034 [US5] Create `crates/mister-smith-llm/src/router.rs` with `ModelRouter`,
+  `RoutingPolicy` enum (`RoundRobin`, `CostOptimized`, `CapabilityMatched`,
+  `Cascade(CascadePolicy)`), `RoutingHint`, data-plane routing with local in-memory state,
+  and control-plane JetStream KV watch subscription for configuration updates.
+- [x] T035 [US5] Add router tests in `crates/mister-smith-llm/tests/router_tests.rs`:
+  sub-millisecond routing overhead, round-robin distribution, cost-optimized selection,
+  unhealthy provider removal, provider recovery after circuit half-open.
+- [x] T036 [US5] Add circuit breaker tests in `crates/mister-smith-llm/tests/router_tests.rs`:
+  Closed -> Open on threshold, Open -> HalfOpen on timeout, HalfOpen -> Closed on probe
+  success, HalfOpen -> Open on probe failure, Retry-After honoring from 429 responses.
+- [x] T037 [US5] Add budget CAS tests in `crates/mister-smith-llm/tests/budget_tests.rs`
+  (env-gated with `NATS_URL`): reserve-and-reconcile round-trip, concurrent CAS with <1%
+  overrun rate, budget exhaustion behavior per policy (reject vs downgrade), hierarchical
+  budget key resolution (org/team/user).
+
+**Checkpoint**: `ModelRouter` routes requests with sub-millisecond overhead, circuit breakers
+correctly manage provider health, budget CAS prevents overruns.
+
+---
+
+## Subphase 9.2b — Dual-Stream + ModelEvent + MessageEnvelope (User Story 7, Priority: P1) — NEW
+
+**Goal**: Implement the `ModelEvent` enum, dual-stream delivery, and `MessageEnvelope` additions.
+
+**Independent Test**: `cargo test -p mister-smith-llm -- model_event dual_stream` and
+`cargo test -p mister-smith-transport -- envelope`
+
+### Implementation for User Story 7
+
+- [x] T042 [US7] Create `crates/mister-smith-llm/src/model_event.rs` with `ModelEvent` enum
+  (28 variants: 5 lifecycle, 3 text, 4 tool-call, 3 observability, 1 error, 1 heartbeat,
+  1 unknown) with `#[non_exhaustive]` and `#[serde(other)]` on `Unknown`.
+- [x] T043 [P] [US7] Create `crates/mister-smith-llm/src/dual_stream.rs` with `StreamClass`
+  enum (`Semantic`, `Ui`), `BackpressurePolicy` enum (`Lossless`, `Coalescible`, `Droppable`),
+  backpressure policy matrix mapping `ModelEvent` variants to policies, and stream actor logic
+  converting `StreamChunk` to `ModelEvent`.
+- [x] T044 [P] [US7] Add `MessagePlane` enum (`Data`, `Control`) and `StreamClass` enum to
+  `crates/mister-smith-transport/src/envelope.rs` (or appropriate module). Add
+  `plane: Option<MessagePlane>` and `stream_class: Option<StreamClass>` to `MessageEnvelope`
+  with `#[serde(default)]`. Both enums use `#[non_exhaustive]`.
+- [x] T045 [US7] Add `ModelEvent` serde and forward compatibility tests in
+  `crates/mister-smith-llm/tests/model_event_tests.rs`: round-trip serialization for all 28
+  variants, `Unknown` variant via `#[serde(other)]` for unrecognized input, `#[non_exhaustive]`
+  forward compatibility.
+- [x] T046 [US7] Add dual-stream tests in `crates/mister-smith-llm/tests/dual_stream_tests.rs`:
+  tool-call events delivered losslessly, text deltas coalesced under backpressure, heartbeats
+  dropped under extreme backpressure, backpressure policy matrix enforcement.
+- [x] T047 [US7] Add `MessageEnvelope` backward compatibility tests in
+  `crates/mister-smith-transport/tests/`: deserialize pre-Phase-9 envelopes without `plane` or
+  `stream_class` fields (both default to `None`), `None` treated as `Data`/`Semantic`
+  respectively.
+
+**Checkpoint**: `ModelEvent` covers all event classes with forward compatibility, dual-stream
+delivers events per backpressure policy, `MessageEnvelope` changes are backward-compatible.
+
+---
+
+## Subphase 9.3 — Providers (User Story 2, Priority: P1) — PARTIALLY DONE
+
+**Status**: `OpenAiProvider` and `ClaudeSubscriptionProvider` are implemented.
+`AnthropicProvider` (API-key) is planned.
+
+### Implementation for User Story 2
+
+- [x] T009 [US2] Add Anthropic provider module wiring in
   `crates/mister-smith-llm/src/providers/mod.rs` and create
   `crates/mister-smith-llm/src/providers/anthropic.rs` behind
   `#[cfg(feature = "anthropic")]`.
-- [ ] T010 [US2] Implement request serialization, response normalization,
-  streaming, embeddings, tool-calling support, and typed error mapping in
-  `crates/mister-smith-llm/src/providers/anthropic.rs` without exposing
-  Anthropic-native payload types outside the provider module.
-- [ ] T011 [US2] Add env-gated real-provider coverage in
-  `crates/mister-smith-llm/tests/integration/anthropic_tests.rs` for
-  completions, streaming, embeddings, tool use, and retryable authentication
-  or rate-limit failures.
+- [x] T010 [US2] Implement request serialization, response normalization, streaming, embeddings,
+  tool-calling support, and typed error mapping in
+  `crates/mister-smith-llm/src/providers/anthropic.rs`.
+- [x] T011 [US2] Add env-gated real-provider coverage in
+  `crates/mister-smith-llm/tests/integration/anthropic_tests.rs`.
+- [x] T012 [US2] Add OpenAI provider module wiring and create
+  `crates/mister-smith-llm/src/providers/openai.rs`.
+- [x] T013 [US2] Implement API-key `OpenAiProvider`.
+- [x] T014 [US2] Implement `OpenAiChatGptProvider` plus `mister-smith-app` auth subcommands.
+- [x] T014A [US2] Add env-gated OpenAI API coverage and app CLI coverage.
 
-**Checkpoint**: Anthropic behavior conforms to the shared contract and remains feature-gated.
-
----
-
-## Phase 3: Subphase 9.3 — OpenAI Providers (User Story 2, Priority: P1)
-
-**Goal**: Add feature-gated OpenAI-family backends for API-key and ChatGPT-subscription access
-while keeping the same public contract as `AnthropicProvider` for supported capabilities.
-
-**Independent Test**: `OPENAI_API_KEY=... cargo test -p mister-smith-llm --features openai -- --ignored`
-passes OpenAI integration coverage using the same public request and response
-types used for Anthropic, and manual ChatGPT validation succeeds through
-`cargo test -p mister-smith-llm --features openai-chatgpt` plus
-`cargo test -p mister-smith-app`.
-
-### Implementation for User Story 2 (OpenAI)
-
-- [X] T012 [US2] Add OpenAI provider module wiring in
-  `crates/mister-smith-llm/src/providers/mod.rs`, create
-  `crates/mister-smith-llm/src/providers/openai.rs` behind
-  `#[cfg(feature = "openai")]`, create
-  `crates/mister-smith-llm/src/providers/openai_chatgpt.rs` behind
-  `#[cfg(feature = "openai-chatgpt")]`, and add the shared Codex app-server
-  client module in `crates/mister-smith-llm/src/app_server.rs`.
-- [X] T013 [US2] Implement API-key `OpenAiProvider` request serialization,
-  response normalization, streaming, embeddings, tool-calling support, and
-  shared error mapping in `crates/mister-smith-llm/src/providers/openai.rs`
-  without introducing OpenAI-specific public types.
-- [X] T014 [US2] Implement `OpenAiChatGptProvider` plus `mister-smith-app`
-  `auth openai-chatgpt login` and `status` support in
-  `crates/mister-smith-llm/src/providers/openai_chatgpt.rs`,
-  `crates/mister-smith-llm/src/app_server.rs`,
-  `crates/mister-smith-app/src/main.rs`, and
-  `crates/mister-smith-app/Cargo.toml`, including typed authentication
-  failures, completion, streaming, and `UnsupportedCapability` behavior for
-  embeddings and tool calling.
-- [X] T014A [US2] Add env-gated OpenAI API coverage in
-  `crates/mister-smith-llm/tests/integration/openai_tests.rs`, add stubbed
-  Codex app-server coverage in `crates/mister-smith-llm/tests/`, and add app
-  CLI coverage in `crates/mister-smith-app/tests/` for login, status, missing
-  auth, and unsupported-capability paths.
-
-**Checkpoint**: OpenAI API-key behavior matches the shared contract, the ChatGPT-backed path works
-through Codex app-server for completion and streaming with typed unsupported-capability behavior for
-embeddings and tool calling, and both can be swapped with Anthropic without call-site changes
-outside provider selection or app auth commands.
+**Checkpoint**: All provider adapters conform to the shared contract. `ClaudeSubscriptionProvider`
+(OAuth Bearer) coexists with planned `AnthropicProvider` (API-key) under
+`ProviderKind::ClaudeSubscription` and `ProviderKind::Anthropic` respectively.
 
 ---
 
-## Phase 4: Subphase 9.4 — Agent-LLM Bridge (User Story 3, Priority: P2)
+## Subphase 9.4 — Agent-LLM Bridge (User Story 3, Priority: P2)
 
-**Goal**: Add a feature-gated bridge from `mister-smith-agents` to `ModelProvider` for Planner, Critic, and Executor while keeping the Orchestrator provider-neutral.
-
-**Independent Test**: `cargo test -p mister-smith-agents --features llm planner` validates structured Planner decomposition through the shared orchestration flow with provider-backed role logic.
+**Goal**: Feature-gated bridge from `mister-smith-agents` to `ModelProvider` via `ModelRouter`
+for Planner, Critic, and Executor.
 
 ### Implementation for User Story 3
 
-- [ ] T015 [US3] Add the optional `llm` feature and `mister-smith-llm`
-  dependency wiring in `crates/mister-smith-agents/Cargo.toml` and update
-  `crates/mister-smith-agents/src/lib.rs` re-exports to compile cleanly with
-  and without the feature.
-- [ ] T016 [P] [US3] Extend `crates/mister-smith-agents/src/agent.rs` and
-  `crates/mister-smith-agents/src/errors.rs` with the feature-gated model
-  attachment boundary and provider-aware error conversions required by the
-  Phase 9 contracts.
-- [ ] T017 [P] [US3] Implement Planner role integration in
-  `crates/mister-smith-agents/src/roles/planner.rs` so a configured
-  `ModelProvider` produces structured subtask decomposition without leaking
-  provider-specific types.
-- [ ] T018 [P] [US3] Implement Critic role integration in
-  `crates/mister-smith-agents/src/roles/critic.rs` so provider-backed
-  evaluation returns structured feedback through existing agent error
-  handling.
-- [ ] T019 [P] [US3] Implement Executor role integration in
-  `crates/mister-smith-agents/src/roles/executor.rs` so model-backed
-  execution can participate in tool-calling loops without bypassing current
-  timeout and error semantics.
-- [ ] T020 [US3] Update `crates/mister-smith-agents/src/orchestrator.rs` to
-  consume structured Planner output through existing scheduler and team paths
-  while keeping provider selection confined to the LLM boundary.
-- [ ] T021 [US3] Add feature-gated bridge coverage in
+- [x] T015 [US3] Add the optional `llm` feature and `mister-smith-llm` dependency wiring in
+  `crates/mister-smith-agents/Cargo.toml` and update re-exports.
+- [x] T016 [P] [US3] Extend `crates/mister-smith-agents/src/agent.rs` and
+  `crates/mister-smith-agents/src/errors.rs` with feature-gated model attachment boundary
+  and provider-aware error conversions.
+- [x] T017 [P] [US3] Implement Planner role integration in
+  `crates/mister-smith-agents/src/roles/planner.rs` — provider-backed subtask decomposition
+  via `ModelRouter`, dual-stream consumption of `ModelEvent` items.
+- [x] T018 [P] [US3] Implement Critic role integration in
+  `crates/mister-smith-agents/src/roles/critic.rs`.
+- [x] T019 [P] [US3] Implement Executor role integration in
+  `crates/mister-smith-agents/src/roles/executor.rs`.
+- [x] T020 [US3] Update `crates/mister-smith-agents/src/orchestrator.rs` to consume structured
+  Planner output through existing scheduler and team paths.
+- [x] T021 [US3] Add feature-gated bridge coverage in
   `crates/mister-smith-agents/tests/role_tests.rs` and
-  `crates/mister-smith-agents/tests/team_tests.rs` for Planner-driven
-  decomposition, Orchestrator assignment, and provider swapping between
-  Anthropic and OpenAI-compatible test doubles.
+  `crates/mister-smith-agents/tests/team_tests.rs`.
 
-**Checkpoint**: Planner, Critic, and Executor can use `ModelProvider` behind the `llm` feature while the Orchestrator and broader agent system stay provider-neutral.
-
-**Blocker Reminder**: If unresolved security integration, heartbeat reception,
-supervisor delegation, or priority-mailbox wiring prevents reliable role
-behavior, stop and report a blocker instead of expanding Phase 9 scope.
+**Checkpoint**: Planner, Critic, and Executor use `ModelProvider` via `ModelRouter` behind the
+`llm` feature.
 
 ---
 
-## Phase 5: Subphase 9.5 — Tool Calling Bridge (User Story 4, Priority: P2)
+## Subphase 9.5 — Tool Calling Bridge (User Story 4, Priority: P2)
 
-**Goal**: Export registered tools as unified tool definitions and execute model-emitted tool calls through the existing ToolBus boundary.
-
-**Independent Test**: `cargo test -p mister-smith-agents --features llm tool_bus gate9 -- --ignored` validates model -> ToolBus -> model round-trips plus negative permission and timeout paths.
+**Goal**: Export registered tools as unified definitions and execute model-emitted tool calls
+through the ToolBus, with lossless delivery on the semantic stream.
 
 ### Implementation for User Story 4
 
-- [ ] T022 [US4] Extend `crates/mister-smith-agents/src/tool_bus.rs` with `ToolBus::to_tool_definitions()` that exports registered tools as stable, provider-neutral JSON Schema definitions.
-- [ ] T023 [US4] Extend `crates/mister-smith-agents/src/tool_bus.rs` with
-  `ToolBus::execute_tool_call()` that resolves model-emitted tool requests
-  through the existing ToolBus invocation path, preserving current
-  permission, timeout, metrics, and audit boundaries.
-- [ ] T024 [US4] Add ToolBus bridge coverage in
-  `crates/mister-smith-agents/tests/tool_bus_tests.rs` for export shape,
-  successful execution, permission denial, timeout behavior, and error
-  mapping.
-- [ ] T025 [US4] Add Gate 9 tool-calling coverage in
-  `crates/mister-smith-agents/tests/gate9_tests.rs` that exercises Planner ->
-  model -> ToolBus -> model -> Orchestrator flow with feature-gated
-  Anthropic and OpenAI provider selection.
+- [x] T022 [US4] Extend `crates/mister-smith-agents/src/tool_bus.rs` with
+  `ToolBus::to_tool_definitions()`.
+- [x] T023 [US4] Extend `crates/mister-smith-agents/src/tool_bus.rs` with
+  `ToolBus::execute_tool_call()` preserving permission, timeout, metrics, and audit boundaries.
+- [x] T024 [US4] Add ToolBus bridge coverage in
+  `crates/mister-smith-agents/tests/tool_bus_tests.rs`.
+- [x] T025 [US4] Add Gate 9 tool-calling coverage in
+  `crates/mister-smith-agents/tests/gate9_tests.rs` exercising Planner -> model -> ToolBus ->
+  model -> Orchestrator flow.
 
-**Checkpoint**: Tool export and execution stay inside the existing ToolBus boundary, and model-initiated tool use does not create a provider-specific execution path.
-
-**Blocker Reminder**: If permission or audit hardening is still unverified, `9.5` is blocked. Do not absorb those hardening items into Phase 9 implementation.
+**Checkpoint**: Tool calls route through ToolBus with lossless delivery on semantic stream.
 
 ---
 
-## Phase 6: Verification & Readiness
+## Subphase 9.6 — SLM-Default Routing Policy (User Story 6, Priority: P2) — NEW
 
-**Purpose**: Prove the full Phase 9 implementation without drifting into deferred scope.
+**Goal**: Implement cascade routing with SLM-default / LLM-fallback economics.
 
-- [ ] T026 [P] [US2] Run shared crate verification:
-  `cargo test -p mister-smith-llm` and
-  `cargo doc -p mister-smith-llm --no-deps`; fix any public API or rustdoc
-  issues in `crates/mister-smith-llm/src/`.
-- [ ] T027 [P] [US2] Run env-gated provider verification for
-  `crates/mister-smith-llm/tests/integration/anthropic_tests.rs` and
-  `crates/mister-smith-llm/tests/integration/openai_tests.rs`, run
-  `cargo test -p mister-smith-app`, and complete manual ChatGPT login or
-  status validation through Codex app-server, confirming identical public
-  contract usage across supported providers.
-- [ ] T028 [US3] Run feature-gated agent verification:
-  `cargo test -p mister-smith-agents --features llm`, including
-  `crates/mister-smith-agents/tests/role_tests.rs`, `team_tests.rs`,
-  `tool_bus_tests.rs`, and `gate9_tests.rs`.
-- [ ] T029 [US4] Run workspace hygiene checks:
-  `cargo clippy --workspace -- -D warnings`; ensure Phase 9 changes preserve
-  tool permission, testing, and explicit error-handling expectations from
-  `spec/core-architecture/coding-standards.md`.
-- [ ] T030 [US4] Update `CLAUDE.md` implementation status and workspace crate tree to reflect the completed `mister-smith-llm` phase once Gate 9 verification passes.
+### Implementation for User Story 6
+
+- [x] T051 [US6] Implement `CascadePolicy`, `CascadeTier`, and `ConfidenceSignal` types in
+  `crates/mister-smith-llm/src/router.rs` with cascade routing logic: attempt tiers in order,
+  evaluate confidence, escalate on rejection.
+- [x] T052 [US6] Add routing decision logging: `ModelEvent::RoutingDecision` emission for each
+  cascade attempt with tier label, confidence score, and escalation reason.
+- [x] T053 [US6] Add cascade routing tests in `crates/mister-smith-llm/tests/router_tests.rs`:
+  SLM attempt accepted when confidence >= threshold, LLM escalation when confidence < threshold,
+  final tier response returned when all tiers exhausted, max escalation limit honored.
+
+**Checkpoint**: Cascade routing attempts cheapest tier first, escalates based on confidence.
+
+---
+
+## Verification & Readiness
+
+- [x] T026 [P] [US2] Run shared crate verification: `cargo test -p mister-smith-llm` and
+  `cargo doc -p mister-smith-llm --no-deps`.
+- [x] T027 [P] [US2] Run env-gated provider verification for Anthropic and OpenAI integration
+  tests, run `cargo test -p mister-smith-app`, and complete manual ChatGPT validation.
+- [x] T028 [US3] Run feature-gated agent verification:
+  `cargo test -p mister-smith-agents --features llm`.
+- [x] T029 [US4] Run workspace hygiene checks: `cargo clippy --workspace -- -D warnings`.
+- [x] T030 [US4] Update `CLAUDE.md` implementation status and workspace crate tree to reflect
+  completed `mister-smith-llm` phase once Gate 9 verification passes.
 
 ---
 
@@ -281,43 +268,21 @@ behavior, stop and report a blocker instead of expanding Phase 9 scope.
 
 ### Subphase Dependencies
 
-- **9.1 (Phase 1)**: No Phase 9 dependencies. This is the blocking foundation.
-- **9.2 (Phase 2)**: Depends on `9.1`.
-- **9.3 (Phase 3)**: Depends on `9.1`.
-- **9.4 (Phase 4)**: Depends on `9.1` and the existing Phase 7 baseline in `mister-smith-agents`.
-- **9.5 (Phase 5)**: Depends on `9.2` or `9.3`, plus `9.4`.
-- **Verification (Phase 6)**: Depends on `9.1` through `9.5`.
-
-### Blocker-Sensitive Dependencies
-
-- `9.4` and `9.5` depend on existing Phase 7 seams remaining valid without silently pulling in Phase 7.5 hardening work.
-- Unresolved tool permission or audit wiring blocks `T023` through `T025`.
-- Unresolved heartbeat reception, supervisor delegation, or priority mailbox wiring can block `T020`, `T021`, or `T025` if the Gate 9 workflow cannot be validated honestly.
+- **9.1 (Core)**: No Phase 9 dependencies. DONE.
+- **9.2a (Router/Health/Budget)**: Depends on `9.1`.
+- **9.2b (Dual-Stream/ModelEvent/Envelope)**: Depends on `9.1`.
+- **9.3 (Providers)**: Depends on `9.1`. Partially DONE.
+- **9.4 (Agent Bridge)**: Depends on `9.1`, `9.2a`, `9.2b`, and Phase 7 baseline.
+- **9.5 (Tool Bridge)**: Depends on `9.2a`, `9.2b`, `9.4`.
+- **9.6 (SLM-Default)**: Depends on `9.2a`.
+- **Verification**: Depends on all subphases.
 
 ### Parallel Opportunities
 
-- `T003`, `T004`, `T005`, and `T006` can proceed in parallel after workspace scaffolding begins.
-- `T009` through `T014` can run as two parallel provider tracks after `9.1` stabilizes.
-- `T017`, `T018`, and `T019` can run in parallel once `T015` and `T016` establish the shared agent bridge boundary.
-- `T022` and `T024` can run in parallel after the ToolBus bridge API is defined.
-- `T026` and `T027` can run in parallel once the `mister-smith-llm` crate is implementation-complete.
-
----
-
-## Implementation Strategy
-
-### MVP First
-
-1. Complete `9.1` so the shared contract and deterministic mock behavior are stable.
-2. Land Anthropic and OpenAI behind the same public surface in `9.2` and `9.3`.
-3. Wire Planner-first provider-backed orchestration in `9.4`, then extend Critic and Executor.
-4. Finish ToolBus export and execution in `9.5`.
-5. Run Gate 9 verification only after blocker-sensitive Phase 7.5 dependencies have been checked and either cleared or reported.
-
-### Scope Discipline
-
-- Do not implement hook events or `llm.hooks.*` subjects.
-- Do not implement `LlmTaskOutputParser` routing.
-- Do not add Neural/AI Operations agents.
-- Do not add prompt-framework, RAG, guardrail, or non-MVP provider work.
-- Do not turn Phase 7.5 hardening into hidden Phase 9 implementation tasks.
+- `T031`, `T032`, `T033` can proceed in parallel after 9.1 (different files).
+- `T042`, `T043`, `T044` can proceed in parallel after 9.1 (different files).
+- `9.2a` and `9.2b` can proceed in parallel (no dependency between them).
+- `9.3` (remaining Anthropic work) can proceed in parallel with `9.2a`/`9.2b`.
+- `9.6` can proceed in parallel with `9.3` and `9.4` (only depends on `9.2a`).
+- `T017`, `T018`, `T019` can run in parallel once `T015`/`T016` establish the bridge.
+- `T026` and `T027` can run in parallel once implementation is complete.

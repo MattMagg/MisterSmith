@@ -138,10 +138,54 @@ pub enum LlmError {
 5. Unsupported capabilities return `LlmError::UnsupportedCapability` rather than silently no-oping.
 6. `MockProvider` implements the full contract without network access or credentials.
 
+## Router-Provider Relationship
+
+The `ModelRouter` sits above the `ModelProvider` layer. It selects a provider per-request based on
+routing policy, provider health, and budget constraints. The `ModelProvider` trait is unchanged —
+routing logic lives in the router, not in providers.
+
+```text
+Caller -> ModelRouter -> [routing decision] -> ModelProvider -> Provider API
+                      -> [health check]     -> HealthStatus / CircuitState
+                      -> [budget check]     -> BudgetNode (JetStream KV CAS)
+```
+
+### Routing Hints on CompletionRequest
+
+`CompletionRequest` gains an optional `routing_hint: Option<RoutingHint>` field that callers can
+use to express preferences (model tier, cost constraint, required capabilities). The `ModelRouter`
+consumes and strips this field before forwarding to the selected provider. Providers never see
+routing hints.
+
+```rust
+pub struct RoutingHint {
+    pub preferred_tier: Option<String>,
+    pub max_cost_tokens: Option<u64>,
+    pub required_capabilities: Vec<String>,
+}
+```
+
+### Two-Layer Streaming Architecture
+
+Providers emit raw `StreamChunk`/`ChunkDelta` (4 variants) at the provider-to-framework boundary.
+The framework's stream actors convert these to canonical `ModelEvent` items (28 variants) for
+internal consumption. This is a two-layer design:
+
+- **Layer 1 (Provider boundary)**: `StreamChunk` with `ChunkDelta::Text`, `ToolUseStart`,
+  `ToolUseInput`, `Stop` — raw, provider-normalized deltas
+- **Layer 2 (Framework internal)**: `ModelEvent` with lifecycle, text, tool-call, observability,
+  error, heartbeat, and unknown variants — canonical orchestration events
+
+The `ModelProvider::stream()` method continues to return `Stream<Item = Result<StreamChunk, LlmError>>`.
+The conversion to `ModelEvent` happens in the stream actor, not in the provider.
+
 ## Validation Requirements
 
 - Unit tests must exercise `complete`, `stream`, `embed`, and tool-calling paths through
   `MockProvider`.
-- Anthropic and OpenAI real-provider tests must be env-gated.
+- Anthropic, OpenAI, and Claude subscription real-provider tests must be env-gated.
 - Public call sites outside `mister-smith-llm` must not depend on provider-specific structs or
   enums.
+- Router tests must verify sub-millisecond routing overhead (excluding provider latency).
+- Budget enforcement tests must verify <1% overrun rate under concurrent CAS operations.
+- Circuit breaker tests must verify correct state transitions (Closed -> Open -> HalfOpen -> Closed).

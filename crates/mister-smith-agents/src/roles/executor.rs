@@ -59,12 +59,30 @@ pub enum ExecutorError {
 /// progress queries.
 pub struct ExecutorAgent {
     id: AgentId,
+    #[cfg(feature = "llm")]
+    router: Option<std::sync::Arc<mister_smith_llm::ModelRouter>>,
 }
 
 impl ExecutorAgent {
     /// Create a new `ExecutorAgent` with the given identity.
     pub fn new(id: AgentId) -> Self {
-        Self { id }
+        Self {
+            id,
+            #[cfg(feature = "llm")]
+            router: None,
+        }
+    }
+
+    /// Create a new `ExecutorAgent` with an LLM [`ModelRouter`] for AI-powered execution strategy.
+    #[cfg(feature = "llm")]
+    pub fn with_router(
+        id: AgentId,
+        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+    ) -> Self {
+        Self {
+            id,
+            router: Some(router),
+        }
     }
 }
 
@@ -84,6 +102,68 @@ impl Actor for ExecutorAgent {
             ExecutorMessage::ExecutePlan { plan } => {
                 state.executing = true;
                 state.steps_completed = 0;
+
+                // When the `llm` feature is enabled and a router is configured,
+                // ask the model to analyze the plan and suggest an execution strategy.
+                #[cfg(feature = "llm")]
+                if let Some(router) = &self.router {
+                    let result: Result<serde_json::Value, ExecutorError> = async {
+                        use mister_smith_llm::{ChatMessage, CompletionRequest, ContentBlock};
+
+                        let mut request = CompletionRequest::default();
+                        request.system = Some(
+                            "You are a task execution agent. Given a plan, analyze it and \
+                             suggest an execution strategy. Return a JSON object with 'status', \
+                             'strategy' (string), and 'estimated_steps' (number)."
+                                .to_string(),
+                        );
+                        request.messages = vec![ChatMessage::User {
+                            content: serde_json::json!({
+                                "plan": plan,
+                            }),
+                        }];
+
+                        let (response, _routing) = router
+                            .route_completion(request)
+                            .await
+                            .map_err(|e| ExecutorError::Internal(e.to_string()))?;
+
+                        // Extract text from the first text content block.
+                        let text = response
+                            .content
+                            .iter()
+                            .find_map(|block| match block {
+                                ContentBlock::Text { text } => Some(text.as_str()),
+                                _ => None,
+                            })
+                            .unwrap_or("");
+
+                        let mut strategy: serde_json::Value =
+                            serde_json::from_str(text).unwrap_or_else(|_| {
+                                serde_json::json!({
+                                    "status": "executing",
+                                    "raw_response": text,
+                                })
+                            });
+
+                        // Ensure the plan is included in the response.
+                        if let Some(obj) = strategy.as_object_mut() {
+                            obj.entry("status".to_string())
+                                .or_insert_with(|| serde_json::json!("executing"));
+                            obj.insert("plan".to_string(), plan.clone());
+                        }
+
+                        Ok(strategy)
+                    }
+                    .await;
+
+                    if let Ok(strategy) = result {
+                        return Ok(strategy);
+                    }
+                    // On error, fall through to the stub implementation below.
+                }
+
+                // Stub implementation — deterministic response without an LLM.
                 Ok(serde_json::json!({
                     "status": "executing",
                     "plan": plan,

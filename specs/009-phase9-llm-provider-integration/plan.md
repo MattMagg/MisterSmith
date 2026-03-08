@@ -1,30 +1,31 @@
 # Implementation Plan: Phase 9 — LLM Provider Integration
 
-**Branch**: `009-phase9-llm-provider-integration` | **Date**: 2026-03-06 | **Spec**:
+**Branch**: `009-phase9-llm-provider-integration` | **Date**: 2026-03-07 (revised) | **Spec**:
 [spec.md](spec.md)
 **Input**: Feature specification from `/specs/009-phase9-llm-provider-integration/spec.md`
 
 ## Summary
 
-Phase 9 adds provider-neutral LLM connectivity without breaking Mister Smith's model-agnostic
-architecture. The implementation centers on a new `mister-smith-llm` crate that owns the
-`ModelProvider` trait, unified completion and streaming types, deterministic mock behavior, and
-feature-gated Anthropic and OpenAI-family adapters. Existing agent orchestration remains the system
-boundary: the `mister-smith-agents` crate gains an optional `llm` feature for Planner, Critic, and
-Executor, while tool calling continues to flow through the current `ToolBus` rather than a
-provider-specific execution path.
+Phase 9 adds provider-neutral LLM connectivity and three research-driven architectural
+capabilities: a two-plane router with budget enforcement (Finding #8), SLM-default/LLM-fallback
+routing (Finding #9), and dual-stream formalization with the `ModelEvent` enum (Finding #13).
 
-The OpenAI-family work deliberately splits into two backends behind the same trait: `OpenAiProvider`
-for standard API-key access to the OpenAI API and `OpenAiChatGptProvider` for ChatGPT subscription
-access through the official Codex app-server browser-login and turn protocol. That keeps OpenAI API
-auth and ChatGPT auth as separate backends while avoiding a second OAuth, callback, or token-store
-implementation inside Mister Smith.
+The implementation centers on a new `mister-smith-llm` crate that owns the `ModelProvider` trait,
+unified completion and streaming types, deterministic mock behavior, and feature-gated provider
+adapters. The `ModelRouter` layer sits above providers to handle routing decisions, circuit
+breaking, and budget enforcement. Stream actors convert raw `StreamChunk` items into canonical
+`ModelEvent` items for dual-stream delivery.
 
-This plan fixes the traceability gap called out in the 2026-03-05 architectural grounding audit by
-anchoring every major decision to canonical `spec/` sources. It also preserves the approved Phase 9
-subphases `9.1` through `9.5`, keeps Phase 7.5 hardening visible as prerequisite or blocker work,
-and encodes Gate 9 as the real-provider Planner -> Orchestrator -> Worker proof point required by
-`ROADMAP.md`.
+Existing agent orchestration remains the system boundary: the `mister-smith-agents` crate gains an
+optional `llm` feature for Planner, Critic, and Executor, while tool calling continues to flow
+through the current `ToolBus`.
+
+**Partial implementation status**: Core types, `MockProvider`, `OpenAiProvider`, and
+`ClaudeSubscriptionProvider` are already implemented (tasks T001-T008, T012-T014A complete).
+The spec originally planned `AnthropicProvider` (API-key auth) but the codebase implemented
+`ClaudeSubscriptionProvider` (OAuth Bearer auth) instead. Both are valid — the revision
+acknowledges `ClaudeSubscriptionProvider` as implemented and retains `AnthropicProvider` as
+planned future work.
 
 ## Technical Context
 
@@ -32,23 +33,15 @@ and encodes Gate 9 as the real-provider Planner -> Orchestrator -> Worker proof 
 - **Primary Dependencies**: existing workspace crates plus `reqwest` 0.12+ for provider APIs,
   `tokio`/`futures` for async streaming and process I/O, `serde`/`serde_json`, `async-trait`,
   `webbrowser` for app-driven ChatGPT login UX
-- **Storage**: no new Mister Smith persistence layer inside `mister-smith-llm`; Codex app-server
-  owns managed ChatGPT auth state while existing PostgreSQL and JetStream integrations remain
-  indirect dependencies for Gate 9 orchestration and ToolBus audit boundaries
-- **Testing**: `cargo test`, deterministic mock-provider unit tests, env-gated Anthropic and
-  OpenAI API integration tests, stubbed Codex app-server client tests, manual ChatGPT auth and turn
-  validation, Gate 9 orchestration validation
+- **Storage**: JetStream KV for budget enforcement (CAS), health state, and control-plane
+  configuration; no new PostgreSQL layer inside `mister-smith-llm`
+- **Testing**: `cargo test`, deterministic mock-provider unit tests, env-gated provider
+  integration tests, router/budget/circuit-breaker tests, dual-stream tests, Gate 9 validation
 - **Target Platform**: Linux server runtime, macOS development parity
-- **Project Type**: new workspace library crate plus feature-gated integration into existing library
-  crate
-- **Performance Goals**: preserve streaming order, keep provider-specific serialization outside
-  public call sites, and keep model tool-calling inside existing timeout and audit boundaries
-- **Constraints**: no hook-event system, no `LlmTaskOutputParser`, no Neural/AI Operations
-  implementation, no provider-specific public types, and no new tool-execution path outside
-  `ToolBus`
-- **Scale/Scope**: 1 new crate, 3 provider adapters (Anthropic, OpenAI API-key, OpenAI ChatGPT),
-  1 deterministic mock provider, 1 optional agents feature, 1 explicit app auth surface,
-  Planner/Critic/Executor bridge, and ToolBus JSON Schema export and execution bridge
+- **Performance Goals**: sub-millisecond data-plane routing overhead, <1% budget overrun rate
+  via CAS, lossless tool-call delivery on semantic stream
+- **Constraints**: no learned routing (RouteLLM), no step-level PRMs, no guided decoding, no
+  local model inference, no disaggregated serving
 
 ## Constitution Check
 
@@ -56,16 +49,13 @@ and encodes Gate 9 as the real-provider Planner -> Orchestrator -> Worker proof 
 
 | Principle | Status | Evidence |
 | ----------- | -------- | ---------- |
-| I. Canonical Single Source | PASS | Core keeps canonical IDs and shared errors, ToolBus stays in agents, and the plan cites the required core architecture docs directly. |
-| II. Spec-First Design | PASS | `specs/009-phase9-llm-provider-integration/spec.md` defines scope, clarifications, FRs, SCs, and deferred work before any implementation task breakdown. |
-| III. Phase-Gated Build Order | PASS | The roadmap places Phase 9 after Phases 1-7, and the deviation report keeps Phase 7.5 hardening ahead of risky 9.4 and 9.5 work. |
-| IV. Model-Agnostic Architecture | PASS | Anthropic, OpenAI API-key, and ChatGPT-backed access sit behind `ModelProvider`, with typed `LlmError` values instead of provider-specific leakage. |
-| V. Erlang/OTP-Style Fault Tolerance | PASS | The plan extends `AgentRuntime`, `Orchestrator`, and `ToolBus` rather than replacing supervision or mailbox boundaries defined by prior phases. |
-| VI. Evidence-Based Validation | PASS | Validation uses mock contract tests, env-gated provider integrations, ToolBus round-trip checks, and Gate 9 orchestration tests with blocker reporting. |
-| VII. Explicit Dependency Management | PASS | Workspace and crate changes are enumerated below: new crate member, provider HTTP dependency, feature flags, and touched core and agent files. |
-
-**Constitution posture**: No amendment is justified. Phase 9 fits the existing constitution, and the
-main correction is better traceability, not new governance.
+| I. Canonical Single Source | PASS | Core keeps canonical IDs and shared errors, ToolBus stays in agents, router lives in llm crate. |
+| II. Spec-First Design | PASS | Spec defines scope, research grounding, FRs, SCs, and deferred work. |
+| III. Phase-Gated Build Order | PASS | Phase 9 follows Phases 1-8, research findings are phased appropriately. |
+| IV. Model-Agnostic Architecture | PASS | Providers sit behind `ModelProvider`, router is provider-neutral, cascade policy is model-agnostic. |
+| V. Erlang/OTP-Style Fault Tolerance | PASS | Stream actors use OTP supervision, circuit breakers handle provider failure, cascade provides escalation. |
+| VI. Evidence-Based Validation | PASS | Three-tier validation plus router/budget/dual-stream specific tests. |
+| VII. Explicit Dependency Management | PASS | New entities and dependencies enumerated, MessageEnvelope changes are backward-compatible. |
 
 ## Project Structure
 
@@ -73,338 +63,314 @@ main correction is better traceability, not new governance.
 
 ```text
 specs/009-phase9-llm-provider-integration/
-├── spec.md                     # Feature specification
-├── plan.md                     # This file
-├── research.md                 # Phase 0 decisions and rationale
-├── data-model.md               # Phase 1 entity model
-├── quickstart.md               # Validation and usage flow
-├── contracts/                  # Phase 1 public contracts
-│   ├── agent-llm-bridge.md     # Agents feature-gated LLM integration contract
-│   ├── model-provider.md       # Provider-neutral LLM interface contract
-│   └── tool-calling-bridge.md  # ToolBus <-> LLM tool-calling contract
-└── tasks.md                    # Phase 2 output (/speckit.tasks)
++-- spec.md                     # Feature specification (revised 2026-03-07)
++-- plan.md                     # This file (revised 2026-03-07)
++-- research.md                 # Research grounding (revised 2026-03-07)
++-- data-model.md               # Entity model (revised 2026-03-07)
++-- quickstart.md               # Validation and usage flow
++-- contracts/                  # Public contracts
+|   +-- agent-llm-bridge.md     # Agents feature-gated LLM integration contract
+|   +-- model-provider.md       # Provider-neutral LLM interface contract
+|   +-- tool-calling-bridge.md  # ToolBus <-> LLM tool-calling contract
++-- tasks.md                    # Task breakdown
++-- analyze.md                  # Cross-artifact analysis
 ```
 
 ### Source Code (repository root)
 
 ```text
-Cargo.toml                                  # Add workspace member + provider HTTP dependency
+Cargo.toml                                  # Workspace member + dependencies
 
 crates/mister-smith-core/
-├── src/error.rs                            # Add canonical LlmError hierarchy
-└── src/lib.rs                              # Re-export LlmError for workspace consumers
++-- src/error.rs                            # Canonical LlmError hierarchy (done)
++-- src/lib.rs                              # Re-export LlmError (done)
 
 crates/mister-smith-llm/
-├── Cargo.toml                              # New crate manifest and feature flags
-├── src/
-│   ├── lib.rs                              # Crate docs and re-exports
-│   ├── app_server.rs                       # Codex app-server JSON-RPC client + protocol types
-│   ├── config.rs                           # Provider/model configuration
-│   ├── provider.rs                         # ModelProvider trait
-│   ├── streaming.rs                        # StreamChunk and parser helpers
-│   ├── tool_schema.rs                      # ToolDefinition, ToolCall, ToolResult
-│   ├── types.rs                            # Requests, responses, messages, capabilities
-│   ├── mock.rs                             # Deterministic MockProvider
-│   └── providers/
-│       ├── mod.rs
-│       ├── anthropic.rs                    # #[cfg(feature = "anthropic")]
-│       ├── openai.rs                       # #[cfg(feature = "openai")]
-│       └── openai_chatgpt.rs               # #[cfg(feature = "openai-chatgpt")]
-└── tests/
-    ├── mock_tests.rs                       # Contract tests for MockProvider
-    ├── types_tests.rs                      # Unified type serialization and invariants
-    └── integration/
-        ├── anthropic_tests.rs              # Env-gated real-provider tests
-        └── openai_tests.rs                 # Env-gated real-provider tests
++-- Cargo.toml                              # Crate manifest and feature flags (done)
++-- src/
+|   +-- lib.rs                              # Crate docs and re-exports (done)
+|   +-- app_server.rs                       # Codex app-server client (done)
+|   +-- config.rs                           # Provider/model configuration (done)
+|   +-- provider.rs                         # ModelProvider trait (done)
+|   +-- streaming.rs                        # StreamChunk and parser helpers (done)
+|   +-- tool_schema.rs                      # ToolDefinition, ToolCall, ToolResult (done)
+|   +-- types.rs                            # Requests, responses, messages, capabilities (done)
+|   +-- mock.rs                             # Deterministic MockProvider (done)
+|   +-- router.rs                           # ModelRouter, RoutingPolicy, CascadePolicy (NEW)
+|   +-- budget.rs                           # BudgetNode, BudgetPolicy, JetStream KV CAS (NEW)
+|   +-- health.rs                           # HealthStatus, CircuitState, circuit breaker (NEW)
+|   +-- model_event.rs                      # ModelEvent enum (28 variants) (NEW)
+|   +-- dual_stream.rs                      # Dual-stream actor, StreamClass, backpressure (NEW)
+|   +-- providers/
+|       +-- mod.rs                          # (done)
+|       +-- anthropic.rs                    # #[cfg(feature = "anthropic")] (planned)
+|       +-- openai.rs                       # #[cfg(feature = "openai")] (done)
+|       +-- openai_chatgpt.rs              # #[cfg(feature = "openai-chatgpt")] (done)
+|       +-- claude_subscription.rs         # #[cfg(feature = "claude-subscription")] (done)
++-- tests/
+    +-- mock_tests.rs                       # Contract tests (done)
+    +-- types_tests.rs                      # Serialization tests (done)
+    +-- router_tests.rs                     # Router, cascade, health tests (NEW)
+    +-- budget_tests.rs                     # Budget CAS, overrun tests (NEW)
+    +-- model_event_tests.rs               # ModelEvent serde, forward compat tests (NEW)
+    +-- dual_stream_tests.rs               # Dual-stream backpressure tests (NEW)
+    +-- integration/
+        +-- anthropic_tests.rs              # Env-gated (planned)
+        +-- openai_tests.rs                 # Env-gated (done)
+
+crates/mister-smith-transport/
++-- src/envelope.rs                         # MessageEnvelope: add plane, stream_class (NEW)
 
 crates/mister-smith-app/
-├── Cargo.toml                              # Add `mister-smith-llm` + browser-launch dependency
-└── src/
-    ├── main.rs                             # Add `run` default and `auth openai-chatgpt` subcommands
-    └── config.rs                           # Preserve current config loading for runtime entrypoint
++-- src/main.rs                             # Auth subcommands (done)
 
 crates/mister-smith-agents/
-├── Cargo.toml                              # Optional llm feature and new dependency
-├── src/agent.rs                            # Runtime-level model attachment boundary
-├── src/errors.rs                           # Bridge/provider/tool-call integration errors
-├── src/lib.rs                              # Feature-gated re-exports
-├── src/orchestrator.rs                     # Consume structured decomposition without provider leakage
-├── src/tool_bus.rs                         # to_tool_definitions() + execute_tool_call()
-└── src/roles/
-    ├── planner.rs                          # Provider-backed decomposition path
-    ├── critic.rs                           # Provider-backed evaluation path
-    └── executor.rs                         # Provider-backed execution/tool loop path
++-- Cargo.toml                              # Optional llm feature
++-- src/agent.rs                            # Model attachment boundary
++-- src/orchestrator.rs                     # Consume structured Planner output
++-- src/tool_bus.rs                         # to_tool_definitions() + execute_tool_call()
++-- src/roles/
+    +-- planner.rs                          # Provider-backed decomposition
+    +-- critic.rs                           # Provider-backed evaluation
+    +-- executor.rs                         # Provider-backed execution/tool loop
 ```
-
-**Structure Decision**: Use one new crate, `mister-smith-llm`, instead of splitting providers into
-multiple crates or placing provider logic directly into `mister-smith-agents`. This matches the
-workspace's one-domain-per-crate pattern, keeps provider dependencies optional, and preserves the
-existing agent crate as an orchestration boundary rather than an API-integration bucket.
 
 ## Design Decisions
 
 ### D1: Single `mister-smith-llm` Crate With Feature-Gated Providers
 
-**Decision**: Add one new crate that owns the provider-neutral contract, with `anthropic`,
-`openai`, and `openai-chatgpt` feature flags for real providers and an always-on `MockProvider`.
+**Decision**: One crate owns the provider-neutral contract, with feature flags for real providers.
+**Status**: Implemented and confirmed.
 
-**Rationale**: `docs/plans/2026-03-05-llm-provider-integration-design.md:23-35` already approves
-this shape, and it mirrors how transport abstractions and implementations are separated elsewhere in
-the workspace.
+### D1a: ChatGPT Subscription Access Uses Codex App-Server
 
-### D1a: ChatGPT Subscription Access Uses Codex App-Server, Not A Second OAuth Stack
-
-**Decision**: Implement `OpenAiChatGptProvider` and the corresponding app auth commands as a thin
-client over Codex app-server's JSON-RPC protocol instead of building browser login, localhost
-callback handling, token refresh, and token persistence directly into Mister Smith.
-
-**Rationale**: The official Codex docs already define `account/login/start`, `account/read`,
-`account/login/completed`, `account/updated`, `thread/start`, and `turn/start` as the supported
-browser-login and turn-execution surface. Re-implementing OAuth and local token storage in Mister
-Smith would duplicate the platform's auth machinery, create a second source of truth for session
-state, and increase maintenance risk without improving the public contract.
+**Decision**: `OpenAiChatGptProvider` is a thin client of Codex app-server's JSON-RPC protocol.
+**Status**: Implemented and confirmed.
 
 ### D2: `LlmError` Lives In `mister-smith-core`
 
-**Decision**: Add `LlmError` to `crates/mister-smith-core/src/error.rs` and re-export it from
-`crates/mister-smith-core/src/lib.rs`; `mister-smith-llm` re-exports the canonical type.
+**Decision**: `LlmError` in `crates/mister-smith-core/src/error.rs`, re-exported from llm crate.
+**Status**: Implemented and confirmed.
 
-**Rationale**: `crates/mister-smith-core/src/error.rs` is already the canonical home for
-domain-level errors like `ToolError`, `SecurityError`, and `PersistenceError`. Keeping `LlmError`
-there avoids a second top-level error taxonomy.
+### D3: Capability Normalization, Not Lowest-Common-Denominator
 
-### D3: Capability Parity Means Normalization, Not Lowest-Common-Denominator
+**Decision**: Unified types plus `ModelCapabilities`; unsupported behavior returns typed errors.
+**Status**: Implemented and confirmed.
 
-**Decision**: Model parity is expressed through unified request and response types plus
-`ModelCapabilities`. Unsupported provider or model behaviors surface as typed errors instead of
-forcing the public API down to the least-capable backend.
+### D4: Agent Bridge Stops At Planner, Critic, Executor
 
-**Rationale**: The clarified spec explicitly rejects the idea that every configured model must
-support every feature. Gate 9 only requires the same provider-neutral workflow to succeed on
-supported Anthropic and OpenAI configurations.
+**Decision**: Feature-gated LLM bridge extends existing role seams.
+**Status**: Planned, not yet implemented.
 
-### D4: Agent Bridge Scope Stops At Planner, Critic, Executor, and Existing Orchestrator Seams
+### D5: Tool Calling Through ToolBus Only
 
-**Decision**: Add a feature-gated LLM bridge to `mister-smith-agents` that extends Planner, Critic,
-and Executor behavior and lets the Orchestrator consume structured decomposition results through its
-current scheduler-driven flow.
+**Decision**: `ToolBus::to_tool_definitions()` and `execute_tool_call()` are the only bridge.
+**Status**: Planned, not yet implemented.
 
-**Rationale**: `crates/mister-smith-agents/src/orchestrator.rs` already owns decomposition,
-assignment, and aggregation flow, while the current role files are intentionally thin. Phase 9 makes
-those roles provider-backed without rewriting Router, Memory, Supervisor, heartbeat handling, or
-mailbox architecture.
+### D5a: ChatGPT Provider Scope Stops At Completion And Streaming
 
-### D5: Tool Calling Must Stay Inside The Existing ToolBus Boundary
+**Decision**: Tool calling and embeddings surface as `UnsupportedCapability` for ChatGPT.
+**Status**: Implemented and confirmed.
 
-**Decision**: Implement `ToolBus::to_tool_definitions()` and `ToolBus::execute_tool_call()` as the
-only bridge between model tool calls and framework tools.
+### D6: Phase 7.5 Hardening Visible As Blockers
 
-**Rationale**: `crates/mister-smith-agents/src/tool_bus.rs` is already the central registry. Both
-`spec/core-architecture/async-patterns.md:2164-2315` and
-`specs/007-phase7-agent-system/contracts/tool-bus.md:50-89` require permission checks, timeout
-enforcement, and metrics or audit behavior at that boundary.
+**Decision**: Security, router, memory, heartbeat, supervisor, mailbox hardening are blockers.
+**Status**: Active. Security items now have dedicated Phase 9.1 spec.
 
-### D5a: ChatGPT Provider Scope Stops At Completion And Streaming In Phase 9
+### D7: Two-Plane Router Architecture (NEW — Finding #8)
 
-**Decision**: Keep `OpenAiChatGptProvider` limited to completion and streaming in Phase 9 and
-surface tool calling plus embeddings as typed unsupported capabilities.
+**Decision**: Separate microsecond data plane (NATS request-reply, ~50us) from control plane
+(JetStream KV watches). The `ModelRouter` executes routing decisions in the data plane using
+local in-memory state refreshed by KV watches.
 
-**Rationale**: The documented Codex app-server browser-login flow is the correct transport boundary
-for ChatGPT subscription access, but `dynamicTools` and `item/tool/call` remain experimental and do
-not cleanly fit the current provider-neutral tool loop without widening public contracts or hiding a
-second execution boundary inside the provider.
+**Rationale**: Converged across all three R3 industry reports, validated by R4 academic surveys,
+and reinforced by production gateways. No competing framework separates data plane from control
+plane. Source: `consolidated/01-model-routing-and-cost-optimization.md`.
 
-### D6: Phase 7.5 Hardening Remains Visible As Blockers, Not Scope
+### D8: SLM-Default / LLM-Fallback Routing (NEW — Finding #9)
 
-**Decision**: Security integration, router balancing, memory metadata, heartbeat receiving,
-supervisor delegation, and priority mailbox wiring remain prerequisite or blocker work for Phase 9.4
-and 9.5 when unresolved.
+**Decision**: Default routing policy starts with the cheapest capable model and escalates based
+on configurable confidence thresholds. `CascadePolicy` with ordered tiers.
 
-**Rationale**: `docs/2026-03-05-implementation-deviation-report.md:308-318` and
-`spec.md:66-113` are explicit that these items must not be silently absorbed into the feature.
+**Rationale**: 10-100x cost reduction for structured tasks. Liu (2025, 106 citations) showed
+0.5B outperforms GPT-4o. Guided decoding and local inference are Phase 10+ scope — Phase 9
+implements the cascade policy and escalation logic only.
+
+### D9: Dual-Stream with ModelEvent (NEW — Finding #13)
+
+**Decision**: Emit two parallel streams from the same canonical event log — lossless semantic
+(JetStream) and best-effort UI (NATS Core). `ModelEvent` enum (28 variants, `#[non_exhaustive]`,
+`#[serde(other)]`) is the canonical internal event type.
+
+**Rationale**: All three R3 source reports independently conclude streaming must be a typed event
+pipeline. The dual-stream design decouples correctness from presentation. No competing framework
+distinguishes lossless orchestration events from lossy UI events.
+
+**Critical design**: `StreamChunk`/`ChunkDelta` (4 variants) = raw provider boundary.
+`ModelEvent` (28 variants) = canonical internal event type. Two layers, not a replacement.
+Providers emit `StreamChunk`; stream actors convert to `ModelEvent`.
+
+### D10: Budget Enforcement via JetStream KV CAS (NEW — Finding #8)
+
+**Decision**: Hierarchical budget tracking using JetStream KV CAS with reserve-before-send /
+reconcile-after-completion pattern.
+
+**Rationale**: All three R3 reports converge on budget enforcement in the router. CAS-based
+enforcement demonstrates <1% overrun rate. Budget checks execute in the data plane as
+constant-time in-memory lookups, refreshed by control-plane updates.
 
 ## Dependency Changes
 
 ### Workspace Manifest
 
-- Add `"crates/mister-smith-llm"` to the `[workspace].members` list in `Cargo.toml`
-- Add `reqwest` 0.12+ with JSON, streaming, and rustls TLS support to `[workspace.dependencies]`
-- Add `webbrowser` for CLI-driven ChatGPT login UX in `mister-smith-app`
+- `"crates/mister-smith-llm"` is already in `[workspace].members`
+- `reqwest` 0.12+ already in `[workspace.dependencies]`
+- No new workspace-level dependencies for router/budget/dual-stream (uses existing `async-nats`)
 
 ### Existing Crates Touched
 
-- `crates/mister-smith-core`: add and re-export `LlmError`
+- `crates/mister-smith-core`: `LlmError` already added (T003 complete)
+- `crates/mister-smith-transport`: add `MessagePlane`, `StreamClass` to `MessageEnvelope` (NEW)
 - `crates/mister-smith-agents`: add optional `llm` feature and `mister-smith-llm` dependency
-- `crates/mister-smith-app`: add auth subcommands that call Codex app-server for ChatGPT login and
-  account status
-
-### New Crate Features
-
-```toml
-[features]
-default = []
-anthropic = ["dep:reqwest"]
-openai = ["dep:reqwest"]
-openai-chatgpt = []
-all-providers = ["anthropic", "openai", "openai-chatgpt"]
-```
-
-The Phase 9 spec deliberately excludes non-MVP providers, so the plan omits Google and Ollama even
-though the original design doc discussed them as future extensions.
-
-## Integration Points
-
-### Canonical Architecture Anchors
-
-- `spec/data-management/agent-orchestration.md:2467-2665`
-  - Boundary reference for LLM coordination concepts and ToolBus patterns
-- `spec/data-management/message-schemas.md:1069-1265`
-  - Deferred hook-event schema reference that must remain out of scope
-- `spec/agent-domains/SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md:453-500`
-  - Deferred Neural/AI Operations scope reference
-- `spec/core-architecture/type-definitions.md:48-153`
-  - Canonical IDs, agent enums, priority levels, and top-level error pattern
-- `spec/core-architecture/type-definitions.md:503-523`
-  - Agent context includes transport and tool-registry access
-- `spec/core-architecture/async-patterns.md:1939-2315`
-  - Agent-as-tool and ToolBus behavior that Phase 9 must extend instead of replace
-- `spec/core-architecture/coding-standards.md:492-620`
-  - Typed error hierarchy and propagation expectations
-- `spec/core-architecture/coding-standards.md:1596-1799`
-  - Tool timeout, permission, audit, and testing expectations for agent integrations
-
-### Current Code Seams
-
-- `crates/mister-smith-core/src/traits.rs:106-149`
-  - Canonical `Tool` and `Agent` traits already define JSON-schema and JSON-value boundaries
-- `crates/mister-smith-agents/src/agent.rs:41-208`
-  - Runtime wrapper where optional model attachment can remain feature-gated
-- `crates/mister-smith-agents/src/orchestrator.rs:30-141`
-  - Existing decomposition and aggregation seam for structured Planner output
-- `crates/mister-smith-agents/src/tool_bus.rs:31-159`
-  - Current registry, discovery, and metrics boundary that Phase 9 extends
-- `crates/mister-smith-agents/src/roles/planner.rs:10-109`
-  - Current thin Planner role to enrich via provider-backed decomposition
-- `crates/mister-smith-agents/src/roles/critic.rs:10-102`
-  - Current thin Critic role to enrich via provider-backed evaluation
-- `crates/mister-smith-agents/src/roles/executor.rs:10-118`
-  - Current thin Executor role to enrich via provider-backed execution/tool flow
+- `crates/mister-smith-app`: auth subcommands (T014 complete)
 
 ## Subphase Execution Plan
 
-### 9.1 Core Types and MockProvider
+### 9.1 Core Types and MockProvider (DONE)
+
+**Status**: Complete. Tasks T001-T008 implemented.
+
+**Outputs**: Compilable `mister-smith-llm` crate with `ModelProvider` trait, unified types,
+`MockProvider`, contract tests.
+
+### 9.2a Two-Plane Router + Health + Budget (NEW)
 
 **Scope**:
-
-- create `mister-smith-llm`
-- define `ModelProvider`, unified types, `ModelCapabilities`, and `LlmError` integration
-- implement deterministic `MockProvider`
+- `ModelRouter` with data-plane routing using local in-memory state
+- `RoutingPolicy` enum (RoundRobin, CostOptimized, CapabilityMatched, Cascade)
+- `HealthStatus` and `CircuitState` for health-aware circuit breakers
+- `BudgetNode` and `BudgetPolicy` with JetStream KV CAS enforcement
+- Control-plane KV watch subscription for configuration updates
 
 **Outputs**:
+- Router tests (sub-millisecond overhead)
+- Circuit breaker state transition tests
+- Budget CAS tests (<1% overrun rate)
 
-- compilable crate with public re-exports
-- contract tests for completion, streaming, embeddings, and tool-calling via mock behavior
+- **Depends on**: 9.1 (core types)
+- **Must not absorb**: learned routing (RouteLLM), step-level PRMs
 
-- **Depends on**: Phase 1 core types only
-- **Must not absorb**: provider-specific public types, hook events, role hardening
-
-### 9.2 Anthropic Provider
+### 9.2b Dual-Stream + ModelEvent + MessageEnvelope (NEW)
 
 **Scope**:
-
-- feature-gated `AnthropicProvider`
-- completion, streaming, embeddings, and tool use through unified types
-- map provider failures into `LlmError`
+- `ModelEvent` enum (28 variants, `#[non_exhaustive]`, `#[serde(other)]`)
+- Stream actor converting `StreamChunk` to `ModelEvent`
+- Dual-stream delivery (semantic via JetStream, UI via NATS Core)
+- `BackpressurePolicy` per event class
+- `MessageEnvelope` additions: `plane: Option<MessagePlane>`,
+  `stream_class: Option<StreamClass>` with `#[serde(default)]`
 
 **Outputs**:
+- `ModelEvent` serde and forward compatibility tests
+- Dual-stream backpressure tests
+- `MessageEnvelope` backward compatibility tests
 
-- env-gated Anthropic integration tests
-- no call-site changes outside provider selection
+- **Depends on**: 9.1 (core types), `mister-smith-transport` (MessageEnvelope)
+- **Must not absorb**: streaming content monitors, disaggregated serving
+
+### 9.3 Providers (PARTIALLY DONE)
+
+**Status**: `OpenAiProvider` (T012-T013) and `ClaudeSubscriptionProvider` (T014-T014A) are
+implemented. `AnthropicProvider` (API-key auth via Anthropic Messages API) is planned.
+
+**Scope**:
+- Feature-gated `AnthropicProvider` for API-key access
+- Feature-gated `OpenAiChatGptProvider` for ChatGPT subscription access through Codex app-server
+- `mister-smith-app auth openai-chatgpt login` and `status` (done)
+
+**Outputs**:
+- Env-gated Anthropic integration tests
+- Stubbed Codex app-server client tests
 
 - **Depends on**: 9.1
-- **Must not absorb**: Anthropic-specific orchestration logic or public response types
-
-### 9.3 OpenAI Providers
-
-**Scope**:
-
-- feature-gated `OpenAiProvider` for API-key access
-- feature-gated `OpenAiChatGptProvider` for ChatGPT subscription access through Codex app-server
-- `mister-smith-app auth openai-chatgpt login` and `status`
-- completion and streaming parity for the ChatGPT-backed path, with typed unsupported-capability
-  behavior for embeddings and tool calling
-
-**Outputs**:
-
-- env-gated OpenAI API integration tests
-- stubbed Codex app-server client tests plus manual ChatGPT auth and turn or tool validation
-- shared request and response semantics for supported capabilities
-
-- **Depends on**: 9.1
-- **Must not absorb**: OpenAI-specific orchestration logic, custom OAuth or token storage, or
-  alternate public request types
+- **Must not absorb**: additional providers, provider-specific orchestration
 
 ### 9.4 Agent-LLM Bridge
 
 **Scope**:
-
-- add the `llm` feature to `mister-smith-agents`
-- attach a selected `ModelProvider` to Planner, Critic, and Executor paths
-- keep Orchestrator provider-neutral while consuming structured model output
+- Add the `llm` feature to `mister-smith-agents`
+- Attach `ModelProvider` (via `ModelRouter`) to Planner, Critic, and Executor
+- Orchestrator consumes structured model output
+- Dual-stream handling in bridge (semantic stream for orchestration, UI stream optional)
+- Budget enforcement interface (router handles it, bridge observes routing decisions)
 
 **Outputs**:
+- Provider-backed Planner decomposition
+- Provider-backed Critic evaluation and Executor action flow
+- Same orchestration surface for all providers
 
-- provider-backed Planner decomposition
-- provider-backed Critic evaluation and Executor action flow
-- same orchestration surface for Anthropic, OpenAI API-key access, and supported OpenAI
-  ChatGPT-backed flows
-
-- **Depends on**: 9.1 and Phase 7 baseline
-- **Blocker sensitivity**: unresolved Phase 7.5 security, supervisor, heartbeat, or mailbox
-  hardening must stay visible as blockers
+- **Depends on**: 9.1, 9.2a, 9.2b, and Phase 7 baseline
+- **Blocker sensitivity**: unresolved Phase 7.5 security items now addressed by Phase 9.1 spec
 
 ### 9.5 Tool Calling Bridge
 
 **Scope**:
-
-- export registered tools as unified tool definitions
-- execute model-emitted tool calls through the existing ToolBus
-- round-trip tool results back into provider-neutral completion flow
+- `ToolBus::to_tool_definitions()` — export as unified definitions
+- `ToolBus::execute_tool_call()` — dispatch through existing ToolBus
+- Tool-call events are lossless in dual-stream backpressure matrix
+- Tool calls route through `ModelRouter` data plane
 
 **Outputs**:
+- Tool export and execution tests
+- Gate 9 tool-calling round-trip coverage
+- Lossless tool-call delivery under backpressure
 
-- `ToolBus::to_tool_definitions()`
-- `ToolBus::execute_tool_call()`
-- model -> ToolBus -> model round-trip tests
+- **Depends on**: 9.2a (router), 9.2b (dual-stream), 9.4 (bridge)
+- **Blocker sensitivity**: unresolved permission or audit hardening is a blocker
 
-- **Depends on**: 9.2 or 9.3, plus 9.4
-- **Blocker sensitivity**: unresolved permission or audit hardening remains a blocker, not feature
-  scope
+### 9.6 SLM-Default Routing Policy Integration (NEW)
+
+**Scope**:
+- `CascadePolicy` configuration with ordered tiers
+- Confidence-based escalation logic (`ConfidenceSignal`)
+- Routing decision logging for observability
+- Integration with `ModelRouter` cascade routing mode
+
+**Outputs**:
+- Cascade routing tests (SLM attempt -> LLM escalation)
+- Confidence threshold tests
+- Routing decision observability
+
+- **Depends on**: 9.2a (router)
+- **Must not absorb**: guided decoding (XGrammar/Outlines), local model inference
 
 ## Blockers and Deferred Work
 
 ### Visible Phase 7.5 Dependencies
 
-- Security integration for agent messaging, tool permissions, and audit logging
-- Router balancing strategies (`round-robin`, `least-loaded`)
-- Memory metadata, timestamps, versions, and access counts
-- Heartbeat receiver and failure detection
-- Supervisor delegation to Phase 3 `SupervisedSystem`
-- Priority mailbox wiring
+- Security integration for agent messaging, tool permissions, and audit logging — now addressed
+  by Phase 9.1 spec at `specs/011-phase9.1-security-hardening/`
+- Router balancing strategies (`round-robin`, `least-loaded`) — partially addressed by
+  `ModelRouter` in 9.2a
+- Memory metadata, timestamps, versions, and access counts — remains deferred
+- Heartbeat receiver and failure detection — remains deferred
+- Supervisor delegation to Phase 3 `SupervisedSystem` — remains deferred
+- Priority mailbox wiring — remains deferred
 
 ### Explicit Deferred Scope
 
-- Hook event system and `llm.hooks.*` subjects
-- `LlmTaskOutputParser` regex routing
-- Neural/AI Operations domain work
-- Prompt framework or prompt-template DSL
-- RAG retrieval pipeline
-- Guardrails or safety enforcement layer
-- Non-MVP providers beyond Anthropic and OpenAI
-- Custom ChatGPT OAuth, callback, or token persistence outside Codex app-server
-- ChatGPT embeddings
-- Codex app-server approval, file-change, or shell-execution workflows outside the LLM tool bridge
+- Learned routing via RouteLLM / kNN / ONNX embeddings (Phase 10+)
+- Step-level intelligence / Process Reward Models (Phase 10)
+- Guided decoding via XGrammar / Outlines (Phase 10)
+- Local model inference / `LocalModelProvider` (Phase 10+)
+- Disaggregated serving / shared KV cache / PrefillShare (Phase 10+)
+- Dynamic topology / MaAS / MAS^2 (Phase 11)
+- Inter-agent message authentication / AgentSandbox (Phase 9.1)
+- CRDT coordination (Phase 13)
+- MPST session types (Phase 13)
 
 ## Complexity Tracking
 
-No constitution violations. No complexity justification required.
+No constitution violations. The three new capabilities (router, dual-stream, budget) are
+additive to the existing plan and do not require re-architecturing any prior phase. The
+`MessageEnvelope` changes are backward-compatible via `Option<T>` with `#[serde(default)]`.

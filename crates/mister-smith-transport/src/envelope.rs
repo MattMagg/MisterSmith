@@ -10,6 +10,36 @@ use crate::errors::TransportError;
 use crate::priority::MessagePriority;
 use crate::serialization;
 
+/// Classifies whether a message carries data-plane or control-plane traffic.
+///
+/// Data-plane messages use NATS request-reply or Core pub/sub (microsecond latency).
+/// Control-plane messages use JetStream KV watches and durable consumers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum MessagePlane {
+    /// Request-reply, streaming, tool calls (microsecond latency budget).
+    #[default]
+    Data,
+    /// Configuration updates, health telemetry, budget state (JetStream KV watches).
+    Control,
+}
+
+/// Classifies whether a stream event requires lossless or best-effort delivery.
+///
+/// Semantic events are delivered losslessly via JetStream (tool calls, lifecycle, errors).
+/// UI events are delivered best-effort via NATS Core (text deltas, heartbeats, progress).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum StreamClass {
+    /// Lossless delivery via JetStream (tool calls, lifecycle, errors, finalization).
+    #[default]
+    Semantic,
+    /// Best-effort delivery via NATS Core (text deltas, heartbeats, progress indicators).
+    Ui,
+}
+
 /// Default maximum payload size: 1 MB.
 pub const DEFAULT_MAX_PAYLOAD_SIZE: usize = 1_048_576;
 
@@ -61,6 +91,16 @@ pub struct MessageEnvelope {
     /// Transport-level metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub headers: HashMap<String, String>,
+
+    /// Message plane classification (data vs control).
+    /// `None` is treated as `Data` for backward compatibility with pre-Phase-9 messages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plane: Option<MessagePlane>,
+
+    /// Stream class classification (semantic vs UI).
+    /// `None` is treated as `Semantic` for backward compatibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream_class: Option<StreamClass>,
 }
 
 impl MessageEnvelope {
@@ -76,6 +116,8 @@ impl MessageEnvelope {
             payload: Vec::new(),
             headers: HashMap::new(),
             max_payload_size: DEFAULT_MAX_PAYLOAD_SIZE,
+            plane: None,
+            stream_class: None,
         }
     }
 
@@ -114,6 +156,8 @@ pub struct MessageEnvelopeBuilder {
     payload: Vec<u8>,
     headers: HashMap<String, String>,
     max_payload_size: usize,
+    plane: Option<MessagePlane>,
+    stream_class: Option<StreamClass>,
 }
 
 impl MessageEnvelopeBuilder {
@@ -172,6 +216,18 @@ impl MessageEnvelopeBuilder {
         self
     }
 
+    /// Set the message plane classification.
+    pub fn plane(mut self, plane: MessagePlane) -> Self {
+        self.plane = Some(plane);
+        self
+    }
+
+    /// Set the stream class classification.
+    pub fn stream_class(mut self, stream_class: StreamClass) -> Self {
+        self.stream_class = Some(stream_class);
+        self
+    }
+
     /// Override the maximum payload size for validation.
     pub fn max_payload_size(mut self, size: usize) -> Self {
         self.max_payload_size = size;
@@ -205,6 +261,8 @@ impl MessageEnvelopeBuilder {
             priority: self.priority,
             payload: self.payload,
             headers: self.headers,
+            plane: self.plane,
+            stream_class: self.stream_class,
         })
     }
 }
@@ -411,6 +469,87 @@ mod tests {
 
         assert_eq!(extract_trace_context(&envelope), Some(traceparent));
         assert_eq!(extract_tracestate(&envelope), Some("mistersmith=testing"));
+    }
+
+    #[test]
+    fn pre_phase9_json_without_plane_or_stream_class() {
+        // Pre-Phase-9 envelopes have no `plane` or `stream_class` fields.
+        // Deserialization must succeed with both defaulting to None.
+        let pre_phase9_json = serde_json::json!({
+            "message_id": Uuid::new_v4(),
+            "message_type": "legacy.message",
+            "schema_version": SCHEMA_VERSION,
+            "timestamp": chrono::Utc::now(),
+            "priority": "Normal",
+            "payload": [],
+            "headers": {}
+        });
+
+        let envelope: MessageEnvelope =
+            serde_json::from_value(pre_phase9_json).unwrap();
+        assert!(envelope.plane.is_none());
+        assert!(envelope.stream_class.is_none());
+    }
+
+    #[test]
+    fn plane_defaults_to_data_when_absent() {
+        let envelope = MessageEnvelope::builder("test").build().unwrap();
+        // None is treated as Data plane
+        assert!(envelope.plane.is_none());
+        assert_eq!(
+            envelope.plane.unwrap_or(MessagePlane::Data),
+            MessagePlane::Data
+        );
+    }
+
+    #[test]
+    fn stream_class_defaults_to_semantic_when_absent() {
+        let envelope = MessageEnvelope::builder("test").build().unwrap();
+        // None is treated as Semantic stream
+        assert!(envelope.stream_class.is_none());
+        assert_eq!(
+            envelope.stream_class.unwrap_or(StreamClass::Semantic),
+            StreamClass::Semantic
+        );
+    }
+
+    #[test]
+    fn plane_and_stream_class_round_trip() {
+        let envelope = MessageEnvelope::builder("dual.test")
+            .plane(MessagePlane::Control)
+            .stream_class(StreamClass::Ui)
+            .build()
+            .unwrap();
+
+        let json = serde_json::to_string(&envelope).unwrap();
+        let decoded: MessageEnvelope = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded.plane, Some(MessagePlane::Control));
+        assert_eq!(decoded.stream_class, Some(StreamClass::Ui));
+    }
+
+    #[test]
+    fn plane_and_stream_class_msgpack_round_trip() {
+        let envelope = MessageEnvelope::builder("msgpack.dual")
+            .plane(MessagePlane::Data)
+            .stream_class(StreamClass::Semantic)
+            .build()
+            .unwrap();
+
+        let bytes = envelope.to_bytes().unwrap();
+        let decoded = MessageEnvelope::from_bytes(&bytes).unwrap();
+
+        assert_eq!(decoded.plane, Some(MessagePlane::Data));
+        assert_eq!(decoded.stream_class, Some(StreamClass::Semantic));
+    }
+
+    #[test]
+    fn plane_omitted_from_json_when_none() {
+        let envelope = MessageEnvelope::builder("test").build().unwrap();
+        let json = serde_json::to_string(&envelope).unwrap();
+        // plane and stream_class should be omitted, not serialized as null
+        assert!(!json.contains("\"plane\""));
+        assert!(!json.contains("\"stream_class\""));
     }
 
     #[test]

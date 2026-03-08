@@ -1682,6 +1682,7 @@ dependencies = [
  "mister-smith-config",
  "mister-smith-core",
  "mister-smith-events",
+ "mister-smith-llm",
  "mister-smith-mcp",
  "mister-smith-monitoring",
  "mister-smith-persistence",

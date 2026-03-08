@@ -10,7 +10,9 @@
   - `OPENAI_API_KEY`
 - For ChatGPT-subscription validation:
   - `codex` available on `PATH` with `app-server` support
-- For future Gate 9 orchestration validation: local NATS and PostgreSQL services available if the
+- For router/budget validation:
+  - NATS server running with JetStream enabled (for KV CAS budget enforcement)
+- For Gate 9 orchestration validation: local NATS and PostgreSQL services available if the
   implementation exercises existing ToolBus security or audit boundaries
 
 ## Source Map
@@ -23,6 +25,7 @@
 | `spec/core-architecture/type-definitions.md` | Anchors the provider-neutral types and feature-gated role boundaries shown in the usage sketch. |
 | `spec/core-architecture/async-patterns.md` | Keeps `ToolBus::to_tool_definitions()` and `execute_tool_call()` inside the existing tool patterns. |
 | `spec/core-architecture/coding-standards.md` | Keeps the validation tiers tied to testing, permission, timeout, audit, and typed-error expectations. |
+| `docs/research-output/consolidated/00-MASTER-FINDINGS.md` | Authoritative ranked findings informing router, dual-stream, and budget architecture. |
 
 ## Validate The Planning Artifacts
 
@@ -45,26 +48,40 @@ Expected result:
 Phase 9 implementation is expected to validate in this order:
 
 ```bash
-# 1. Core provider-neutral contract and mock behavior
+# 1. Core provider-neutral contract and mock behavior (DONE)
 cargo test -p mister-smith-llm
 
-# 2. Anthropic adapter when credentials are available
+# 2. Router, health, and circuit breaker (NEW)
+cargo test -p mister-smith-llm -- router health circuit
+
+# 3. Budget enforcement with JetStream KV CAS (NEW, env-gated)
+NATS_URL=nats://localhost:4222 cargo test -p mister-smith-llm -- budget --ignored
+
+# 4. ModelEvent serde and forward compatibility (NEW)
+cargo test -p mister-smith-llm -- model_event
+
+# 5. Dual-stream backpressure and event classification (NEW, env-gated)
+NATS_URL=nats://localhost:4222 cargo test -p mister-smith-llm -- dual_stream --ignored
+
+# 6. MessageEnvelope backward compatibility
+cargo test -p mister-smith-transport -- envelope plane stream_class
+
+# 7. Anthropic adapter when credentials are available
 ANTHROPIC_API_KEY=... cargo test -p mister-smith-llm --features anthropic -- --ignored
 
-# 3. OpenAI adapter when credentials are available
+# 8. OpenAI adapter when credentials are available (DONE)
 OPENAI_API_KEY=... cargo test -p mister-smith-llm --features openai -- --ignored
 
-# 4. ChatGPT-backed OpenAI path through Codex app-server
+# 9. ChatGPT-backed OpenAI path through Codex app-server (DONE)
 cargo test -p mister-smith-llm --features openai-chatgpt
 cargo test -p mister-smith-app
 
-# 5. Agent bridge and Gate 9 orchestration path
+# 10. Cascade routing (SLM-default / LLM-fallback) (NEW)
+cargo test -p mister-smith-llm -- cascade confidence
+
+# 11. Agent bridge and Gate 9 orchestration path
 cargo test -p mister-smith-agents --features llm gate9 -- --ignored --nocapture
 ```
-
-The exact test names can be refined during implementation, but the validation tiers must remain:
-mock contract tests, real-provider integration tests, Codex app-server auth or turn validation, and
-Gate 9 orchestration validation.
 
 ## Usage Sketch
 
@@ -84,8 +101,67 @@ let response = provider
         max_tokens: Some(512),
         stop_sequences: None,
         metadata: serde_json::json!({}),
+        routing_hint: None,
     })
     .await?;
+```
+
+### Routing Through ModelRouter
+
+```rust
+use mister_smith_llm::{ModelRouter, RoutingPolicy, ProviderConfig};
+
+let router = ModelRouter::new(
+    vec![cheap_provider_config, expensive_provider_config],
+    RoutingPolicy::CostOptimized,
+);
+
+// Router selects cheapest healthy provider meeting capability requirements
+let response = router.complete(request).await?;
+```
+
+### Cascade Routing (SLM-Default / LLM-Fallback)
+
+```rust
+use mister_smith_llm::{ModelRouter, RoutingPolicy, CascadePolicy, CascadeTier};
+
+let cascade = CascadePolicy {
+    tiers: vec![
+        CascadeTier { provider_config: slm_7b_config, label: "slm-7b".into() },
+        CascadeTier { provider_config: gpt4o_config, label: "llm-gpt4o".into() },
+    ],
+    escalation_threshold: 0.7,
+    max_escalations: 1,
+};
+
+let router = ModelRouter::new(
+    vec![slm_7b_config, gpt4o_config],
+    RoutingPolicy::Cascade(cascade),
+);
+```
+
+### Consuming ModelEvent (Dual-Stream)
+
+```rust
+use mister_smith_llm::ModelEvent;
+
+// Stream actor converts StreamChunk -> ModelEvent
+let mut event_stream = stream_actor.subscribe_semantic(); // lossless
+while let Some(event) = event_stream.next().await {
+    match event {
+        ModelEvent::ToolCallCompleted { call_id, name, input } => {
+            // Tool calls are lossless — always delivered
+            let result = tool_bus.execute_tool_call(&call).await?;
+        }
+        ModelEvent::TextDelta { text } => {
+            // Text deltas may be coalesced on UI stream under backpressure
+        }
+        ModelEvent::Unknown => {
+            // Forward compatibility — unknown events from future provider updates
+        }
+        _ => {}
+    }
+}
 ```
 
 ### Tool Definitions From ToolBus
@@ -102,9 +178,6 @@ let tool_definitions = tool_bus.to_tool_definitions();
 let tool_result = tool_bus.execute_tool_call(/* caller context */, &tool_call).await?;
 ```
 
-The bridge contract is behavioral: tool execution must preserve the existing ToolBus permission,
-timeout, and audit boundary even if the final method signature evolves during implementation.
-
 ### ChatGPT Subscription Login And Status
 
 ```bash
@@ -112,53 +185,29 @@ cargo run -p mister-smith-app -- auth openai-chatgpt login
 cargo run -p mister-smith-app -- auth openai-chatgpt status
 ```
 
-Expected behavior:
-
-- `login` starts Codex app-server, requests `account/login/start` with `type = "chatgpt"`, opens
-  the returned browser URL, prints the same URL for manual fallback, and waits for
-  `account/login/completed` or a confirming `account/updated`.
-- The login flow must correlate `account/login/completed` to the exact returned `loginId` and
-  cancel the pending login with `account/login/cancel` if the browser flow times out before
-  completion.
-- `status` reports the current Codex app-server account state from `account/read` and whether
-  Mister Smith can use the `openai_chatgpt` backend.
-- `requiresOpenaiAuth = true` in `account/read` does not mean ChatGPT login failed; it only means
-  the active provider requires OpenAI authentication. The ChatGPT path keys off the returned
-  account type instead.
-- If Codex is currently authenticated with an API key instead of a ChatGPT subscription, the status
-  command must report that explicitly and direct the operator to run
-  `mister-smith auth openai-chatgpt login`.
-- If `account/read` returns `account = null` and `requiresOpenaiAuth = false`, the status command
-  must report that the active Codex provider does not currently require OpenAI authentication
-  instead of treating that state as a failed ChatGPT login.
-
-If login is missing or expired, `OpenAiChatGptProvider` must return a typed authentication error
-that directs the operator to run `mister-smith auth openai-chatgpt login`.
-
 ## Gate 9 Scenario
 
 The roadmap Gate 9 validation for Phase 9 is:
 
 1. A Planner receives a high-level task.
-2. The Planner calls a real LLM through `ModelProvider`.
-3. The response contains a structured subtask decomposition.
-4. The Orchestrator assigns subtasks to Worker agents through the existing agent-system flow.
-5. Tool calls, when requested by the model, round-trip through the ToolBus.
-6. The same flow succeeds with Anthropic and the OpenAI API-key backend.
-7. The ChatGPT-backed OpenAI path validates completion and streaming through Codex app-server and
-   returns typed unsupported-capability errors for embeddings and tool calling without introducing a
-   second auth stack into Mister Smith.
-8. Codex app-server turns normalize the authoritative `item/completed` agent message, propagated
-   token-usage updates, and any `model/rerouted` notification before the response leaves the
-   provider boundary.
+2. The Planner calls a real LLM through `ModelProvider` via `ModelRouter`.
+3. The `ModelRouter` selects the provider based on routing policy, health, and budget.
+4. The response contains a structured subtask decomposition.
+5. The Orchestrator assigns subtasks to Worker agents through the existing agent-system flow.
+6. Tool calls, when requested by the model, round-trip through the ToolBus.
+7. Tool-call events are delivered losslessly via the semantic stream (JetStream).
+8. The same flow succeeds with Anthropic/Claude and the OpenAI API-key backend.
+9. Budget enforcement prevents budget overruns under concurrent requests.
+10. The ChatGPT-backed OpenAI path validates completion and streaming through Codex app-server
+    and returns typed unsupported-capability errors for embeddings and tool calling.
+11. Routing decisions are recorded for observability.
 
-## Blocker Review Before `/speckit.tasks`
+## Blocker Review
 
-Before task generation, confirm that these remain visible as blockers or prerequisites rather than
+Before implementation, confirm these remain visible as blockers or prerequisites rather than
 Phase 9 scope:
 
-- ToolBus permission and audit hardening
-- Router balancing strategies
+- ToolBus permission and audit hardening (Phase 9.1 addresses security aspects)
 - Memory metadata and versioning
 - Heartbeat receiver and failure detection
 - Supervisor delegation to Phase 3 supervision

@@ -51,12 +51,30 @@ pub enum PlannerError {
 /// Creates execution plans from high-level goals and contextual information.
 pub struct PlannerAgent {
     id: AgentId,
+    #[cfg(feature = "llm")]
+    router: Option<std::sync::Arc<mister_smith_llm::ModelRouter>>,
 }
 
 impl PlannerAgent {
     /// Create a new `PlannerAgent` with the given identity.
     pub fn new(id: AgentId) -> Self {
-        Self { id }
+        Self {
+            id,
+            #[cfg(feature = "llm")]
+            router: None,
+        }
+    }
+
+    /// Create a new `PlannerAgent` with an LLM [`ModelRouter`] for AI-powered planning.
+    #[cfg(feature = "llm")]
+    pub fn with_router(
+        id: AgentId,
+        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+    ) -> Self {
+        Self {
+            id,
+            router: Some(router),
+        }
     }
 }
 
@@ -74,6 +92,64 @@ impl Actor for PlannerAgent {
     ) -> Result<Self::Response, Self::Error> {
         match message {
             PlannerMessage::PlanGoal { goal, context } => {
+                // When the `llm` feature is enabled and a router is configured,
+                // ask the model to decompose the goal into concrete steps.
+                #[cfg(feature = "llm")]
+                if let Some(router) = &self.router {
+                    let result: Result<serde_json::Value, PlannerError> = async {
+                        use mister_smith_llm::{ChatMessage, CompletionRequest, ContentBlock};
+
+                        let mut request = CompletionRequest::default();
+                        request.system = Some(
+                            "You are a task planning agent. Given a goal and context, \
+                             decompose it into concrete steps. Return a JSON object with \
+                             'goal', 'steps' (array of objects with 'step' number, 'action', \
+                             and 'description'), and 'context'."
+                                .to_string(),
+                        );
+                        request.messages = vec![ChatMessage::User {
+                            content: serde_json::json!({
+                                "goal": goal,
+                                "context": context,
+                            }),
+                        }];
+
+                        let (response, _routing) = router
+                            .route_completion(request)
+                            .await
+                            .map_err(|e| PlannerError::Internal(e.to_string()))?;
+
+                        // Extract text from the first text content block.
+                        let text = response
+                            .content
+                            .iter()
+                            .find_map(|block| match block {
+                                ContentBlock::Text { text } => Some(text.as_str()),
+                                _ => None,
+                            })
+                            .unwrap_or("");
+
+                        let plan: serde_json::Value =
+                            serde_json::from_str(text).unwrap_or_else(|_| {
+                                serde_json::json!({
+                                    "goal": goal,
+                                    "raw_response": text,
+                                    "context": context,
+                                })
+                            });
+
+                        Ok(plan)
+                    }
+                    .await;
+
+                    if let Ok(plan) = result {
+                        state.current_plan = Some(plan.clone());
+                        return Ok(plan);
+                    }
+                    // On error, fall through to the stub implementation below.
+                }
+
+                // Stub implementation — deterministic plan without an LLM.
                 let plan = serde_json::json!({
                     "goal": goal,
                     "steps": [

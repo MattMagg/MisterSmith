@@ -113,6 +113,7 @@ impl ToolBus {
     }
 
     /// Register an invocable native tool.
+    #[allow(clippy::too_many_arguments)]
     pub fn register_native_tool(
         &self,
         name: impl Into<String>,
@@ -158,6 +159,7 @@ impl ToolBus {
     }
 
     /// Register an invocable MCP-backed tool.
+    #[allow(clippy::too_many_arguments)]
     pub fn register_mcp_tool(
         &self,
         name: impl Into<String>,
@@ -180,6 +182,7 @@ impl ToolBus {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn insert_entry(
         &self,
         name: String,
@@ -386,6 +389,7 @@ impl ToolBus {
         })))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_audit_event(
         &self,
         principal: Option<&ToolPrincipal>,
@@ -458,6 +462,59 @@ impl ToolBus {
     /// Get count of registered tools.
     pub fn count(&self) -> usize {
         self.tools.len()
+    }
+
+    /// Export registered tools as provider-neutral [`mister_smith_llm::ToolDefinition`]s
+    /// for inclusion in LLM completion requests.
+    #[cfg(feature = "llm")]
+    pub fn to_tool_definitions(&self) -> Vec<mister_smith_llm::ToolDefinition> {
+        self.tools
+            .iter()
+            .map(|entry| {
+                let tool = entry.value();
+                mister_smith_llm::ToolDefinition {
+                    name: format!("{}.{}", tool.namespace, tool.name),
+                    description: tool.description.clone(),
+                    input_schema: tool.input_schema.clone(),
+                }
+            })
+            .collect()
+    }
+
+    /// Execute a model-emitted [`mister_smith_llm::ToolCall`] through the ToolBus,
+    /// preserving all existing security, timeout, metrics, and audit boundaries.
+    ///
+    /// Returns `Ok(ToolResult)` in both success and tool-error cases (the error is
+    /// captured inside `ToolResult::error`). Returns `Err` only for structural
+    /// problems such as an invalid tool name format.
+    #[cfg(feature = "llm")]
+    pub async fn execute_tool_call(
+        &self,
+        principal: Option<&ToolPrincipal>,
+        call: &mister_smith_llm::ToolCall,
+    ) -> Result<mister_smith_llm::ToolResult, AgentSystemError> {
+        // Parse namespace.name from call.name
+        let (namespace, name) = call.name.split_once('.').ok_or_else(|| {
+            AgentSystemError::ToolBusError(format!(
+                "Tool call name '{}' must be in 'namespace.name' format",
+                call.name
+            ))
+        })?;
+
+        // Delegate to existing invoke() with same security/timeout/metrics boundaries
+        match self
+            .invoke(principal, namespace, name, call.input.clone(), None)
+            .await
+        {
+            Ok(output) => Ok(mister_smith_llm::ToolResult::success(
+                call.call_id.clone(),
+                output,
+            )),
+            Err(err) => Ok(mister_smith_llm::ToolResult::failure(
+                call.call_id.clone(),
+                err.to_string(),
+            )),
+        }
     }
 }
 

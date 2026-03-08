@@ -1,149 +1,169 @@
 # Research: Phase 9 — LLM Provider Integration
 
-**Date**: 2026-03-06
+**Date**: 2026-03-07 (revised)
 **Spec**: [spec.md](spec.md) | **Plan**: [plan.md](plan.md)
 
 ## Research Summary
 
-Phase 9 does not need new external research to move into planning. The governing decisions are
-already present in `ROADMAP.md`, the approved LLM provider integration design, the architectural
-grounding audit, the implementation deviation report, the Phase 7 baseline artifacts, and the
-canonical `spec/` architecture sources. The planning job is to turn those sources into a grounded,
-non-drifting artifact set.
+Phase 9 research is grounded in a completed 7-round research phase covering 2,000+ papers and
+500+ industry references, synthesized into 9 consolidated documents at
+`docs/research-output/consolidated/`. The authoritative findings document is
+`docs/research-output/consolidated/00-MASTER-FINDINGS.md`.
+
+Three findings are directly incorporated into Phase 9:
+
+| Finding | Source | Phase 9 Impact |
+| ------- | ------ | -------------- |
+| **#8** | `consolidated/01-model-routing-and-cost-optimization.md` | Two-plane router, health-aware circuit breakers, hierarchical budget enforcement via JetStream KV CAS |
+| **#9** | `consolidated/01-model-routing-and-cost-optimization.md` | SLM-default / LLM-fallback routing policy, cascade configuration |
+| **#13** | `consolidated/06-streaming-architecture.md` | Dual-stream formalization (lossless semantic + best-effort UI), `ModelEvent` enum, backpressure policy matrix |
+
+## Pre-Research Decisions (Original R1-R7)
+
+The following decisions were made before the 7-round research phase and remain valid. The research
+confirmed rather than contradicted them.
+
+### R1: One New Crate, Not Provider-Specific Crate Sprawl
+
+**Decision**: Introduce a single `mister-smith-llm` workspace crate with feature-gated providers
+plus an always-available `MockProvider`.
+
+**Confirmed by research**: No contrary evidence found. The one-crate pattern is consistent with
+the workspace's one-domain-per-crate convention and does not conflict with any research finding.
+
+### R2: Shared Error Placement Must Follow The Existing Core Pattern
+
+**Decision**: Add `LlmError` to `crates/mister-smith-core/src/error.rs` and re-export.
+
+**Confirmed by research**: Consistent with the project's canonical single-source error pattern.
+
+### R3: Capability Normalization Beats Artificial Feature Flattening
+
+**Decision**: Express provider parity through unified types plus `ModelCapabilities`; unsupported
+behavior returns typed errors.
+
+**Confirmed by research**: Finding #9 (SLM-default) reinforces this — different models have
+fundamentally different capability sets, and the routing layer handles the mismatch.
+
+### R4: The Agent Bridge Must Extend Existing Role Seams, Not Replace Them
+
+**Decision**: The `mister-smith-agents` crate gains an optional `llm` feature that wires a
+selected `ModelProvider` into Planner, Critic, and Executor behavior.
+
+**Confirmed by research**: Finding #1 (dynamic topology) would eventually replace static role
+assignments, but that is Phase 11 scope. The agent bridge pattern remains correct for Phase 9.
+
+### R5: Tool Calls Must Flow Through ToolBus, Not Around It
+
+**Decision**: `ToolBus::to_tool_definitions()` and `ToolBus::execute_tool_call()` are the only
+sanctioned bridge for model-initiated tool use.
+
+**Confirmed by research**: Finding #6 (security) strengthens this — all tool invocations must
+pass through a centralized permission and audit boundary. The ToolBus is that boundary.
+
+### R6: Validation Needs Three Tiers, Not One
+
+**Decision**: Use deterministic mock tests, env-gated provider tests, and Gate 9 orchestration
+validation.
+
+**Confirmed by research**: No contrary evidence. Three-tier validation is consistent with the
+research emphasis on defense-in-depth.
+
+### R7: Phase 7.5 Hardening Is Blocker State, Not Backlog Laundry
+
+**Decision**: Keep Phase 7.5 hardening items visible as prerequisites or blockers.
+
+**Modified by research**: The Phase 9.1 Security Hardening spec (at
+`specs/011-phase9.1-security-hardening/`) now addresses several security gaps that were
+previously treated as generic Phase 7.5 blockers. The specific security items are now properly
+scoped rather than left as generic deferred work.
 
 ---
 
-## R1: One New Crate, Not Provider-Specific Crate Sprawl
+## Research-Driven Additions
 
-**Decision**: Introduce a single `mister-smith-llm` workspace crate with feature-gated Anthropic and
-OpenAI providers plus an always-available `MockProvider`.
+These are new architectural decisions driven by the 7-round research phase that did not exist in
+the original Phase 9 specification.
 
-**Rationale**: The approved design already chooses this approach, and the repo's existing
-crate-per-domain pattern supports it. Splitting providers into separate crates would create extra
-workspace management without solving a current problem.
+### R8: Two-Plane Router Architecture (Finding #8)
+
+**Decision**: Separate a microsecond-latency data plane (NATS request-reply, ~50us) from a
+control plane (JetStream KV watches) for model configuration, health telemetry, and budget state.
+
+**Rationale**: Converged across all three R3 industry reports, validated by academic surveys
+(Varangot-Reille 2025, Behera 2025), and reinforced by production gateways (Bifrost 11us
+overhead at 5,000 RPS, Kong, Vercel, AWS).
+
+**Key evidence**: NATS request-reply achieves ~50us average latency. Rust-based gateways achieve
+11us overhead. LiteLLM (Python/FastAPI) achieves <500 RPS. This infrastructure advantage is
+structural and cannot be matched by Python-based competitors.
 
 **Alternatives considered**:
+- Single-plane RPC (status quo in LangGraph, CrewAI, AutoGen): rejected because it cannot
+  support real-time configuration updates without service restarts.
 
-- **Provider-specific crates**: rejected as premature fragmentation.
-- **Put provider logic in `mister-smith-agents`**: rejected because it would make orchestration
-  depend directly on vendor HTTP clients.
+### R9: SLM-Default / LLM-Fallback Routing (Finding #9)
 
----
+**Decision**: Default routing policy starts with the cheapest capable model (1-12B parameters)
+and escalates to larger models based on configurable confidence thresholds.
 
-## R2: Shared Error Placement Must Follow The Existing Core Pattern
+**Rationale**: Sharma & Mehta (2025) comprehensive review; Liu (2025, 106 citations) showing
+0.5B outperforms GPT-4o with compute-optimal scaling; Yang (2025, 81 citations) on optimal
+CoT length. Cost reduction of 10-100x for structured tasks.
 
-**Decision**: Add `LlmError` to `crates/mister-smith-core/src/error.rs` and re-export it from
-`crates/mister-smith-core/src/lib.rs`.
+**Scope boundaries**: Guided decoding (XGrammar/Outlines) and local model inference are Phase 10+.
+Phase 9 implements the cascade policy and confidence-based escalation, not the decoding
+enforcement.
 
-**Rationale**: The core crate is already the canonical home for top-level domain errors such as
-`ToolError`, `SecurityError`, and `PersistenceError`. Creating a second public error hierarchy in
-`mister-smith-llm` would break the "single source of truth" rule called out in the constitution and
-supported by `spec/core-architecture/type-definitions.md`.
+### R10: Dual-Stream Formalization (Finding #13)
 
-**Alternatives considered**:
+**Decision**: Emit two parallel streams from the same canonical event log — a lossless semantic
+stream (JetStream) for orchestration correctness and a best-effort UI stream (NATS Core) for
+real-time rendering.
 
-- **`mister-smith-llm` owns its own top-level error type**: rejected because downstream crates would
-  now need special error handling rules not used elsewhere in the workspace.
-- **Provider-specific public errors only**: rejected because the spec requires provider-neutral
-  behavior.
+**Rationale**: All three R3 source reports independently conclude that streaming must be modeled
+as a typed event pipeline. The dual-stream design decouples correctness from presentation,
+enabling per-event-class backpressure policies.
 
----
+**Key design**: `StreamChunk`/`ChunkDelta` (4 variants) remain the raw provider boundary.
+`ModelEvent` (28 variants) is the canonical internal event type. These are two layers, not a
+replacement.
 
-## R3: Capability Normalization Beats Artificial Feature Flattening
+### R11: Budget Enforcement via JetStream KV CAS (Finding #8)
 
-**Decision**: Express provider parity through unified request and response types plus
-`ModelCapabilities`; unsupported behavior returns typed errors instead of weakening the whole public
-API to the least-capable backend.
+**Decision**: Hierarchical budget tracking (org -> team -> user -> request tag) using JetStream
+KV atomic compare-and-swap operations with a reserve-before-send / reconcile-after-completion
+pattern.
 
-**Rationale**: Anthropic and OpenAI do not expose identical native payloads or capability sets, but
-the clarified Phase 9 spec only requires parity for the shared workflow. Typed
-`UnsupportedCapability` behavior is the cleanest way to preserve both model-agnostic architecture
-and honest provider differences.
-
-**Alternatives considered**:
-
-- **Require all providers to implement all capabilities**: rejected because it would force fake or
-  misleading behavior.
-- **Expose raw provider payloads publicly**: rejected because it would leak vendor coupling outside
-  provider modules.
-
----
-
-## R4: The Agent Bridge Must Extend Existing Role Seams, Not Replace Them
-
-**Decision**: The `mister-smith-agents` crate gains an optional `llm` feature that wires a selected
-`ModelProvider` into Planner, Critic, and Executor behavior while leaving the Orchestrator and
-team/scheduler flow provider-neutral.
-
-**Rationale**: The current role implementations in
-`crates/mister-smith-agents/src/roles/{planner,critic,executor}.rs` are intentionally thin, and
-`crates/mister-smith-agents/src/orchestrator.rs` already owns the decompose -> assign -> aggregate
-workflow. Phase 9 should enrich these seams, not invent a second orchestration pipeline.
-
-**Alternatives considered**:
-
-- **New provider-aware orchestrator crate**: rejected because it would fork the existing execution
-  path.
-- **LLM-enable every agent role in one phase**: rejected as scope creep beyond the approved design.
-
----
-
-## R5: Tool Calls Must Flow Through ToolBus, Not Around It
-
-**Decision**: Implement `ToolBus::to_tool_definitions()` and `ToolBus::execute_tool_call()` as the
-only sanctioned bridge for model-initiated tool use.
-
-**Rationale**: The approved Phase 9 design and the current ToolBus contract both require permission
-checks, timeouts, metrics, and audit or error handling at the ToolBus boundary. A provider-specific
-tool-dispatch path would bypass those guarantees and recreate the exact drift this planning pass is
-trying to prevent.
-
-**Alternatives considered**:
-
-- **Provider-specific function-calling adapter that dispatches directly to agents**: rejected
-  because it bypasses ToolBus security and timeout semantics.
-- **MCP-only tool bridge**: rejected because native agent-backed tools are already first-class in
-  Phase 7.
-
----
-
-## R6: Validation Needs Three Tiers, Not One
-
-**Decision**: Use three validation tiers:
-
-1. deterministic unit and serialization tests around the shared types and `MockProvider`
-2. env-gated Anthropic and OpenAI integration tests
-3. Gate 9 orchestration validation through the existing agent runtime
-
-**Rationale**: Mock tests prove the contract, provider tests prove vendor wiring, and Gate 9 proves
-the framework-level workflow. None of the three replaces the others.
-
-**Alternatives considered**:
-
-- **Only mock tests**: rejected because they cannot prove real provider compatibility.
-- **Only live-provider tests**: rejected because they are too slow and brittle to carry all contract
-  validation.
-
----
-
-## R7: Phase 7.5 Hardening Is Blocker State, Not Backlog Laundry
-
-**Decision**: Keep the six Phase 7.5 hardening items visible in Phase 9 plan artifacts as
-prerequisites or blockers. Do not redefine them as Phase 9 deliverables.
-
-**Rationale**: The implementation deviation report explicitly places these items before Phase 9, and
-the clarified spec repeats that instruction. Planning must preserve that posture so `/speckit.tasks`
-and `/speckit.analyze` can report blockers honestly.
+**Rationale**: All three R3 reports converge on budget enforcement belonging in the router, not
+in application code. CAS-based enforcement demonstrates <1% overrun rate vs potentially
+unbounded overruns with naive check-then-spend.
 
 ## Source Map
 
 | Source | Why it matters |
 | -------- | ---------------- |
+| `docs/research-output/consolidated/00-MASTER-FINDINGS.md` | Authoritative ranked findings from all 7 research rounds |
+| `docs/research-output/consolidated/01-model-routing-and-cost-optimization.md` | Two-plane router, budget enforcement, SLM-default, cascade routing — core Phase 9 architecture |
+| `docs/research-output/consolidated/06-streaming-architecture.md` | Dual-stream, backpressure, ModelEvent, stream actors — Phase 9 streaming contract |
+| `docs/research-output/consolidated/04-security-and-trust.md` | Security findings driving Phase 9.1 (separate spec) |
+| `docs/RESEARCH_CHECKPOINT.md` | Confidence tiers, evidence gaps, what's not pursued |
 | `ROADMAP.md:586-660` | Canonical Phase 9 scope, subphases, and Gate 9 |
 | `docs/plans/2026-03-05-llm-provider-integration-design.md:23-306` | Approved crate, type, and bridge design |
-| `docs/2026-03-05-architectural-grounding-audit.md:112-170` | Traceability gap to fix forward |
-| `docs/2026-03-05-implementation-deviation-report.md:296-318` | Phase 9 posture plus Phase 7.5 blocker list |
 | `spec/data-management/agent-orchestration.md:2467-2665` | LLM coordination reference and ToolBus boundary context |
-| `spec/data-management/message-schemas.md:1069-1265` | Deferred hook-event schemas that must stay out of scope |
-| `spec/agent-domains/SPECIALIZED_AGENT_DOMAINS_ANALYSIS.md:453-500` | Deferred Neural/AI Operations scope |
 | `spec/core-architecture/async-patterns.md:1939-2315` | Agent-as-tool and ToolBus patterns to preserve |
+
+## Explicitly Deferred Findings
+
+| Finding | Phase | Reason |
+| ------- | ----- | ------ |
+| #1 Dynamic Topology / MaAS | 11 | Depends on Phase 9 agent-LLM bridge |
+| #2 Step-Level Intelligence / PRMs | 10 | Depends on Phase 9 streaming infrastructure |
+| #3 CRDT Coordination | 13 | Independent of LLM integration |
+| #4 Predictive Supervision | 12 | Independent of LLM integration |
+| #5 MPST Session Types | 13 | Independent of LLM integration |
+| #6 Defense-in-Depth Security | 9.1 | Separate spec at `specs/011-phase9.1-security-hardening/` |
+| #7 Infectious Jailbreak Defense | 9.1 | Separate spec at `specs/011-phase9.1-security-hardening/` |
+| #10 Neuromorphic Fault Tolerance | 12+ | Requires predictive supervision foundation |
+| #12 Persistent KV Cache | 10 | Depends on streaming infrastructure |
+| #14 Decentralized Agent Discovery | 11 | Depends on capability model |

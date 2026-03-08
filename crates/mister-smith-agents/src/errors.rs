@@ -48,4 +48,8 @@ pub enum AgentSystemError {
 
     #[error("Serialization error: {0}")]
     Serialization(String),
+
+    #[cfg(feature = "llm")]
+    #[error("LLM error: {0}")]
+    Llm(#[from] mister_smith_core::LlmError),
 }

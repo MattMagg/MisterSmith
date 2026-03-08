@@ -6,7 +6,7 @@ Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-a
 
 ```bash
 cargo build --workspace                    # Build all crates
-cargo test --workspace                     # Run all tests (983 as of Phase 8 complete)
+cargo test --workspace                     # Run all tests (1100 as of Phase 9 complete)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 ```
 
@@ -22,7 +22,7 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 6. Persistence & State | Complete | `mister-smith-persistence` |
 | 7. Agent System | Complete | `mister-smith-agents` |
 | 8. Operations | Complete | `mister-smith-app` (binary entry point, bootstrap, shutdown, health probes, observability, cross-phase bridges) |
-| 9. LLM Providers | Not started | `mister-smith-llm` — see `ROADMAP.md` |
+| 9. LLM Providers | Complete | `mister-smith-llm` (ModelProvider trait, MockProvider, OpenAI/Anthropic/Claude providers, ModelRouter, circuit breaker, budget enforcement, dual-stream, ModelEvent, cascade routing); `mister-smith-agents` extended with `llm` feature (Planner/Critic/Executor LLM integration, ToolBus bridge) |
 
 ## Workspace Crate Dependencies
 
@@ -43,7 +43,8 @@ mister-smith-core (foundation types, traits, errors)
 ├── mister-smith-mcp (MCP client/server, tool registry, NATS bridge)
 ├── mister-smith-security (JWT auth, RBAC, TLS/mTLS, audit logging)
 ├── mister-smith-persistence (PostgreSQL + JetStream KV dual-store, repositories, audit bridge)
-├── mister-smith-agents (AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles)
+├── mister-smith-llm (ModelProvider trait, MockProvider, OpenAI/Anthropic/Claude providers, ModelRouter, circuit breaker, budget, dual-stream, ModelEvent)
+├── mister-smith-agents (AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles, optional LLM bridge)
 ├── mister-smith-app (binary entry point, bootstrap, shutdown, observability, health probes, cross-phase bridges)
 └── mister-smith-integration-tests (cross-crate validation)
 ```

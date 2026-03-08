@@ -83,9 +83,25 @@ The bridge must not:
 - bypass ToolBus audit or metrics boundaries
 - rely on hook events or `llm.hooks.*` subjects
 
+## Routing and Stream Integration
+
+Tool-call events are classified as **lossless** in the backpressure policy matrix. They flow
+through the semantic stream (JetStream) with guaranteed delivery. This means:
+
+- `ModelEvent::ToolCallStart`, `ToolCallDelta`, and `ToolCallCompleted` must never be coalesced
+  or dropped under backpressure
+- Tool calls route through the `ModelRouter`'s data plane (NATS request-reply)
+- The `ModelRouter` applies budget enforcement to tool-call-bearing requests the same way it
+  handles completion requests
+
+Tool-call serialization must support both OpenAI function-calling format (`tools` array with
+`function` type) and Anthropic tool-use format (`tool_use` content blocks). The unified
+`ToolDefinition` type abstracts this difference at the provider boundary.
+
 ## Validation Requirements
 
 - unit tests for tool-definition export shape
 - unit or integration tests for successful tool-call execution
 - negative tests for permission denial and timeout behavior
 - end-to-end Gate 9 coverage showing model -> ToolBus -> model round-trips
+- verification that tool-call events are lossless (never coalesced/dropped) under backpressure

@@ -51,12 +51,30 @@ pub enum CriticError {
 /// Reviews and validates outputs against specified criteria.
 pub struct CriticAgent {
     id: AgentId,
+    #[cfg(feature = "llm")]
+    router: Option<std::sync::Arc<mister_smith_llm::ModelRouter>>,
 }
 
 impl CriticAgent {
     /// Create a new `CriticAgent` with the given identity.
     pub fn new(id: AgentId) -> Self {
-        Self { id }
+        Self {
+            id,
+            #[cfg(feature = "llm")]
+            router: None,
+        }
+    }
+
+    /// Create a new `CriticAgent` with an LLM [`ModelRouter`] for AI-powered evaluation.
+    #[cfg(feature = "llm")]
+    pub fn with_router(
+        id: AgentId,
+        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+    ) -> Self {
+        Self {
+            id,
+            router: Some(router),
+        }
     }
 }
 
@@ -75,6 +93,79 @@ impl Actor for CriticAgent {
         match message {
             CriticMessage::Evaluate { output, criteria } => {
                 state.evaluations_completed += 1;
+
+                // When the `llm` feature is enabled and a router is configured,
+                // ask the model to evaluate the output against the criteria.
+                #[cfg(feature = "llm")]
+                if let Some(router) = &self.router {
+                    let result: Result<serde_json::Value, CriticError> = async {
+                        use mister_smith_llm::{ChatMessage, CompletionRequest, ContentBlock};
+
+                        let mut request = CompletionRequest::default();
+                        request.system = Some(
+                            "You are a quality evaluation agent. Given an output and criteria, \
+                             evaluate whether the output meets the criteria. Return a JSON object \
+                             with 'evaluation' (pass/fail), 'confidence' (0.0-1.0), 'suggestions' \
+                             (array of strings), and 'reasoning' (string)."
+                                .to_string(),
+                        );
+                        request.messages = vec![ChatMessage::User {
+                            content: serde_json::json!({
+                                "output": output,
+                                "criteria": criteria,
+                            }),
+                        }];
+
+                        let (response, _routing) = router
+                            .route_completion(request)
+                            .await
+                            .map_err(|e| CriticError::Internal(e.to_string()))?;
+
+                        // Extract text from the first text content block.
+                        let text = response
+                            .content
+                            .iter()
+                            .find_map(|block| match block {
+                                ContentBlock::Text { text } => Some(text.as_str()),
+                                _ => None,
+                            })
+                            .unwrap_or("");
+
+                        let mut eval: serde_json::Value =
+                            serde_json::from_str(text).unwrap_or_else(|_| {
+                                serde_json::json!({
+                                    "evaluation": "pass",
+                                    "raw_response": text,
+                                })
+                            });
+
+                        // Attach metadata the stub normally includes.
+                        if let Some(obj) = eval.as_object_mut() {
+                            obj.insert(
+                                "output_reviewed".to_string(),
+                                output.clone(),
+                            );
+                            obj.insert(
+                                "criteria_applied".to_string(),
+                                criteria.clone(),
+                            );
+                            obj.insert(
+                                "evaluations_completed".to_string(),
+                                serde_json::json!(state.evaluations_completed),
+                            );
+                        }
+
+                        Ok(eval)
+                    }
+                    .await;
+
+                    if let Ok(eval) = result {
+                        return Ok(eval);
+                    }
+                    // On error, fall through to the stub implementation below.
+                }
+
+                // Stub implementation — deterministic evaluation without an LLM.
                 Ok(serde_json::json!({
                     "evaluation": "pass",
                     "output_reviewed": output,

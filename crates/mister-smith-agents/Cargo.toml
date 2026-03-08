@@ -19,6 +19,7 @@ mister-smith-monitoring = { workspace = true }
 mister-smith-security = { workspace = true }
 mister-smith-persistence = { workspace = true }
 mister-smith-mcp = { workspace = true }
+mister-smith-llm = { workspace = true, optional = true }
 
 # Serialization
 serde = { workspace = true }
@@ -45,6 +46,11 @@ semver = { workspace = true }
 # Logging
 tracing = { workspace = true }
 
+[features]
+default = []
+llm = ["dep:mister-smith-llm"]
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 serde_json = { workspace = true }
+mister-smith-llm = { workspace = true }

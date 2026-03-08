@@ -1,3 +1,5 @@
+#[cfg(feature = "anthropic")]
+mod anthropic;
 #[cfg(feature = "claude-subscription")]
 mod claude_subscription;
 #[cfg(feature = "openai")]
@@ -5,6 +7,8 @@ mod openai;
 #[cfg(feature = "openai-chatgpt")]
 mod openai_chatgpt;
 
+#[cfg(feature = "anthropic")]
+pub use anthropic::AnthropicProvider;
 #[cfg(feature = "claude-subscription")]
 pub use claude_subscription::ClaudeSubscriptionProvider;
 #[cfg(feature = "openai")]

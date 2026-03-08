@@ -194,6 +194,17 @@ pub enum LlmError {
     /// Authentication or credential validation failed.
     #[error("LLM authentication failed: {0}")]
     Authentication(String),
+    /// Hierarchical budget exhausted — no remaining token budget for this request.
+    #[error("LLM budget exhausted: {message}")]
+    BudgetExhausted {
+        /// Human-readable budget exhaustion detail.
+        message: String,
+        /// Budget key that was exhausted (e.g., "budget/org1/team-alpha").
+        budget_key: String,
+    },
+    /// All configured providers are unhealthy — circuit breakers are open.
+    #[error("No healthy LLM provider available: {0}")]
+    NoHealthyProvider(String),
 }
 
 /// Configuration errors.
