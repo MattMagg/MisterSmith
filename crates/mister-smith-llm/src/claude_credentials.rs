@@ -13,6 +13,7 @@ use serde_json::Value;
 
 use crate::LlmError;
 
+#[cfg(target_os = "macos")]
 const KEYCHAIN_SERVICE: &str = "Claude Code-credentials";
 const CREDENTIALS_FILE: &str = ".claude/.credentials.json";
 const OAUTH_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
