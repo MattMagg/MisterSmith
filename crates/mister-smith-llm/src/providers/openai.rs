@@ -642,13 +642,11 @@ fn normalize_request_error(timeout_ms: u64, error: reqwest::Error) -> LlmError {
     }
 }
 
-fn reasoning_effort_override<'a>(
-    model_id: &'a str,
+fn reasoning_effort_override(
+    model_id: &str,
     request: &CompletionRequest,
 ) -> Option<&'static str> {
-    if request.max_tokens.is_none() {
-        return None;
-    }
+    request.max_tokens?;
 
     if model_id.starts_with("gpt-5.1") || model_id.starts_with("gpt-5-pro") {
         return None;

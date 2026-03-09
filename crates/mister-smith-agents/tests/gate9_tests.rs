@@ -15,8 +15,8 @@ use mister_smith_agents::tool_bus::ToolBus;
 use mister_smith_core::{Actor, AgentId, LlmError};
 use mister_smith_llm::{
     CircuitBreakerConfig, CompletionRequest, CompletionResponse, CompletionStream,
-    EmbeddingResponse, MockProvider, ModelCapabilities, ModelProvider, ModelRouter,
-    ProviderConfig, ProviderKind, RoutingPolicy, ToolCall,
+    EmbeddingResponse, MockProvider, ModelCapabilities, ModelProvider, ModelRouter, ProviderConfig,
+    ProviderKind, RoutingPolicy, ToolCall,
 };
 
 async fn mock_router() -> Arc<ModelRouter> {

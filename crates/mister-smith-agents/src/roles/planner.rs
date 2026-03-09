@@ -67,10 +67,7 @@ impl PlannerAgent {
 
     /// Create a new `PlannerAgent` with an LLM [`ModelRouter`] for AI-powered planning.
     #[cfg(feature = "llm")]
-    pub fn with_router(
-        id: AgentId,
-        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
-    ) -> Self {
+    pub fn with_router(id: AgentId, router: std::sync::Arc<mister_smith_llm::ModelRouter>) -> Self {
         Self {
             id,
             router: Some(router),

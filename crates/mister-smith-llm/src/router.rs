@@ -369,7 +369,9 @@ impl ModelRouter {
                     LlmError::InvalidRequest(format!(
                         "Cascade tier '{}' has no matching registered provider \
                          (model_id: '{}', provider_kind: {:?})",
-                        tier.label, tier.provider_config.model_id, tier.provider_config.provider_kind
+                        tier.label,
+                        tier.provider_config.model_id,
+                        tier.provider_config.provider_kind
                     ))
                 })?;
             plan.push(CascadeAttempt {
@@ -431,7 +433,10 @@ impl ModelRouter {
         };
 
         let start = std::time::Instant::now();
-        let result = entry.provider.complete(Self::provider_request(&request)).await;
+        let result = entry
+            .provider
+            .complete(Self::provider_request(&request))
+            .await;
         let latency_ms = start.elapsed().as_millis() as u64;
 
         drop(providers);
@@ -490,17 +495,16 @@ impl ModelRouter {
         let mut attempt_indices: Vec<usize> = (0..attempt_plan.len()).collect();
         if let Some(hint) = hint {
             if let Some(preferred) = &hint.preferred_tier {
-                if let Some(pos) = attempt_plan
-                    .iter()
-                    .position(|a| a.tier_label == *preferred)
-                {
+                if let Some(pos) = attempt_plan.iter().position(|a| a.tier_label == *preferred) {
                     attempt_indices.retain(|&i| i != pos);
                     attempt_indices.insert(0, pos);
                 }
             }
         }
 
-        let max_attempts = attempt_indices.len().min(policy.max_escalations as usize + 1);
+        let max_attempts = attempt_indices
+            .len()
+            .min(policy.max_escalations as usize + 1);
 
         for (attempt_idx, plan_idx) in attempt_indices.into_iter().take(max_attempts).enumerate() {
             let attempt = &attempt_plan[plan_idx];

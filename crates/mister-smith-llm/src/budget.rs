@@ -65,8 +65,7 @@ pub trait BudgetStore: Send + Sync {
     async fn get(&self, key: &str) -> Result<Option<BudgetNode>, LlmError>;
 
     /// Atomic compare-and-swap update. Returns the new revision on success.
-    async fn cas_update(&self, node: &BudgetNode, expected_revision: u64)
-        -> Result<u64, LlmError>;
+    async fn cas_update(&self, node: &BudgetNode, expected_revision: u64) -> Result<u64, LlmError>;
 }
 
 /// In-memory budget store for testing and local development.
@@ -100,11 +99,7 @@ impl BudgetStore for InMemoryBudgetStore {
         Ok(nodes.get(key).cloned())
     }
 
-    async fn cas_update(
-        &self,
-        node: &BudgetNode,
-        expected_revision: u64,
-    ) -> Result<u64, LlmError> {
+    async fn cas_update(&self, node: &BudgetNode, expected_revision: u64) -> Result<u64, LlmError> {
         let mut nodes = self.nodes.lock().unwrap();
         if let Some(existing) = nodes.get(&node.key) {
             if existing.revision != expected_revision {
@@ -183,12 +178,16 @@ impl BudgetEnforcer {
         actual_tokens: u64,
     ) -> Result<(), LlmError> {
         for _attempt in 0..=CAS_RETRY_LIMIT {
-            let node = self.store.get(&reservation.budget_key).await?.ok_or_else(|| {
-                LlmError::InvalidRequest(format!(
-                    "Budget key '{}' not found during reconciliation",
-                    reservation.budget_key
-                ))
-            })?;
+            let node = self
+                .store
+                .get(&reservation.budget_key)
+                .await?
+                .ok_or_else(|| {
+                    LlmError::InvalidRequest(format!(
+                        "Budget key '{}' not found during reconciliation",
+                        reservation.budget_key
+                    ))
+                })?;
 
             let adjustment = actual_tokens as i64 - reservation.estimated_tokens as i64;
             let new_used = (node.used_tokens as i64 + adjustment).max(0) as u64;

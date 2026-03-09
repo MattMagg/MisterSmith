@@ -4,12 +4,14 @@ use std::time::Instant;
 use async_trait::async_trait;
 use futures::stream;
 use mister_smith_core::LlmError;
-use mister_smith_llm::budget::{BudgetEnforcer, BudgetNode, BudgetPolicy, BudgetStore, InMemoryBudgetStore};
+use mister_smith_llm::budget::{
+    BudgetEnforcer, BudgetNode, BudgetPolicy, BudgetStore, InMemoryBudgetStore,
+};
 use mister_smith_llm::router::ModelEventSink;
 use mister_smith_llm::{
     CascadePolicy, CascadeTier, CircuitBreakerConfig, CircuitState, CompletionRequest,
-    CompletionResponse, ContentBlock, EmbeddingResponse, ModelCapabilities, ModelEvent,
-    ModelProvider, ModelRouter, MockProvider, ProviderConfig, ProviderKind, RoutingHint,
+    CompletionResponse, ContentBlock, EmbeddingResponse, MockProvider, ModelCapabilities,
+    ModelEvent, ModelProvider, ModelRouter, ProviderConfig, ProviderKind, RoutingHint,
     RoutingPolicy, StopReason, Usage,
 };
 
@@ -105,10 +107,7 @@ impl RecordingProvider {
 #[async_trait]
 impl ModelProvider for RecordingProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, LlmError> {
-        self.observed_requests
-            .lock()
-            .unwrap()
-            .push(request.clone());
+        self.observed_requests.lock().unwrap().push(request.clone());
         Ok(CompletionResponse {
             content: vec![ContentBlock::Text {
                 text: "recorded".to_string(),
@@ -155,11 +154,7 @@ impl BudgetStore for SharedBudgetStore {
         self.0.get(key).await
     }
 
-    async fn cas_update(
-        &self,
-        node: &BudgetNode,
-        expected_revision: u64,
-    ) -> Result<u64, LlmError> {
+    async fn cas_update(&self, node: &BudgetNode, expected_revision: u64) -> Result<u64, LlmError> {
         self.0.cas_update(node, expected_revision).await
     }
 }
@@ -288,7 +283,11 @@ async fn provider_count() {
 
     let provider: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("test"));
     router
-        .add_provider(mock_config("test"), provider, CircuitBreakerConfig::default())
+        .add_provider(
+            mock_config("test"),
+            provider,
+            CircuitBreakerConfig::default(),
+        )
         .await;
     assert_eq!(router.provider_count().await, 1);
 }
@@ -340,7 +339,11 @@ async fn max_cost_tokens_hint_blocks_over_budget_estimate() {
     let provider: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("test"));
 
     router
-        .add_provider(mock_config("test"), provider, CircuitBreakerConfig::default())
+        .add_provider(
+            mock_config("test"),
+            provider,
+            CircuitBreakerConfig::default(),
+        )
         .await;
 
     let request = CompletionRequest {
@@ -354,7 +357,10 @@ async fn max_cost_tokens_hint_blocks_over_budget_estimate() {
 
     let result = router.route_completion(request).await;
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), LlmError::NoHealthyProvider(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        LlmError::NoHealthyProvider(_)
+    ));
 }
 
 #[tokio::test]
@@ -368,7 +374,11 @@ async fn route_completion_strips_routing_hint_before_provider_dispatch() {
 
     let router = ModelRouter::new(RoutingPolicy::RoundRobin);
     router
-        .add_provider(mock_config("recorder"), recorder, CircuitBreakerConfig::default())
+        .add_provider(
+            mock_config("recorder"),
+            recorder,
+            CircuitBreakerConfig::default(),
+        )
         .await;
 
     let request = CompletionRequest {
@@ -397,12 +407,15 @@ async fn provider_failure_after_reserve_reverts_budget_usage() {
     let store = budget_store_with_default();
     let enforcer = BudgetEnforcer::new(Box::new(store.clone()));
 
-    let router = ModelRouter::new(RoutingPolicy::RoundRobin)
-        .with_budget(enforcer, "budget/test");
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin).with_budget(enforcer, "budget/test");
 
     let provider: Arc<dyn ModelProvider> = Arc::new(FailingProvider::new("failing-model"));
     router
-        .add_provider(mock_config("failing-model"), provider, CircuitBreakerConfig::default())
+        .add_provider(
+            mock_config("failing-model"),
+            provider,
+            CircuitBreakerConfig::default(),
+        )
         .await;
 
     let result = router.route_completion(mock_request()).await;
@@ -410,7 +423,10 @@ async fn provider_failure_after_reserve_reverts_budget_usage() {
 
     // Budget should be fully reverted
     let node = store.get("budget/test").await.unwrap().unwrap();
-    assert_eq!(node.used_tokens, 0, "budget should revert to 0 after provider failure");
+    assert_eq!(
+        node.used_tokens, 0,
+        "budget should revert to 0 after provider failure"
+    );
 }
 
 #[tokio::test]
@@ -418,12 +434,15 @@ async fn failed_requests_have_no_net_token_leak() {
     let store = budget_store_with_default();
     let enforcer = BudgetEnforcer::new(Box::new(store.clone()));
 
-    let router = ModelRouter::new(RoutingPolicy::RoundRobin)
-        .with_budget(enforcer, "budget/test");
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin).with_budget(enforcer, "budget/test");
 
     let provider: Arc<dyn ModelProvider> = Arc::new(FailingProvider::new("failing-model"));
     router
-        .add_provider(mock_config("failing-model"), provider, CircuitBreakerConfig::default())
+        .add_provider(
+            mock_config("failing-model"),
+            provider,
+            CircuitBreakerConfig::default(),
+        )
         .await;
 
     for _ in 0..3 {
@@ -431,7 +450,10 @@ async fn failed_requests_have_no_net_token_leak() {
     }
 
     let node = store.get("budget/test").await.unwrap().unwrap();
-    assert_eq!(node.used_tokens, 0, "3 failed requests should leave 0 used tokens");
+    assert_eq!(
+        node.used_tokens, 0,
+        "3 failed requests should leave 0 used tokens"
+    );
 }
 
 // --- Circuit breaker tests ---
@@ -708,8 +730,8 @@ mod cascade {
         let enforcer = BudgetEnforcer::new(Box::new(store.clone()));
 
         let policy = cascade_policy(0.3, 1);
-        let router = ModelRouter::new(RoutingPolicy::Cascade(policy))
-            .with_budget(enforcer, "budget/test");
+        let router =
+            ModelRouter::new(RoutingPolicy::Cascade(policy)).with_budget(enforcer, "budget/test");
 
         let slm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("slm-model"));
         let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
@@ -738,8 +760,8 @@ mod cascade {
 
         // threshold 1.1 forces escalation
         let policy = cascade_policy(1.1, 1);
-        let router = ModelRouter::new(RoutingPolicy::Cascade(policy))
-            .with_budget(enforcer, "budget/test");
+        let router =
+            ModelRouter::new(RoutingPolicy::Cascade(policy)).with_budget(enforcer, "budget/test");
 
         let slm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("slm-model"));
         let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
@@ -770,8 +792,8 @@ mod cascade {
 
         // threshold 1.1 forces escalation from tier 0 to tier 1
         let policy = cascade_policy(1.1, 1);
-        let router = ModelRouter::new(RoutingPolicy::Cascade(policy))
-            .with_model_event_sink(sink.clone());
+        let router =
+            ModelRouter::new(RoutingPolicy::Cascade(policy)).with_model_event_sink(sink.clone());
 
         let slm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("slm-model"));
         let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
@@ -791,7 +813,9 @@ mod cascade {
         // First event: escalated from slm-tier
         match &events[0] {
             ModelEvent::RoutingDecision {
-                model_id, tier, reason,
+                model_id,
+                tier,
+                reason,
             } => {
                 assert_eq!(model_id, "slm-model");
                 assert_eq!(tier, "slm-tier");
@@ -803,7 +827,9 @@ mod cascade {
         // Second event: accepted at llm-tier
         match &events[1] {
             ModelEvent::RoutingDecision {
-                model_id, tier, reason,
+                model_id,
+                tier,
+                reason,
             } => {
                 assert_eq!(model_id, "llm-model");
                 assert_eq!(tier, "llm-tier");
@@ -818,8 +844,8 @@ mod cascade {
         let sink = Arc::new(RecordingSink::default());
 
         let policy = cascade_policy(0.3, 1);
-        let router = ModelRouter::new(RoutingPolicy::Cascade(policy))
-            .with_model_event_sink(sink.clone());
+        let router =
+            ModelRouter::new(RoutingPolicy::Cascade(policy)).with_model_event_sink(sink.clone());
 
         // First tier fails, second succeeds
         let failing: Arc<dyn ModelProvider> = Arc::new(FailingProvider::new("slm-failure"));
@@ -839,7 +865,9 @@ mod cascade {
 
         match &events[0] {
             ModelEvent::RoutingDecision {
-                model_id, tier, reason,
+                model_id,
+                tier,
+                reason,
             } => {
                 assert_eq!(model_id, "slm-failure");
                 assert_eq!(tier, "slm-tier");
@@ -850,7 +878,9 @@ mod cascade {
 
         match &events[1] {
             ModelEvent::RoutingDecision {
-                model_id, tier, reason,
+                model_id,
+                tier,
+                reason,
             } => {
                 assert_eq!(model_id, "llm-model");
                 assert_eq!(tier, "llm-tier");

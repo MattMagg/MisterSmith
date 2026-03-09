@@ -13,6 +13,7 @@ use serde_json::Value;
 
 use crate::LlmError;
 
+#[cfg(target_os = "macos")]
 const KEYCHAIN_SERVICE: &str = "Claude Code-credentials";
 const CREDENTIALS_FILE: &str = ".claude/.credentials.json";
 const OAUTH_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
@@ -234,9 +235,7 @@ pub async fn refresh_access_token(
         .get("access_token")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            LlmError::Serialization(
-                "Token refresh response missing access_token".to_string(),
-            )
+            LlmError::Serialization("Token refresh response missing access_token".to_string())
         })?
         .to_string();
 

@@ -75,10 +75,7 @@ impl ExecutorAgent {
 
     /// Create a new `ExecutorAgent` with an LLM [`ModelRouter`] for AI-powered execution strategy.
     #[cfg(feature = "llm")]
-    pub fn with_router(
-        id: AgentId,
-        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
-    ) -> Self {
+    pub fn with_router(id: AgentId, router: std::sync::Arc<mister_smith_llm::ModelRouter>) -> Self {
         Self {
             id,
             router: Some(router),
@@ -138,8 +135,8 @@ impl Actor for ExecutorAgent {
                             })
                             .unwrap_or("");
 
-                        let mut strategy: serde_json::Value =
-                            serde_json::from_str(text).unwrap_or_else(|_| {
+                        let mut strategy: serde_json::Value = serde_json::from_str(text)
+                            .unwrap_or_else(|_| {
                                 serde_json::json!({
                                     "status": "executing",
                                     "raw_response": text,

@@ -23,39 +23,23 @@ pub enum ModelEvent {
         stop_reason: StopReason,
     },
     /// Stream failed with an error.
-    StreamFailed {
-        error: String,
-        recoverable: bool,
-    },
+    StreamFailed { error: String, recoverable: bool },
     /// Stream was cancelled.
-    StreamCancelled {
-        reason: String,
-    },
+    StreamCancelled { reason: String },
     /// Stream resumed from a checkpoint.
-    StreamResumed {
-        from_checkpoint: String,
-    },
+    StreamResumed { from_checkpoint: String },
 
     // -- Text (3) --
     /// Incremental text content.
-    TextDelta {
-        text: String,
-    },
+    TextDelta { text: String },
     /// Complete assembled text block.
-    TextCompleted {
-        full_text: String,
-    },
+    TextCompleted { full_text: String },
     /// Text annotation metadata.
-    TextAnnotation {
-        annotation: serde_json::Value,
-    },
+    TextAnnotation { annotation: serde_json::Value },
 
     // -- Tool Call (4) --
     /// Model initiated a tool call.
-    ToolCallStart {
-        call_id: String,
-        name: String,
-    },
+    ToolCallStart { call_id: String, name: String },
     /// Incremental tool call input.
     ToolCallDelta {
         call_id: String,
@@ -76,14 +60,9 @@ pub enum ModelEvent {
 
     // -- Observability (3) --
     /// Token usage update during streaming.
-    UsageUpdate {
-        usage: Usage,
-    },
+    UsageUpdate { usage: Usage },
     /// Latency checkpoint marker.
-    LatencyMarker {
-        checkpoint: String,
-        elapsed_ms: u64,
-    },
+    LatencyMarker { checkpoint: String, elapsed_ms: u64 },
     /// Routing decision for observability.
     RoutingDecision {
         model_id: String,
@@ -101,9 +80,7 @@ pub enum ModelEvent {
 
     // -- Heartbeat (1) --
     /// Periodic heartbeat to indicate stream liveness.
-    Heartbeat {
-        sequence: u64,
-    },
+    Heartbeat { sequence: u64 },
 
     // -- Forward compatibility (1) --
     /// Unknown event type for forward compatibility.
@@ -197,7 +174,9 @@ mod tests {
 
     #[test]
     fn serde_round_trip_text_delta() {
-        let event = ModelEvent::TextDelta { text: "hello".into() };
+        let event = ModelEvent::TextDelta {
+            text: "hello".into(),
+        };
         let json = serde_json::to_string(&event).unwrap();
         let deserialized: ModelEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(event, deserialized);
@@ -248,7 +227,11 @@ mod tests {
     #[test]
     fn backpressure_policy_mapping() {
         assert_eq!(
-            ModelEvent::ToolCallStart { call_id: "c".into(), name: "t".into() }.backpressure_policy(),
+            ModelEvent::ToolCallStart {
+                call_id: "c".into(),
+                name: "t".into()
+            }
+            .backpressure_policy(),
             BackpressurePolicy::Lossless
         );
         assert_eq!(
@@ -264,7 +247,11 @@ mod tests {
     #[test]
     fn stream_class_mapping() {
         assert_eq!(
-            ModelEvent::ToolCallStart { call_id: "c".into(), name: "t".into() }.stream_class(),
+            ModelEvent::ToolCallStart {
+                call_id: "c".into(),
+                name: "t".into()
+            }
+            .stream_class(),
             StreamClassification::Semantic
         );
         assert_eq!(
@@ -280,22 +267,66 @@ mod tests {
     #[test]
     fn all_variants_serialize() {
         let variants: Vec<ModelEvent> = vec![
-            ModelEvent::StreamStarted { model_id: "m".into(), request_id: "r".into() },
-            ModelEvent::StreamCompleted { usage: Usage::default(), stop_reason: StopReason::Completed },
-            ModelEvent::StreamFailed { error: "err".into(), recoverable: false },
-            ModelEvent::StreamCancelled { reason: "cancel".into() },
-            ModelEvent::StreamResumed { from_checkpoint: "cp".into() },
+            ModelEvent::StreamStarted {
+                model_id: "m".into(),
+                request_id: "r".into(),
+            },
+            ModelEvent::StreamCompleted {
+                usage: Usage::default(),
+                stop_reason: StopReason::Completed,
+            },
+            ModelEvent::StreamFailed {
+                error: "err".into(),
+                recoverable: false,
+            },
+            ModelEvent::StreamCancelled {
+                reason: "cancel".into(),
+            },
+            ModelEvent::StreamResumed {
+                from_checkpoint: "cp".into(),
+            },
             ModelEvent::TextDelta { text: "t".into() },
-            ModelEvent::TextCompleted { full_text: "full".into() },
-            ModelEvent::TextAnnotation { annotation: serde_json::json!({}) },
-            ModelEvent::ToolCallStart { call_id: "c".into(), name: "n".into() },
-            ModelEvent::ToolCallDelta { call_id: "c".into(), input_chunk: "i".into() },
-            ModelEvent::ToolCallCompleted { call_id: "c".into(), name: "n".into(), input: serde_json::json!({}) },
-            ModelEvent::ToolResult { call_id: "c".into(), result: serde_json::json!({}), error: None },
-            ModelEvent::UsageUpdate { usage: Usage::default() },
-            ModelEvent::LatencyMarker { checkpoint: "cp".into(), elapsed_ms: 100 },
-            ModelEvent::RoutingDecision { model_id: "m".into(), tier: "t".into(), reason: "r".into() },
-            ModelEvent::Error { code: "E001".into(), message: "msg".into(), recoverable: true },
+            ModelEvent::TextCompleted {
+                full_text: "full".into(),
+            },
+            ModelEvent::TextAnnotation {
+                annotation: serde_json::json!({}),
+            },
+            ModelEvent::ToolCallStart {
+                call_id: "c".into(),
+                name: "n".into(),
+            },
+            ModelEvent::ToolCallDelta {
+                call_id: "c".into(),
+                input_chunk: "i".into(),
+            },
+            ModelEvent::ToolCallCompleted {
+                call_id: "c".into(),
+                name: "n".into(),
+                input: serde_json::json!({}),
+            },
+            ModelEvent::ToolResult {
+                call_id: "c".into(),
+                result: serde_json::json!({}),
+                error: None,
+            },
+            ModelEvent::UsageUpdate {
+                usage: Usage::default(),
+            },
+            ModelEvent::LatencyMarker {
+                checkpoint: "cp".into(),
+                elapsed_ms: 100,
+            },
+            ModelEvent::RoutingDecision {
+                model_id: "m".into(),
+                tier: "t".into(),
+                reason: "r".into(),
+            },
+            ModelEvent::Error {
+                code: "E001".into(),
+                message: "msg".into(),
+                recoverable: true,
+            },
             ModelEvent::Heartbeat { sequence: 42 },
             ModelEvent::Unknown,
         ];

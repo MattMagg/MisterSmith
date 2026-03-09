@@ -66,21 +66,13 @@ impl DualStreamActor {
             active_tool_calls: std::collections::HashMap::new(),
         };
 
-        let handle = DualStreamHandle {
-            semantic_rx,
-            ui_rx,
-        };
+        let handle = DualStreamHandle { semantic_rx, ui_rx };
 
         (actor, handle)
     }
 
     /// Convert a StreamChunk to one or more ModelEvents and route them.
-    pub async fn process_chunk(
-        &mut self,
-        chunk: StreamChunk,
-        model_id: &str,
-        request_id: &str,
-    ) {
+    pub async fn process_chunk(&mut self, chunk: StreamChunk, model_id: &str, request_id: &str) {
         let events = self.convert_chunk(chunk, model_id, request_id);
         for event in events {
             self.route_event(event).await;
@@ -125,7 +117,9 @@ impl DualStreamActor {
                     .drain()
                     .map(|(call_id, active_tool_call)| {
                         let input = serde_json::from_str(&active_tool_call.accumulated_input)
-                            .unwrap_or_else(|_| serde_json::json!(active_tool_call.accumulated_input));
+                            .unwrap_or_else(|_| {
+                                serde_json::json!(active_tool_call.accumulated_input)
+                            });
                         ModelEvent::ToolCallCompleted {
                             call_id,
                             name: active_tool_call.name,
@@ -241,14 +235,18 @@ mod tests {
     async fn text_delta_routes_to_ui_stream() {
         let (mut actor, mut handle) = DualStreamActor::new(DualStreamConfig::default());
 
-        actor.process_chunk(
-            StreamChunk {
-                index: 0,
-                delta: ChunkDelta::Text { text: "hello".into() },
-            },
-            "test-model",
-            "req-1",
-        ).await;
+        actor
+            .process_chunk(
+                StreamChunk {
+                    index: 0,
+                    delta: ChunkDelta::Text {
+                        text: "hello".into(),
+                    },
+                },
+                "test-model",
+                "req-1",
+            )
+            .await;
 
         // Flush to ensure delivery
         actor.finish().await;
@@ -263,17 +261,19 @@ mod tests {
     async fn tool_call_routes_to_semantic_stream() {
         let (mut actor, mut handle) = DualStreamActor::new(DualStreamConfig::default());
 
-        actor.process_chunk(
-            StreamChunk {
-                index: 0,
-                delta: ChunkDelta::ToolUseStart {
-                    call_id: "call-1".into(),
-                    name: "search".into(),
+        actor
+            .process_chunk(
+                StreamChunk {
+                    index: 0,
+                    delta: ChunkDelta::ToolUseStart {
+                        call_id: "call-1".into(),
+                        name: "search".into(),
+                    },
                 },
-            },
-            "test-model",
-            "req-1",
-        ).await;
+                "test-model",
+                "req-1",
+            )
+            .await;
 
         let event = handle.semantic_rx.try_recv();
         assert!(event.is_ok());
@@ -287,11 +287,13 @@ mod tests {
     async fn stop_chunk_produces_stream_completed() {
         let (mut actor, mut handle) = DualStreamActor::new(DualStreamConfig::default());
 
-        actor.process_chunk(
-            StreamChunk::stop(0, StopReason::Completed),
-            "test-model",
-            "req-1",
-        ).await;
+        actor
+            .process_chunk(
+                StreamChunk::stop(0, StopReason::Completed),
+                "test-model",
+                "req-1",
+            )
+            .await;
 
         let event = handle.semantic_rx.try_recv();
         assert!(event.is_ok());
@@ -305,35 +307,41 @@ mod tests {
     async fn tool_call_completed_preserves_name_and_input() {
         let (mut actor, mut handle) = DualStreamActor::new(DualStreamConfig::default());
 
-        actor.process_chunk(
-            StreamChunk {
-                index: 0,
-                delta: ChunkDelta::ToolUseStart {
-                    call_id: "call-1".into(),
-                    name: "search".into(),
+        actor
+            .process_chunk(
+                StreamChunk {
+                    index: 0,
+                    delta: ChunkDelta::ToolUseStart {
+                        call_id: "call-1".into(),
+                        name: "search".into(),
+                    },
                 },
-            },
-            "test-model",
-            "req-1",
-        ).await;
+                "test-model",
+                "req-1",
+            )
+            .await;
 
-        actor.process_chunk(
-            StreamChunk {
-                index: 1,
-                delta: ChunkDelta::ToolUseInput {
-                    call_id: "call-1".into(),
-                    input: serde_json::json!({"query": "rust"}),
+        actor
+            .process_chunk(
+                StreamChunk {
+                    index: 1,
+                    delta: ChunkDelta::ToolUseInput {
+                        call_id: "call-1".into(),
+                        input: serde_json::json!({"query": "rust"}),
+                    },
                 },
-            },
-            "test-model",
-            "req-1",
-        ).await;
+                "test-model",
+                "req-1",
+            )
+            .await;
 
-        actor.process_chunk(
-            StreamChunk::stop(2, StopReason::Completed),
-            "test-model",
-            "req-1",
-        ).await;
+        actor
+            .process_chunk(
+                StreamChunk::stop(2, StopReason::Completed),
+                "test-model",
+                "req-1",
+            )
+            .await;
 
         let start_event = handle.semantic_rx.try_recv().unwrap();
         assert!(matches!(
@@ -370,9 +378,13 @@ mod tests {
         let (mut actor, _handle) = DualStreamActor::new(config);
 
         // Fill the UI channel
-        actor.route_event(ModelEvent::Heartbeat { sequence: 1 }).await;
+        actor
+            .route_event(ModelEvent::Heartbeat { sequence: 1 })
+            .await;
         // This should be silently dropped (Droppable policy + full channel)
-        actor.route_event(ModelEvent::Heartbeat { sequence: 2 }).await;
+        actor
+            .route_event(ModelEvent::Heartbeat { sequence: 2 })
+            .await;
         // No panic = success
     }
 
@@ -386,21 +398,34 @@ mod tests {
         let (mut actor, mut handle) = DualStreamActor::new(config);
 
         // First text is immediately passed through while there is capacity.
-        actor.route_event(ModelEvent::TextDelta { text: "part0".into() }).await;
+        actor
+            .route_event(ModelEvent::TextDelta {
+                text: "part0".into(),
+            })
+            .await;
 
         let first = handle.ui_rx.try_recv();
         assert!(matches!(first, Ok(ModelEvent::TextDelta { text }) if text == "part0"));
 
         // Saturate the UI channel so coalescing is required.
-        actor.route_event(ModelEvent::Heartbeat { sequence: 1 }).await;
+        actor
+            .route_event(ModelEvent::Heartbeat { sequence: 1 })
+            .await;
 
         // Send multiple text deltas — these should now coalesce.
         for i in 0..3 {
-            actor.route_event(ModelEvent::TextDelta { text: format!("part{}", i + 1) }).await;
+            actor
+                .route_event(ModelEvent::TextDelta {
+                    text: format!("part{}", i + 1),
+                })
+                .await;
         }
 
         // Channel remains full with the heartbeat; coalesced payload is buffered.
-        assert!(matches!(handle.ui_rx.try_recv(), Ok(ModelEvent::Heartbeat { sequence: 1 })));
+        assert!(matches!(
+            handle.ui_rx.try_recv(),
+            Ok(ModelEvent::Heartbeat { sequence: 1 })
+        ));
 
         // Freeing capacity allows the pending coalesced payload to flush.
         actor.finish().await;
@@ -419,15 +444,26 @@ mod tests {
         let (mut actor, mut handle) = DualStreamActor::new(config);
 
         // Fill the UI channel and force the first text delta into pending coalesced state.
-        actor.route_event(ModelEvent::Heartbeat { sequence: 1 }).await;
-        actor.route_event(ModelEvent::TextDelta { text: "hello".into() }).await;
+        actor
+            .route_event(ModelEvent::Heartbeat { sequence: 1 })
+            .await;
+        actor
+            .route_event(ModelEvent::TextDelta {
+                text: "hello".into(),
+            })
+            .await;
 
         // Flush attempt while full should keep pending text buffered.
         actor.finish().await;
-        assert!(matches!(handle.ui_rx.try_recv(), Ok(ModelEvent::Heartbeat { sequence: 1 })));
+        assert!(matches!(
+            handle.ui_rx.try_recv(),
+            Ok(ModelEvent::Heartbeat { sequence: 1 })
+        ));
 
         // A second flush now succeeds and delivers the original buffered text.
         actor.finish().await;
-        assert!(matches!(handle.ui_rx.try_recv(), Ok(ModelEvent::TextDelta { text }) if text == "hello"));
+        assert!(
+            matches!(handle.ui_rx.try_recv(), Ok(ModelEvent::TextDelta { text }) if text == "hello")
+        );
     }
 }

@@ -186,12 +186,18 @@ async fn execute_tool_call_tool_not_found_returns_typed_error() {
     };
 
     let err = bus.execute_tool_call(None, &call).await.unwrap_err();
-    assert!(matches!(err, AgentSystemError::Tool(ToolError::NotFound(_))));
+    assert!(matches!(
+        err,
+        AgentSystemError::Tool(ToolError::NotFound(_))
+    ));
 }
 
 #[tokio::test]
 async fn execute_tool_call_permission_denied_returns_typed_error() {
-    let bus = ToolBus::with_security(Some(Arc::new(PolicyEngine::new(&RbacConfig::default()))), None);
+    let bus = ToolBus::with_security(
+        Some(Arc::new(PolicyEngine::new(&RbacConfig::default()))),
+        None,
+    );
     let agent_id = AgentId::new();
     let principal = ToolPrincipal::new(agent_id, claims(agent_id, &[]));
 

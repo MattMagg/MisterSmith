@@ -485,8 +485,7 @@ mod tests {
             "headers": {}
         });
 
-        let envelope: MessageEnvelope =
-            serde_json::from_value(pre_phase9_json).unwrap();
+        let envelope: MessageEnvelope = serde_json::from_value(pre_phase9_json).unwrap();
         assert!(envelope.plane.is_none());
         assert!(envelope.stream_class.is_none());
     }
