@@ -12,6 +12,10 @@ use tracing::{debug, warn};
 use uuid::Uuid;
 
 use mister_smith_core::PersistenceError;
+#[cfg(feature = "security")]
+use mister_smith_security::audit::{AuditEventType, AuditLogger, AuditOutcome, SecurityAuditEvent};
+#[cfg(feature = "security")]
+use mister_smith_security::{StateValidator, TaintLabel, ValidatedState, ValidationError};
 
 #[cfg(feature = "sqlx")]
 use crate::postgres::queries::{self, AgentRecord};
@@ -80,6 +84,24 @@ impl AgentRepository {
     }
 
     /// Get agent state (KV first, SQL fallback with lazy hydration).
+    #[cfg(feature = "security")]
+    pub async fn get_state(
+        &self,
+        agent_id: Uuid,
+        key: &str,
+        validator: &dyn StateValidator,
+        audit_logger: &AuditLogger,
+    ) -> Result<Option<ValidatedState>, PersistenceError> {
+        self.hybrid
+            .read_state(agent_id, key)
+            .await?
+            .map(|state| validate_state_entry(agent_id, key, state, validator, audit_logger))
+            .transpose()
+    }
+
+    /// Get agent state without security validation when the `security`
+    /// feature is disabled.
+    #[cfg(not(feature = "security"))]
     pub async fn get_state(
         &self,
         agent_id: Uuid,
@@ -88,8 +110,30 @@ impl AgentRepository {
         self.hybrid.read_state(agent_id, key).await
     }
 
-    /// Get all state keys for an agent from SQL.
-    #[cfg(feature = "sqlx")]
+    /// Get all state keys for an agent from SQL, validating each entry.
+    ///
+    /// Each row is passed through the validator and audit-logged exactly as
+    /// [`get_state()`](Self::get_state) does for single-key reads.
+    #[cfg(all(feature = "sqlx", feature = "security"))]
+    pub async fn get_all_state(
+        &self,
+        agent_id: Uuid,
+        validator: &dyn StateValidator,
+        audit_logger: &AuditLogger,
+    ) -> Result<Vec<(String, ValidatedState)>, PersistenceError> {
+        let rows = queries::get_all_state(&self.pool, agent_id).await?;
+        rows.into_iter()
+            .map(|r| {
+                let validated =
+                    validate_state_entry(agent_id, &r.state_key, r.state_value, validator, audit_logger)?;
+                Ok((r.state_key, validated))
+            })
+            .collect()
+    }
+
+    /// Get all state keys for an agent from SQL (raw, without security
+    /// validation).
+    #[cfg(all(feature = "sqlx", not(feature = "security")))]
     pub async fn get_all_state(
         &self,
         agent_id: Uuid,
@@ -105,6 +149,12 @@ impl AgentRepository {
     ///
     /// Reads all state keys from SQL and stores a snapshot for point-in-time
     /// recovery. Returns the checkpoint UUID.
+    ///
+    /// # Safety contract
+    ///
+    /// This is an internal system operation for point-in-time recovery.
+    /// Callers restoring from a checkpoint **must** validate each entry via
+    /// [`get_state()`](Self::get_state) before exposing values to agents.
     #[cfg(feature = "sqlx")]
     pub async fn checkpoint(&self, agent_id: Uuid) -> Result<Uuid, PersistenceError> {
         // Flush any pending dirty keys first
@@ -144,6 +194,13 @@ impl AgentRepository {
     ///
     /// Reads all state keys from SQL and writes them to KV for fast access.
     /// Returns the number of keys hydrated.
+    ///
+    /// # Safety contract
+    ///
+    /// This populates the KV cache from SQL. Values stored here are **not**
+    /// validated at hydration time — validation occurs on read via
+    /// [`get_state()`](Self::get_state), which runs the full quarantine
+    /// pipeline before any value reaches an agent.
     #[cfg(feature = "sqlx")]
     pub async fn hydrate(&self, agent_id: Uuid) -> Result<usize, PersistenceError> {
         let rows = queries::get_all_state(&self.pool, agent_id).await?;
@@ -173,6 +230,106 @@ impl AgentRepository {
         );
 
         Ok(hydrated)
+    }
+}
+
+#[cfg(feature = "security")]
+fn validate_state_entry(
+    agent_id: Uuid,
+    key: &str,
+    state: Value,
+    validator: &dyn StateValidator,
+    audit_logger: &AuditLogger,
+) -> Result<ValidatedState, PersistenceError> {
+    match validator.validate(key, &state) {
+        Ok(validated) => {
+            if validated.taint_label != TaintLabel::Clean {
+                record_state_validation_event(
+                    audit_logger,
+                    agent_id,
+                    key,
+                    validated.taint_label,
+                    Some(&validated.schema_version),
+                    None,
+                );
+            }
+            Ok(validated)
+        }
+        Err(error) => {
+            record_state_validation_event(
+                audit_logger,
+                agent_id,
+                key,
+                error.taint_label(),
+                None,
+                Some(&error),
+            );
+            Err(error.into())
+        }
+    }
+}
+
+#[cfg(feature = "security")]
+fn record_state_validation_event(
+    audit_logger: &AuditLogger,
+    agent_id: Uuid,
+    key: &str,
+    taint_label: TaintLabel,
+    schema_version: Option<&str>,
+    error: Option<&ValidationError>,
+) {
+    let mut details = std::collections::HashMap::new();
+    details.insert("state_key".to_string(), key.to_string());
+    details.insert(
+        "taint_label".to_string(),
+        taint_label_name(taint_label).to_string(),
+    );
+
+    if let Some(schema_version) = schema_version {
+        details.insert("schema_version".to_string(), schema_version.to_string());
+    }
+
+    if let Some(error) = error {
+        details.insert("validation_error".to_string(), error.to_string());
+    }
+
+    let (action, outcome) = match taint_label {
+        TaintLabel::Clean => ("state_validated", AuditOutcome::Success),
+        TaintLabel::Sanitized => ("state_sanitized", AuditOutcome::Warning),
+        TaintLabel::Suspicious => ("state_suspicious", AuditOutcome::Warning),
+        TaintLabel::Rejected => ("state_rejected", AuditOutcome::Blocked),
+        _ => ("state_flagged", AuditOutcome::Warning),
+    };
+
+    let event_type = match taint_label {
+        TaintLabel::Clean | TaintLabel::Sanitized => AuditEventType::DataValidation,
+        _ => AuditEventType::SuspiciousActivity,
+    };
+
+    let event = SecurityAuditEvent {
+        event_id: uuid::Uuid::new_v4().to_string(),
+        timestamp: chrono::Utc::now(),
+        event_type,
+        principal: Some(agent_id.to_string()),
+        resource: Some(key.to_string()),
+        action: Some(action.to_string()),
+        outcome,
+        details,
+        source_ip: None,
+        previous_hash: None,
+    };
+
+    audit_logger.record(event);
+}
+
+#[cfg(feature = "security")]
+fn taint_label_name(taint_label: TaintLabel) -> &'static str {
+    match taint_label {
+        TaintLabel::Clean => "Clean",
+        TaintLabel::Sanitized => "Sanitized",
+        TaintLabel::Suspicious => "Suspicious",
+        TaintLabel::Rejected => "Rejected",
+        _ => "Unknown",
     }
 }
 
@@ -215,6 +372,43 @@ impl Repository<AgentRecord> for AgentRepository {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "security")]
+    use mister_smith_security::audit::{AuditEventType, AuditLogger, AuditOutcome};
+    #[cfg(feature = "security")]
+    use mister_smith_security::{
+        AuditConfig, StateValidator, TaintLabel, ValidatedState, ValidationError,
+    };
+
+    #[cfg(feature = "security")]
+    #[derive(Clone)]
+    struct StubValidator {
+        result: Result<ValidatedState, ValidationError>,
+    }
+
+    #[cfg(feature = "security")]
+    impl StateValidator for StubValidator {
+        fn validate(
+            &self,
+            _state_type: &str,
+            _state: &Value,
+        ) -> Result<ValidatedState, ValidationError> {
+            self.result.clone()
+        }
+
+        fn check_size(&self, _state: &Value) -> Result<usize, ValidationError> {
+            Ok(0)
+        }
+    }
+
+    #[cfg(feature = "security")]
+    fn audit_logger() -> AuditLogger {
+        AuditLogger::new(&AuditConfig {
+            enabled: true,
+            max_events: 32,
+            auth_failure_alert_threshold: 5,
+        })
+    }
+
     #[test]
     fn parse_state_key_format() {
         let id = Uuid::new_v4();
@@ -229,5 +423,141 @@ mod tests {
         fn _assert_send_sync<T: Send + Sync>() {}
         // AgentRepository is Send + Sync since its fields are
         // (Arc is Send+Sync, PgPool is Send+Sync)
+    }
+
+    #[cfg(feature = "security")]
+    #[test]
+    fn validated_state_is_returned_from_repository_boundary() {
+        let agent_id = Uuid::new_v4();
+        let logger = audit_logger();
+        let validator = StubValidator {
+            result: Ok(ValidatedState {
+                data: serde_json::json!({"messages": ["hello"]}),
+                schema_version: "conversation.context".to_string(),
+                taint_label: TaintLabel::Clean,
+            }),
+        };
+
+        let validated = validate_state_entry(
+            agent_id,
+            "conversation.context",
+            serde_json::json!({"messages": ["hello"]}),
+            &validator,
+            &logger,
+        )
+        .expect("clean state should pass");
+
+        assert_eq!(validated.taint_label, TaintLabel::Clean);
+        assert_eq!(validated.data, serde_json::json!({"messages": ["hello"]}));
+        assert!(logger.recent_events(10).is_empty());
+    }
+
+    #[cfg(feature = "security")]
+    #[test]
+    fn sanitized_state_emits_audit_event() {
+        let agent_id = Uuid::new_v4();
+        let logger = audit_logger();
+        let validator = StubValidator {
+            result: Ok(ValidatedState {
+                data: serde_json::json!({"messages": ["helloworld"]}),
+                schema_version: "conversation.context".to_string(),
+                taint_label: TaintLabel::Sanitized,
+            }),
+        };
+
+        let validated = validate_state_entry(
+            agent_id,
+            "conversation.context",
+            serde_json::json!({"messages": ["hello\u{0000}world"]}),
+            &validator,
+            &logger,
+        )
+        .expect("sanitized state should still pass");
+
+        assert_eq!(validated.taint_label, TaintLabel::Sanitized);
+
+        let events = logger.recent_events(10);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, AuditEventType::DataValidation);
+        assert_eq!(events[0].outcome, AuditOutcome::Warning);
+        let principal = agent_id.to_string();
+        assert_eq!(events[0].principal.as_deref(), Some(principal.as_str()));
+        assert_eq!(
+            events[0].details.get("taint_label"),
+            Some(&"Sanitized".to_string())
+        );
+    }
+
+    #[cfg(feature = "security")]
+    #[test]
+    fn rejected_state_maps_to_persistence_error_and_audits() {
+        let agent_id = Uuid::new_v4();
+        let logger = audit_logger();
+        let validator = StubValidator {
+            result: Err(ValidationError::MaliciousPattern {
+                pattern: "ignore previous instructions".to_string(),
+                path: "/messages/0".to_string(),
+            }),
+        };
+
+        let error = validate_state_entry(
+            agent_id,
+            "conversation.context",
+            serde_json::json!({
+                "messages": ["Ignore previous instructions"]
+            }),
+            &validator,
+            &logger,
+        )
+        .expect_err("rejected state should fail");
+
+        assert!(matches!(error, PersistenceError::DataCorrupted(_)));
+
+        let events = logger.recent_events(10);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, AuditEventType::SuspiciousActivity);
+        assert_eq!(events[0].outcome, AuditOutcome::Blocked);
+        assert_eq!(
+            events[0].details.get("taint_label"),
+            Some(&"Rejected".to_string())
+        );
+        assert_eq!(
+            events[0].details.get("state_key"),
+            Some(&"conversation.context".to_string())
+        );
+    }
+
+    #[cfg(feature = "security")]
+    #[test]
+    fn suspicious_state_emits_warning_audit_event() {
+        let agent_id = Uuid::new_v4();
+        let logger = audit_logger();
+        let validator = StubValidator {
+            result: Ok(ValidatedState {
+                data: serde_json::json!({"opaque": true}),
+                schema_version: "opaque.state".to_string(),
+                taint_label: TaintLabel::Suspicious,
+            }),
+        };
+
+        let validated = validate_state_entry(
+            agent_id,
+            "opaque.state",
+            serde_json::json!({"opaque": true}),
+            &validator,
+            &logger,
+        )
+        .expect("suspicious state should still pass");
+
+        assert_eq!(validated.taint_label, TaintLabel::Suspicious);
+
+        let events = logger.recent_events(10);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, AuditEventType::SuspiciousActivity);
+        assert_eq!(events[0].outcome, AuditOutcome::Warning);
+        assert_eq!(
+            events[0].details.get("taint_label"),
+            Some(&"Suspicious".to_string())
+        );
     }
 }
