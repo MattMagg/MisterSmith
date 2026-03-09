@@ -79,13 +79,14 @@ impl ClaudeSubscriptionProvider {
     async fn access_token(&self) -> Result<String, LlmError> {
         // Check cached credentials first.
         {
-            let guard = self.credentials.read().map_err(|_| {
-                LlmError::ProviderError {
+            let guard = self
+                .credentials
+                .read()
+                .map_err(|_| LlmError::ProviderError {
                     status: 500,
                     message: "credential lock poisoned".to_string(),
                     retryable: false,
-                }
-            })?;
+                })?;
             if let Some(creds) = guard.as_ref() {
                 if !creds.is_expired() {
                     return Ok(creds.access_token.clone());
@@ -248,8 +249,8 @@ impl ClaudeSubscriptionProvider {
         // Accumulate partial JSON input for tool calls across deltas.
         let mut tool_input_buffers: std::collections::HashMap<String, String> =
             std::collections::HashMap::new();
-        // Track tool call_id → name for ToolUseStart events.
-        let mut tool_names: std::collections::HashMap<String, String> =
+        // Track SSE content-block indexes to the stable provider tool call IDs.
+        let mut tool_call_ids_by_content_index: std::collections::HashMap<u64, String> =
             std::collections::HashMap::new();
 
         while let Some(chunk) = bytes_stream.next().await {
@@ -273,7 +274,7 @@ impl ClaudeSubscriptionProvider {
                         &mut index,
                         &mut saw_tool_call,
                         &mut tool_input_buffers,
-                        &mut tool_names,
+                        &mut tool_call_ids_by_content_index,
                     )
                     .await?;
                     continue;
@@ -299,7 +300,7 @@ impl ClaudeSubscriptionProvider {
                 &mut index,
                 &mut saw_tool_call,
                 &mut tool_input_buffers,
-                &mut tool_names,
+                &mut tool_call_ids_by_content_index,
             )
             .await?;
         }
@@ -411,7 +412,9 @@ fn build_messages(messages: &[ChatMessage]) -> Vec<Value> {
                     "content": [{ "type": "text", "text": text }]
                 }));
             }
-            ChatMessage::Tool { result: tool_result } => {
+            ChatMessage::Tool {
+                result: tool_result,
+            } => {
                 let block = json!({
                     "type": "tool_result",
                     "tool_use_id": tool_result.call_id,
@@ -528,18 +531,12 @@ fn normalize_completion_response(
 }
 
 fn normalize_tool_call(block: &Value) -> Result<ToolCall, LlmError> {
-    let call_id = block
-        .get("id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            LlmError::Serialization("Anthropic tool_use block missing id".to_string())
-        })?;
-    let name = block
-        .get("name")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            LlmError::Serialization("Anthropic tool_use block missing name".to_string())
-        })?;
+    let call_id = block.get("id").and_then(Value::as_str).ok_or_else(|| {
+        LlmError::Serialization("Anthropic tool_use block missing id".to_string())
+    })?;
+    let name = block.get("name").and_then(Value::as_str).ok_or_else(|| {
+        LlmError::Serialization("Anthropic tool_use block missing name".to_string())
+    })?;
     let input = block.get("input").cloned().unwrap_or(json!({}));
 
     Ok(ToolCall {
@@ -550,7 +547,10 @@ fn normalize_tool_call(block: &Value) -> Result<ToolCall, LlmError> {
 }
 
 fn normalize_usage(payload: &Value) -> Result<Usage, LlmError> {
-    let input_tokens = payload.get("input_tokens").and_then(Value::as_u64).unwrap_or(0);
+    let input_tokens = payload
+        .get("input_tokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
     let output_tokens = payload
         .get("output_tokens")
         .and_then(Value::as_u64)
@@ -591,7 +591,7 @@ async fn process_anthropic_sse_event(
     index: &mut usize,
     saw_tool_call: &mut bool,
     tool_input_buffers: &mut std::collections::HashMap<String, String>,
-    tool_names: &mut std::collections::HashMap<String, String>,
+    tool_call_ids_by_content_index: &mut std::collections::HashMap<u64, String>,
 ) -> Result<(), LlmError> {
     if data_lines.is_empty() {
         return Ok(());
@@ -608,6 +608,7 @@ async fn process_anthropic_sse_event(
             if let Some(content_block) = payload.get("content_block") {
                 match content_block.get("type").and_then(Value::as_str) {
                     Some("tool_use") => {
+                        let block_index = payload.get("index").and_then(Value::as_u64).unwrap_or(0);
                         let call_id = content_block
                             .get("id")
                             .and_then(Value::as_str)
@@ -631,8 +632,8 @@ async fn process_anthropic_sse_event(
                         *index += 1;
                         *saw_tool_call = true;
 
+                        tool_call_ids_by_content_index.insert(block_index, call_id.clone());
                         tool_input_buffers.insert(call_id.clone(), String::new());
-                        tool_names.insert(call_id, name);
                     }
                     _ => {
                         // text blocks start emitting via content_block_delta
@@ -658,23 +659,14 @@ async fn process_anthropic_sse_event(
                     }
                     Some("input_json_delta") => {
                         if let Some(partial) = delta.get("partial_json").and_then(Value::as_str) {
-                            // Find which tool call this delta belongs to via the
-                            // content block index in the payload.
                             let block_index =
                                 payload.get("index").and_then(Value::as_u64).unwrap_or(0);
-
-                            // Find the call_id by block index. We track names in
-                            // insertion order, so the Nth tool_use block maps to the
-                            // Nth entry. Use the last-inserted call_id as fallback.
-                            let call_id = tool_input_buffers
-                                .keys()
-                                .nth(block_index as usize)
-                                .cloned()
-                                .or_else(|| tool_input_buffers.keys().last().cloned())
-                                .unwrap_or_default();
-
-                            if let Some(buf) = tool_input_buffers.get_mut(&call_id) {
-                                buf.push_str(partial);
+                            if let Some(call_id) =
+                                tool_call_ids_by_content_index.get(&block_index).cloned()
+                            {
+                                if let Some(buf) = tool_input_buffers.get_mut(&call_id) {
+                                    buf.push_str(partial);
+                                }
                             }
                         }
                     }
@@ -685,12 +677,7 @@ async fn process_anthropic_sse_event(
         "content_block_stop" => {
             // If a tool_use block just finished, emit the complete input.
             let block_index = payload.get("index").and_then(Value::as_u64).unwrap_or(0);
-            let call_id = tool_input_buffers
-                .keys()
-                .nth(block_index as usize)
-                .cloned();
-
-            if let Some(call_id) = call_id {
+            if let Some(call_id) = tool_call_ids_by_content_index.remove(&block_index) {
                 if let Some(json_buf) = tool_input_buffers.remove(&call_id) {
                     let input: Value = if json_buf.is_empty() {
                         json!({})
@@ -701,10 +688,7 @@ async fn process_anthropic_sse_event(
                     let _ = stream_tx
                         .send(Ok(StreamChunk {
                             index: *index,
-                            delta: ChunkDelta::ToolUseInput {
-                                call_id,
-                                input,
-                            },
+                            delta: ChunkDelta::ToolUseInput { call_id, input },
                         }))
                         .await;
                     *index += 1;
@@ -832,10 +816,7 @@ mod tests {
         let result = build_messages(&messages);
         // System messages should be excluded from the messages array.
         assert_eq!(result.len(), 1);
-        assert_eq!(
-            result[0].get("role").and_then(Value::as_str),
-            Some("user")
-        );
+        assert_eq!(result[0].get("role").and_then(Value::as_str), Some("user"));
     }
 
     #[test]
@@ -860,10 +841,7 @@ mod tests {
         assert_eq!(result.len(), 3);
 
         let tool_msg = &result[2];
-        assert_eq!(
-            tool_msg.get("role").and_then(Value::as_str),
-            Some("user")
-        );
+        assert_eq!(tool_msg.get("role").and_then(Value::as_str), Some("user"));
         let content = tool_msg.get("content").and_then(Value::as_array).unwrap();
         assert_eq!(content.len(), 2);
         assert_eq!(
@@ -895,10 +873,16 @@ mod tests {
 
         let body = provider.build_request_body(&request, false);
 
-        assert_eq!(body.get("model").and_then(Value::as_str), Some("claude-sonnet-4-6"));
+        assert_eq!(
+            body.get("model").and_then(Value::as_str),
+            Some("claude-sonnet-4-6")
+        );
         assert_eq!(body.get("max_tokens").and_then(Value::as_u64), Some(1024));
         assert_eq!(body.get("stream").and_then(Value::as_bool), Some(false));
-        assert_eq!(body.get("system").and_then(Value::as_str), Some("Be helpful"));
+        assert_eq!(
+            body.get("system").and_then(Value::as_str),
+            Some("Be helpful")
+        );
         assert!(body.get("messages").and_then(Value::as_array).is_some());
     }
 
@@ -947,7 +931,10 @@ mod tests {
         let body = provider.build_request_body(&request, false);
         let tools = body.get("tools").and_then(Value::as_array).unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].get("name").and_then(Value::as_str), Some("get_weather"));
+        assert_eq!(
+            tools[0].get("name").and_then(Value::as_str),
+            Some("get_weather")
+        );
     }
 
     #[test]
@@ -966,7 +953,9 @@ mod tests {
 
         let response = normalize_completion_response("fallback", payload).unwrap();
         assert_eq!(response.content.len(), 1);
-        assert!(matches!(&response.content[0], ContentBlock::Text { text } if text == "Hello, world!"));
+        assert!(
+            matches!(&response.content[0], ContentBlock::Text { text } if text == "Hello, world!")
+        );
         assert_eq!(response.model_id, "claude-sonnet-4-6");
         assert_eq!(response.usage.input_tokens, 10);
         assert_eq!(response.usage.output_tokens, 5);
@@ -1002,12 +991,115 @@ mod tests {
         assert_eq!(response.stop_reason, StopReason::ToolCall);
     }
 
+    #[tokio::test]
+    async fn streaming_tool_inputs_preserve_tool_ids_across_multiple_block_stops() {
+        let (stream_tx, mut stream_rx) = tokio::sync::mpsc::channel(16);
+        let mut index = 0usize;
+        let mut saw_tool_call = false;
+        let mut tool_input_buffers = std::collections::HashMap::new();
+        let mut tool_call_ids_by_content_index = std::collections::HashMap::new();
+
+        let events = vec![
+            (
+                "content_block_start",
+                json!({
+                    "index": 0,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": "call_weather",
+                        "name": "get_weather"
+                    }
+                }),
+            ),
+            (
+                "content_block_start",
+                json!({
+                    "index": 1,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": "call_news",
+                        "name": "get_news"
+                    }
+                }),
+            ),
+            (
+                "content_block_delta",
+                json!({
+                    "index": 0,
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": "{\"city\":\"Paris\"}"
+                    }
+                }),
+            ),
+            (
+                "content_block_delta",
+                json!({
+                    "index": 1,
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": "{\"topic\":\"rust\"}"
+                    }
+                }),
+            ),
+            (
+                "content_block_stop",
+                json!({
+                    "index": 0
+                }),
+            ),
+            (
+                "content_block_stop",
+                json!({
+                    "index": 1
+                }),
+            ),
+        ];
+
+        for (event_name, payload) in events {
+            process_anthropic_sse_event(
+                Some(event_name.to_string()),
+                vec![payload.to_string()],
+                &stream_tx,
+                &mut index,
+                &mut saw_tool_call,
+                &mut tool_input_buffers,
+                &mut tool_call_ids_by_content_index,
+            )
+            .await
+            .unwrap();
+        }
+
+        let input_chunks: Vec<(String, Value)> = std::iter::from_fn(|| stream_rx.try_recv().ok())
+            .filter_map(|result| match result.unwrap().delta {
+                ChunkDelta::ToolUseInput { call_id, input } => Some((call_id, input)),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(input_chunks.len(), 2);
+        assert!(input_chunks.contains(&("call_weather".to_string(), json!({"city": "Paris"}))));
+        assert!(input_chunks.contains(&("call_news".to_string(), json!({"topic": "rust"}))));
+    }
+
     #[test]
     fn normalize_stop_reasons() {
-        assert_eq!(normalize_stop_reason(Some("end_turn")), StopReason::Completed);
-        assert_eq!(normalize_stop_reason(Some("max_tokens")), StopReason::MaxTokens);
-        assert_eq!(normalize_stop_reason(Some("tool_use")), StopReason::ToolCall);
-        assert_eq!(normalize_stop_reason(Some("stop_sequence")), StopReason::Completed);
+        assert_eq!(
+            normalize_stop_reason(Some("end_turn")),
+            StopReason::Completed
+        );
+        assert_eq!(
+            normalize_stop_reason(Some("max_tokens")),
+            StopReason::MaxTokens
+        );
+        assert_eq!(
+            normalize_stop_reason(Some("tool_use")),
+            StopReason::ToolCall
+        );
+        assert_eq!(
+            normalize_stop_reason(Some("stop_sequence")),
+            StopReason::Completed
+        );
         assert_eq!(normalize_stop_reason(None), StopReason::Completed);
     }
 
