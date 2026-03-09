@@ -214,7 +214,10 @@ impl DualStreamActor {
     /// Flush accumulated text delta to the UI stream.
     async fn flush_pending_text(&mut self) {
         if let Some(text) = self.pending_text.as_ref() {
-            match self.ui_tx.try_send(ModelEvent::TextDelta { text: text.clone() }) {
+            match self
+                .ui_tx
+                .try_send(ModelEvent::TextDelta { text: text.clone() })
+            {
                 Ok(()) | Err(TrySendError::Closed(_)) => {
                     self.pending_text = None;
                     self.coalesce_count = 0;
@@ -480,12 +483,25 @@ mod tests {
         };
         let (mut actor, mut handle) = DualStreamActor::new(config);
 
-        actor.route_event(ModelEvent::Heartbeat { sequence: 1 }).await;
-        actor.route_event(ModelEvent::TextDelta { text: "part1".into() }).await;
+        actor
+            .route_event(ModelEvent::Heartbeat { sequence: 1 })
+            .await;
+        actor
+            .route_event(ModelEvent::TextDelta {
+                text: "part1".into(),
+            })
+            .await;
 
-        assert!(matches!(handle.ui_rx.try_recv(), Ok(ModelEvent::Heartbeat { sequence: 1 })));
+        assert!(matches!(
+            handle.ui_rx.try_recv(),
+            Ok(ModelEvent::Heartbeat { sequence: 1 })
+        ));
 
-        actor.route_event(ModelEvent::TextDelta { text: "part2".into() }).await;
+        actor
+            .route_event(ModelEvent::TextDelta {
+                text: "part2".into(),
+            })
+            .await;
 
         assert!(matches!(
             handle.ui_rx.try_recv(),
