@@ -144,6 +144,65 @@ impl ModelProvider for RecordingProvider {
     }
 }
 
+/// Provider that returns a fixed completion response and tracks call count.
+#[derive(Debug)]
+struct StaticResponseProvider {
+    model_id: String,
+    response: CompletionResponse,
+    calls: Arc<Mutex<u32>>,
+}
+
+impl StaticResponseProvider {
+    fn new(
+        model_id: impl Into<String>,
+        response: CompletionResponse,
+        calls: Arc<Mutex<u32>>,
+    ) -> Self {
+        Self {
+            model_id: model_id.into(),
+            response,
+            calls,
+        }
+    }
+}
+
+#[async_trait]
+impl ModelProvider for StaticResponseProvider {
+    async fn complete(&self, _request: CompletionRequest) -> Result<CompletionResponse, LlmError> {
+        *self.calls.lock().unwrap() += 1;
+        Ok(self.response.clone())
+    }
+
+    fn stream(&self, _request: CompletionRequest) -> mister_smith_llm::CompletionStream {
+        Box::pin(stream::once(async {
+            Err(LlmError::UnsupportedCapability {
+                capability: "streaming".into(),
+                model: "static-response".into(),
+            })
+        }))
+    }
+
+    async fn embed(&self, _input: Vec<String>) -> Result<EmbeddingResponse, LlmError> {
+        Err(LlmError::UnsupportedCapability {
+            capability: "embeddings".into(),
+            model: "static-response".into(),
+        })
+    }
+
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    fn capabilities(&self) -> ModelCapabilities {
+        ModelCapabilities {
+            completion: true,
+            streaming: false,
+            embeddings: false,
+            tool_calling: false,
+        }
+    }
+}
+
 /// Shared budget store wrapper for test assertions.
 #[derive(Clone)]
 struct SharedBudgetStore(Arc<InMemoryBudgetStore>);
@@ -164,6 +223,19 @@ fn budget_store_with_default() -> SharedBudgetStore {
     inner.insert(BudgetNode {
         key: "budget/test".to_string(),
         limit_tokens: 50_000,
+        used_tokens: 0,
+        period: "test".to_string(),
+        policy: BudgetPolicy::HardCap,
+        revision: 1,
+    });
+    SharedBudgetStore(Arc::new(inner))
+}
+
+fn budget_store_with_limit(limit_tokens: u64) -> SharedBudgetStore {
+    let inner = InMemoryBudgetStore::new();
+    inner.insert(BudgetNode {
+        key: "budget/test".to_string(),
+        limit_tokens,
         used_tokens: 0,
         period: "test".to_string(),
         policy: BudgetPolicy::HardCap,
@@ -754,7 +826,7 @@ mod cascade {
     }
 
     #[tokio::test]
-    async fn cascade_reconciles_budget_when_escalating_to_second_tier() {
+    async fn cascade_accounts_for_both_tiers_when_escalating_to_second_tier() {
         let store = budget_store_with_default();
         let enforcer = BudgetEnforcer::new(Box::new(store.clone()));
 
@@ -778,10 +850,136 @@ mod cascade {
         assert_eq!(decision.tier_label.as_deref(), Some("llm-tier"));
         let node = store.get("budget/test").await.unwrap().unwrap();
         assert_eq!(
-            node.used_tokens, response.usage.total_tokens,
-            "budget should be reconciled after escalation"
+            node.used_tokens,
+            response.usage.total_tokens * 2,
+            "budget should include both tier attempts after escalation"
         );
         assert!(decision.estimated_cost_tokens.is_some());
+    }
+
+    #[tokio::test]
+    async fn cascade_budget_counts_all_successful_attempts_during_escalation() {
+        let store = budget_store_with_default();
+        let enforcer = BudgetEnforcer::new(Box::new(store.clone()));
+
+        let policy = cascade_policy(1.1, 1);
+        let router =
+            ModelRouter::new(RoutingPolicy::Cascade(policy)).with_budget(enforcer, "budget/test");
+
+        let slm_calls = Arc::new(Mutex::new(0));
+        let llm_calls = Arc::new(Mutex::new(0));
+        let slm: Arc<dyn ModelProvider> = Arc::new(StaticResponseProvider::new(
+            "slm-model",
+            CompletionResponse {
+                content: vec![ContentBlock::Text {
+                    text: "ok".to_string(),
+                }],
+                model_id: "slm-model".to_string(),
+                usage: Usage::new(9, 3),
+                stop_reason: StopReason::Completed,
+                tool_calls: vec![],
+            },
+            slm_calls.clone(),
+        ));
+        let llm: Arc<dyn ModelProvider> = Arc::new(StaticResponseProvider::new(
+            "llm-model",
+            CompletionResponse {
+                content: vec![ContentBlock::Text {
+                    text: "fallback accepted response".to_string(),
+                }],
+                model_id: "llm-model".to_string(),
+                usage: Usage::new(14, 6),
+                stop_reason: StopReason::Completed,
+                tool_calls: vec![],
+            },
+            llm_calls.clone(),
+        ));
+
+        router
+            .add_provider(mock_config("slm"), slm, CircuitBreakerConfig::default())
+            .await;
+        router
+            .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+            .await;
+
+        let (_response, decision) = router.route_completion(mock_request()).await.unwrap();
+
+        assert_eq!(decision.tier_label.as_deref(), Some("llm-tier"));
+        assert_eq!(*slm_calls.lock().unwrap(), 1);
+        assert_eq!(*llm_calls.lock().unwrap(), 1);
+
+        let node = store.get("budget/test").await.unwrap().unwrap();
+        assert_eq!(
+            node.used_tokens, 32,
+            "budget should include the first-tier and fallback-tier actual usage"
+        );
+    }
+
+    #[tokio::test]
+    async fn cascade_budget_rechecks_hard_cap_before_fallback_attempt() {
+        let store = budget_store_with_limit(46);
+        let enforcer = BudgetEnforcer::new(Box::new(store.clone()));
+
+        let policy = cascade_policy(1.1, 1);
+        let router =
+            ModelRouter::new(RoutingPolicy::Cascade(policy)).with_budget(enforcer, "budget/test");
+
+        let slm_calls = Arc::new(Mutex::new(0));
+        let llm_calls = Arc::new(Mutex::new(0));
+        let slm: Arc<dyn ModelProvider> = Arc::new(StaticResponseProvider::new(
+            "slm-model",
+            CompletionResponse {
+                content: vec![ContentBlock::Text {
+                    text: "ok".to_string(),
+                }],
+                model_id: "slm-model".to_string(),
+                usage: Usage::new(9, 3),
+                stop_reason: StopReason::Completed,
+                tool_calls: vec![],
+            },
+            slm_calls.clone(),
+        ));
+        let llm: Arc<dyn ModelProvider> = Arc::new(StaticResponseProvider::new(
+            "llm-model",
+            CompletionResponse {
+                content: vec![ContentBlock::Text {
+                    text: "fallback accepted response".to_string(),
+                }],
+                model_id: "llm-model".to_string(),
+                usage: Usage::new(14, 6),
+                stop_reason: StopReason::Completed,
+                tool_calls: vec![],
+            },
+            llm_calls.clone(),
+        ));
+
+        router
+            .add_provider(mock_config("slm"), slm, CircuitBreakerConfig::default())
+            .await;
+        router
+            .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+            .await;
+
+        let result = router
+            .route_completion(CompletionRequest {
+                max_tokens: Some(32),
+                ..mock_request()
+            })
+            .await;
+
+        assert!(matches!(result, Err(LlmError::BudgetExhausted { .. })));
+        assert_eq!(*slm_calls.lock().unwrap(), 1);
+        assert_eq!(
+            *llm_calls.lock().unwrap(),
+            0,
+            "fallback tier must not run when a fresh reservation exceeds budget"
+        );
+
+        let node = store.get("budget/test").await.unwrap().unwrap();
+        assert_eq!(
+            node.used_tokens, 12,
+            "budget should reflect only the first-tier actual usage after the fallback reservation is rejected"
+        );
     }
 
     // --- Routing event emission tests (#127) ---

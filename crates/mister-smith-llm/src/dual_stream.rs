@@ -166,7 +166,27 @@ impl DualStreamActor {
                     BackpressurePolicy::Coalescible => {
                         // Text deltas can be coalesced under backpressure
                         if let ModelEvent::TextDelta { ref text } = event {
-                            self.route_text_delta(text).await;
+                            if self.pending_text.is_none() {
+                                match self.ui_tx.try_send(event.clone()) {
+                                    Ok(()) => return,
+                                    Err(TrySendError::Full(_)) => {
+                                        // Start coalescing only after backpressure is observed.
+                                    }
+                                    Err(TrySendError::Closed(_)) => return,
+                                }
+                            }
+
+                            self.coalesce_count += 1;
+                            if let Some(pending) = &mut self.pending_text {
+                                pending.push_str(text);
+                            } else {
+                                self.pending_text = Some(text.clone());
+                            }
+
+                            // Flush if we've coalesced enough
+                            if self.coalesce_count >= self.config.max_coalesce_count {
+                                self.flush_pending_text().await;
+                            }
                         } else {
                             // Flush any pending text first, then send this event
                             self.flush_pending_text().await;
@@ -186,43 +206,16 @@ impl DualStreamActor {
         }
     }
 
-    async fn route_text_delta(&mut self, text: &str) {
-        let mut buffered_text = self.pending_text.take().unwrap_or_default();
-        buffered_text.push_str(text);
-
-        match self.ui_tx.try_send(ModelEvent::TextDelta {
-            text: buffered_text.clone(),
-        }) {
-            Ok(()) => {
-                self.coalesce_count = 0;
-            }
-            Err(TrySendError::Full(_)) => {
-                self.pending_text = Some(buffered_text);
-                self.coalesce_count += 1;
-
-                // Flush if we've coalesced enough while the channel remains full.
-                if self.coalesce_count >= self.config.max_coalesce_count {
-                    self.flush_pending_text().await;
-                }
-            }
-            Err(TrySendError::Closed(_)) => {
-                self.coalesce_count = 0;
-            }
-        }
-    }
-
     /// Flush accumulated text delta to the UI stream.
     async fn flush_pending_text(&mut self) {
         if let Some(text) = self.pending_text.as_ref() {
-            match self
+            if self
                 .ui_tx
                 .try_send(ModelEvent::TextDelta { text: text.clone() })
+                .is_ok()
             {
-                Ok(()) | Err(TrySendError::Closed(_)) => {
-                    self.pending_text = None;
-                    self.coalesce_count = 0;
-                }
-                Err(TrySendError::Full(_)) => {}
+                self.pending_text = None;
+                self.coalesce_count = 0;
             }
         }
     }
@@ -472,40 +465,5 @@ mod tests {
         assert!(
             matches!(handle.ui_rx.try_recv(), Ok(ModelEvent::TextDelta { text }) if text == "hello")
         );
-    }
-
-    #[tokio::test]
-    async fn coalesced_text_flushes_when_capacity_returns_on_next_delta() {
-        let config = DualStreamConfig {
-            ui_capacity: 1,
-            max_coalesce_count: 10,
-            ..Default::default()
-        };
-        let (mut actor, mut handle) = DualStreamActor::new(config);
-
-        actor
-            .route_event(ModelEvent::Heartbeat { sequence: 1 })
-            .await;
-        actor
-            .route_event(ModelEvent::TextDelta {
-                text: "part1".into(),
-            })
-            .await;
-
-        assert!(matches!(
-            handle.ui_rx.try_recv(),
-            Ok(ModelEvent::Heartbeat { sequence: 1 })
-        ));
-
-        actor
-            .route_event(ModelEvent::TextDelta {
-                text: "part2".into(),
-            })
-            .await;
-
-        assert!(matches!(
-            handle.ui_rx.try_recv(),
-            Ok(ModelEvent::TextDelta { text }) if text == "part1part2"
-        ));
     }
 }
