@@ -120,6 +120,10 @@ pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
     // Rate limiting must be outermost to block floods of unauthenticated requests.
     let mut router = api_router();
 
+    let mut router = router
+        .layer(axum_mw::from_fn(request_id_middleware))
+        .layer(axum_mw::from_fn(security_middleware));
+
     // Configure CORS based on allowed_origins.
     if !config.allowed_origins.is_empty() {
         let allow_origin = if config.allowed_origins.contains(&"*".to_string()) {
@@ -142,8 +146,6 @@ pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
     }
 
     let router = router
-        .layer(axum_mw::from_fn(request_id_middleware))
-        .layer(axum_mw::from_fn(security_middleware))
         .layer(axum_mw::from_fn(rate_limit_middleware))
         .layer(axum::Extension(rate_limiter));
 

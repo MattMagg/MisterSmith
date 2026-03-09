@@ -92,6 +92,7 @@ mod tests {
             ws_keepalive_interval: Duration::from_secs(60),
             max_ws_connections: 500,
             rate_limit_rps: 50,
+            allowed_origins: vec!["http://localhost:3000".to_string()],
         };
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: HttpTransportConfig = serde_json::from_str(&json).unwrap();
@@ -100,5 +101,9 @@ mod tests {
         assert_eq!(deserialized.ws_keepalive_interval, Duration::from_secs(60));
         assert_eq!(deserialized.max_ws_connections, 500);
         assert_eq!(deserialized.rate_limit_rps, 50);
+        assert_eq!(
+            deserialized.allowed_origins,
+            vec!["http://localhost:3000".to_string()]
+        );
     }
 }
