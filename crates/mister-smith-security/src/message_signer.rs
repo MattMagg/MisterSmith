@@ -10,6 +10,9 @@ use serde::Serialize;
 use mister_smith_core::SecurityError;
 use mister_smith_transport::MessageEnvelope;
 
+/// Minimum HMAC key length in bytes (NIST SP 800-107: at least the hash output length).
+const MIN_KEY_LENGTH: usize = 32;
+
 /// Symmetric HMAC key material used for message signing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HmacKey {
@@ -37,6 +40,14 @@ impl HmacKey {
             return Err(SecurityError::KeyLoadFailed(
                 "message-signing secret must not be empty".to_string(),
             ));
+        }
+
+        if self.secret.len() < MIN_KEY_LENGTH {
+            return Err(SecurityError::KeyLoadFailed(format!(
+                "message-signing secret must be at least {MIN_KEY_LENGTH} bytes \
+                 (NIST SP 800-107); got {} bytes",
+                self.secret.len()
+            )));
         }
 
         Ok(())
@@ -98,7 +109,9 @@ impl NonceTracker {
         }
     }
 
-    fn generate_nonce(&mut self) -> String {
+    /// Generate a monotonic nonce prefixed with the signing key ID so that
+    /// the replay cache is effectively namespaced per sender/key.
+    fn generate_nonce(&mut self, key_id: &str) -> String {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -111,7 +124,10 @@ impl NonceTracker {
             self.counter = self.counter.saturating_add(1);
         }
 
-        format!("{:020}-{:016x}", self.last_timestamp_ms, self.counter)
+        format!(
+            "{}:{:020}-{:016x}",
+            key_id, self.last_timestamp_ms, self.counter
+        )
     }
 
     fn is_replay(&self, nonce: &str) -> bool {
@@ -170,6 +186,15 @@ pub trait MessageSigner: Send + Sync {
     fn requires_signatures(&self) -> bool;
 
     /// Validate and record a nonce atomically.
+    ///
+    /// # Concurrency Warning
+    ///
+    /// The default implementation calls [`is_replay`](Self::is_replay) and
+    /// [`record_nonce`](Self::record_nonce) as **separate** operations,
+    /// which is susceptible to TOCTOU races under concurrent access.
+    /// Implementors **must** override this method with an atomic
+    /// check-and-record operation when the signer may be called from
+    /// multiple tasks or threads.
     fn validate_nonce(&self, nonce: &str) -> Result<(), SecurityError> {
         if self.is_replay(nonce) {
             return Err(SecurityError::ReplayDetected {
@@ -296,7 +321,8 @@ impl MessageSigner for HmacMessageSigner {
     }
 
     fn generate_nonce(&self) -> String {
-        self.nonce_tracker.lock().generate_nonce()
+        let key_id = self.active_key.read().key_id.clone();
+        self.nonce_tracker.lock().generate_nonce(&key_id)
     }
 
     fn is_replay(&self, nonce: &str) -> bool {

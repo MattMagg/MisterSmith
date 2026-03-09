@@ -114,6 +114,43 @@ impl<T: Transport> SecureTransport<T> {
 
         Ok(())
     }
+
+    /// Wrap a raw subscription stream with inbound envelope validation.
+    ///
+    /// Messages that fail signature or nonce checks are silently dropped
+    /// (and optionally audit-logged).  This helper is shared by both
+    /// [`subscribe`](Transport::subscribe) and
+    /// [`queue_subscribe`](Transport::queue_subscribe).
+    fn wrap_inbound_subscription(&self, inner: Subscription, subject: &str) -> Subscription {
+        let message_signer = self.message_signer.clone();
+        #[cfg(feature = "audit")]
+        let audit_logger = self.audit_logger.clone();
+        let agent_id = self.agent_claims.agent_id.clone();
+        let subject_name = subject.to_string();
+
+        let mut stream = inner.into_stream();
+        let filtered = async_stream::stream! {
+            while let Some(message) = stream.next().await {
+                if let Some(message_signer) = message_signer.as_ref() {
+                    if let Err(error) = message_signer.validate_envelope(&message.envelope) {
+                        record_validation_failure(
+                            #[cfg(feature = "audit")]
+                            audit_logger.as_ref(),
+                            &agent_id,
+                            &subject_name,
+                            &message.envelope,
+                            &error,
+                        );
+                        continue;
+                    }
+                }
+
+                yield message;
+            }
+        };
+
+        Subscription::new(filtered)
+    }
 }
 
 #[async_trait]
@@ -130,34 +167,8 @@ impl<T: Transport> Transport for SecureTransport<T> {
 
     async fn subscribe(&self, subject: &str) -> Result<Subscription, TransportError> {
         self.check_permission("subscribe", subject)?;
-        let subject_name = subject.to_string();
-        let message_signer = self.message_signer.clone();
-        #[cfg(feature = "audit")]
-        let audit_logger = self.audit_logger.clone();
-        let agent_id = self.agent_claims.agent_id.clone();
-
-        let mut inner = self.inner.subscribe(subject).await?.into_stream();
-        let stream = async_stream::stream! {
-            while let Some(message) = inner.next().await {
-                if let Some(message_signer) = message_signer.as_ref() {
-                    if let Err(error) = message_signer.validate_envelope(&message.envelope) {
-                        record_validation_failure(
-                            #[cfg(feature = "audit")]
-                            audit_logger.as_ref(),
-                            &agent_id,
-                            &subject_name,
-                            &message.envelope,
-                            &error,
-                        );
-                        continue;
-                    }
-                }
-
-                yield message;
-            }
-        };
-
-        Ok(Subscription::new(stream))
+        let inner = self.inner.subscribe(subject).await?;
+        Ok(self.wrap_inbound_subscription(inner, subject))
     }
 
     async fn queue_subscribe(
@@ -166,38 +177,8 @@ impl<T: Transport> Transport for SecureTransport<T> {
         queue: &str,
     ) -> Result<Subscription, TransportError> {
         self.check_permission("subscribe", subject)?;
-        let subject_name = subject.to_string();
-        let message_signer = self.message_signer.clone();
-        #[cfg(feature = "audit")]
-        let audit_logger = self.audit_logger.clone();
-        let agent_id = self.agent_claims.agent_id.clone();
-
-        let mut inner = self
-            .inner
-            .queue_subscribe(subject, queue)
-            .await?
-            .into_stream();
-        let stream = async_stream::stream! {
-            while let Some(message) = inner.next().await {
-                if let Some(message_signer) = message_signer.as_ref() {
-                    if let Err(error) = message_signer.validate_envelope(&message.envelope) {
-                        record_validation_failure(
-                            #[cfg(feature = "audit")]
-                            audit_logger.as_ref(),
-                            &agent_id,
-                            &subject_name,
-                            &message.envelope,
-                            &error,
-                        );
-                        continue;
-                    }
-                }
-
-                yield message;
-            }
-        };
-
-        Ok(Subscription::new(stream))
+        let inner = self.inner.queue_subscribe(subject, queue).await?;
+        Ok(self.wrap_inbound_subscription(inner, subject))
     }
 
     async fn request(

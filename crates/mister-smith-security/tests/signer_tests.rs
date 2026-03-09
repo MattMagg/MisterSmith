@@ -265,3 +265,50 @@ async fn secure_transport_request_rejects_unsigned_response_with_typed_security_
         "unexpected request result: {result:?}"
     );
 }
+
+#[tokio::test]
+async fn secure_transport_drops_forged_queue_subscription_messages() {
+    let inner = InMemoryTransport::new();
+    let signer: Arc<dyn MessageSigner> = Arc::new(signer());
+    let audit = audit_logger();
+    let secure = SecureTransport::new(inner.clone(), None, transport_claims())
+        .with_message_signer(signer)
+        .with_audit_logger(audit.clone());
+    let mut subscription = secure
+        .queue_subscribe("signed.queue", "workers")
+        .await
+        .unwrap();
+
+    inner
+        .publish("signed.queue", unsigned_envelope("security.unsigned"))
+        .await
+        .unwrap();
+
+    let timeout = tokio::time::timeout(Duration::from_millis(100), subscription.next()).await;
+    assert!(
+        timeout.is_err(),
+        "unsigned message should be filtered out by queue subscription"
+    );
+
+    let events = audit.recent_events(10);
+    assert!(events.iter().any(|event| {
+        event.event_type == AuditEventType::SuspiciousActivity
+            && event.outcome == AuditOutcome::Blocked
+    }));
+}
+
+#[test]
+fn header_mutation_invalidates_signature() {
+    let signer = signer();
+    let (mut envelope, signature) = signed_envelope(&signer, "security.headers");
+
+    // Mutate a header value after signing — the signature must no longer verify.
+    envelope
+        .headers
+        .insert("x-agent".to_string(), "attacker".to_string());
+
+    assert!(
+        !signer.verify(&envelope, &signature).unwrap(),
+        "signature should be invalid after header mutation"
+    );
+}

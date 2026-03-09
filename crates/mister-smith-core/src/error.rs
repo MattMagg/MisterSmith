@@ -455,7 +455,7 @@ impl SystemError {
             SystemError::Event(_) => ErrorSeverity::Low,
             SystemError::Tool(_) => ErrorSeverity::Low,
             SystemError::Llm(_) => ErrorSeverity::Medium,
-            SystemError::Security(_) => ErrorSeverity::Medium,
+            SystemError::Security(_) => ErrorSeverity::High,
         }
     }
 
