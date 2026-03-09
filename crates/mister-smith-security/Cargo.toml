@@ -37,6 +37,7 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 async-stream = { workspace = true }
 futures = { workspace = true }
+async-nats = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
@@ -55,6 +56,9 @@ rustls-pki-types = { workspace = true, optional = true }
 arc-swap = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 hex = { workspace = true }
+base64 = { workspace = true }
+nats-jwt = { workspace = true }
+nkeys = { workspace = true }
 
 # HTTP/gRPC types for middleware
 axum = { workspace = true }

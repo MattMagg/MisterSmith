@@ -96,6 +96,9 @@ rustls-pki-types = "1"
 sha2 = "0.10"
 arc-swap = "1"
 hex = "0.4"
+base64 = "0.22.1"
+nats-jwt = "0.3.0"
+nkeys = "0.4.5"
 
 # Internal crates
 mister-smith-core = { path = "crates/mister-smith-core" }

@@ -124,8 +124,13 @@ impl AgentRepository {
         let rows = queries::get_all_state(&self.pool, agent_id).await?;
         rows.into_iter()
             .map(|r| {
-                let validated =
-                    validate_state_entry(agent_id, &r.state_key, r.state_value, validator, audit_logger)?;
+                let validated = validate_state_entry(
+                    agent_id,
+                    &r.state_key,
+                    r.state_value,
+                    validator,
+                    audit_logger,
+                )?;
                 Ok((r.state_key, validated))
             })
             .collect()

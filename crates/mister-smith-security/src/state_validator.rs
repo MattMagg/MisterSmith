@@ -165,8 +165,7 @@ impl JsonSchemaStateValidator {
     /// built-in defaults.
     #[must_use]
     pub fn new_with_patterns(max_bytes: usize, extra_patterns: Vec<String>) -> Self {
-        let mut patterns: Vec<String> =
-            DEFAULT_PATTERNS.iter().map(|s| (*s).to_string()).collect();
+        let mut patterns: Vec<String> = DEFAULT_PATTERNS.iter().map(|s| (*s).to_string()).collect();
         patterns.extend(extra_patterns);
         Self {
             max_bytes,
@@ -200,7 +199,7 @@ impl JsonSchemaStateValidator {
         Ok(())
     }
 
-    fn sanitize_state(&self, state: &Value, path: &str) -> Result<(Value, bool), ValidationError> {
+    fn sanitize_state(state: &Value, path: &str) -> Result<(Value, bool), ValidationError> {
         match state {
             Value::String(value) => {
                 let sanitized: String = value.chars().filter(|ch| is_safe_character(*ch)).collect();
@@ -212,7 +211,7 @@ impl JsonSchemaStateValidator {
                 let mut sanitized = Vec::with_capacity(values.len());
                 for (index, value) in values.iter().enumerate() {
                     let child_path = format!("{path}/{index}");
-                    let (value, value_changed) = self.sanitize_state(value, &child_path)?;
+                    let (value, value_changed) = Self::sanitize_state(value, &child_path)?;
                     changed |= value_changed;
                     sanitized.push(value);
                 }
@@ -227,7 +226,7 @@ impl JsonSchemaStateValidator {
                     let child_path =
                         format!("{path}/{}", escape_json_pointer_segment(&sanitized_key));
                     let (sanitized_value, value_changed) =
-                        self.sanitize_state(value, &child_path)?;
+                        Self::sanitize_state(value, &child_path)?;
                     changed |= value_changed;
 
                     if sanitized
@@ -281,7 +280,7 @@ impl StateValidator for JsonSchemaStateValidator {
     fn validate(&self, state_type: &str, state: &Value) -> Result<ValidatedState, ValidationError> {
         self.check_size(state)?;
 
-        let (sanitized, was_sanitized) = self.sanitize_state(state, "")?;
+        let (sanitized, was_sanitized) = Self::sanitize_state(state, "")?;
         let registered = self.schemas.read();
 
         if let Some(schema) = registered.get(state_type) {
@@ -289,15 +288,13 @@ impl StateValidator for JsonSchemaStateValidator {
             // the injection scan. Injection detection takes priority because a
             // schema failure might be benign (extra field) while an injection is
             // always hostile.
-            let schema_result =
-                schema
-                    .validator
-                    .validate(&sanitized)
-                    .map_err(|error| ValidationError::SchemaViolation {
-                        schema_ref: state_type.to_string(),
-                        path: error.instance_path().as_str().to_string(),
-                        message: error.to_string(),
-                    });
+            let schema_result = schema.validator.validate(&sanitized).map_err(|error| {
+                ValidationError::SchemaViolation {
+                    schema_ref: state_type.to_string(),
+                    path: error.instance_path().as_str().to_string(),
+                    message: error.to_string(),
+                }
+            });
 
             // Always run pattern scan — injection detection takes priority over
             // schema errors.
