@@ -53,9 +53,18 @@ spec:
             periodSeconds: 2
             timeoutSeconds: 3
             failureThreshold: 15
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
           volumeMounts:
             - name: nats-data
               mountPath: /data
       volumes:
+        # WARNING: emptyDir is ephemeral — JetStream state is lost on pod restart.
+        # For production, replace with a PersistentVolumeClaim.
         - name: nats-data
           emptyDir: {}

@@ -331,9 +331,7 @@ where
     Ok(AgentRuntime {
         context,
         actor_ref,
-        system: Arc::new(ActorSystem::new(
-            mister_smith_actor::system::ActorSystemConfig::default(),
-        )),
+        system: supervised.system_arc(),
     })
 }
 

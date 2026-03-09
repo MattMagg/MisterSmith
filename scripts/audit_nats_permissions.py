@@ -35,7 +35,7 @@ AUTH_MARKERS = (
     "subscribe",
     "$JS",
 )
-GENERIC_WILDCARD_PATTERN = re.compile(r"""(?<![\w$])['"]?>['"]?(?![\w.])""")
+GENERIC_WILDCARD_PATTERN = re.compile(r"""(?<![\w$])['"]?>['"]?(?![\w.\-|])""")
 
 
 def iter_candidates(path: Path) -> list[Path]:

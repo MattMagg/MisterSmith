@@ -313,6 +313,25 @@ fn delegation_max_depth_from_config_is_honored() {
 }
 
 #[test]
+fn delegation_duplicate_entry_rejected() {
+    let mgr = JwtManager::new(&hmac_config()).unwrap();
+    let mut claims = test_claims();
+    claims.delegation_chain = vec![
+        "root".to_string(),
+        "middle".to_string(),
+        "root".to_string(),
+    ];
+
+    let result = mgr.generate_token_pair(&claims);
+
+    assert!(matches!(
+        result,
+        Err(mister_smith_core::SecurityError::InvalidToken(message))
+            if message.contains("delegation_chain contains a circular reference")
+    ));
+}
+
+#[test]
 fn delegation_circular_reference_rejected_on_validation() {
     let config = hmac_config();
     let mgr = JwtManager::new(&config).unwrap();
