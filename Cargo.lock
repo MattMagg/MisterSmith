@@ -2100,10 +2100,12 @@ name = "mister-smith-security"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "async-stream",
  "async-trait",
  "axum",
  "chrono",
  "dashmap",
+ "futures",
  "hex",
  "ipnet",
  "jsonschema",
@@ -2114,6 +2116,7 @@ dependencies = [
  "mister-smith-transport",
  "parking_lot",
  "rcgen",
+ "ring",
  "rustls",
  "rustls-pki-types",
  "serde",

@@ -101,6 +101,18 @@ pub struct MessageEnvelope {
     /// `None` is treated as `Semantic` for backward compatibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stream_class: Option<StreamClass>,
+
+    /// HMAC-SHA256 signature over canonical envelope contents.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
+
+    /// Monotonic nonce for replay detection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
+
+    /// Optional capability delegation token carried alongside the message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_token: Option<String>,
 }
 
 impl MessageEnvelope {
@@ -118,6 +130,9 @@ impl MessageEnvelope {
             max_payload_size: DEFAULT_MAX_PAYLOAD_SIZE,
             plane: None,
             stream_class: None,
+            signature: None,
+            nonce: None,
+            capability_token: None,
         }
     }
 
@@ -158,6 +173,9 @@ pub struct MessageEnvelopeBuilder {
     max_payload_size: usize,
     plane: Option<MessagePlane>,
     stream_class: Option<StreamClass>,
+    signature: Option<String>,
+    nonce: Option<String>,
+    capability_token: Option<String>,
 }
 
 impl MessageEnvelopeBuilder {
@@ -263,6 +281,9 @@ impl MessageEnvelopeBuilder {
             headers: self.headers,
             plane: self.plane,
             stream_class: self.stream_class,
+            signature: self.signature,
+            nonce: self.nonce,
+            capability_token: self.capability_token,
         })
     }
 }
@@ -473,8 +494,9 @@ mod tests {
 
     #[test]
     fn pre_phase9_json_without_plane_or_stream_class() {
-        // Pre-Phase-9 envelopes have no `plane` or `stream_class` fields.
-        // Deserialization must succeed with both defaulting to None.
+        // Pre-Phase-9.1 envelopes have no `plane`, `stream_class`, or
+        // message-signing fields. Deserialization must succeed with all of
+        // them defaulting to None for backward compatibility.
         let pre_phase9_json = serde_json::json!({
             "message_id": Uuid::new_v4(),
             "message_type": "legacy.message",
@@ -488,6 +510,9 @@ mod tests {
         let envelope: MessageEnvelope = serde_json::from_value(pre_phase9_json).unwrap();
         assert!(envelope.plane.is_none());
         assert!(envelope.stream_class.is_none());
+        assert!(envelope.signature.is_none());
+        assert!(envelope.nonce.is_none());
+        assert!(envelope.capability_token.is_none());
     }
 
     #[test]
@@ -546,9 +571,54 @@ mod tests {
     fn plane_omitted_from_json_when_none() {
         let envelope = MessageEnvelope::builder("test").build().unwrap();
         let json = serde_json::to_string(&envelope).unwrap();
-        // plane and stream_class should be omitted, not serialized as null
+        // Optional envelope extensions should be omitted, not serialized as null.
         assert!(!json.contains("\"plane\""));
         assert!(!json.contains("\"stream_class\""));
+        assert!(!json.contains("\"signature\""));
+        assert!(!json.contains("\"nonce\""));
+        assert!(!json.contains("\"capability_token\""));
+    }
+
+    #[test]
+    fn security_fields_round_trip_json() {
+        let mut envelope = MessageEnvelope::builder("signed.json")
+            .payload_raw(b"signed payload".to_vec())
+            .build()
+            .unwrap();
+        envelope.signature = Some("deadbeef".to_string());
+        envelope.nonce = Some("00000000000000000001-0000000000000001".to_string());
+        envelope.capability_token = Some("cap-read-task".to_string());
+
+        let json = serde_json::to_string(&envelope).unwrap();
+        let decoded: MessageEnvelope = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded.signature.as_deref(), Some("deadbeef"));
+        assert_eq!(
+            decoded.nonce.as_deref(),
+            Some("00000000000000000001-0000000000000001")
+        );
+        assert_eq!(decoded.capability_token.as_deref(), Some("cap-read-task"));
+    }
+
+    #[test]
+    fn security_fields_round_trip_msgpack() {
+        let mut envelope = MessageEnvelope::builder("signed.msgpack")
+            .payload_raw(b"signed payload".to_vec())
+            .build()
+            .unwrap();
+        envelope.signature = Some("cafebabe".to_string());
+        envelope.nonce = Some("00000000000000000002-0000000000000001".to_string());
+        envelope.capability_token = Some("cap-write-task".to_string());
+
+        let bytes = envelope.to_bytes().unwrap();
+        let decoded = MessageEnvelope::from_bytes(&bytes).unwrap();
+
+        assert_eq!(decoded.signature.as_deref(), Some("cafebabe"));
+        assert_eq!(
+            decoded.nonce.as_deref(),
+            Some("00000000000000000002-0000000000000001")
+        );
+        assert_eq!(decoded.capability_token.as_deref(), Some("cap-write-task"));
     }
 
     #[test]
