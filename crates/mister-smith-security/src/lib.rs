@@ -16,6 +16,7 @@
 //! - **`audit`** — Tamper-evident audit logging with hash chaining
 //! - **Message signing** — HMAC-SHA256 signing and replay protection for transport envelopes
 
+pub mod auth_callout;
 pub mod config;
 mod error;
 pub mod message_signer;
@@ -35,6 +36,10 @@ pub mod middleware;
 pub mod audit;
 
 // Re-export SecurityError from core for convenience.
+pub use auth_callout::{
+    AuthCalloutHandler, AuthorizationResult, PermissionTier, Permissions, TrustProfile,
+    AUTH_CALLOUT_SUBJECT,
+};
 pub use message_signer::{HmacKey, HmacMessageSigner, MessageSigner, MessageSigningConfig};
 pub use mister_smith_core::SecurityError;
 

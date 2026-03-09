@@ -2001,9 +2001,11 @@ name = "mister-smith-security"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "async-nats",
  "async-stream",
  "async-trait",
  "axum",
+ "base64",
  "chrono",
  "dashmap",
  "futures",
@@ -2014,6 +2016,8 @@ dependencies = [
  "mister-smith-core",
  "mister-smith-events",
  "mister-smith-transport",
+ "nats-jwt",
+ "nkeys",
  "parking_lot",
  "rcgen",
  "ring",
@@ -2079,6 +2083,19 @@ name = "multimap"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
+
+[[package]]
+name = "nats-jwt"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e51104ed9bd9e7d1f9117603e1186a56a3a437ceaf0761383910180f5879b801"
+dependencies = [
+ "data-encoding",
+ "nkeys",
+ "serde",
+ "serde_json",
+ "sha2",
+]
 
 [[package]]
 name = "ndk-context"
