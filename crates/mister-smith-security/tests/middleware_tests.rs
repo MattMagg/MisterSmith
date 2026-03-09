@@ -25,6 +25,7 @@ fn test_jwt_config() -> JwtConfig {
         refresh_token_ttl: Duration::from_secs(3600),
         issuer: None,
         audience: Vec::new(),
+        delegation_chain_max_depth: 5,
         key_source: KeySource::Hmac {
             secret: b"test-middleware-secret-key-at-least-32-bytes!".to_vec(),
         },
