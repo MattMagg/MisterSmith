@@ -2,7 +2,7 @@
 tracker:
   kind: linear
   api_key: $LINEAR_API_KEY
-  project_slug: "phase-9-bug-fixes-2c10c60904ce"
+  project_slug: "phase-91-security-hardening-e439446ddfb9"
   active_states:
     - Todo
     - In Progress
