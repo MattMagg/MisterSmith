@@ -216,9 +216,11 @@ mod tests {
     fn phi_increases_with_silence() {
         let mut detector = PhiAccrualFailureDetector::new(8.0, 100);
         // Record heartbeats at ~10ms intervals.
-        for _ in 0..10 {
+        for i in 0..10 {
             detector.record_heartbeat("node-1");
-            thread::sleep(Duration::from_millis(10));
+            if i < 9 {
+                thread::sleep(Duration::from_millis(10));
+            }
         }
         let phi_soon = detector.phi("node-1").unwrap();
 
