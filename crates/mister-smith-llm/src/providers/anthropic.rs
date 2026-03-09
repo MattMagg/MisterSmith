@@ -48,9 +48,9 @@ fn parse_stream_event(
                         }
                     }
                     "input_json_delta" => {
-                        if let Some(partial) = delta.get("partial_json").and_then(|v| v.as_str())
-                        {
-                            let block_index = event.get("index").and_then(|v| v.as_u64()).unwrap_or(0);
+                        if let Some(partial) = delta.get("partial_json").and_then(|v| v.as_str()) {
+                            let block_index =
+                                event.get("index").and_then(|v| v.as_u64()).unwrap_or(0);
                             let call_id = state
                                 .tool_call_ids_by_content_index
                                 .get(&block_index)
@@ -156,10 +156,7 @@ impl AnthropicProvider {
             .ok_or_else(|| LlmError::Authentication("api_key_env required for Anthropic".into()))?;
 
         let api_key = std::env::var(api_key_env).map_err(|_| {
-            LlmError::Authentication(format!(
-                "Environment variable '{}' not set",
-                api_key_env
-            ))
+            LlmError::Authentication(format!("Environment variable '{}' not set", api_key_env))
         })?;
 
         let base_url = config
@@ -413,12 +410,9 @@ impl ModelProvider for AnthropicProvider {
             });
         }
 
-        let anthropic_response: AnthropicMessagesResponse = response
-            .json()
-            .await
-            .map_err(|e| {
-                LlmError::Serialization(format!("Failed to parse Anthropic response: {e}"))
-            })?;
+        let anthropic_response: AnthropicMessagesResponse = response.json().await.map_err(|e| {
+            LlmError::Serialization(format!("Failed to parse Anthropic response: {e}"))
+        })?;
 
         self.normalize_response(anthropic_response)
     }
@@ -659,7 +653,12 @@ mod tests {
 
         let chunks = parse_stream_event(&event, &mut state);
         assert_eq!(chunks.len(), 1);
-        assert_eq!(chunks[0].delta, ChunkDelta::Stop { reason: StopReason::MaxTokens });
+        assert_eq!(
+            chunks[0].delta,
+            ChunkDelta::Stop {
+                reason: StopReason::MaxTokens
+            }
+        );
         assert!(state.terminal_stop_emitted);
     }
 
@@ -677,7 +676,12 @@ mod tests {
         let stop = serde_json::json!({ "type": "message_stop" });
         let chunks = parse_stream_event(&stop, &mut state);
         assert_eq!(chunks.len(), 1);
-        assert_eq!(chunks[0].delta, ChunkDelta::Stop { reason: StopReason::Completed });
+        assert_eq!(
+            chunks[0].delta,
+            ChunkDelta::Stop {
+                reason: StopReason::Completed
+            }
+        );
         assert!(state.terminal_stop_emitted);
     }
 

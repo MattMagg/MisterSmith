@@ -4,8 +4,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use mister_smith_core::LlmError;
 use mister_smith_llm::budget::{
-    BudgetEnforcer, BudgetNode, BudgetPolicy, BudgetReservation, BudgetStore,
-    InMemoryBudgetStore,
+    BudgetEnforcer, BudgetNode, BudgetPolicy, BudgetReservation, BudgetStore, InMemoryBudgetStore,
 };
 
 fn test_store() -> InMemoryBudgetStore {
@@ -207,8 +206,7 @@ fn budget_node_exhausted() {
 
 #[test]
 fn hierarchical_budget_key_resolution() {
-    let keys =
-        BudgetEnforcer::resolve_hierarchy("budget/org1/team-alpha/user-42");
+    let keys = BudgetEnforcer::resolve_hierarchy("budget/org1/team-alpha/user-42");
     assert_eq!(
         keys,
         vec![
@@ -266,16 +264,16 @@ impl BudgetStore for FlakyCasStore {
         Ok(Some(self.node.lock().unwrap().clone()))
     }
 
-    async fn cas_update(
-        &self,
-        node: &BudgetNode,
-        expected_revision: u64,
-    ) -> Result<u64, LlmError> {
-        let remaining = self
-            .conflicts_remaining
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
-                if v > 0 { Some(v - 1) } else { None }
-            });
+    async fn cas_update(&self, node: &BudgetNode, expected_revision: u64) -> Result<u64, LlmError> {
+        let remaining =
+            self.conflicts_remaining
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
+                    if v > 0 {
+                        Some(v - 1)
+                    } else {
+                        None
+                    }
+                });
 
         if remaining.is_ok() {
             // Simulate conflict: bump revision but return error

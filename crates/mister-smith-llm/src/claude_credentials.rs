@@ -235,9 +235,7 @@ pub async fn refresh_access_token(
         .get("access_token")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            LlmError::Serialization(
-                "Token refresh response missing access_token".to_string(),
-            )
+            LlmError::Serialization("Token refresh response missing access_token".to_string())
         })?
         .to_string();
 

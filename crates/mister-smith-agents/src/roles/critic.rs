@@ -67,10 +67,7 @@ impl CriticAgent {
 
     /// Create a new `CriticAgent` with an LLM [`ModelRouter`] for AI-powered evaluation.
     #[cfg(feature = "llm")]
-    pub fn with_router(
-        id: AgentId,
-        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
-    ) -> Self {
+    pub fn with_router(id: AgentId, router: std::sync::Arc<mister_smith_llm::ModelRouter>) -> Self {
         Self {
             id,
             router: Some(router),
@@ -131,8 +128,8 @@ impl Actor for CriticAgent {
                             })
                             .unwrap_or("");
 
-                        let mut eval: serde_json::Value =
-                            serde_json::from_str(text).unwrap_or_else(|_| {
+                        let mut eval: serde_json::Value = serde_json::from_str(text)
+                            .unwrap_or_else(|_| {
                                 serde_json::json!({
                                     "evaluation": "pass",
                                     "raw_response": text,
@@ -141,14 +138,8 @@ impl Actor for CriticAgent {
 
                         // Attach metadata the stub normally includes.
                         if let Some(obj) = eval.as_object_mut() {
-                            obj.insert(
-                                "output_reviewed".to_string(),
-                                output.clone(),
-                            );
-                            obj.insert(
-                                "criteria_applied".to_string(),
-                                criteria.clone(),
-                            );
+                            obj.insert("output_reviewed".to_string(), output.clone());
+                            obj.insert("criteria_applied".to_string(), criteria.clone());
                             obj.insert(
                                 "evaluations_completed".to_string(),
                                 serde_json::json!(state.evaluations_completed),
