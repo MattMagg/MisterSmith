@@ -54,6 +54,8 @@ pub enum AuditEventType {
     CertificateEvent,
     /// Anomalous patterns detected (brute force, unusual access, etc.).
     SuspiciousActivity,
+    /// State validation or sanitization at a persistence boundary.
+    DataValidation,
     /// Access to system-level resources or admin endpoints.
     SystemAccess,
     /// Changes to security configuration (roles, policies, keys).

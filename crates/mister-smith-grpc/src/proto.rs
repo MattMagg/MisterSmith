@@ -263,6 +263,15 @@ pub struct MessageEnvelope {
     /// Arbitrary key-value headers.
     #[prost(map = "string, string", tag = "11")]
     pub headers: HashMap<String, String>,
+    /// Optional HMAC-SHA256 message signature.
+    #[prost(string, optional, tag = "12")]
+    pub signature: Option<String>,
+    /// Optional monotonic nonce for replay prevention.
+    #[prost(string, optional, tag = "13")]
+    pub nonce: Option<String>,
+    /// Optional capability delegation token.
+    #[prost(string, optional, tag = "14")]
+    pub capability_token: Option<String>,
 }
 
 /// Agent information for status reporting.
@@ -624,6 +633,9 @@ mod tests {
             priority: MessagePriority::High as i32,
             payload: vec![1, 2, 3],
             headers: HashMap::from([("key".to_string(), "value".to_string())]),
+            signature: Some("deadbeef".to_string()),
+            nonce: Some("00000000000000000001-0000000000000001".to_string()),
+            capability_token: Some("capability".to_string()),
         };
 
         let encoded = envelope.encode_to_vec();

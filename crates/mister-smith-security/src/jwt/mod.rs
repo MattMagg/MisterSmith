@@ -4,7 +4,7 @@ mod claims;
 mod keys;
 
 pub use crate::config::KeySource;
-pub use claims::{AgentClaims, TokenPair};
+pub use claims::{AgentClaims, TokenPair, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
 
 use crate::config::JwtConfig;
 use dashmap::DashMap;
@@ -25,6 +25,7 @@ pub struct JwtManager {
     refresh_ttl: std::time::Duration,
     issuer: Option<String>,
     audience: Vec<String>,
+    delegation_chain_max_depth: usize,
     /// Revoked token JTIs mapped to the time they were revoked.
     revoked: DashMap<String, Instant>,
 }
@@ -36,6 +37,14 @@ impl JwtManager {
     ///
     /// Returns `SecurityError::KeyLoadFailed` if the key source is invalid.
     pub fn new(config: &JwtConfig) -> Result<Self, SecurityError> {
+        Self::new_with_delegation_chain_max_depth(config, config.delegation_chain_max_depth)
+    }
+
+    /// Create a new `JwtManager` with an explicit delegation-chain depth limit.
+    pub fn new_with_delegation_chain_max_depth(
+        config: &JwtConfig,
+        delegation_chain_max_depth: usize,
+    ) -> Result<Self, SecurityError> {
         let algorithm = parse_algorithm(&config.algorithm)?;
         let encoding_key = keys::load_encoding_key(&config.key_source, algorithm)?;
         let decoding_key = keys::load_decoding_key(&config.key_source, algorithm)?;
@@ -66,6 +75,7 @@ impl JwtManager {
             refresh_ttl: config.refresh_token_ttl,
             issuer: config.issuer.clone(),
             audience: config.audience.clone(),
+            delegation_chain_max_depth,
             revoked: DashMap::new(),
         })
     }
@@ -88,6 +98,7 @@ impl JwtManager {
             access_claims.aud.clone_from(&self.audience);
         }
         access_claims.token_use = "access".to_string();
+        access_claims.validate_delegation_chain(self.delegation_chain_max_depth)?;
 
         let header = jsonwebtoken::Header::new(self.algorithm);
         let access_token = jsonwebtoken::encode(&header, &access_claims, &self.encoding_key)
@@ -123,6 +134,10 @@ impl JwtManager {
             warn!(jti = %token_data.claims.jti, "revoked token used");
             return Err(SecurityError::TokenRevoked);
         }
+
+        token_data
+            .claims
+            .validate_delegation_chain(self.delegation_chain_max_depth)?;
 
         Ok(token_data.claims)
     }

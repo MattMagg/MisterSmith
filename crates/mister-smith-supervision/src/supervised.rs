@@ -103,6 +103,11 @@ impl SupervisedSystem {
         &self.system
     }
 
+    /// Returns a shared ownership handle to the underlying actor system.
+    pub fn system_arc(&self) -> Arc<ActorSystem> {
+        Arc::clone(&self.system)
+    }
+
     /// Create a root-level supervisor with the given strategy.
     pub async fn create_supervisor(&self, strategy: SupervisionStrategy) -> AgentId {
         let id = AgentId::new();

@@ -3,7 +3,7 @@
 
 services:
   nats:
-    image: nats:latest
+    image: nats:2.12.4-alpine
     ports:
       - "4222:4222"
       - "8222:8222"

@@ -129,7 +129,9 @@ Changes to these files cascade across the architecture:
 **NATS server**: Docker container `NATS` running nats-server v2.12.4
 - Ports: 4222 (client), 6222 (cluster), 8222 (monitoring) — container-internal only, not published to host
 - Start: `docker start NATS`
-- To publish ports: `docker run -d --name NATS -p 4222:4222 -p 8222:8222 nats:latest`
+- To publish ports: `docker run -d --name NATS -p 4222:4222 -p 8222:8222 nats:2.12.4-alpine`
+- Minimum safe version: `nats-server` must be `>= v2.11.1` for CVE-2025-30215 mitigation
+- Version check: `docker run --rm nats:2.12.4-alpine --version`
 
 **NATS Rust client**: `nats.rs/` — cloned from `nats-io/nats.rs`, contains async-nats 0.46.0 source for API reference
 
@@ -142,4 +144,3 @@ The following apps are connected and available for use. Select the most appropri
 | **Context7 MCP** | Fetches up-to-date, version-specific documentation and code examples directly into the prompt. Use when you need accurate library/framework docs or API references. |
 | **GitHub** | Code hosting and version control platform. Use for managing repositories, creating/reviewing pull requests, tracking issues, and CI/CD workflows. |
 | **Tavily** | AI-optimized search and data retrieval. Use for quickly searching the web or filtering relevant information from documents and databases. Load the Tavily-best-practices skill whenever you need to use Tavily > .claude/skills/tavily-best-practices |
-

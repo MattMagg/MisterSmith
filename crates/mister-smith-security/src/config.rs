@@ -20,6 +20,8 @@ pub struct JwtConfig {
     pub issuer: Option<String>,
     /// Required audience claims.
     pub audience: Vec<String>,
+    /// Maximum allowed delegation-chain depth.
+    pub delegation_chain_max_depth: usize,
     /// Key source for signing and verification.
     pub key_source: KeySource,
 }
@@ -32,6 +34,7 @@ impl Default for JwtConfig {
             refresh_token_ttl: Duration::from_secs(86400),
             issuer: None,
             audience: Vec::new(),
+            delegation_chain_max_depth: 5,
             key_source: KeySource::Hmac {
                 secret: b"insecure-default-secret-change-me".to_vec(),
             },

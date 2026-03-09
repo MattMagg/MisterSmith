@@ -2,10 +2,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mister_smith_actor::system::{ActorSystem, ActorSystemConfig};
-use mister_smith_agents::agent::{deregister_agent, register_agent, spawn_agent};
+use mister_smith_agents::agent::{
+    deregister_agent, register_agent, spawn_agent, spawn_agent_delegated,
+};
 use mister_smith_agents::config::{AgentConfig, HealthLevel};
 use mister_smith_agents::registry::AgentRegistry;
 use mister_smith_core::{Actor, AgentId, AgentState, AgentType};
+use mister_smith_security::jwt::AgentClaims;
 use serde::{Deserialize, Serialize};
 
 // Test actor for lifecycle tests
@@ -262,4 +265,32 @@ async fn test_multiple_agents() {
     assert_eq!(registry.count(), 4);
     assert_eq!(registry.find_by_type(AgentType::Worker).len(), 3);
     assert_eq!(registry.find_by_type(AgentType::Coordinator).len(), 1);
+}
+
+#[tokio::test]
+async fn test_spawn_agent_delegated_extends_parent_chain() {
+    let system = Arc::new(ActorSystem::new(ActorSystemConfig::default()));
+    let id = AgentId::new();
+    let parent_claims = AgentClaims {
+        sub: "coordinator-1".to_string(),
+        agent_id: "coordinator-1".to_string(),
+        agent_type: "coordinator".to_string(),
+        delegation_chain: vec!["root-agent".to_string()],
+        ..Default::default()
+    };
+
+    let runtime = spawn_agent_delegated(
+        system,
+        &parent_claims,
+        LifecycleActor { id },
+        LifecycleState::default(),
+        AgentConfig::for_type(AgentType::Worker),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        runtime.delegation_chain(),
+        ["root-agent".to_string(), "coordinator-1".to_string()].as_slice()
+    );
 }
