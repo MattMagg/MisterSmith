@@ -1,7 +1,8 @@
 ---
 tracker:
   kind: linear
-  project_slug: "agentic-ops"
+  api_key: $LINEAR_API_KEY
+  project_slug: "phase-9-bug-fixes-2c10c60904ce"
   active_states:
     - Todo
     - In Progress
@@ -23,14 +24,18 @@ hooks:
       cargo fetch
     fi
 agent:
-  max_concurrent_agents: 4
-  max_turns: 20
+  max_concurrent_agents: 10
+  max_turns: 150
+  max_retry_backoff_ms: 1200000
+  max_concurrent_agents_by_state:
+    rework: 6
 codex:
-  command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.3-codex app-server
+  command: codex --config shell_environment_policy.inherit=all --config model_reasoning_effort=xhigh --model gpt-5.4 app-server
   approval_policy: never
-  thread_sandbox: workspace-write
+  thread_sandbox: danger-full-access
   turn_sandbox_policy:
-    type: workspaceWrite
+    type: dangerFullAccess
+  stall_timeout_ms: 900000
 ---
 
 You are working on a Linear ticket `{{ issue.identifier }}` in the Mister Smith repository.

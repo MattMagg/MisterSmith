@@ -67,8 +67,7 @@ SEEDS = [
                 "content": "Mister Smith is a model-agnostic multi-agent orchestration framework built in Rust with NATS messaging. It is NOT Claude-specific — it works with any LLM. Claude-specific files were archived to archive/claude-cli-research/.",
             }
         ],
-        "immutable": True,
-        "infer": False,
+        "infer": True,
         "metadata": {"confidence": "confirmed", "source": "architecture"},
     },
     {
@@ -78,8 +77,7 @@ SEEDS = [
                 "content": "The Mister Smith workspace has 19 crates across 9 phases: core, config, runtime, monitoring, events, async, resources, actor, supervision, transport, nats, http, grpc, mcp, security, persistence, llm, agents, app. Plus 1 integration-test crate. MSRV is 1.88.0, driven by async-nats 0.46.0.",
             }
         ],
-        "immutable": True,
-        "infer": False,
+        "infer": True,
         "metadata": {"confidence": "confirmed", "source": "architecture"},
     },
     {
@@ -89,8 +87,7 @@ SEEDS = [
                 "content": "spec/ contains canonical architecture specifications (the system contract: types, patterns, interfaces, 62 files). specs/ contains SpecKit-generated per-phase implementation artifacts (build instructions, 113 files). ROADMAP.md bridges them. These are different directories with different purposes.",
             }
         ],
-        "immutable": True,
-        "infer": False,
+        "infer": True,
         "metadata": {"confidence": "confirmed", "source": "architecture"},
     },
     {
@@ -100,8 +97,7 @@ SEEDS = [
                 "content": "Error types in Mister Smith follow a pattern: defined in mister-smith-core, re-exported from the domain crate (SecurityError, PersistenceError, etc). Feature flags gate selective compilation (e.g., jwt, rbac, tls, audit in security; sqlx, security in persistence; llm in agents).",
             }
         ],
-        "immutable": True,
-        "infer": False,
+        "infer": True,
         "metadata": {"confidence": "confirmed", "source": "implementation"},
     },
     {
@@ -111,8 +107,7 @@ SEEDS = [
                 "content": "As of March 2026, all 9 phases of Mister Smith are implementation-complete with 1100+ tests passing. Phase 9 LLM Provider Integration added mister-smith-llm crate with ModelProvider trait, MockProvider, OpenAI/Anthropic/Claude providers, ModelRouter with cascade routing, circuit breaker, budget enforcement, and dual-stream processing.",
             }
         ],
-        "immutable": True,
-        "infer": False,
+        "infer": True,
         "metadata": {"confidence": "confirmed", "source": "implementation", "phase": "9"},
     },
     {
@@ -122,7 +117,7 @@ SEEDS = [
                 "content": "Active code review triage identified critical findings in Phase 9: budget leak where failed completions don't release budget reservations (router.rs), tool ID mismatch in Anthropic streaming (anthropic.rs), tool name loss in DualStreamActor on completion (dual_stream.rs), and missing routing_hint not implemented end-to-end.",
             }
         ],
-        "immutable": False,
+        "infer": True,
         "metadata": {
             "confidence": "confirmed",
             "source": "code-review",
@@ -137,8 +132,7 @@ SEEDS = [
                 "content": "The Mister Smith mem0 project uses these entity scoping conventions: user_id is always matthewmaggio (the developer — preferences, decisions, requests follow the user everywhere). agent_id identifies the AI tool that produced the memory (claude-code, opencode, codex, bootstrap, manual). app_id is always mister-smith. run_id is optional — only for session-scoped data like phase9-llm or review-2026-03-08. Metadata includes source, phase, crate, confidence fields.",
             }
         ],
-        "immutable": True,
-        "infer": False,
+        "infer": True,
         "metadata": {"confidence": "confirmed", "source": "architecture"},
     },
 ]

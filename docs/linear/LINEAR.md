@@ -309,28 +309,31 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 
 | Setting | Value |
 |---------|-------|
-| `project_slug` | `agentic-ops` |
+| `tracker.api_key` | `$LINEAR_API_KEY` |
+| `project_slug` | `phase-9-bug-fixes-2c10c60904ce` |
 | `active_states` | Todo, In Progress, Merging, Rework |
 | `terminal_states` | Done, Canceled, Duplicate |
 | `polling.interval_ms` | 5000 |
-| `agent.max_concurrent_agents` | 4 |
-| `agent.max_turns` | 20 |
+| `agent.max_concurrent_agents` | 10 |
+| `agent.max_turns` | 150 |
 
-### Required Environment
+### Required Credentials
 
-| Variable | Purpose |
-|----------|---------|
-| `LINEAR_API_KEY` | Linear API access (in `.env`, gitignored) |
-| `OPENAI_API_KEY` | Codex agent LLM access |
-| `GITHUB_TOKEN` | PR creation and merge via `gh` CLI |
+| Credential | Purpose |
+|------------|---------|
+| `LINEAR_API_KEY` | Required. Loaded by `./scripts/run-symphony.sh` into the Symphony process environment for tracker access. |
+| Codex auth | Required for `codex app-server` to start issue sessions. An existing Codex login is acceptable; this does not have to be `OPENAI_API_KEY`. |
+| GitHub auth | Required when agents need to create PRs, fetch review state, or merge via `gh` CLI. |
 
 ### Running Symphony
 
 ```bash
-source .env  # or use direnv/dotenv
-# From the symphony repo:
-symphony run --config /path/to/Mister-Smith/WORKFLOW.md
+./scripts/run-symphony.sh
 ```
+
+`/Users/matthewmaggio/Mister-Smith/scripts/run-symphony.sh` is the supported launcher for this repo. It loads `/Users/matthewmaggio/Mister-Smith/.env`, verifies `LINEAR_API_KEY`, then starts the upstream Symphony checkout against this repo's `WORKFLOW.md`.
+
+Important: Symphony does not auto-read repo `.env` files. Keeping `LINEAR_API_KEY` in `.env` is not sufficient unless the launch path exports it into the Symphony process environment first.
 
 ### Codex Skills
 

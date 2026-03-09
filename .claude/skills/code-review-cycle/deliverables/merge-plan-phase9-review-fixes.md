@@ -1,152 +1,144 @@
-# Phase 9 Review Fixes — PR Merge Plan
+# Merge Plan: Phase 9 Bug Fixes — PRs #129-#132 (MS-2 through MS-5)
 
-## PR Inventory
+**Date**: 2026-03-09
+**Reviewer**: Claude Code Agent Team (`ms-pr-review`)
+**Status**: All 4 PRs APPROVED — no code changes required
 
-| PR | Title | Finding | Files | Assessment |
-|----|-------|---------|-------|------------|
-| #116 | fix(spec): reconcile phase 9 task completion status | #12 | `tasks.md` | Correct |
-| #117 | fix(anthropic): emit fallback stop chunk on message_stop | #11 | `anthropic.rs` | Correct |
-| #118 | fix(llm): reconcile budget reservations on all completion paths | #1 | `router.rs`, `budget.rs`, tests | Correct |
-| #119 | fix(llm): enforce and reconcile budget for cascade routing | #2 | `router.rs`, `budget.rs`, tests | Partially correct (see notes) |
-| #120 | fix(llm): map Anthropic input_json_delta events to real tool call IDs | #3 | `anthropic.rs` | Correct |
-| #121 | feat(llm): add routing_hint to CompletionRequest and honor hints | #4 | `types.rs`, `router.rs`, `lib.rs`, tests | Correct |
-| #122 | fix(llm): preserve tool metadata across dual-stream tool assembly | #5 | `dual_stream.rs` | Correct |
-| #123 | fix(agents): propagate ToolBus boundary errors for LLM tool calls | #6 | `tool_bus.rs`, tests | Correct |
-| #124 | fix(llm): enforce cascade tier-to-provider routing order | #7 | `router.rs`, tests | Correct |
-| #125 | fix: propagate LLM failures in planner/critic/executor | #10 | `planner.rs`, `critic.rs`, `executor.rs`, tests | Correct |
-| #126 | fix: refine dual stream text delta backpressure routing | #9 | `dual_stream.rs` | Correct |
-| #127 | feat(router): emit ModelEvent::RoutingDecision for cascade tiers | #8 | `router.rs`, tests | Correct |
+---
 
-## Conflict Map
+## Review Summary
 
-### `router.rs` — 5-WAY CONFLICT (PRs #118, #119, #121, #124, #127)
+| PR | Issue | Title | Verdict | Agent Changes |
+|----|-------|-------|---------|---------------|
+| #129 | MS-3 | fix(llm): resume UI text delivery after backpressure | APPROVED | None |
+| #130 | MS-4 | fix(llm): stabilize Anthropic streaming tool-call IDs | APPROVED | None |
+| #131 | MS-5 | fix(llm): finish routing hint handling and clear fmt gate | APPROVED | None |
+| #132 | MS-2 | fix(llm): enforce cascade budgets per attempt | APPROVED | None |
 
-| Function | #118 | #119 | #121 | #124 | #127 |
-|----------|------|------|------|------|------|
-| `route_completion()` | error-path budget fix | move budget before cascade | add hint to select_provider, strip hint | — | — |
-| `route_cascade()` | — | add estimated_tokens param | hint filtering, tier reordering | rewrite to use attempt plan | add event emission |
-| `select_provider()` | — | — | change signature (add params, filtering) | — | — |
-| New types/methods | — | `BudgetReservationContext`, `reserve_budget()` | `provider_supports_capability()`, `provider_matches_hint()`, `provider_request()` | `CascadeAttempt`, `build_cascade_attempt_plan()` | `ModelEventSink`, `emit_routing_event()` |
+### Review Findings
 
-**Cannot merge independently.** Every rebase after the first produces heavy conflicts in `route_cascade()`.
+- **PR #129 (MS-3)**: `route_text_delta()` correctly implements try-first-then-buffer. `pending_text` accumulates only while channel is full; next `TextDelta` with capacity delivers coalesced content immediately. 4 regression tests cover all scenarios.
 
-### `budget.rs` — 2-WAY CONFLICT (PRs #118, #119)
+- **PR #130 (MS-4)**: `tool_call_ids_by_content_index: HashMap<u64, String>` replaces broken `.keys().nth()` iteration-order lookup. `call_id` stored at `content_block_start`, looked up by index for `input_json_delta`, consumed at `content_block_stop`. Regression test exercises sequential multi-tool blocks.
 
-Both add CAS retry loop to `reconcile()`. Nearly identical implementations. Pick one.
+- **PR #131 (MS-5)**: `RoutingHint.preferred_tier` wired through completion, streaming, and cascade paths. `prioritize_preferred_tier()` uses stable `Vec::partition()`. Hint stripped before provider dispatch via `provider_request()`. 6 tests cover hint-guided selection, streaming, cascade, capabilities, and cost filtering.
 
-### `anthropic.rs` — 2-WAY CONFLICT (PRs #117, #120)
+- **PR #132 (MS-2)**: Per-tier `reserve_budget()` inside cascade loop (line 532). `reconcile(actual)` after successful tier before escalation decision (line 549). `reconcile(0)` on failed tier (line 606). No `release()` needed — reconcile-with-zero correctly nets out. 4 regression tests cover accepted, escalated, multi-tier accounting, and hard-cap rejection.
 
-- #120 rewrites the entire streaming loop into `parse_stream_event()` + `AnthropicStreamState`
-- #117 adds `terminal_stop_emitted` tracking + fallback emission
-- #120 does NOT fix the terminal stop issue (same comment-only `message_stop` branch)
+---
 
-**Must combine.** Merge #120's refactor first, then integrate #117's fallback into the new structure.
+## Conflict Analysis
 
-### `gate9_tests.rs` — 2-WAY CONFLICT (PRs #123, #125)
+### Shared Baseline (all 4 PRs)
 
-- #123 changes `tool_bus_round_trip_with_mock_provider` to use new `execute_tool_call_provider_result`
-- #125 adds failing provider tests and formatting changes
+All 4 PRs branch from the same commit on `main` and share an identical formatting/infrastructure baseline across 11 files:
 
-**Compatible.** Merge #123 first, then rebase #125.
+- `critic.rs`, `executor.rs`, `planner.rs` (rustfmt)
+- `gate9_tests.rs`, `tool_bus_llm_tests.rs` (minor test fixes)
+- `budget.rs`, `budget_tests.rs` (rustfmt)
+- `claude_credentials.rs` (`#[cfg(target_os = "macos")]` gate)
+- `model_event.rs`, `anthropic.rs`, `envelope.rs` (rustfmt)
 
-### `dual_stream.rs` — NO CONFLICT (PRs #122, #126)
+The first merged PR lands these changes. Subsequent rebases resolve these trivially (accept main).
 
-- #122 modifies `convert_chunk()` and HashMap type
-- #126 modifies `route_event()` and `flush_pending_text()`
+### Divergent Files
 
-Different functions — merge independently.
+| File | PR #129 | PR #130 | PR #131 | PR #132 | Conflict Risk |
+|------|---------|---------|---------|---------|--------------|
+| `router.rs` | +11/-7 | +11/-7 | **+78/-29** | +26/-22 | **HIGH** — #131 and #132 modify different functions |
+| `router_tests.rs` | +66/-36 | +66/-36 | **+181/-43** | **+267/-39** | **MEDIUM** — tests are additive, non-overlapping |
+| `dual_stream.rs` | **+174/-96** | +107/-71 | +107/-71 | +107/-71 | LOW — #129 unique; others are baseline |
+| `claude_subscription.rs` | +53/-42 | **+157/-65** | +53/-42 | +53/-42 | LOW — #130 unique; others are baseline |
+| `claude-code-review.yml` | — | +6/-0 | — | — | NONE — #130 only |
 
-## Correctness Issues Found
+### Dependency Ordering
 
-### #119 — `BudgetReservationContext::reconcile()` silently drops errors
-
-```rust
-impl<'a> BudgetReservationContext<'a> {
-    async fn reconcile(self, actual_tokens: u64) {
-        let _ = self.enforcer.reconcile(&self.reservation, actual_tokens).await;
-    }
-}
-```
-
-This re-introduces the `let _` pattern that #118 specifically fixes. During the combine, this must be changed to propagate or log the error.
+No PR depends on another — they fix independent bugs in independent code paths. The shared baseline creates file-level conflicts but no semantic dependencies.
 
 ---
 
 ## Merge Strategy
 
-### Phase 1: Zero-conflict independent merges
+### Method: Squash Merge (`--squash --delete-branch`)
 
-| Order | PR | Disposition | Rationale |
-|-------|----|-------------|-----------|
-| 1.1 | #116 | Merge as-is | docs only, no code conflicts |
-| 1.2 | #122 | Merge as-is | `dual_stream.rs` `convert_chunk()` — no overlap with other PRs |
-| 1.3 | #123 | Merge as-is | `tool_bus.rs` only + tests |
-| 1.4 | #126 | Merge as-is | `dual_stream.rs` `route_event()` — different area from #122 |
+Each PR has 3 commits (fix + macOS gate + rustfmt baseline). Squash into a single commit per PR for clean history.
 
-**Verify after Phase 1:** `cargo build --workspace && cargo test --workspace`
+### Phase 1: PR #130 (MS-4) — Anthropic tool-call IDs
 
-### Phase 2: Role error propagation
+**Disposition**: Merge as-is (no rebase needed — branches from main)
 
-| Order | PR | Disposition | Rationale |
-|-------|----|-------------|-----------|
-| 2.1 | #125 | Merge with rebase | `gate9_tests.rs` conflicts with #123 (Phase 1.3); rebase onto main |
+**Rationale**: Most isolated unique change (`claude_subscription.rs`), plus the only PR with CI workflow fix. Lands the shared formatting baseline for all subsequent PRs.
 
-Changes are in `planner.rs`, `critic.rs`, `executor.rs` (no other PR touches these) and `gate9_tests.rs` (needs rebase after #123).
+```bash
+gh pr merge 130 --squash --delete-branch
+```
 
-**Verify after Phase 2:** `cargo test -p mister-smith-agents`
+**Verify**: `cargo build --workspace && cargo test -p mister-smith-llm`
 
-### Phase 3: Anthropic streaming (combine #120 + #117)
+### Phase 2: PR #129 (MS-3) — UI backpressure resume
 
-| Order | PR | Disposition | Rationale |
-|-------|----|-------------|-----------|
-| 3.1 | #120 | Primary branch | Major refactor — `parse_stream_event()` + `AnthropicStreamState` + ID mapping |
-| 3.2 | #117 | Combine into #120 | Integrate `terminal_stop_emitted` into `AnthropicStreamState`, add fallback logic to `parse_stream_event()`'s `message_stop` branch |
+**Disposition**: Rebase onto main, resolve baseline conflicts, merge
 
-Integration plan:
-1. Check out #120's branch
-2. Add `terminal_stop_emitted: bool` field to `AnthropicStreamState`
-3. In `parse_stream_event()` `message_delta` branch: set `state.terminal_stop_emitted = true` when emitting stop chunk
-4. In `message_stop` branch: emit `StreamChunk::stop(state.chunk_index, StopReason::Completed)` if `!state.terminal_stop_emitted`
-5. Port #117's tests into #120's test module
-6. Merge the combined branch, close #117 as superseded
+**Expected conflicts**: 11 common baseline files (accept main), `dual_stream.rs` (accept PR — unique fix), `claude_subscription.rs` (accept main — #130's version), `router.rs`/`router_tests.rs` (accept main for baseline, keep PR's minimal additions)
 
-**Verify after Phase 3:** `cargo test -p mister-smith-llm`
+```bash
+gh pr merge 129 --squash --delete-branch
+```
 
-### Phase 4: Router megamerge (combine #118 + #119 + #121 + #124 + #127)
+**Verify**: `cargo build --workspace && cargo test -p mister-smith-llm`
 
-These 5 PRs all modify `router.rs` and cannot merge independently. Combine into a single branch.
+### Phase 3: PR #132 (MS-2) — Cascade budget enforcement
 
-| Order | PR | Disposition | Role in combination |
-|-------|----|-------------|---------------------|
-| 4.base | #121 | Primary branch | Largest structural change: `RoutingHint` on `CompletionRequest`, `select_provider` filtering, hint stripping |
-| 4.layer | #118 | Combine into #121 | Budget error-path fix, reconcile error propagation (`let _` → `?`), CAS retry in `budget.rs` |
-| 4.layer | #119 | Combine into #121 | `reserve_budget()` before cascade early-return, reconcile on cascade path. **Fix**: change `BudgetReservationContext::reconcile()` to propagate errors instead of `let _` |
-| 4.layer | #124 | Combine into #121 | `build_cascade_attempt_plan()` — tier-to-provider binding by `model_id` + `provider_kind` |
-| 4.layer | #127 | Combine into #121 | `ModelEventSink` trait + `emit_routing_event()` in cascade loop |
+**Disposition**: Rebase onto main, resolve conflicts, merge
 
-Integration order within the combined branch:
-1. Start from #121 (types.rs changes, select_provider signature, hint filtering/stripping)
-2. Apply #118's budget fixes (error-path reconcile, reconcile error propagation, CAS retry)
-3. Apply #119's cascade budget logic (reserve before cascade, but with error propagation fixed)
-4. Apply #124's cascade tier binding (route_cascade rewrite with attempt plan)
-5. Apply #127's event emission (ModelEventSink, emit in cascade loop)
-6. Reconcile all router_tests.rs additions (deduplicate test helpers: FailingProvider, SharedBudgetStore, RecordingSink)
+**Expected conflicts**: Common baseline (accept main), `router.rs` (manual merge — PR #132's cascade budget changes are in different functions than those already landed), `router_tests.rs` (combine — tests are additive, non-overlapping)
 
-**Budget.rs resolution**: Use #118's `CAS_RETRY_LIMIT` const approach and `FlakyCasStore` test. Drop #119's duplicate `RECONCILE_MAX_RETRIES` + `ConflictOnceStore`.
+```bash
+gh pr merge 132 --squash --delete-branch
+```
 
-Close #118, #119, #124, #127 as superseded by the combined branch.
+**Verify**: `cargo build --workspace && cargo test -p mister-smith-llm`
 
-**Verify after Phase 4:** `cargo build --workspace && cargo test --workspace && cargo clippy --workspace -- -D warnings`
+### Phase 4: PR #131 (MS-5) — RoutingHint end-to-end
+
+**Disposition**: Rebase onto main, resolve conflicts, merge
+
+**Expected conflicts**: Common baseline (accept main), `router.rs` (manual merge — largest change, touches `select_provider_from_entries` and adds `prioritize_preferred_tier()`), `router_tests.rs` (combine — tests are additive)
+
+```bash
+gh pr merge 131 --squash --delete-branch
+```
+
+**Verify**: `cargo build --workspace && cargo test -p mister-smith-llm`
+
+### Post-Merge Final Verification
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace -- -D warnings
+cargo test -p mister-smith-llm
+cargo test -p mister-smith-agents
+cargo build --workspace
+```
 
 ---
 
-## Summary
+## Linear Status Transitions
 
-| Phase | PRs | Action | PRs closed as superseded |
-|-------|-----|--------|--------------------------|
-| 1 | #116, #122, #123, #126 | Merge as-is (4 merges) | — |
-| 2 | #125 | Merge with rebase | — |
-| 3 | #120 + #117 | Combine, merge | #117 |
-| 4 | #121 + #118 + #119 + #124 + #127 | Combine, merge | #118, #119, #124, #127 |
+| Issue | Current | After Merge | Mechanism |
+|-------|---------|-------------|-----------|
+| MS-2 | Human Review | Done | Auto via GitHub integration on PR #132 merge |
+| MS-3 | Human Review | Done | Auto via GitHub integration on PR #129 merge |
+| MS-4 | Human Review | Done | Auto via GitHub integration on PR #130 merge |
+| MS-5 | Human Review | Done | Auto via GitHub integration on PR #131 merge |
+| MS-15 | In Progress | Done | Close manually — fixed by PR #130's CI advisory change |
 
-**Total: 12 PRs → 7 merges, 5 closures**
+---
+
+## Risk Assessment
+
+**Overall risk**: LOW — all fixes are correct, well-tested, and touch independent code paths.
+
+The main risk is conflict resolution during rebasing phases 2-4. The conflicts are on the shared formatting baseline (trivial) plus `router.rs`/`router_tests.rs` where each PR's unique changes touch different functions.
+
+**Rollback plan**: If a merge introduces test failures, revert the squash commit and investigate before continuing.
