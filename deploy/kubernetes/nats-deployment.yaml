@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: mister-smith
+  labels:
+    app.kubernetes.io/name: nats
+    app.kubernetes.io/component: messaging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nats
+        app.kubernetes.io/component: messaging
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.12.4-alpine
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--jetstream"
+            - "--store_dir=/data"
+            - "--http_port=8222"
+          ports:
+            - name: client
+              containerPort: 4222
+              protocol: TCP
+            - name: monitor
+              containerPort: 8222
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 2
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 15
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: nats-data
+              mountPath: /data
+      volumes:
+        # WARNING: emptyDir is ephemeral — JetStream state is lost on pod restart.
+        # For production, replace with a PersistentVolumeClaim.
+        - name: nats-data
+          emptyDir: {}

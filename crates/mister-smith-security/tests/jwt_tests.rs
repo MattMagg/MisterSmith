@@ -1,7 +1,7 @@
 //! Integration tests for the JWT authentication subsystem.
 
 use mister_smith_security::config::{JwtConfig, KeySource};
-use mister_smith_security::jwt::{AgentClaims, JwtManager};
+use mister_smith_security::jwt::{AgentClaims, JwtManager, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
 use std::time::Duration;
 
 fn hmac_config() -> JwtConfig {
@@ -11,6 +11,7 @@ fn hmac_config() -> JwtConfig {
         refresh_token_ttl: Duration::from_secs(3600),
         issuer: Some("mister-smith-test".to_string()),
         audience: vec!["test-audience".to_string()],
+        delegation_chain_max_depth: DEFAULT_MAX_DELEGATION_CHAIN_DEPTH,
         key_source: KeySource::Hmac {
             secret: b"test-secret-key-for-hmac-256-min-32-bytes!".to_vec(),
         },
@@ -230,4 +231,139 @@ fn empty_token_rejected() {
     let mgr = JwtManager::new(&hmac_config()).unwrap();
     let result = mgr.validate_token("");
     assert!(result.is_err());
+}
+
+#[test]
+fn delegation_chain_with_empty_entry_is_rejected_on_generation() {
+    let mgr = JwtManager::new(&hmac_config()).unwrap();
+    let mut claims = test_claims();
+    claims.delegation_chain = vec!["parent-agent".to_string(), "".to_string()];
+
+    let result = mgr.generate_token_pair(&claims);
+
+    assert!(matches!(
+        result,
+        Err(mister_smith_core::SecurityError::InvalidToken(message))
+            if message.contains("delegation_chain")
+    ));
+}
+
+#[test]
+fn delegation_propagation_roundtrip() {
+    let mgr = JwtManager::new(&hmac_config()).unwrap();
+    let mut parent = test_claims();
+    parent.agent_type = "coordinator".to_string();
+
+    let child = parent.delegated_to("agent-002", "worker");
+    let pair = mgr.generate_token_pair(&child).unwrap();
+    let validated = mgr.validate_token(&pair.access_token).unwrap();
+
+    assert_eq!(validated.agent_id, "agent-002");
+    assert_eq!(validated.agent_type, "worker");
+    assert_eq!(validated.delegation_chain, vec!["agent-001"]);
+}
+
+#[test]
+fn delegation_empty_entry_rejected_on_issue() {
+    let mgr = JwtManager::new(&hmac_config()).unwrap();
+    let mut claims = test_claims();
+    claims.delegation_chain = vec!["   ".to_string()];
+
+    let result = mgr.generate_token_pair(&claims);
+
+    assert!(matches!(
+        result,
+        Err(mister_smith_core::SecurityError::InvalidToken(message))
+            if message.contains("delegation_chain entries must be non-empty")
+    ));
+}
+
+#[test]
+fn delegation_max_depth_rejected_on_issue() {
+    let mgr = JwtManager::new_with_delegation_chain_max_depth(&hmac_config(), 1).unwrap();
+    let mut claims = test_claims();
+    claims.delegation_chain = vec!["root".to_string(), "parent".to_string()];
+
+    let result = mgr.generate_token_pair(&claims);
+
+    assert!(matches!(
+        result,
+        Err(mister_smith_core::SecurityError::InvalidToken(message))
+            if message.contains("delegation_chain exceeds max depth")
+    ));
+}
+
+#[test]
+fn delegation_max_depth_from_config_is_honored() {
+    let config = JwtConfig {
+        delegation_chain_max_depth: 1,
+        ..hmac_config()
+    };
+    let mgr = JwtManager::new(&config).unwrap();
+    let mut claims = test_claims();
+    claims.delegation_chain = vec!["root".to_string(), "parent".to_string()];
+
+    let result = mgr.generate_token_pair(&claims);
+
+    assert!(matches!(
+        result,
+        Err(mister_smith_core::SecurityError::InvalidToken(message))
+            if message.contains("delegation_chain exceeds max depth")
+    ));
+}
+
+#[test]
+fn delegation_duplicate_entry_rejected() {
+    let mgr = JwtManager::new(&hmac_config()).unwrap();
+    let mut claims = test_claims();
+    claims.delegation_chain = vec![
+        "root".to_string(),
+        "middle".to_string(),
+        "root".to_string(),
+    ];
+
+    let result = mgr.generate_token_pair(&claims);
+
+    assert!(matches!(
+        result,
+        Err(mister_smith_core::SecurityError::InvalidToken(message))
+            if message.contains("delegation_chain contains a circular reference")
+    ));
+}
+
+#[test]
+fn delegation_circular_reference_rejected_on_validation() {
+    let config = hmac_config();
+    let mgr = JwtManager::new(&config).unwrap();
+    let now = chrono::Utc::now().timestamp() as u64;
+    let claims = AgentClaims {
+        sub: "agent-001".to_string(),
+        exp: now + 300,
+        iat: now,
+        jti: uuid::Uuid::new_v4().to_string(),
+        agent_id: "agent-001".to_string(),
+        agent_type: "worker".to_string(),
+        delegation_chain: vec!["root".to_string(), "agent-001".to_string()],
+        token_use: "access".to_string(),
+        ..Default::default()
+    };
+
+    let secret = match &config.key_source {
+        KeySource::Hmac { secret } => secret,
+        _ => unreachable!("test config should use HMAC"),
+    };
+    let token = jsonwebtoken::encode(
+        &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
+        &claims,
+        &jsonwebtoken::EncodingKey::from_secret(secret),
+    )
+    .unwrap();
+
+    let result = mgr.validate_token(&token);
+
+    assert!(matches!(
+        result,
+        Err(mister_smith_core::SecurityError::InvalidToken(message))
+            if message.contains("delegation_chain contains a circular reference")
+    ));
 }

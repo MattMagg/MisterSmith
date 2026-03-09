@@ -14,12 +14,16 @@
 //! - **`rbac`** — Role-based access control with hierarchical roles
 //! - **`tls`** — TLS 1.3 / mTLS certificate management with rustls
 //! - **`audit`** — Tamper-evident audit logging with hash chaining
+//!
+//! State validation (`state_validator` module) is always compiled and not
+//! feature-gated — it is required at every persistence-to-agent boundary.
 //! - **Message signing** — HMAC-SHA256 signing and replay protection for transport envelopes
 
 pub mod auth_callout;
 pub mod config;
 mod error;
 pub mod message_signer;
+pub mod state_validator;
 
 #[cfg(feature = "jwt")]
 pub mod jwt;
@@ -45,3 +49,6 @@ pub use mister_smith_core::SecurityError;
 
 // Re-export config types.
 pub use config::{AuditConfig, JwtConfig, RbacConfig, TlsConfig};
+pub use state_validator::{
+    JsonSchemaStateValidator, StateValidator, TaintLabel, ValidatedState, ValidationError,
+};
