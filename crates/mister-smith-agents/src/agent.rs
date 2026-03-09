@@ -7,6 +7,7 @@ use mister_smith_actor::mailbox::{MailboxConfig, SpawnConfig};
 use mister_smith_actor::system::ActorSystem;
 use mister_smith_actor::ActorRef;
 use mister_smith_core::{Actor, ActorError, AgentId, AgentState, AgentType, RestartScope};
+use mister_smith_security::jwt::AgentClaims;
 use mister_smith_supervision::SupervisedSystem;
 use tokio::sync::RwLock;
 use tracing::instrument;
@@ -21,6 +22,7 @@ pub struct AgentContext {
     pub agent_id: AgentId,
     pub agent_type: AgentType,
     pub config: AgentConfig,
+    pub delegation_chain: Vec<String>,
     pub started_at: RwLock<Option<DateTime<Utc>>>,
     pub restart_count: AtomicU32,
     pub health: RwLock<HealthLevel>,
@@ -28,10 +30,19 @@ pub struct AgentContext {
 
 impl AgentContext {
     pub fn new(agent_id: AgentId, config: AgentConfig) -> Self {
+        Self::new_with_delegation_chain(agent_id, config, Vec::new())
+    }
+
+    pub fn new_with_delegation_chain(
+        agent_id: AgentId,
+        config: AgentConfig,
+        delegation_chain: Vec<String>,
+    ) -> Self {
         Self {
             agent_type: config.agent_type,
             agent_id,
             config,
+            delegation_chain,
             started_at: RwLock::new(None),
             restart_count: AtomicU32::new(0),
             health: RwLock::new(HealthLevel::Healthy),
@@ -124,6 +135,11 @@ impl<M: Send + Clone + 'static, R: Send + Clone + 'static> AgentRuntime<M, R> {
         &self.context
     }
 
+    /// Get the ordered chain of delegating parent agents for this runtime.
+    pub fn delegation_chain(&self) -> &[String] {
+        &self.context.delegation_chain
+    }
+
     /// Get a reference to the actor system.
     pub fn system(&self) -> &Arc<ActorSystem> {
         &self.system
@@ -142,6 +158,48 @@ where
     A::Message: Send + 'static,
     A::State: Send + 'static,
 {
+    spawn_agent_with_chain(system, actor, initial_state, config, Vec::new()).await
+}
+
+/// Spawn a child agent and propagate the parent's delegation chain into the runtime context.
+pub async fn spawn_agent_delegated<A>(
+    system: Arc<ActorSystem>,
+    parent_claims: &AgentClaims,
+    actor: A,
+    initial_state: A::State,
+    config: AgentConfig,
+) -> Result<AgentRuntime<A::Message, A::Response>, AgentSystemError>
+where
+    A: Actor + 'static,
+    A::Message: Send + 'static,
+    A::State: Send + 'static,
+{
+    let child_claims = parent_claims.delegated_to(
+        actor.actor_id().to_string(),
+        format!("{:?}", config.agent_type).to_lowercase(),
+    );
+    spawn_agent_with_chain(
+        system,
+        actor,
+        initial_state,
+        config,
+        child_claims.delegation_chain,
+    )
+    .await
+}
+
+async fn spawn_agent_with_chain<A>(
+    system: Arc<ActorSystem>,
+    actor: A,
+    initial_state: A::State,
+    config: AgentConfig,
+    delegation_chain: Vec<String>,
+) -> Result<AgentRuntime<A::Message, A::Response>, AgentSystemError>
+where
+    A: Actor + 'static,
+    A::Message: Send + 'static,
+    A::State: Send + 'static,
+{
     let agent_id = actor.actor_id();
     let spawn_config = SpawnConfig {
         mailbox: MailboxConfig {
@@ -151,7 +209,11 @@ where
         shutdown_timeout: Duration::from_secs(5),
     };
 
-    let context = Arc::new(AgentContext::new(agent_id, config));
+    let context = Arc::new(AgentContext::new_with_delegation_chain(
+        agent_id,
+        config,
+        delegation_chain,
+    ));
 
     let actor_ref = system
         .spawn(actor, initial_state, spawn_config)
@@ -185,6 +247,66 @@ where
     let agent_id = sample_actor.actor_id();
     drop(sample_actor);
 
+    spawn_supervised_with_chain(
+        supervised,
+        supervisor_id,
+        agent_id,
+        factory,
+        config,
+        Vec::new(),
+    )
+    .await
+}
+
+/// Spawn a supervised child agent with a propagated delegation chain in its runtime context.
+pub async fn spawn_supervised_delegated<A, F>(
+    supervised: &SupervisedSystem,
+    supervisor_id: AgentId,
+    parent_claims: &AgentClaims,
+    factory: F,
+    config: AgentConfig,
+) -> Result<AgentRuntime<A::Message, A::Response>, AgentSystemError>
+where
+    A: Actor + 'static,
+    A::Message: Send + Clone + 'static,
+    A::State: Send + 'static,
+    A::Response: Send + Clone + 'static,
+    F: Fn() -> (A, A::State) + Send + Sync + 'static,
+{
+    let (sample_actor, _) = factory();
+    let agent_id = sample_actor.actor_id();
+    let child_claims = parent_claims.delegated_to(
+        agent_id.to_string(),
+        format!("{:?}", config.agent_type).to_lowercase(),
+    );
+    drop(sample_actor);
+
+    spawn_supervised_with_chain(
+        supervised,
+        supervisor_id,
+        agent_id,
+        factory,
+        config,
+        child_claims.delegation_chain,
+    )
+    .await
+}
+
+async fn spawn_supervised_with_chain<A, F>(
+    supervised: &SupervisedSystem,
+    supervisor_id: AgentId,
+    agent_id: AgentId,
+    factory: F,
+    config: AgentConfig,
+    delegation_chain: Vec<String>,
+) -> Result<AgentRuntime<A::Message, A::Response>, AgentSystemError>
+where
+    A: Actor + 'static,
+    A::Message: Send + Clone + 'static,
+    A::State: Send + 'static,
+    A::Response: Send + Clone + 'static,
+    F: Fn() -> (A, A::State) + Send + Sync + 'static,
+{
     let spawn_config = SpawnConfig {
         mailbox: MailboxConfig {
             capacity: Some(config.mailbox_capacity),
@@ -193,7 +315,11 @@ where
         shutdown_timeout: Duration::from_secs(5),
     };
 
-    let context = Arc::new(AgentContext::new(agent_id, config));
+    let context = Arc::new(AgentContext::new_with_delegation_chain(
+        agent_id,
+        config,
+        delegation_chain,
+    ));
 
     let actor_ref = supervised
         .spawn_supervised(supervisor_id, factory, spawn_config)
@@ -231,7 +357,11 @@ pub async fn register_agent<M: Send + Clone + 'static, R: Send + Clone + 'static
         heartbeat_at: Utc::now(),
         started_at: *runtime.context.started_at.read().await,
         restart_count: runtime.restart_count(),
-        metadata: serde_json::Value::Null,
+        metadata: if runtime.delegation_chain().is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!({ "delegation_chain": runtime.delegation_chain() })
+        },
         supervisor_id: None,
     };
     registry.register(entry);
