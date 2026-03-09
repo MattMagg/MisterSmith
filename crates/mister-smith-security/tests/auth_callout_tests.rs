@@ -5,10 +5,10 @@ use std::time::Duration;
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use futures::StreamExt;
-use mister_smith_security::config::{JwtConfig, KeySource};
 use mister_smith_security::auth_callout::{
     AuthCalloutHandler, PermissionTier, TrustProfile, AUTH_CALLOUT_SUBJECT,
 };
+use mister_smith_security::config::{JwtConfig, KeySource};
 use mister_smith_security::jwt::{AgentClaims, JwtManager};
 use nkeys::KeyPair;
 use serde_json::{json, Value};
@@ -325,7 +325,10 @@ async fn service_replies_over_nats_auth_callout_subject() {
     let handler = handler();
     let auth_key = KeyPair::new_user();
     let auth_key_public = auth_key.public_key();
-    handler.update_trust(&auth_key_public, TrustProfile::new(auth_key_public.clone(), 0.55));
+    handler.update_trust(
+        &auth_key_public,
+        TrustProfile::new(auth_key_public.clone(), 0.55),
+    );
     handler.start(&client).await.unwrap();
 
     tokio::time::sleep(Duration::from_millis(50)).await;

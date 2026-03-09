@@ -281,18 +281,17 @@ impl AuthCalloutHandler {
     /// This spawns a background task and returns once the subscription has been
     /// established.
     pub async fn start(&self, nats_client: &Client) -> Result<(), SecurityError> {
-        let mut subscriber =
-            nats_client
-                .queue_subscribe(
-                    AUTH_CALLOUT_SUBJECT.to_string(),
-                    AUTH_CALLOUT_QUEUE_GROUP.to_string(),
-                )
-                .await
-                .map_err(|error| {
-                    SecurityError::AuthenticationFailed(format!(
-                        "failed to queue subscribe to {AUTH_CALLOUT_SUBJECT}: {error}"
-                    ))
-                })?;
+        let mut subscriber = nats_client
+            .queue_subscribe(
+                AUTH_CALLOUT_SUBJECT.to_string(),
+                AUTH_CALLOUT_QUEUE_GROUP.to_string(),
+            )
+            .await
+            .map_err(|error| {
+                SecurityError::AuthenticationFailed(format!(
+                    "failed to queue subscribe to {AUTH_CALLOUT_SUBJECT}: {error}"
+                ))
+            })?;
 
         let handler = self.clone();
         let client = nats_client.clone();
@@ -467,8 +466,7 @@ impl AuthCalloutHandler {
     fn authenticate_bearer_token(&self, auth_token: &str) -> Result<String, SecurityError> {
         let jwt_manager = self.jwt_manager.as_ref().ok_or_else(|| {
             SecurityError::AuthenticationFailed(
-                "auth callout bearer token validation requires a configured JwtManager"
-                    .to_string(),
+                "auth callout bearer token validation requires a configured JwtManager".to_string(),
             )
         })?;
 
@@ -500,11 +498,13 @@ impl AuthCalloutHandler {
             ))
         })?;
 
-        key_pair.verify(nonce.as_bytes(), &signature).map_err(|error| {
-            SecurityError::AuthenticationFailed(format!(
-                "invalid auth callout nkey signature: {error}"
-            ))
-        })?;
+        key_pair
+            .verify(nonce.as_bytes(), &signature)
+            .map_err(|error| {
+                SecurityError::AuthenticationFailed(format!(
+                    "invalid auth callout nkey signature: {error}"
+                ))
+            })?;
 
         Ok(())
     }
