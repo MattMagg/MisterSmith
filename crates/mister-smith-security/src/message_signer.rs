@@ -293,6 +293,15 @@ impl HmacMessageSigner {
         keys.extend(self.grace_keys.lock().iter().map(|key| key.key.clone()));
         keys
     }
+
+    fn replay_key(envelope: &MessageEnvelope, signature: &str, nonce: &str) -> String {
+        let replay_scope = envelope
+            .source_agent_id
+            .map(|agent_id| agent_id.to_string())
+            .unwrap_or_else(|| signature.to_string());
+
+        format!("{replay_scope}:{nonce}")
+    }
 }
 
 impl MessageSigner for HmacMessageSigner {
@@ -359,6 +368,22 @@ impl MessageSigner for HmacMessageSigner {
 
     fn validate_nonce(&self, nonce: &str) -> Result<(), SecurityError> {
         self.nonce_tracker.lock().validate_and_record(nonce)
+    }
+
+    fn validate_envelope(&self, envelope: &MessageEnvelope) -> Result<(), SecurityError> {
+        match (envelope.signature.as_deref(), envelope.nonce.as_deref()) {
+            (None, None) if !self.requires_signatures() => Ok(()),
+            (None, _) => Err(SecurityError::MissingSignature),
+            (_, None) => Err(SecurityError::MissingNonce),
+            (Some(signature), Some(nonce)) => {
+                if !self.verify(envelope, signature)? {
+                    return Err(SecurityError::InvalidSignature);
+                }
+
+                let replay_key = Self::replay_key(envelope, signature, nonce);
+                self.validate_nonce(&replay_key)
+            }
+        }
     }
 }
 

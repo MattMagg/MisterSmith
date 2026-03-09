@@ -10,6 +10,7 @@ use mister_smith_security::{
     HmacKey, HmacMessageSigner, MessageSigner, MessageSigningConfig,
 };
 use mister_smith_transport::{InMemoryTransport, MessageEnvelope, Transport, TransportError};
+use uuid::Uuid;
 
 fn signing_key(id: &str, secret: &[u8]) -> HmacKey {
     HmacKey::new(id, secret.to_vec())
@@ -106,6 +107,59 @@ fn replay_rejected() {
 
     assert!(matches!(
         signer.validate_envelope(&envelope),
+        Err(SecurityError::ReplayDetected { .. })
+    ));
+}
+
+#[test]
+fn same_nonce_from_distinct_senders_is_not_treated_as_replay() {
+    let signer = signer();
+    let shared_nonce = signer.generate_nonce();
+
+    let mut sender_a = unsigned_envelope("security.sender-a");
+    sender_a.source_agent_id = Some(Uuid::new_v4());
+    sender_a.nonce = Some(shared_nonce.clone());
+    let sender_a_signature = signer.sign(&sender_a).expect("sign should succeed");
+    sender_a.signature = Some(sender_a_signature);
+
+    let mut sender_b = unsigned_envelope("security.sender-b");
+    sender_b.source_agent_id = Some(Uuid::new_v4());
+    sender_b.nonce = Some(shared_nonce);
+    let sender_b_signature = signer.sign(&sender_b).expect("sign should succeed");
+    sender_b.signature = Some(sender_b_signature);
+
+    signer
+        .validate_envelope(&sender_a)
+        .expect("first sender should pass replay validation");
+    signer
+        .validate_envelope(&sender_b)
+        .expect("different sender should not collide on nonce replay tracking");
+}
+
+#[test]
+fn same_nonce_from_same_sender_is_rejected_even_when_payload_changes() {
+    let signer = signer();
+    let source_agent_id = Uuid::new_v4();
+    let shared_nonce = signer.generate_nonce();
+
+    let mut first = unsigned_envelope("security.same-sender.first");
+    first.source_agent_id = Some(source_agent_id);
+    first.nonce = Some(shared_nonce.clone());
+    let first_signature = signer.sign(&first).expect("sign should succeed");
+    first.signature = Some(first_signature);
+
+    let mut second = unsigned_envelope("security.same-sender.second");
+    second.source_agent_id = Some(source_agent_id);
+    second.nonce = Some(shared_nonce);
+    let second_signature = signer.sign(&second).expect("sign should succeed");
+    second.signature = Some(second_signature);
+
+    signer
+        .validate_envelope(&first)
+        .expect("first delivery should pass");
+
+    assert!(matches!(
+        signer.validate_envelope(&second),
         Err(SecurityError::ReplayDetected { .. })
     ));
 }
