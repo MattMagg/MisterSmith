@@ -118,14 +118,12 @@ pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
 
     // Axum executes layers in reverse declaration order (last = outermost = first).
     // Rate limiting must be outermost to block floods of unauthenticated requests.
-    let mut router = api_router();
-
-    let mut router = router
+    let router = api_router()
         .layer(axum_mw::from_fn(request_id_middleware))
         .layer(axum_mw::from_fn(security_middleware));
 
     // Configure CORS based on allowed_origins.
-    if !config.allowed_origins.is_empty() {
+    let router = if !config.allowed_origins.is_empty() {
         let allow_origin = if config.allowed_origins.contains(&"*".to_string()) {
             AllowOrigin::any()
         } else {
@@ -142,8 +140,10 @@ pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
             .allow_methods(tower_http::cors::Any)
             .allow_headers(tower_http::cors::Any);
 
-        router = router.layer(cors);
-    }
+        router.layer(cors)
+    } else {
+        router
+    };
 
     let router = router
         .layer(axum_mw::from_fn(rate_limit_middleware))
