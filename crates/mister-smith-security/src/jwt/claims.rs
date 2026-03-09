@@ -90,11 +90,7 @@ impl AgentClaims {
     }
 
     /// Derive child claims from the current agent, appending the parent identity to the chain.
-    pub fn delegated_to(
-        &self,
-        agent_id: impl Into<String>,
-        agent_type: impl Into<String>,
-    ) -> Self {
+    pub fn delegated_to(&self, agent_id: impl Into<String>, agent_type: impl Into<String>) -> Self {
         let agent_id = agent_id.into();
         let mut child = self.clone();
         child.delegation_chain.push(self.agent_id.clone());
