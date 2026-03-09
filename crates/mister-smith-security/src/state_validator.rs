@@ -80,6 +80,14 @@ pub enum ValidationError {
         /// JSON Pointer describing the location of the match.
         path: String,
     },
+    /// Sanitization produced duplicate object keys.
+    #[error("sanitization conflict at '{path}' for key '{key}'")]
+    SanitizationConflict {
+        /// JSON Pointer describing the object containing the conflict.
+        path: String,
+        /// The duplicate key produced during sanitization.
+        key: String,
+    },
     /// JSON serialization failed while sizing or copying the payload.
     #[error("state serialization failed: {0}")]
     SerializationFailed(String),
@@ -173,38 +181,49 @@ impl JsonSchemaStateValidator {
         Ok(())
     }
 
-    fn sanitize_state(&self, state: &Value) -> (Value, bool) {
+    fn sanitize_state(&self, state: &Value, path: &str) -> Result<(Value, bool), ValidationError> {
         match state {
             Value::String(value) => {
                 let sanitized: String = value.chars().filter(|ch| is_safe_character(*ch)).collect();
                 let changed = sanitized != *value;
-                (Value::String(sanitized), changed)
+                Ok((Value::String(sanitized), changed))
             }
             Value::Array(values) => {
                 let mut changed = false;
-                let sanitized = values
-                    .iter()
-                    .map(|value| {
-                        let (value, value_changed) = self.sanitize_state(value);
-                        changed |= value_changed;
-                        value
-                    })
-                    .collect();
-                (Value::Array(sanitized), changed)
+                let mut sanitized = Vec::with_capacity(values.len());
+                for (index, value) in values.iter().enumerate() {
+                    let child_path = format!("{path}/{index}");
+                    let (value, value_changed) = self.sanitize_state(value, &child_path)?;
+                    changed |= value_changed;
+                    sanitized.push(value);
+                }
+                Ok((Value::Array(sanitized), changed))
             }
             Value::Object(entries) => {
                 let mut changed = false;
-                let sanitized = entries
-                    .iter()
-                    .map(|(key, value)| {
-                        let (value, value_changed) = self.sanitize_state(value);
-                        changed |= value_changed;
-                        (key.clone(), value)
-                    })
-                    .collect();
-                (Value::Object(sanitized), changed)
+                let mut sanitized = serde_json::Map::with_capacity(entries.len());
+                for (key, value) in entries {
+                    let sanitized_key = sanitize_string(key);
+                    changed |= sanitized_key != *key;
+                    let child_path =
+                        format!("{path}/{}", escape_json_pointer_segment(&sanitized_key));
+                    let (sanitized_value, value_changed) =
+                        self.sanitize_state(value, &child_path)?;
+                    changed |= value_changed;
+
+                    if sanitized
+                        .insert(sanitized_key.clone(), sanitized_value)
+                        .is_some()
+                    {
+                        return Err(ValidationError::SanitizationConflict {
+                            path: path.to_string(),
+                            key: sanitized_key,
+                        });
+                    }
+                }
+                Ok((Value::Object(sanitized), changed))
             }
-            _ => (state.clone(), false),
+            _ => Ok((state.clone(), false)),
         }
     }
 
@@ -224,6 +243,14 @@ impl JsonSchemaStateValidator {
             }),
             Value::Object(entries) => entries.iter().find_map(|(key, value)| {
                 let child_path = format!("{path}/{}", escape_json_pointer_segment(key));
+                let normalized_key = key.to_ascii_lowercase();
+                if let Some(pattern) = self
+                    .malicious_patterns
+                    .iter()
+                    .find(|pattern| normalized_key.contains(pattern.as_str()))
+                {
+                    return Some((pattern.clone(), child_path.clone()));
+                }
                 self.detect_malicious_pattern(value, &child_path)
             }),
             _ => None,
@@ -235,7 +262,7 @@ impl StateValidator for JsonSchemaStateValidator {
     fn validate(&self, state_type: &str, state: &Value) -> Result<ValidatedState, ValidationError> {
         self.check_size(state)?;
 
-        let (sanitized, was_sanitized) = self.sanitize_state(state);
+        let (sanitized, was_sanitized) = self.sanitize_state(state, "")?;
         let registered = self.schemas.read();
 
         if let Some(schema) = registered.get(state_type) {
@@ -294,6 +321,10 @@ impl StateValidator for JsonSchemaStateValidator {
 
 fn is_safe_character(ch: char) -> bool {
     !ch.is_control() || matches!(ch, '\n' | '\r' | '\t')
+}
+
+fn sanitize_string(value: &str) -> String {
+    value.chars().filter(|ch| is_safe_character(*ch)).collect()
 }
 
 fn escape_json_pointer_segment(segment: &str) -> String {
