@@ -110,8 +110,30 @@ impl AgentRepository {
         self.hybrid.read_state(agent_id, key).await
     }
 
-    /// Get all state keys for an agent from SQL.
-    #[cfg(feature = "sqlx")]
+    /// Get all state keys for an agent from SQL, validating each entry.
+    ///
+    /// Each row is passed through the validator and audit-logged exactly as
+    /// [`get_state()`](Self::get_state) does for single-key reads.
+    #[cfg(all(feature = "sqlx", feature = "security"))]
+    pub async fn get_all_state(
+        &self,
+        agent_id: Uuid,
+        validator: &dyn StateValidator,
+        audit_logger: &AuditLogger,
+    ) -> Result<Vec<(String, ValidatedState)>, PersistenceError> {
+        let rows = queries::get_all_state(&self.pool, agent_id).await?;
+        rows.into_iter()
+            .map(|r| {
+                let validated =
+                    validate_state_entry(agent_id, &r.state_key, r.state_value, validator, audit_logger)?;
+                Ok((r.state_key, validated))
+            })
+            .collect()
+    }
+
+    /// Get all state keys for an agent from SQL (raw, without security
+    /// validation).
+    #[cfg(all(feature = "sqlx", not(feature = "security")))]
     pub async fn get_all_state(
         &self,
         agent_id: Uuid,
@@ -127,6 +149,12 @@ impl AgentRepository {
     ///
     /// Reads all state keys from SQL and stores a snapshot for point-in-time
     /// recovery. Returns the checkpoint UUID.
+    ///
+    /// # Safety contract
+    ///
+    /// This is an internal system operation for point-in-time recovery.
+    /// Callers restoring from a checkpoint **must** validate each entry via
+    /// [`get_state()`](Self::get_state) before exposing values to agents.
     #[cfg(feature = "sqlx")]
     pub async fn checkpoint(&self, agent_id: Uuid) -> Result<Uuid, PersistenceError> {
         // Flush any pending dirty keys first
@@ -166,6 +194,13 @@ impl AgentRepository {
     ///
     /// Reads all state keys from SQL and writes them to KV for fast access.
     /// Returns the number of keys hydrated.
+    ///
+    /// # Safety contract
+    ///
+    /// This populates the KV cache from SQL. Values stored here are **not**
+    /// validated at hydration time — validation occurs on read via
+    /// [`get_state()`](Self::get_state), which runs the full quarantine
+    /// pipeline before any value reaches an agent.
     #[cfg(feature = "sqlx")]
     pub async fn hydrate(&self, agent_id: Uuid) -> Result<usize, PersistenceError> {
         let rows = queries::get_all_state(&self.pool, agent_id).await?;
@@ -266,10 +301,15 @@ fn record_state_validation_event(
         _ => ("state_flagged", AuditOutcome::Warning),
     };
 
+    let event_type = match taint_label {
+        TaintLabel::Clean | TaintLabel::Sanitized => AuditEventType::DataValidation,
+        _ => AuditEventType::SuspiciousActivity,
+    };
+
     let event = SecurityAuditEvent {
         event_id: uuid::Uuid::new_v4().to_string(),
         timestamp: chrono::Utc::now(),
-        event_type: AuditEventType::SuspiciousActivity,
+        event_type,
         principal: Some(agent_id.to_string()),
         resource: Some(key.to_string()),
         action: Some(action.to_string()),
@@ -438,7 +478,7 @@ mod tests {
 
         let events = logger.recent_events(10);
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].event_type, AuditEventType::SuspiciousActivity);
+        assert_eq!(events[0].event_type, AuditEventType::DataValidation);
         assert_eq!(events[0].outcome, AuditOutcome::Warning);
         let principal = agent_id.to_string();
         assert_eq!(events[0].principal.as_deref(), Some(principal.as_str()));
@@ -513,6 +553,7 @@ mod tests {
 
         let events = logger.recent_events(10);
         assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, AuditEventType::SuspiciousActivity);
         assert_eq!(events[0].outcome, AuditOutcome::Warning);
         assert_eq!(
             events[0].details.get("taint_label"),

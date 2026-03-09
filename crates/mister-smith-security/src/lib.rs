@@ -14,6 +14,9 @@
 //! - **`rbac`** — Role-based access control with hierarchical roles
 //! - **`tls`** — TLS 1.3 / mTLS certificate management with rustls
 //! - **`audit`** — Tamper-evident audit logging with hash chaining
+//!
+//! State validation (`state_validator` module) is always compiled and not
+//! feature-gated — it is required at every persistence-to-agent boundary.
 
 pub mod config;
 mod error;

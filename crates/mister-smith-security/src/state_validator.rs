@@ -140,6 +140,16 @@ pub struct JsonSchemaStateValidator {
     malicious_patterns: Vec<String>,
 }
 
+/// Default prompt-injection patterns checked during malicious-pattern
+/// detection. These are always included even when callers supply extra
+/// patterns via [`JsonSchemaStateValidator::new_with_patterns`].
+const DEFAULT_PATTERNS: &[&str] = &[
+    "ignore previous instructions",
+    "reveal the system prompt",
+    "developer message",
+    "override safety",
+];
+
 impl JsonSchemaStateValidator {
     /// Create a new validator with the provided serialized size limit.
     #[must_use]
@@ -147,12 +157,21 @@ impl JsonSchemaStateValidator {
         Self {
             max_bytes,
             schemas: RwLock::new(HashMap::new()),
-            malicious_patterns: vec![
-                "ignore previous instructions".to_string(),
-                "reveal the system prompt".to_string(),
-                "developer message".to_string(),
-                "override safety".to_string(),
-            ],
+            malicious_patterns: DEFAULT_PATTERNS.iter().map(|s| (*s).to_string()).collect(),
+        }
+    }
+
+    /// Create a new validator that merges caller-supplied patterns with the
+    /// built-in defaults.
+    #[must_use]
+    pub fn new_with_patterns(max_bytes: usize, extra_patterns: Vec<String>) -> Self {
+        let mut patterns: Vec<String> =
+            DEFAULT_PATTERNS.iter().map(|s| (*s).to_string()).collect();
+        patterns.extend(extra_patterns);
+        Self {
+            max_bytes,
+            schemas: RwLock::new(HashMap::new()),
+            malicious_patterns: patterns,
         }
     }
 
@@ -266,17 +285,28 @@ impl StateValidator for JsonSchemaStateValidator {
         let registered = self.schemas.read();
 
         if let Some(schema) = registered.get(state_type) {
-            schema.validator.validate(&sanitized).map_err(|error| {
-                ValidationError::SchemaViolation {
-                    schema_ref: state_type.to_string(),
-                    path: error.instance_path().as_str().to_string(),
-                    message: error.to_string(),
-                }
-            })?;
+            // Capture schema result without early-returning so we can still run
+            // the injection scan. Injection detection takes priority because a
+            // schema failure might be benign (extra field) while an injection is
+            // always hostile.
+            let schema_result =
+                schema
+                    .validator
+                    .validate(&sanitized)
+                    .map_err(|error| ValidationError::SchemaViolation {
+                        schema_ref: state_type.to_string(),
+                        path: error.instance_path().as_str().to_string(),
+                        message: error.to_string(),
+                    });
 
+            // Always run pattern scan — injection detection takes priority over
+            // schema errors.
             if let Some((pattern, path)) = self.detect_malicious_pattern(&sanitized, "") {
                 return Err(ValidationError::MaliciousPattern { pattern, path });
             }
+
+            // Now propagate schema error if any.
+            schema_result?;
 
             return Ok(ValidatedState {
                 data: sanitized,
