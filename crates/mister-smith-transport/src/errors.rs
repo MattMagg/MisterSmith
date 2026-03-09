@@ -45,6 +45,10 @@ pub enum TransportError {
     /// A protocol-level error occurred.
     #[error("protocol error: {0}")]
     ProtocolError(String),
+
+    /// Transport security validation failed.
+    #[error("security error: {0}")]
+    Security(#[from] mister_smith_core::SecurityError),
 }
 
 impl From<TransportError> for mister_smith_core::NetworkError {
@@ -54,6 +58,9 @@ impl From<TransportError> for mister_smith_core::NetworkError {
                 mister_smith_core::NetworkError::ConnectionFailed(msg)
             }
             TransportError::Timeout(msg) => mister_smith_core::NetworkError::Timeout(msg),
+            TransportError::Security(err) => {
+                mister_smith_core::NetworkError::ProtocolError(err.to_string())
+            }
             other => mister_smith_core::NetworkError::ProtocolError(other.to_string()),
         }
     }
@@ -105,5 +112,19 @@ mod tests {
         let network_err = mister_smith_core::NetworkError::Timeout("test".into());
         let transport_err: TransportError = network_err.into();
         assert!(matches!(transport_err, TransportError::Timeout(_)));
+    }
+
+    #[test]
+    fn security_error_variant_preserves_typed_context() {
+        let transport_err =
+            TransportError::from(mister_smith_core::SecurityError::MissingSignature);
+        assert!(matches!(transport_err, TransportError::Security(_)));
+
+        let network_err: mister_smith_core::NetworkError = transport_err.into();
+        assert!(matches!(
+            network_err,
+            mister_smith_core::NetworkError::ProtocolError(message)
+                if message.contains("Missing message signature")
+        ));
     }
 }

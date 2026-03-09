@@ -224,8 +224,10 @@ impl Transport for InMemoryTransport {
         mut envelope: MessageEnvelope,
         timeout: Duration,
     ) -> Result<MessageEnvelope, TransportError> {
-        // Generate a correlation ID for matching the response.
-        let correlation_id = Uuid::new_v4();
+        // Generate a correlation ID for matching the response when the caller
+        // did not already supply one. Preserving caller-provided IDs matters
+        // for envelope signing and end-to-end correlation.
+        let correlation_id = envelope.correlation_id.unwrap_or_else(Uuid::new_v4);
         envelope.correlation_id = Some(correlation_id);
 
         // Create a oneshot channel for the reply.
@@ -446,6 +448,45 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.message_type, "echo.response");
+    }
+
+    #[tokio::test]
+    async fn request_preserves_existing_correlation_id() {
+        let transport = InMemoryTransport::new();
+        let expected = Uuid::new_v4();
+        let transport_clone = transport.clone();
+        let mut sub = transport.subscribe("service.signed").await.unwrap();
+
+        tokio::spawn(async move {
+            if let Some(msg) = sub.next().await {
+                assert_eq!(msg.envelope.correlation_id, Some(expected));
+
+                let response = MessageEnvelope::builder("signed.response")
+                    .correlation_id(expected)
+                    .payload_raw(msg.envelope.payload.clone())
+                    .build()
+                    .unwrap();
+
+                if let Some(reply_subject) = msg.reply_subject {
+                    transport_clone
+                        .publish(&reply_subject, response)
+                        .await
+                        .unwrap();
+                }
+            }
+        });
+
+        let request = MessageEnvelope::builder("signed.request")
+            .correlation_id(expected)
+            .payload_raw(b"signed payload".to_vec())
+            .build()
+            .unwrap();
+        let response = transport
+            .request("service.signed", request, Duration::from_secs(5))
+            .await
+            .unwrap();
+
+        assert_eq!(response.correlation_id, Some(expected));
     }
 
     #[tokio::test]
