@@ -309,6 +309,18 @@ pub enum SecurityError {
     /// Token signature is invalid.
     #[error("Invalid signature")]
     InvalidSignature,
+    /// Required message signature is missing.
+    #[error("Missing message signature")]
+    MissingSignature,
+    /// Required message nonce is missing.
+    #[error("Missing message nonce")]
+    MissingNonce,
+    /// Replay attack detected for a previously-seen nonce.
+    #[error("Replay detected for nonce '{nonce}'")]
+    ReplayDetected {
+        /// The nonce that was already observed.
+        nonce: String,
+    },
     /// Token is malformed or otherwise invalid.
     #[error("Invalid token: {0}")]
     InvalidToken(String),
@@ -330,6 +342,12 @@ pub enum SecurityError {
     /// Key loading failed.
     #[error("Key load failed: {0}")]
     KeyLoadFailed(String),
+    /// Message signing failed.
+    #[error("Message signing failed: {0}")]
+    SigningFailed(String),
+    /// Signing key rotation failed.
+    #[error("Signing key rotation failed: {0}")]
+    KeyRotationFailed(String),
     /// Token generation failed.
     #[error("Token generation failed: {0}")]
     TokenGenerationFailed(String),

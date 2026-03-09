@@ -14,9 +14,11 @@
 //! - **`rbac`** — Role-based access control with hierarchical roles
 //! - **`tls`** — TLS 1.3 / mTLS certificate management with rustls
 //! - **`audit`** — Tamper-evident audit logging with hash chaining
+//! - **Message signing** — HMAC-SHA256 signing and replay protection for transport envelopes
 
 pub mod config;
 mod error;
+pub mod message_signer;
 
 #[cfg(feature = "jwt")]
 pub mod jwt;
@@ -33,6 +35,7 @@ pub mod middleware;
 pub mod audit;
 
 // Re-export SecurityError from core for convenience.
+pub use message_signer::{HmacKey, HmacMessageSigner, MessageSigner, MessageSigningConfig};
 pub use mister_smith_core::SecurityError;
 
 // Re-export config types.

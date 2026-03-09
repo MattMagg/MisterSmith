@@ -62,6 +62,9 @@ message MessageEnvelope {
   MessagePriority priority = 9;
   bytes payload = 10;           // serialized inner message
   map<string, string> headers = 11;
+  optional string signature = 12;
+  optional string nonce = 13;
+  optional string capability_token = 14;
 }
 
 message AgentInfo {
