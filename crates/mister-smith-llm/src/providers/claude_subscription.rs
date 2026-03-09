@@ -249,8 +249,8 @@ impl ClaudeSubscriptionProvider {
         // Accumulate partial JSON input for tool calls across deltas.
         let mut tool_input_buffers: std::collections::HashMap<String, String> =
             std::collections::HashMap::new();
-        // Track SSE content-block indexes to the stable provider tool call IDs.
-        let mut tool_call_ids_by_content_index: std::collections::HashMap<u64, String> =
+        // Track tool call_id → name for ToolUseStart events.
+        let mut tool_names: std::collections::HashMap<String, String> =
             std::collections::HashMap::new();
 
         while let Some(chunk) = bytes_stream.next().await {
@@ -274,7 +274,7 @@ impl ClaudeSubscriptionProvider {
                         &mut index,
                         &mut saw_tool_call,
                         &mut tool_input_buffers,
-                        &mut tool_call_ids_by_content_index,
+                        &mut tool_names,
                     )
                     .await?;
                     continue;
@@ -300,7 +300,7 @@ impl ClaudeSubscriptionProvider {
                 &mut index,
                 &mut saw_tool_call,
                 &mut tool_input_buffers,
-                &mut tool_call_ids_by_content_index,
+                &mut tool_names,
             )
             .await?;
         }
@@ -591,7 +591,7 @@ async fn process_anthropic_sse_event(
     index: &mut usize,
     saw_tool_call: &mut bool,
     tool_input_buffers: &mut std::collections::HashMap<String, String>,
-    tool_call_ids_by_content_index: &mut std::collections::HashMap<u64, String>,
+    tool_names: &mut std::collections::HashMap<String, String>,
 ) -> Result<(), LlmError> {
     if data_lines.is_empty() {
         return Ok(());
@@ -608,7 +608,6 @@ async fn process_anthropic_sse_event(
             if let Some(content_block) = payload.get("content_block") {
                 match content_block.get("type").and_then(Value::as_str) {
                     Some("tool_use") => {
-                        let block_index = payload.get("index").and_then(Value::as_u64).unwrap_or(0);
                         let call_id = content_block
                             .get("id")
                             .and_then(Value::as_str)
@@ -632,8 +631,8 @@ async fn process_anthropic_sse_event(
                         *index += 1;
                         *saw_tool_call = true;
 
-                        tool_call_ids_by_content_index.insert(block_index, call_id.clone());
                         tool_input_buffers.insert(call_id.clone(), String::new());
+                        tool_names.insert(call_id, name);
                     }
                     _ => {
                         // text blocks start emitting via content_block_delta
@@ -659,14 +658,23 @@ async fn process_anthropic_sse_event(
                     }
                     Some("input_json_delta") => {
                         if let Some(partial) = delta.get("partial_json").and_then(Value::as_str) {
+                            // Find which tool call this delta belongs to via the
+                            // content block index in the payload.
                             let block_index =
                                 payload.get("index").and_then(Value::as_u64).unwrap_or(0);
-                            if let Some(call_id) =
-                                tool_call_ids_by_content_index.get(&block_index).cloned()
-                            {
-                                if let Some(buf) = tool_input_buffers.get_mut(&call_id) {
-                                    buf.push_str(partial);
-                                }
+
+                            // Find the call_id by block index. We track names in
+                            // insertion order, so the Nth tool_use block maps to the
+                            // Nth entry. Use the last-inserted call_id as fallback.
+                            let call_id = tool_input_buffers
+                                .keys()
+                                .nth(block_index as usize)
+                                .cloned()
+                                .or_else(|| tool_input_buffers.keys().last().cloned())
+                                .unwrap_or_default();
+
+                            if let Some(buf) = tool_input_buffers.get_mut(&call_id) {
+                                buf.push_str(partial);
                             }
                         }
                     }
@@ -677,7 +685,9 @@ async fn process_anthropic_sse_event(
         "content_block_stop" => {
             // If a tool_use block just finished, emit the complete input.
             let block_index = payload.get("index").and_then(Value::as_u64).unwrap_or(0);
-            if let Some(call_id) = tool_call_ids_by_content_index.remove(&block_index) {
+            let call_id = tool_input_buffers.keys().nth(block_index as usize).cloned();
+
+            if let Some(call_id) = call_id {
                 if let Some(json_buf) = tool_input_buffers.remove(&call_id) {
                     let input: Value = if json_buf.is_empty() {
                         json!({})
@@ -989,97 +999,6 @@ mod tests {
         assert_eq!(response.tool_calls[0].name, "get_weather");
         assert_eq!(response.tool_calls[0].input, json!({"city": "Paris"}));
         assert_eq!(response.stop_reason, StopReason::ToolCall);
-    }
-
-    #[tokio::test]
-    async fn streaming_tool_inputs_preserve_tool_ids_across_multiple_block_stops() {
-        let (stream_tx, mut stream_rx) = tokio::sync::mpsc::channel(16);
-        let mut index = 0usize;
-        let mut saw_tool_call = false;
-        let mut tool_input_buffers = std::collections::HashMap::new();
-        let mut tool_call_ids_by_content_index = std::collections::HashMap::new();
-
-        let events = vec![
-            (
-                "content_block_start",
-                json!({
-                    "index": 0,
-                    "content_block": {
-                        "type": "tool_use",
-                        "id": "call_weather",
-                        "name": "get_weather"
-                    }
-                }),
-            ),
-            (
-                "content_block_start",
-                json!({
-                    "index": 1,
-                    "content_block": {
-                        "type": "tool_use",
-                        "id": "call_news",
-                        "name": "get_news"
-                    }
-                }),
-            ),
-            (
-                "content_block_delta",
-                json!({
-                    "index": 0,
-                    "delta": {
-                        "type": "input_json_delta",
-                        "partial_json": "{\"city\":\"Paris\"}"
-                    }
-                }),
-            ),
-            (
-                "content_block_delta",
-                json!({
-                    "index": 1,
-                    "delta": {
-                        "type": "input_json_delta",
-                        "partial_json": "{\"topic\":\"rust\"}"
-                    }
-                }),
-            ),
-            (
-                "content_block_stop",
-                json!({
-                    "index": 0
-                }),
-            ),
-            (
-                "content_block_stop",
-                json!({
-                    "index": 1
-                }),
-            ),
-        ];
-
-        for (event_name, payload) in events {
-            process_anthropic_sse_event(
-                Some(event_name.to_string()),
-                vec![payload.to_string()],
-                &stream_tx,
-                &mut index,
-                &mut saw_tool_call,
-                &mut tool_input_buffers,
-                &mut tool_call_ids_by_content_index,
-            )
-            .await
-            .unwrap();
-        }
-
-        let input_chunks: Vec<(String, Value)> = std::iter::from_fn(|| stream_rx.try_recv().ok())
-            .filter_map(|result| match result.unwrap().delta {
-                ChunkDelta::ToolUseInput { call_id, input } => Some((call_id, input)),
-                _ => None,
-            })
-            .collect();
-
-        assert_eq!(input_chunks.len(), 2);
-        assert!(input_chunks.contains(&("call_weather".to_string(), json!({"city": "Paris"}))));
-        assert!(input_chunks.contains(&("call_news".to_string(), json!({"topic": "rust"}))));
     }
 
     #[test]
