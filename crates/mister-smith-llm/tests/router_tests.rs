@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use futures::stream;
+use futures::StreamExt;
 use mister_smith_core::LlmError;
 use mister_smith_llm::budget::{
     BudgetEnforcer, BudgetNode, BudgetPolicy, BudgetStore, InMemoryBudgetStore,
@@ -29,6 +30,13 @@ fn mock_config(model_id: &str) -> ProviderConfig {
         provider_kind: ProviderKind::Mock,
         model_id: model_id.to_string(),
         ..Default::default()
+    }
+}
+
+fn mock_config_with_tier(model_id: &str, tier: &str) -> ProviderConfig {
+    ProviderConfig {
+        metadata: serde_json::json!({ "tier": tier }),
+        ..mock_config(model_id)
     }
 }
 
@@ -119,13 +127,20 @@ impl ModelProvider for RecordingProvider {
         })
     }
 
-    fn stream(&self, _request: CompletionRequest) -> mister_smith_llm::CompletionStream {
-        Box::pin(stream::once(async {
-            Err(LlmError::UnsupportedCapability {
-                capability: "streaming".into(),
-                model: "recording".into(),
-            })
-        }))
+    fn stream(&self, request: CompletionRequest) -> mister_smith_llm::CompletionStream {
+        self.observed_requests.lock().unwrap().push(request.clone());
+        Box::pin(stream::iter(vec![
+            Ok(mister_smith_llm::StreamChunk {
+                index: 0,
+                delta: mister_smith_llm::ChunkDelta::Text {
+                    text: "recorded-stream".to_string(),
+                },
+            }),
+            Ok(mister_smith_llm::StreamChunk::stop(
+                1,
+                StopReason::Completed,
+            )),
+        ]))
     }
 
     async fn embed(&self, _input: Vec<String>) -> Result<EmbeddingResponse, LlmError> {
@@ -406,6 +421,37 @@ async fn required_capabilities_hint_filters_providers() {
 }
 
 #[tokio::test]
+async fn preferred_tier_hint_prioritizes_matching_provider_for_non_cascade_routing() {
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin);
+
+    router
+        .add_provider(
+            mock_config_with_tier("baseline", "slm"),
+            Arc::new(MockProvider::new("baseline-model")),
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+    router
+        .add_provider(
+            mock_config_with_tier("preferred", "llm"),
+            Arc::new(MockProvider::new("preferred-model")),
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let request = CompletionRequest {
+        routing_hint: Some(RoutingHint {
+            preferred_tier: Some("llm".to_string()),
+            ..Default::default()
+        }),
+        ..mock_request()
+    };
+
+    let (_, decision) = router.route_completion(request).await.unwrap();
+    assert_eq!(decision.provider_id, "preferred");
+}
+
+#[tokio::test]
 async fn max_cost_tokens_hint_blocks_over_budget_estimate() {
     let router = ModelRouter::new(RoutingPolicy::RoundRobin);
     let provider: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("test"));
@@ -433,6 +479,68 @@ async fn max_cost_tokens_hint_blocks_over_budget_estimate() {
         result.unwrap_err(),
         LlmError::NoHealthyProvider(_)
     ));
+}
+
+#[tokio::test]
+async fn stream_consumes_hint_for_selection_and_strips_before_dispatch() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let recorder: Arc<dyn ModelProvider> = Arc::new(RecordingProvider::new(
+        "recorder",
+        ModelCapabilities::all(),
+        observed.clone(),
+    ));
+    let no_tools = Arc::new(
+        MockProvider::new("no-tools").with_capabilities(ModelCapabilities {
+            completion: true,
+            streaming: true,
+            embeddings: true,
+            tool_calling: false,
+        }),
+    );
+
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin);
+    router
+        .add_provider(
+            mock_config_with_tier("baseline", "slm"),
+            no_tools,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+    router
+        .add_provider(
+            mock_config_with_tier("preferred", "llm"),
+            recorder,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let chunks = router
+        .stream(CompletionRequest {
+            tools: Some(vec![]),
+            routing_hint: Some(RoutingHint {
+                preferred_tier: Some("llm".to_string()),
+                required_capabilities: vec!["tool_calling".to_string()],
+                ..Default::default()
+            }),
+            ..mock_request()
+        })
+        .collect::<Vec<_>>()
+        .await;
+
+    assert_eq!(chunks.len(), 2);
+    assert_eq!(
+        chunks[0].as_ref().unwrap().delta,
+        mister_smith_llm::ChunkDelta::Text {
+            text: "recorded-stream".to_string(),
+        }
+    );
+
+    let recorded = observed.lock().unwrap();
+    assert_eq!(recorded.len(), 1);
+    assert!(
+        recorded[0].routing_hint.is_none(),
+        "routing_hint should be stripped before dispatch to provider"
+    );
 }
 
 #[tokio::test]

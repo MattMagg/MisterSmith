@@ -224,6 +224,15 @@ impl ModelRouter {
             entry.circuit_breaker.maybe_transition_to_half_open();
         }
 
+        self.select_provider_from_entries(&providers, hint, estimated_tokens)
+    }
+
+    fn select_provider_from_entries(
+        &self,
+        providers: &[ProviderEntry],
+        hint: Option<&RoutingHint>,
+        estimated_tokens: u64,
+    ) -> Result<usize, LlmError> {
         let healthy_indices: Vec<usize> = providers
             .iter()
             .enumerate()
@@ -239,7 +248,6 @@ impl ModelRouter {
             ));
         }
 
-        // Filter by hint capabilities and cost
         let filtered_indices: Vec<usize> = if let Some(hint) = hint {
             healthy_indices
                 .into_iter()
@@ -261,16 +269,18 @@ impl ModelRouter {
             ));
         }
 
+        let candidate_indices = Self::prioritize_preferred_tier(providers, filtered_indices, hint);
+
         match &self.routing_policy {
             RoutingPolicy::RoundRobin => {
                 let idx = self
                     .round_robin_counter
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                Ok(filtered_indices[idx % filtered_indices.len()])
+                Ok(candidate_indices[idx % candidate_indices.len()])
             }
-            RoutingPolicy::CostOptimized => Ok(filtered_indices[0]),
-            RoutingPolicy::CapabilityMatched => Ok(filtered_indices[0]),
-            RoutingPolicy::Cascade(_) => Ok(filtered_indices[0]),
+            RoutingPolicy::CostOptimized => Ok(candidate_indices[0]),
+            RoutingPolicy::CapabilityMatched => Ok(candidate_indices[0]),
+            RoutingPolicy::Cascade(_) => Ok(candidate_indices[0]),
         }
     }
 
@@ -302,6 +312,43 @@ impl ModelRouter {
             }
         }
         true
+    }
+
+    fn prioritize_preferred_tier(
+        providers: &[ProviderEntry],
+        candidate_indices: Vec<usize>,
+        hint: Option<&RoutingHint>,
+    ) -> Vec<usize> {
+        let Some(preferred_tier) = hint.and_then(|hint| hint.preferred_tier.as_deref()) else {
+            return candidate_indices;
+        };
+
+        let (mut preferred, fallback): (Vec<usize>, Vec<usize>) =
+            candidate_indices.into_iter().partition(|&index| {
+                Self::provider_matches_preferred_tier(&providers[index].config, preferred_tier)
+            });
+
+        if preferred.is_empty() {
+            return fallback;
+        }
+
+        preferred.extend(fallback);
+        preferred
+    }
+
+    fn provider_matches_preferred_tier(config: &ProviderConfig, preferred_tier: &str) -> bool {
+        if config.model_id == preferred_tier {
+            return true;
+        }
+
+        ["tier", "tier_label"].into_iter().any(|field| {
+            config
+                .metadata
+                .get(field)
+                .and_then(serde_json::Value::as_str)
+                .map(|value| value == preferred_tier)
+                .unwrap_or(false)
+        })
     }
 
     /// Clone the request with routing_hint stripped before dispatch to a provider.
@@ -636,24 +683,22 @@ impl ModelProvider for ModelRouter {
     fn stream(&self, request: CompletionRequest) -> CompletionStream {
         // For streaming, select provider synchronously and delegate
         // This is a simplified version - full async selection would need a different approach
-        let providers = self.providers.try_read();
+        let estimated = Self::estimate_tokens(&request);
+        let hint = request.routing_hint.as_ref();
+        let providers = self.providers.try_write();
         match providers {
-            Ok(providers) => {
-                let healthy: Vec<usize> = providers
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, e)| e.circuit_breaker.is_allowed())
-                    .map(|(i, _)| i)
-                    .collect();
+            Ok(mut providers) => {
+                for entry in providers.iter_mut() {
+                    entry.circuit_breaker.maybe_transition_to_half_open();
+                }
 
-                if let Some(&idx) = healthy.first() {
-                    providers[idx].provider.stream(request)
-                } else {
-                    Box::pin(futures::stream::once(async {
-                        Err(LlmError::NoHealthyProvider(
-                            "No healthy providers for streaming".to_string(),
-                        ))
-                    }))
+                match self.select_provider_from_entries(&providers, hint, estimated) {
+                    Ok(idx) => {
+                        let provider = providers[idx].provider.clone();
+                        drop(providers);
+                        provider.stream(Self::provider_request(&request))
+                    }
+                    Err(err) => Box::pin(futures::stream::once(async { Err(err) })),
                 }
             }
             Err(_) => Box::pin(futures::stream::once(async {
