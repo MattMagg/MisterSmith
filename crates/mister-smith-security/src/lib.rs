@@ -17,6 +17,7 @@
 
 pub mod config;
 mod error;
+pub mod state_validator;
 
 #[cfg(feature = "jwt")]
 pub mod jwt;
@@ -37,3 +38,6 @@ pub use mister_smith_core::SecurityError;
 
 // Re-export config types.
 pub use config::{AuditConfig, JwtConfig, RbacConfig, TlsConfig};
+pub use state_validator::{
+    JsonSchemaStateValidator, StateValidator, TaintLabel, ValidatedState, ValidationError,
+};
