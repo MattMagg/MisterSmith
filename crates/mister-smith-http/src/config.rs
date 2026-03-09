@@ -20,6 +20,11 @@ pub struct HttpTransportConfig {
     pub max_ws_connections: usize,
     /// Maximum requests per second per IP for rate limiting.
     pub rate_limit_rps: u32,
+    /// List of allowed origins for CORS.
+    ///
+    /// Set to `["*"]` to allow any origin (permissive).
+    /// Default is empty (strict).
+    pub allowed_origins: Vec<String>,
 }
 
 impl Default for HttpTransportConfig {
@@ -30,6 +35,7 @@ impl Default for HttpTransportConfig {
             ws_keepalive_interval: Duration::from_secs(30),
             max_ws_connections: 1000,
             rate_limit_rps: 100,
+            allowed_origins: Vec::new(),
         }
     }
 }
