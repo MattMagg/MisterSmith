@@ -391,25 +391,15 @@ impl ModelRouter {
         let estimated = Self::estimate_tokens(&request);
         let hint = request.routing_hint.as_ref();
 
-        // Budget reservation — covers both cascade and non-cascade paths
-        let reservation = self.reserve_budget(estimated).await?;
-
         // Delegate to cascade routing when policy is Cascade
         if let RoutingPolicy::Cascade(ref policy) = self.routing_policy {
             let policy = policy.clone();
-            let result = self.route_cascade(request, &policy, estimated).await;
-
-            // Reconcile budget after cascade
-            if let Some(ctx) = reservation {
-                match &result {
-                    Ok((response, _)) => ctx.reconcile(response.usage.total_tokens).await?,
-                    Err(_) => ctx.reconcile(0).await?,
-                }
-            }
-            return result;
+            return self.route_cascade(request, &policy, estimated).await;
         }
 
         // Non-cascade path
+        let reservation = self.reserve_budget(estimated).await?;
+
         let idx = match self.select_provider(hint, estimated).await {
             Ok(idx) => idx,
             Err(err) => {
@@ -477,8 +467,9 @@ impl ModelRouter {
     /// Route a completion via cascade (SLM-default / LLM-fallback).
     ///
     /// Attempts providers in declared tier order (CascadePolicy::tiers), which is
-    /// authoritative for cheapest-first escalation. Budget is managed by the caller
-    /// (`route_completion`).
+    /// authoritative for cheapest-first escalation. Budget is enforced per tier
+    /// attempt using the same reserve-before-send / reconcile-after-completion
+    /// flow as non-cascade routing.
     async fn route_cascade(
         &self,
         request: CompletionRequest,
@@ -538,6 +529,7 @@ impl ModelRouter {
             }
 
             let tier_label = attempt.tier_label.clone();
+            let reservation = self.reserve_budget(estimated_tokens).await?;
 
             let start = std::time::Instant::now();
             let result = provider.complete(Self::provider_request(&request)).await;
@@ -552,6 +544,10 @@ impl ModelRouter {
                                 .circuit_breaker
                                 .record_success(latency_ms);
                         }
+                    }
+
+                    if let Some(ctx) = reservation {
+                        ctx.reconcile(response.usage.total_tokens).await?;
                     }
 
                     let confidence = ConfidenceSignal::from_response(&response);
@@ -606,6 +602,10 @@ impl ModelRouter {
                             .record_failure(retry_after);
                     }
                     drop(providers);
+
+                    if let Some(ctx) = reservation {
+                        ctx.reconcile(0).await?;
+                    }
 
                     self.emit_routing_event(model_id, tier_label, format!("failed ({err})"));
 
