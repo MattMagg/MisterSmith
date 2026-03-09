@@ -279,12 +279,14 @@ mod tests {
         let mut config = HttpTransportConfig::default();
         config.allowed_origins = vec!["*".to_string()];
         let app = build_router(&config, AppState::new());
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40124);
 
         let request = Request::builder()
             .method("OPTIONS")
             .uri("/api/v1/health")
             .header("origin", "http://example.com")
             .header("access-control-request-method", "GET")
+            .extension(ConnectInfo(client_addr))
             .body(Body::empty())
             .unwrap();
 
@@ -303,12 +305,14 @@ mod tests {
     async fn build_router_excludes_cors_headers_by_default() {
         let config = HttpTransportConfig::default();
         let app = build_router(&config, AppState::new());
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40125);
 
         let request = Request::builder()
             .method("OPTIONS")
             .uri("/api/v1/health")
             .header("origin", "http://example.com")
             .header("access-control-request-method", "GET")
+            .extension(ConnectInfo(client_addr))
             .body(Body::empty())
             .unwrap();
 
