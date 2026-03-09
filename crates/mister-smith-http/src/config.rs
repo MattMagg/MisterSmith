@@ -20,6 +20,12 @@ pub struct HttpTransportConfig {
     pub max_ws_connections: usize,
     /// Maximum requests per second per IP for rate limiting.
     pub rate_limit_rps: u32,
+    /// List of allowed origins for CORS.
+    ///
+    /// Set to `["*"]` to allow any origin (permissive).
+    /// Default is empty (strict).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_origins: Vec<String>,
 }
 
 impl Default for HttpTransportConfig {
@@ -30,6 +36,7 @@ impl Default for HttpTransportConfig {
             ws_keepalive_interval: Duration::from_secs(30),
             max_ws_connections: 1000,
             rate_limit_rps: 100,
+            allowed_origins: Vec::new(),
         }
     }
 }
@@ -86,6 +93,7 @@ mod tests {
             ws_keepalive_interval: Duration::from_secs(60),
             max_ws_connections: 500,
             rate_limit_rps: 50,
+            allowed_origins: vec!["http://localhost:3000".to_string()],
         };
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: HttpTransportConfig = serde_json::from_str(&json).unwrap();
@@ -94,5 +102,28 @@ mod tests {
         assert_eq!(deserialized.ws_keepalive_interval, Duration::from_secs(60));
         assert_eq!(deserialized.max_ws_connections, 500);
         assert_eq!(deserialized.rate_limit_rps, 50);
+        assert_eq!(
+            deserialized.allowed_origins,
+            vec!["http://localhost:3000".to_string()]
+        );
+    }
+
+    #[test]
+    fn config_deserialize_legacy_document_without_cors_field() {
+        let json = r#"{
+            "bind_address":"127.0.0.1:8080",
+            "websocket_enabled":true,
+            "ws_keepalive_interval":30,
+            "max_ws_connections":250,
+            "rate_limit_rps":75
+        }"#;
+
+        let deserialized: HttpTransportConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(deserialized.bind_address, "127.0.0.1:8080");
+        assert!(deserialized.websocket_enabled);
+        assert_eq!(deserialized.ws_keepalive_interval, Duration::from_secs(30));
+        assert_eq!(deserialized.max_ws_connections, 250);
+        assert_eq!(deserialized.rate_limit_rps, 75);
+        assert!(deserialized.allowed_origins.is_empty());
     }
 }

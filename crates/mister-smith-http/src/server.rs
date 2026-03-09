@@ -9,6 +9,7 @@ use axum::Router;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::info;
 
 use crate::config::HttpTransportConfig;
@@ -119,7 +120,32 @@ pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
     // Rate limiting must be outermost to block floods of unauthenticated requests.
     let router = api_router()
         .layer(axum_mw::from_fn(request_id_middleware))
-        .layer(axum_mw::from_fn(security_middleware))
+        .layer(axum_mw::from_fn(security_middleware));
+
+    // Configure CORS based on allowed_origins.
+    let router = if !config.allowed_origins.is_empty() {
+        let allow_origin = if config.allowed_origins.contains(&"*".to_string()) {
+            AllowOrigin::any()
+        } else {
+            let origins: Vec<_> = config
+                .allowed_origins
+                .iter()
+                .filter_map(|s| s.parse().ok())
+                .collect();
+            AllowOrigin::list(origins)
+        };
+
+        let cors = CorsLayer::new()
+            .allow_origin(allow_origin)
+            .allow_methods(tower_http::cors::Any)
+            .allow_headers(tower_http::cors::Any);
+
+        router.layer(cors)
+    } else {
+        router
+    };
+
+    let router = router
         .layer(axum_mw::from_fn(rate_limit_middleware))
         .layer(axum::Extension(rate_limiter));
 
@@ -246,5 +272,58 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn build_router_includes_cors_headers_when_configured() {
+        let mut config = HttpTransportConfig::default();
+        config.allowed_origins = vec!["*".to_string()];
+        let app = build_router(&config, AppState::new());
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40124);
+
+        let request = Request::builder()
+            .method("OPTIONS")
+            .uri("/api/v1/health")
+            .header("origin", "http://example.com")
+            .header("access-control-request-method", "GET")
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get("access-control-allow-origin")
+                .unwrap(),
+            "*"
+        );
+    }
+
+    #[tokio::test]
+    async fn build_router_excludes_cors_headers_by_default() {
+        let config = HttpTransportConfig::default();
+        let app = build_router(&config, AppState::new());
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40125);
+
+        let request = Request::builder()
+            .method("OPTIONS")
+            .uri("/api/v1/health")
+            .header("origin", "http://example.com")
+            .header("access-control-request-method", "GET")
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        // Without CORS middleware, OPTIONS might 405 or 404 depending on router,
+        // or just return OK but without CORS headers.
+        // In Axum, `any(ws_handler)` at the end might catch it, or it might be a 405.
+        // The main point is checking for the header.
+        assert!(response
+            .headers()
+            .get("access-control-allow-origin")
+            .is_none());
     }
 }
