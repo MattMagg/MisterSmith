@@ -203,4 +203,24 @@ mod tests {
         let deserialized: TaskId = serde_json::from_str(&json).unwrap();
         assert_eq!(id, deserialized);
     }
+
+    #[test]
+    fn id_from_uuid_conversion() {
+        let uuid = Uuid::new_v4();
+
+        let agent_id = AgentId::from_uuid(uuid);
+        assert_eq!(*agent_id.as_ref(), uuid);
+
+        let task_id = TaskId::from_uuid(uuid);
+        assert_eq!(*task_id.as_ref(), uuid);
+
+        let message_id = MessageId::from_uuid(uuid);
+        assert_eq!(*message_id.as_ref(), uuid);
+
+        let tool_id = ToolId::from_uuid(uuid);
+        assert_eq!(*tool_id.as_ref(), uuid);
+
+        let resource_id = ResourceId::from_uuid(uuid);
+        assert_eq!(*resource_id.as_ref(), uuid);
+    }
 }
