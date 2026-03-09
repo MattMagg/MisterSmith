@@ -17,8 +17,11 @@ use uuid::Uuid;
 use mister_smith_core::SecurityError;
 use mister_smith_transport::SubjectTaxonomy;
 
+use crate::jwt::JwtManager;
+
 /// System subject used by the NATS server auth callout protocol.
 pub const AUTH_CALLOUT_SUBJECT: &str = "$SYS.REQ.USER.AUTH";
+const AUTH_CALLOUT_QUEUE_GROUP: &str = "mister-smith.auth-callout";
 
 const AUTH_REQUEST_TYPE: &str = "authorization_request";
 const AUTH_RESPONSE_TYPE: &str = "authorization_response";
@@ -226,6 +229,7 @@ pub struct AuthCalloutHandler {
     issuer_account: String,
     default_permissions: Permissions,
     max_jwt_ttl_secs: u64,
+    jwt_manager: Option<Arc<JwtManager>>,
 }
 
 impl AuthCalloutHandler {
@@ -241,6 +245,7 @@ impl AuthCalloutHandler {
             issuer_account: issuer_account.into(),
             default_permissions: Permissions::quarantined(),
             max_jwt_ttl_secs: 300,
+            jwt_manager: None,
         }
     }
 
@@ -258,6 +263,13 @@ impl AuthCalloutHandler {
         self
     }
 
+    /// Configure bearer-token validation for logical agent identities.
+    #[must_use]
+    pub fn with_jwt_manager(mut self, jwt_manager: Arc<JwtManager>) -> Self {
+        self.jwt_manager = Some(jwt_manager);
+        self
+    }
+
     /// Return the issuer account public NKey used in issued tokens.
     #[must_use]
     pub fn issuer_account(&self) -> &str {
@@ -271,11 +283,14 @@ impl AuthCalloutHandler {
     pub async fn start(&self, nats_client: &Client) -> Result<(), SecurityError> {
         let mut subscriber =
             nats_client
-                .subscribe(AUTH_CALLOUT_SUBJECT)
+                .queue_subscribe(
+                    AUTH_CALLOUT_SUBJECT.to_string(),
+                    AUTH_CALLOUT_QUEUE_GROUP.to_string(),
+                )
                 .await
                 .map_err(|error| {
                     SecurityError::AuthenticationFailed(format!(
-                        "failed to subscribe to {AUTH_CALLOUT_SUBJECT}: {error}"
+                        "failed to queue subscribe to {AUTH_CALLOUT_SUBJECT}: {error}"
                     ))
                 })?;
 
@@ -385,7 +400,10 @@ impl AuthCalloutHandler {
             return self.build_error_response(&request, "unsupported auth callout request type");
         }
 
-        let agent_id = request.agent_id();
+        let agent_id = match self.authenticate_request(&request) {
+            Ok(agent_id) => agent_id,
+            Err(error) => return self.build_error_response(&request, &error.to_string()),
+        };
         let authorization = self.authorize(&agent_id)?;
 
         let response = match self.generate_user_jwt(&request.nats.user_nkey, &authorization) {
@@ -394,6 +412,101 @@ impl AuthCalloutHandler {
         }?;
 
         Ok(response)
+    }
+
+    fn authenticate_request(
+        &self,
+        request: &AuthorizationRequestClaims,
+    ) -> Result<String, SecurityError> {
+        if let Some(auth_token) = request.nats.connect_opts.auth_token.as_deref() {
+            let agent_id = self.authenticate_bearer_token(auth_token)?;
+            if let Some(claimed_agent_id) = request.claimed_agent_id() {
+                if claimed_agent_id != agent_id {
+                    return Err(SecurityError::AuthenticationFailed(format!(
+                        "bearer token agent_id '{agent_id}' does not match claimed identity '{claimed_agent_id}'"
+                    )));
+                }
+            }
+            return Ok(agent_id);
+        }
+
+        let nkey = request.nats.connect_opts.nkey.as_deref().ok_or_else(|| {
+            SecurityError::AuthenticationFailed(
+                "auth callout request missing verifiable credentials".to_string(),
+            )
+        })?;
+        let signature = request
+            .nats
+            .connect_opts
+            .signature
+            .as_deref()
+            .ok_or_else(|| {
+                SecurityError::AuthenticationFailed(
+                    "auth callout request missing verifiable credentials".to_string(),
+                )
+            })?;
+        let nonce = request.nats.client_info.nonce.as_deref().ok_or_else(|| {
+            SecurityError::AuthenticationFailed(
+                "auth callout request missing verifiable credentials".to_string(),
+            )
+        })?;
+
+        self.authenticate_nkey(nkey, signature, nonce)?;
+
+        if let Some(claimed_agent_id) = request.claimed_agent_id() {
+            if claimed_agent_id != nkey {
+                return Err(SecurityError::AuthenticationFailed(format!(
+                    "verified nkey '{nkey}' does not match claimed identity '{claimed_agent_id}'"
+                )));
+            }
+        }
+
+        Ok(nkey.to_string())
+    }
+
+    fn authenticate_bearer_token(&self, auth_token: &str) -> Result<String, SecurityError> {
+        let jwt_manager = self.jwt_manager.as_ref().ok_or_else(|| {
+            SecurityError::AuthenticationFailed(
+                "auth callout bearer token validation requires a configured JwtManager"
+                    .to_string(),
+            )
+        })?;
+
+        let claims = jwt_manager.validate_token(auth_token)?;
+        Ok(claims.agent_id)
+    }
+
+    fn authenticate_nkey(
+        &self,
+        nkey: &str,
+        signature: &str,
+        nonce: &str,
+    ) -> Result<(), SecurityError> {
+        let key_pair = KeyPair::from_public_key(nkey).map_err(|error| {
+            SecurityError::AuthenticationFailed(format!(
+                "invalid auth callout nkey '{nkey}': {error}"
+            ))
+        })?;
+
+        if key_pair.key_pair_type() != KeyPairType::User {
+            return Err(SecurityError::AuthenticationFailed(format!(
+                "auth callout nkey must be a user public key: {nkey}"
+            )));
+        }
+
+        let signature = URL_SAFE_NO_PAD.decode(signature).map_err(|error| {
+            SecurityError::AuthenticationFailed(format!(
+                "failed to decode auth callout signature: {error}"
+            ))
+        })?;
+
+        key_pair.verify(nonce.as_bytes(), &signature).map_err(|error| {
+            SecurityError::AuthenticationFailed(format!(
+                "invalid auth callout nkey signature: {error}"
+            ))
+        })?;
+
+        Ok(())
     }
 
     fn generate_user_jwt(
@@ -501,19 +614,16 @@ struct AuthorizationRequestClaims {
 }
 
 impl AuthorizationRequestClaims {
-    fn agent_id(&self) -> String {
+    fn claimed_agent_id(&self) -> Option<&str> {
         [
             self.nats.client_info.user.as_deref(),
             self.nats.connect_opts.user.as_deref(),
             self.nats.client_info.name.as_deref(),
             self.nats.connect_opts.name.as_deref(),
-            self.nats.connect_opts.nkey.as_deref(),
         ]
         .into_iter()
         .flatten()
         .find(|candidate| !candidate.trim().is_empty())
-        .unwrap_or(self.nats.user_nkey.as_str())
-        .to_string()
     }
 }
 
@@ -537,15 +647,21 @@ struct AuthorizationClientInfo {
     #[serde(default)]
     name: Option<String>,
     #[serde(default)]
+    nonce: Option<String>,
+    #[serde(default)]
     user: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct AuthorizationConnectOptions {
     #[serde(default)]
+    auth_token: Option<String>,
+    #[serde(default)]
     name: Option<String>,
     #[serde(default)]
     nkey: Option<String>,
+    #[serde(default, rename = "sig")]
+    signature: Option<String>,
     #[serde(default)]
     user: Option<String>,
 }
