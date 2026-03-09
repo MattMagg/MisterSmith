@@ -222,10 +222,8 @@ fn duplicate_sanitized_object_keys_are_rejected() {
 
 #[test]
 fn custom_patterns_are_detected() {
-    let validator = JsonSchemaStateValidator::new_with_patterns(
-        1_024,
-        vec!["exfiltrate data".to_string()],
-    );
+    let validator =
+        JsonSchemaStateValidator::new_with_patterns(1_024, vec!["exfiltrate data".to_string()]);
     validator
         .register_schema("agent.metadata", metadata_schema())
         .expect("schema registration should succeed");

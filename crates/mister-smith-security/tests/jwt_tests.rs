@@ -316,11 +316,7 @@ fn delegation_max_depth_from_config_is_honored() {
 fn delegation_duplicate_entry_rejected() {
     let mgr = JwtManager::new(&hmac_config()).unwrap();
     let mut claims = test_claims();
-    claims.delegation_chain = vec![
-        "root".to_string(),
-        "middle".to_string(),
-        "root".to_string(),
-    ];
+    claims.delegation_chain = vec!["root".to_string(), "middle".to_string(), "root".to_string()];
 
     let result = mgr.generate_token_pair(&claims);
 

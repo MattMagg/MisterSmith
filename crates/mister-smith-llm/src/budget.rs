@@ -137,7 +137,7 @@ impl BudgetEnforcer {
         estimated_tokens: u64,
     ) -> Result<BudgetReservation, LlmError> {
         let node = self.store.get(budget_key).await?.ok_or_else(|| {
-            LlmError::InvalidRequest(format!("Budget key '{}' not found", budget_key))
+            LlmError::InvalidRequest(format!("Budget key '{budget_key}' not found"))
         })?;
 
         match node.policy {
