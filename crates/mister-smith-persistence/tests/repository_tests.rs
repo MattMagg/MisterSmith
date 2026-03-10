@@ -56,7 +56,7 @@ mod tests {
     #[ignore]
     async fn audit_append_batch() {
         let pool = test_pool().await;
-        let repo = AuditRepository::new(pool);
+        let repo = AuditRepository::new(pool.clone());
 
         let entries: Vec<AuditEntry> = (0..5)
             .map(|i| AuditEntry {
@@ -79,6 +79,68 @@ mod tests {
             .await
             .expect("batch append should succeed");
         assert_eq!(count, 5);
+
+        let entry_ids: Vec<Uuid> = entries.iter().map(|entry| entry.id).collect();
+        let persisted_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM audit_log WHERE id = ANY($1)")
+                .bind(&entry_ids[..])
+                .fetch_one(&pool)
+                .await
+                .expect("count query should succeed");
+
+        assert_eq!(persisted_count, entries.len() as i64);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn audit_append_batch_is_atomic_on_failure() {
+        let pool = test_pool().await;
+        let repo = AuditRepository::new(pool.clone());
+
+        let duplicate_id = Uuid::new_v4();
+        let duplicate_created_at = Utc::now();
+        let entries = vec![
+            AuditEntry {
+                id: duplicate_id,
+                event_type: "authorization".to_string(),
+                agent_id: None,
+                resource_type: Some("security".to_string()),
+                resource_id: None,
+                action: "duplicate_0".to_string(),
+                old_values: None,
+                new_values: None,
+                metadata: serde_json::json!({}),
+                correlation_id: None,
+                created_at: duplicate_created_at,
+            },
+            AuditEntry {
+                id: duplicate_id,
+                event_type: "authorization".to_string(),
+                agent_id: None,
+                resource_type: Some("security".to_string()),
+                resource_id: None,
+                action: "duplicate_1".to_string(),
+                old_values: None,
+                new_values: None,
+                metadata: serde_json::json!({}),
+                correlation_id: None,
+                created_at: duplicate_created_at,
+            },
+        ];
+
+        repo.append_batch(&entries)
+            .await
+            .expect_err("duplicate primary key should fail the batch");
+
+        let persisted_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM audit_log WHERE id = $1 AND created_at = $2")
+                .bind(duplicate_id)
+                .bind(duplicate_created_at)
+                .fetch_one(&pool)
+                .await
+                .expect("count query should succeed");
+
+        assert_eq!(persisted_count, 0);
     }
 
     #[tokio::test]

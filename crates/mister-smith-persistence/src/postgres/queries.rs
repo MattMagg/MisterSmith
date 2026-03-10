@@ -942,6 +942,72 @@ pub struct AuditEntry {
     pub created_at: DateTime<Utc>,
 }
 
+struct AuditBatchInsert {
+    ids: Vec<Uuid>,
+    event_types: Vec<String>,
+    agent_ids: Vec<Option<Uuid>>,
+    resource_types: Vec<Option<String>>,
+    resource_ids: Vec<Option<Uuid>>,
+    actions: Vec<String>,
+    old_values: Vec<Option<serde_json::Value>>,
+    new_values: Vec<Option<serde_json::Value>>,
+    metadata: Vec<serde_json::Value>,
+    correlation_ids: Vec<Option<Uuid>>,
+    created_ats: Vec<DateTime<Utc>>,
+}
+
+impl AuditBatchInsert {
+    const SQL: &str = r#"
+        INSERT INTO audit_log (
+            id, event_type, agent_id, resource_type, resource_id,
+            action, old_values, new_values, metadata,
+            correlation_id, created_at
+        )
+        SELECT *
+        FROM UNNEST(
+            $1::uuid[],
+            $2::text[],
+            $3::uuid[],
+            $4::text[],
+            $5::uuid[],
+            $6::text[],
+            $7::jsonb[],
+            $8::jsonb[],
+            $9::jsonb[],
+            $10::uuid[],
+            $11::timestamptz[]
+        )
+    "#;
+
+    fn from_entries(entries: &[AuditEntry]) -> Self {
+        Self {
+            ids: entries.iter().map(|entry| entry.id).collect(),
+            event_types: entries
+                .iter()
+                .map(|entry| entry.event_type.clone())
+                .collect(),
+            agent_ids: entries.iter().map(|entry| entry.agent_id).collect(),
+            resource_types: entries
+                .iter()
+                .map(|entry| entry.resource_type.clone())
+                .collect(),
+            resource_ids: entries.iter().map(|entry| entry.resource_id).collect(),
+            actions: entries.iter().map(|entry| entry.action.clone()).collect(),
+            old_values: entries
+                .iter()
+                .map(|entry| entry.old_values.clone())
+                .collect(),
+            new_values: entries
+                .iter()
+                .map(|entry| entry.new_values.clone())
+                .collect(),
+            metadata: entries.iter().map(|entry| entry.metadata.clone()).collect(),
+            correlation_ids: entries.iter().map(|entry| entry.correlation_id).collect(),
+            created_ats: entries.iter().map(|entry| entry.created_at).collect(),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Audit log CRUD
 // ---------------------------------------------------------------------------
@@ -988,35 +1054,24 @@ pub async fn insert_audit_batch(
     }
 
     let mut tx = pool.begin().await.map_err(from_sqlx_error)?;
-
-    for entry in entries {
-        sqlx::query(
-            r#"
-            INSERT INTO audit_log (
-                id, event_type, agent_id, resource_type, resource_id,
-                action, old_values, new_values, metadata,
-                correlation_id, created_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            "#,
-        )
-        .bind(entry.id)
-        .bind(&entry.event_type)
-        .bind(entry.agent_id)
-        .bind(&entry.resource_type)
-        .bind(entry.resource_id)
-        .bind(&entry.action)
-        .bind(&entry.old_values)
-        .bind(&entry.new_values)
-        .bind(&entry.metadata)
-        .bind(entry.correlation_id)
-        .bind(entry.created_at)
+    let batch = AuditBatchInsert::from_entries(entries);
+    let count = sqlx::query(AuditBatchInsert::SQL)
+        .bind(&batch.ids[..])
+        .bind(&batch.event_types[..])
+        .bind(&batch.agent_ids[..])
+        .bind(&batch.resource_types[..])
+        .bind(&batch.resource_ids[..])
+        .bind(&batch.actions[..])
+        .bind(&batch.old_values[..])
+        .bind(&batch.new_values[..])
+        .bind(&batch.metadata[..])
+        .bind(&batch.correlation_ids[..])
+        .bind(&batch.created_ats[..])
         .execute(&mut *tx)
         .await
-        .map_err(from_sqlx_error)?;
-    }
+        .map_err(from_sqlx_error)?
+        .rows_affected() as usize;
 
-    let count = entries.len();
     tx.commit().await.map_err(from_sqlx_error)?;
     Ok(count)
 }
@@ -1607,6 +1662,32 @@ mod tests {
         assert!(deserialized.resource_id.is_some());
         assert!(deserialized.old_values.is_some());
         assert!(deserialized.correlation_id.is_some());
+    }
+
+    #[test]
+    fn audit_batch_insert_uses_single_unnest_statement() {
+        let entries = vec![sample_audit_entry(), sample_audit_entry()];
+
+        let batch = AuditBatchInsert::from_entries(&entries);
+        let normalized_sql = AuditBatchInsert::SQL
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        assert!(normalized_sql.contains("FROM UNNEST("));
+        assert_eq!(batch.ids.len(), entries.len());
+        assert_eq!(batch.event_types.len(), entries.len());
+        assert_eq!(batch.agent_ids.len(), entries.len());
+        assert_eq!(batch.resource_types.len(), entries.len());
+        assert_eq!(batch.resource_ids.len(), entries.len());
+        assert_eq!(batch.actions.len(), entries.len());
+        assert_eq!(batch.old_values.len(), entries.len());
+        assert_eq!(batch.new_values.len(), entries.len());
+        assert_eq!(batch.metadata.len(), entries.len());
+        assert_eq!(batch.correlation_ids.len(), entries.len());
+        assert_eq!(batch.created_ats.len(), entries.len());
+        assert_eq!(batch.ids[0], entries[0].id);
+        assert_eq!(batch.event_types[1], entries[1].event_type);
     }
 
     // -------------------------------------------------------------------
