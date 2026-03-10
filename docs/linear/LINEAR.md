@@ -86,7 +86,10 @@ Use cycles only for scheduled near-term work.
 
 ### Group Labels (exclusive — only one per group per issue)
 
-**Phase** (`#5E6AD2`): Phase 1: Foundation, Phase 2: Runtime, Phase 3: Actors, Phase 4: Transport, Phase 5: Security, Phase 6: Persistence, Phase 7: Agents, Phase 8: Operations, Phase 9: LLM, Phase 9.1: Security Hardening
+**Phase** (`#5E6AD2`): Phase 1: Foundation, Phase 2: Runtime, Phase 3: Actors,
+Phase 4: Transport, Phase 5: Security, Phase 6: Persistence, Phase 7: Agents,
+Phase 8: Operations, Phase 9: LLM, Phase 9.1: Security Hardening, Phase 10:
+Frontier Autonomy
 
 **Crate** (`#26B5CE`): crate:core, crate:config, crate:runtime, crate:monitoring, crate:events, crate:async, crate:resources, crate:actor, crate:supervision, crate:transport, crate:nats, crate:http, crate:grpc, crate:mcp, crate:security, crate:persistence, crate:llm, crate:agents, crate:app, crate:integration-tests
 
@@ -138,6 +141,8 @@ Every issue should include:
 8. **Description**: Structured markdown with:
    - Context (what spec, finding, or requirement drives this)
    - Location (`file:line` references for bugs)
+   - Workflow expectations when a mandate, loop runner, or spec artifact is
+     required for execution
    - Task checklist (for multi-step work)
    - Acceptance criteria
 
@@ -161,6 +166,10 @@ Every issue should include:
 ### Impact
 
 [Why this matters — correctness, safety, performance]
+
+### Workflow Expectations
+
+- [Required mandate, issue-local workflow, or loop-runner instructions]
 
 ### Task Checklist
 

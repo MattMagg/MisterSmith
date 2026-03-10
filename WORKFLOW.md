@@ -23,6 +23,9 @@ hooks:
     if command -v cargo >/dev/null 2>&1; then
       cargo fetch
     fi
+    if command -v ralph >/dev/null 2>&1; then
+      ralph --version || true
+    fi
 agent:
   max_concurrent_agents: 10
   max_turns: 150
@@ -72,6 +75,11 @@ Instructions:
 ## Mister Smith repository notes
 
 - Read `AGENTS.md` first and follow it. It governs the whole repo.
+- For frontier-autonomy work, treat
+  `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md` as the
+  canonical frontier mandate. If a workspace-local
+  `AGENTS_READ_IMPORTANT_mistersmith_frontier_mandate.md` file exists, treat it
+  as the same mandate text and prefer the workspace copy.
 - This repo is a Rust workspace. Prefer `cargo build --workspace` for cross-crate compile validation.
 - During development, run `cargo test -p <crate>` for affected crates
   instead of `cargo test --workspace` unless the change touches
@@ -79,6 +87,15 @@ Instructions:
   issue explicitly requires full-workspace proof.
 - Keep `spec/` and `specs/` distinct. `spec/` is canonical architecture; `specs/` contains per-phase implementation artifacts.
 - Avoid editing `archive/` unless the issue explicitly requires it.
+- `ralph` is expected to be available through the inherited shell environment,
+  and the repo's `ralph.yml` plus `PROMPT.md` are available when an issue
+  explicitly calls for Ralph-assisted execution.
+- Ralph is only a loop runner. It must complement SpecKit and repo-native
+  instructions, never replace the required SpecKit flow or the guidance in
+  `AGENTS.md` and this file.
+- If an issue calls for Ralph, rewrite `PROMPT.md` from the current
+  issue/workpad context inside the workspace before running `ralph run`; do not
+  trust stale prompt content from earlier phases.
 - This repository forbids git worktrees. For this unattended Symphony session
   only, you are explicitly authorized to create, switch, and push
   issue-specific branches inside this isolated workspace when the Linear/PR
@@ -116,6 +133,10 @@ Instructions:
 - Reproduce the current issue signal before changing code when the task is a bug or regression.
 - Keep ticket metadata current.
 - Treat any `Validation`, `Test Plan`, or `Testing` section in the issue as mandatory acceptance input.
+- For frontier-autonomy issues, verify that the work strengthens supervised
+  autonomy and improves at least one frontier axis such as coordination,
+  supervision, execution, memory, streaming, routing, reliability,
+  observability, state, or distributed behavior.
 - When you discover meaningful out-of-scope work, create a follow-up issue instead of silently expanding scope.
 - This workflow is scoped to the single `tracker.project_slug` in this file; issues outside that watched project will not dispatch.
 - An empty `Todo` queue means there is no runnable issue in the watched project right now; it does not mean the `Todo` state is missing.
