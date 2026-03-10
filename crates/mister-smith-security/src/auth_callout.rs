@@ -144,7 +144,7 @@ impl Permissions {
         }
     }
 
-    fn apply_to(self, mut token: Token<nats_jwt::User>) -> Token<nats_jwt::User> {
+    pub(crate) fn apply_to(self, mut token: Token<nats_jwt::User>) -> Token<nats_jwt::User> {
         for subject in self.publish_allow {
             token = token.allow_publish(subject);
         }

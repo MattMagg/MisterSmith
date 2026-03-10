@@ -54,3 +54,4 @@ llm = ["dep:mister-smith-llm"]
 tokio = { workspace = true, features = ["test-util"] }
 serde_json = { workspace = true }
 mister-smith-llm = { workspace = true }
+nkeys = { workspace = true }

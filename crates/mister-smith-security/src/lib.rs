@@ -23,6 +23,7 @@ pub mod auth_callout;
 pub mod config;
 mod error;
 pub mod message_signer;
+pub mod sandbox;
 pub mod state_validator;
 
 #[cfg(feature = "jwt")]
@@ -46,6 +47,10 @@ pub use auth_callout::{
 };
 pub use message_signer::{HmacKey, HmacMessageSigner, MessageSigner, MessageSigningConfig};
 pub use mister_smith_core::SecurityError;
+pub use sandbox::{
+    AgentClass, CrossingDecision, CrossingRule, IOFirewall, SandboxAccountConfig,
+    SandboxCredentialIssuer, SandboxCredentials,
+};
 
 // Re-export config types.
 pub use config::{AuditConfig, JwtConfig, RbacConfig, TlsConfig};
