@@ -189,10 +189,16 @@ impl TopologyCompiler {
     }
 }
 
+type GraphComponents = (
+    Vec<ExecutionBranch>,
+    Vec<ExecutionNode>,
+    Vec<ExecutionEdge>,
+);
+
 fn build_graph_components(
     workflow_id: TaskId,
     steps: Vec<PlannerStepSpec>,
-) -> Result<(Vec<ExecutionBranch>, Vec<ExecutionNode>, Vec<ExecutionEdge>), TopologyError> {
+) -> Result<GraphComponents, TopologyError> {
     let graph_id = mister_smith_core::ExecutionGraphId::from_uuid(*workflow_id.as_ref());
 
     let any_branch_labels = steps.iter().any(|step| step.branch_label.is_some());

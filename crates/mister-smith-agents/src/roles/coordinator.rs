@@ -115,7 +115,7 @@ impl Actor for CoordinatorAgent {
                         })
                     });
                 let planner_output = normalize_planner_output(&task_type, &input, planner_payload);
-                let compiler = TopologyCompiler::default();
+                let compiler = TopologyCompiler;
                 let graph =
                     compiler.compile(task_id, &planner_output, &TopologySignals::default())?;
                 state.active_tasks.push(task_id);
