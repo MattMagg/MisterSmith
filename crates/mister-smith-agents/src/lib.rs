@@ -33,6 +33,8 @@ pub mod agent;
 pub mod config;
 /// Error types for the agent system.
 pub mod errors;
+/// Execution graph contracts and validation.
+pub mod execution_graph;
 /// Periodic heartbeat emission for liveness detection.
 pub mod heartbeat;
 /// Inter-agent messaging helpers (send, request, broadcast, durable).
@@ -53,11 +55,16 @@ pub mod scheduler;
 pub mod team;
 /// Central tool registry with native and MCP tool support.
 pub mod tool_bus;
+/// Deterministic topology compilation for execution graphs.
+pub mod topology;
 
 // Re-exports
 pub use agent::AgentRuntime;
 pub use config::AgentConfig;
 pub use errors::AgentSystemError;
+pub use execution_graph::{
+    BranchCheckpoint, ExecutionBranch, ExecutionEdge, ExecutionGraph, ExecutionNode,
+};
 pub use heartbeat::HeartbeatEmitter;
 pub use messaging::{broadcast, request, send, send_durable};
 pub use orchestrator::Orchestrator;
@@ -67,3 +74,4 @@ pub use sandbox::{AgentSandbox, SandboxedAgentRuntime};
 pub use scheduler::{DeadlineMonitor, ResultAggregator, TaskDecomposer, TaskScheduler};
 pub use team::Team;
 pub use tool_bus::ToolBus;
+pub use topology::{TopologyCompiler, TopologySignals};

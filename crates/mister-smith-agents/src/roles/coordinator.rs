@@ -1,5 +1,8 @@
 //! Coordinator agent role — coordinates multi-agent workflows.
 
+use crate::execution_graph::ExecutionGraph;
+use crate::roles::planner::normalize_planner_output;
+use crate::topology::{TopologyCompiler, TopologySignals};
 use mister_smith_core::{Actor, AgentId, TaskId};
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +44,8 @@ pub struct CoordinatorState {
     pub active_tasks: Vec<TaskId>,
     /// Number of subtask results received.
     pub results_received: u64,
+    /// Most recently compiled execution graph for visibility and dispatch control.
+    pub current_graph: Option<ExecutionGraph>,
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +58,9 @@ pub enum CoordinatorError {
     /// A coordination operation failed.
     #[error("coordinator error: {0}")]
     Internal(String),
+    /// Planner output could not be normalized into a valid execution graph.
+    #[error("coordinator topology error: {0}")]
+    Topology(#[from] mister_smith_core::TopologyError),
 }
 
 // ---------------------------------------------------------------------------
@@ -85,16 +93,39 @@ impl Actor for CoordinatorAgent {
         state: &mut Self::State,
     ) -> Result<Self::Response, Self::Error> {
         match message {
-            CoordinatorMessage::SubmitTask {
-                task_type,
-                input: _,
-            } => {
+            CoordinatorMessage::SubmitTask { task_type, input } => {
                 let task_id = TaskId::new();
+                let planner_payload = input
+                    .get("planner_output")
+                    .cloned()
+                    .or_else(|| input.get("steps").map(|_| input.clone()))
+                    .unwrap_or_else(|| {
+                        serde_json::json!({
+                            "goal": task_type,
+                            "steps": [
+                                {
+                                    "id": task_id.to_string(),
+                                    "step": 1,
+                                    "action": task_type,
+                                    "description": "submit task",
+                                    "role": "worker",
+                                    "input": input,
+                                }
+                            ],
+                        })
+                    });
+                let planner_output = normalize_planner_output(&task_type, &input, planner_payload);
+                let compiler = TopologyCompiler::default();
+                let graph =
+                    compiler.compile(task_id, &planner_output, &TopologySignals::default())?;
                 state.active_tasks.push(task_id);
+                state.current_graph = Some(graph.clone());
                 Ok(serde_json::json!({
                     "task_id": task_id.to_string(),
                     "task_type": task_type,
-                    "status": "submitted"
+                    "status": "submitted",
+                    "graph_id": graph.graph_id.to_string(),
+                    "topology_kind": format!("{:?}", graph.topology_plan.topology_kind),
                 }))
             }
             CoordinatorMessage::SubtaskResult { task_id, result: _ } => {
@@ -106,11 +137,20 @@ impl Actor for CoordinatorAgent {
             }
             CoordinatorMessage::TeamMemberFailed(agent_id) => Ok(serde_json::json!({
                 "failed_member": agent_id.to_string(),
-                "active_tasks": state.active_tasks.len()
+                "active_tasks": state.active_tasks.len(),
+                "current_topology": state
+                    .current_graph
+                    .as_ref()
+                    .map(|graph| format!("{:?}", graph.topology_plan.topology_kind)),
             })),
             CoordinatorMessage::QueryProgress => Ok(serde_json::json!({
                 "active_tasks": state.active_tasks.len(),
-                "results_received": state.results_received
+                "results_received": state.results_received,
+                "graph_id": state.current_graph.as_ref().map(|graph| graph.graph_id.to_string()),
+                "topology_kind": state
+                    .current_graph
+                    .as_ref()
+                    .map(|graph| format!("{:?}", graph.topology_plan.topology_kind)),
             })),
         }
     }
@@ -182,6 +222,7 @@ mod tests {
         let mut state = CoordinatorState {
             active_tasks: vec![TaskId::new(), TaskId::new()],
             results_received: 0,
+            current_graph: None,
         };
         let failed_id = AgentId::new();
 
@@ -200,6 +241,7 @@ mod tests {
         let mut state = CoordinatorState {
             active_tasks: vec![TaskId::new()],
             results_received: 5,
+            current_graph: None,
         };
 
         let resp = agent
