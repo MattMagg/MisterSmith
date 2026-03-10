@@ -69,6 +69,7 @@ fn sandbox_cross_boundary_transfer_is_sanitized_before_forwarding() {
 
     let transfer = sandbox
         .inspect_cross_boundary_transfer(
+            Some("persistent-agent"),
             "persistent-account",
             "ephemeral-account",
             "tasks.analysis.assignment",
@@ -85,6 +86,7 @@ fn sandbox_cross_boundary_transfer_is_sanitized_before_forwarding() {
         .into_iter()
         .next()
         .expect("audit event should be recorded");
+    assert_eq!(event.principal.as_deref(), Some("persistent-agent"));
     assert_eq!(event.outcome, AuditOutcome::Warning);
     assert_eq!(event.details.get("decision"), Some(&"Sanitize".to_string()));
 }
@@ -97,6 +99,7 @@ fn sandbox_cross_boundary_transfer_blocks_malicious_payloads() {
 
     let error = sandbox
         .inspect_cross_boundary_transfer(
+            Some("persistent-agent"),
             "persistent-account",
             "ephemeral-account",
             "tasks.analysis.assignment",
@@ -114,6 +117,7 @@ fn sandbox_cross_boundary_transfer_blocks_malicious_payloads() {
         .into_iter()
         .next()
         .expect("audit event should be recorded");
+    assert_eq!(event.principal.as_deref(), Some("persistent-agent"));
     assert_eq!(event.outcome, AuditOutcome::Blocked);
     assert_eq!(
         event.details.get("decision"),

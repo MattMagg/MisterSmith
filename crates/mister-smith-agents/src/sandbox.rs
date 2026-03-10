@@ -156,6 +156,7 @@ impl AgentSandbox {
     /// the subject crossing.
     pub fn inspect_cross_boundary_transfer(
         &self,
+        principal: Option<&str>,
         source_account: &str,
         target_account: &str,
         subject: &str,
@@ -178,7 +179,7 @@ impl AgentSandbox {
                 })?;
                 actor
                     .inspect_cross_boundary_transfer(
-                        None,
+                        principal,
                         source_account,
                         target_account,
                         subject,

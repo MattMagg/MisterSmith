@@ -28,39 +28,45 @@ use crate::hybrid::manager::HybridStateManager;
 pub struct AgentRepository {
     hybrid: Arc<HybridStateManager>,
     #[cfg(feature = "security")]
-    quarantine_actor: Option<Arc<QuarantineActor>>,
+    quarantine_actor: Arc<QuarantineActor>,
     #[cfg(feature = "sqlx")]
     pool: sqlx::PgPool,
 }
 
 impl AgentRepository {
     /// Create from a hybrid state manager and PG pool.
-    #[cfg(feature = "sqlx")]
-    pub fn new(hybrid: Arc<HybridStateManager>, pool: sqlx::PgPool) -> Self {
+    #[cfg(all(feature = "sqlx", feature = "security"))]
+    pub fn new(
+        hybrid: Arc<HybridStateManager>,
+        pool: sqlx::PgPool,
+        quarantine_actor: Arc<QuarantineActor>,
+    ) -> Self {
         Self {
             hybrid,
-            #[cfg(feature = "security")]
-            quarantine_actor: None,
+            quarantine_actor,
             pool,
         }
     }
 
+    /// Create from a hybrid state manager and PG pool.
+    #[cfg(all(feature = "sqlx", not(feature = "security")))]
+    pub fn new(hybrid: Arc<HybridStateManager>, pool: sqlx::PgPool) -> Self {
+        Self { hybrid, pool }
+    }
+
     /// Create from a hybrid state manager only (no SQL).
-    #[cfg(not(feature = "sqlx"))]
-    pub fn new(hybrid: Arc<HybridStateManager>) -> Self {
+    #[cfg(all(not(feature = "sqlx"), feature = "security"))]
+    pub fn new(hybrid: Arc<HybridStateManager>, quarantine_actor: Arc<QuarantineActor>) -> Self {
         Self {
             hybrid,
-            #[cfg(feature = "security")]
-            quarantine_actor: None,
+            quarantine_actor,
         }
     }
 
-    /// Attach the quarantine actor used for agent/shared-state transfers.
-    #[cfg(feature = "security")]
-    #[must_use]
-    pub fn with_quarantine_actor(mut self, quarantine_actor: Arc<QuarantineActor>) -> Self {
-        self.quarantine_actor = Some(quarantine_actor);
-        self
+    /// Create from a hybrid state manager only (no SQL).
+    #[cfg(all(not(feature = "sqlx"), not(feature = "security")))]
+    pub fn new(hybrid: Arc<HybridStateManager>) -> Self {
+        Self { hybrid }
     }
 
     /// Start a new database transaction for multi-operation atomicity.
@@ -96,7 +102,7 @@ impl AgentRepository {
         value: Value,
     ) -> Result<(), PersistenceError> {
         let validated = inspect_shared_state_entry(
-            self.quarantine_actor()?,
+            &self.quarantine_actor,
             agent_id,
             key,
             value,
@@ -136,7 +142,7 @@ impl AgentRepository {
             .await?
             .map(|state| {
                 inspect_shared_state_entry(
-                    self.quarantine_actor()?,
+                    &self.quarantine_actor,
                     agent_id,
                     key,
                     state,
@@ -170,7 +176,7 @@ impl AgentRepository {
         rows.into_iter()
             .map(|r| {
                 let validated = inspect_shared_state_entry(
-                    self.quarantine_actor()?,
+                    &self.quarantine_actor,
                     agent_id,
                     &r.state_key,
                     r.state_value,
@@ -312,18 +318,6 @@ fn inspect_shared_state_entry(
         schema_version,
         taint_label: transfer.taint_label,
     })
-}
-
-#[cfg(feature = "security")]
-impl AgentRepository {
-    fn quarantine_actor(&self) -> Result<&QuarantineActor, PersistenceError> {
-        self.quarantine_actor.as_deref().ok_or_else(|| {
-            PersistenceError::DataCorrupted(
-                "agent/shared-state quarantine actor must be configured before state transfer"
-                    .to_string(),
-            )
-        })
-    }
 }
 
 #[cfg(feature = "sqlx")]
