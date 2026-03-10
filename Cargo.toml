@@ -31,12 +31,12 @@ repository = "https://github.com/matthewmaggio/mister-smith"
 
 [workspace.dependencies]
 # Serialization
-thiserror = "1.0.69"
+thiserror = "2.0.18"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 
 # Identity
-uuid = { version = "1.11.0", features = ["v4", "serde"] }
+uuid = { version = "1.22.0", features = ["v4", "serde"] }
 
 # Async
 async-trait = "0.1.83"
@@ -48,7 +48,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "str
 semver = "1.0"
 
 # Config
-toml = "0.8"
+toml = "1.0"
 
 # Logging / Metrics
 tracing = "0.1.44"
@@ -128,4 +128,4 @@ tracing-opentelemetry = "0.32.1"
 
 # CLI — Phase 8
 clap = { version = "4", features = ["derive"] }
-webbrowser = "1.0.6"
+webbrowser = "1.2.0"

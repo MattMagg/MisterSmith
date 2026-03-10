@@ -152,7 +152,7 @@ impl ClaudeSubscriptionProvider {
         body
     }
 
-    async fn send_request(&self, url: &str, body: &Value) -> Result<Response, LlmError> {
+    async fn send_request(&self, url: &str, body: Vec<u8>) -> Result<Response, LlmError> {
         let token = self.access_token().await?;
 
         self.client
@@ -161,7 +161,7 @@ impl ClaudeSubscriptionProvider {
             .header(header::CONTENT_TYPE, "application/json")
             .header("anthropic-version", ANTHROPIC_VERSION)
             .timeout(self.request_timeout())
-            .json(body)
+            .body(body)
             .send()
             .await
             .map_err(|error| normalize_request_error(self.config.timeout_ms, error))
@@ -169,10 +169,13 @@ impl ClaudeSubscriptionProvider {
 
     async fn execute_json(&self, request: &CompletionRequest) -> Result<Value, LlmError> {
         let body = self.build_request_body(request, false);
+        let body_bytes = serde_json::to_vec(&body).map_err(|error| {
+            LlmError::Serialization(format!("Failed to serialize request: {error}"))
+        })?;
         let url = self.messages_url();
 
         for attempt in 0..=self.config.max_retries {
-            match self.send_request(&url, &body).await {
+            match self.send_request(&url, body_bytes.clone()).await {
                 Ok(response) if response.status().is_success() => {
                     return parse_json_response(response).await;
                 }
@@ -207,11 +210,14 @@ impl ClaudeSubscriptionProvider {
         stream_tx: mpsc::Sender<Result<StreamChunk, LlmError>>,
     ) -> Result<(), LlmError> {
         let body = self.build_request_body(&request, true);
+        let body_bytes = serde_json::to_vec(&body).map_err(|error| {
+            LlmError::Serialization(format!("Failed to serialize request: {error}"))
+        })?;
         let url = self.messages_url();
 
         let mut response = None;
         for attempt in 0..=self.config.max_retries {
-            match self.send_request(&url, &body).await {
+            match self.send_request(&url, body_bytes.clone()).await {
                 Ok(candidate) if candidate.status().is_success() => {
                     response = Some(candidate);
                     break;
