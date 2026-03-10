@@ -9,10 +9,14 @@ use crate::handlers;
 use crate::server::AppState;
 use crate::websocket;
 
-/// Build the complete API router with all REST and WebSocket routes.
+/// Build the public probe router that must remain reachable without auth.
+pub fn public_router() -> Router<AppState> {
+    Router::new().route("/api/v1/health", get(handlers::health_check))
+}
+
+/// Build the protected API router with authenticated REST and WebSocket routes.
 pub fn api_router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/health", get(handlers::health_check))
         .route("/api/v1/agents", get(handlers::list_agents))
         .route("/api/v1/agents/{agent_id}", get(handlers::get_agent))
         .route("/api/v1/tasks", post(handlers::create_task))
@@ -30,11 +34,13 @@ mod tests {
     use tower::ServiceExt;
 
     fn test_app() -> Router {
-        api_router().with_state(AppState::new())
+        public_router()
+            .merge(api_router())
+            .with_state(AppState::new())
     }
 
     fn test_app_with_transport(connected: bool) -> Router {
-        api_router().with_state(
+        public_router().merge(api_router()).with_state(
             AppState::new()
                 .with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(connected))),
         )

@@ -126,7 +126,10 @@ pub struct AgentListQuery {
 // Handlers
 // ---------------------------------------------------------------------------
 
-/// `GET /api/v1/health` — System health with component details.
+/// `GET /api/v1/health` — Public system health for liveness/readiness probes.
+///
+/// This endpoint is intentionally left unauthenticated so deployment probes can
+/// verify process and transport health without minting JWT bearer tokens.
 pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
     let transport_connected = state.transport_health.is_connected();
 
