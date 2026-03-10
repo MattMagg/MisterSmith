@@ -2,7 +2,7 @@ use chrono::Utc;
 use serde_json::json;
 use uuid::Uuid;
 
-use mister_smith_core::{AgentId, AgentType, MemoryError, TaskId};
+use mister_smith_core::{AgentId, AgentType, MemoryError};
 
 use super::fragment::{
     AccessPolicy, FragmentClass, FragmentFreshness, FragmentProvenance, MemoryFragment,
@@ -53,7 +53,7 @@ pub fn consolidate_fragments(
     let workflow_id = ordered_fragments
         .first()
         .map(|fragment| fragment.provenance.workflow_id)
-        .unwrap_or_else(|| TaskId::new());
+        .unwrap_or_default();
     let branch_id = ordered_fragments
         .first()
         .and_then(|fragment| fragment.provenance.branch_id);
