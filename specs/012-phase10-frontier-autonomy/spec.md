@@ -1,8 +1,8 @@
 # Feature Specification: Phase 10 — Frontier Autonomy & Advanced Agent Patterns
 
-**Feature Branch**: `012-phase10-frontier-autonomy`  
-**Created**: 2026-03-10  
-**Status**: Draft  
+**Feature Branch**: `012-phase10-frontier-autonomy`
+**Created**: 2026-03-10
+**Status**: Draft
 **Input**: Linear issue `MS-26`, `ROADMAP.md`, `docs/2026-03-05-architectural-grounding-audit.md`,
 `docs/2026-03-05-implementation-deviation-report.md`,
 `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`, the consolidated research corpus in

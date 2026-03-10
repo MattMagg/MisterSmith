@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Phase 10 — Frontier Autonomy & Advanced Agent Patterns
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2026-03-10  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2026-03-10
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
