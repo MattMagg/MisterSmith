@@ -25,6 +25,7 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           version: "27.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Start NATS with JetStream
         run: |
           docker run -d --name nats-server \
