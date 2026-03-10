@@ -1,7 +1,8 @@
 use mister_smith_core::{
-    AgentId, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope, CapabilityId,
-    CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope, ExecutionBranchId,
-    ExecutionGraphId, GraphState, RevocationState, TaskId, TopologyKind, TopologyRationale,
+    AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
+    CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
+    ExecutionBranchId, ExecutionGraphId, GraphState, RevocationState, TaskId, TopologyKind,
+    TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
@@ -136,4 +137,20 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
     let roundtrip: AutonomyStatusView = serde_json::from_str(&json).unwrap();
 
     assert_eq!(roundtrip, view);
+}
+
+#[test]
+fn capability_summary_preserves_policy_issuers() {
+    let summary = CapabilitySummary {
+        capability_id: CapabilityId::new(),
+        issuer: AuthorityPrincipal::Policy("bootstrap-policy".to_string()),
+        recipient: AgentId::new(),
+        scope: DelegationScope::ApplyIntervention,
+        revocation_state: RevocationState::Active,
+    };
+
+    let json = serde_json::to_string(&summary).unwrap();
+    let roundtrip: CapabilitySummary = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(roundtrip, summary);
 }

@@ -79,6 +79,8 @@ Expected: PASS
   `ExecutionGraphSummary`, `TopologyPlanSummary`, `BranchSummary`,
   `ContextPressureSummary`, `CapabilitySummary`, `DelegationAlert`,
   `AutonomyStatusView`, and the typed autonomy event enum/envelopes needed for serialization tests.
+- Keep delegation summaries faithful to the core autonomy contracts: preserve policy principals in
+  `CapabilitySummary` instead of narrowing all issuers to runtime agents.
 - Re-export the autonomy event surfaces from `lib.rs`.
 
 **Step 2: Run tests to verify events pass**

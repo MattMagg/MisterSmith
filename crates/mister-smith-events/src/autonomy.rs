@@ -7,10 +7,10 @@
 use serde::{Deserialize, Serialize};
 
 use mister_smith_core::{
-    AgentId, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope, CapabilityId,
-    CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope, ExecutionBranchId,
-    ExecutionGraphId, GraphState, GuardDecision, InterventionRecord, ProfileSnapshot,
-    RevocationState, TaskId, TopologyKind, TopologyRationale,
+    AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
+    CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
+    ExecutionBranchId, ExecutionGraphId, GraphState, GuardDecision, InterventionRecord,
+    ProfileSnapshot, RevocationState, TaskId, TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -87,8 +87,8 @@ pub struct ContextPressureSummary {
 pub struct CapabilitySummary {
     /// Capability identifier.
     pub capability_id: CapabilityId,
-    /// Agent that issued or currently owns the capability.
-    pub issuer: AgentId,
+    /// Principal that issued or currently owns the capability.
+    pub issuer: AuthorityPrincipal,
     /// Agent that received the capability.
     pub recipient: AgentId,
     /// Scope granted by the capability.
