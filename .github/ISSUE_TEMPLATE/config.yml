@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Repository roadmap and docs
+    url: https://github.com/MattMagg/MisterSmith/blob/main/README.md
+    about: Review the README and roadmap before opening a new intake issue.
+  - name: Mister Smith operating model
+    url: https://github.com/MattMagg/MisterSmith/blob/main/docs/linear/LINEAR.md
+    about: For maintainers and operators, accepted work is routed through Linear and Symphony.

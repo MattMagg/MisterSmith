@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a new capability or major improvement.
+title: "[Feature] "
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What gap or pain point is this feature addressing?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the capability you want and how it should behave.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Expected scope
+      description: Identify the likely crates, subsystems, or surfaces involved.
+      placeholder: LLM routing, HTTP API, monitoring, deployment manifests
+    validations:
+      required: true
+  - type: textarea
+    id: roadmap
+    attributes:
+      label: Roadmap or spec anchor
+      description: Link the request to the roadmap, spec, or phase if you can.
+      placeholder: ROADMAP Phase 9, spec/security/security-framework.md
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What outcomes would make this request complete?
+    validations:
+      required: true

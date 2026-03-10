@@ -1,0 +1,65 @@
+name: Bug report
+description: Report incorrect behavior in the framework or runtime.
+title: "[Bug] "
+labels: []
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the bug in one or two sentences.
+      placeholder: Health probe returns 503 after startup even when the runtime is ready.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Explain why this matters.
+      placeholder: Breaks readiness gating in Kubernetes and prevents rollout.
+    validations:
+      required: true
+  - type: textarea
+    id: location
+    attributes:
+      label: Affected crates or files
+      description: List the main crates, modules, or paths involved.
+      placeholder: crates/mister-smith-http, crates/mister-smith-app
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide exact steps, commands, or request payloads.
+      placeholder: |
+        1. Start the app with ...
+        2. Call GET /health/ready
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, traces, or screenshots
+      description: Paste the most relevant evidence.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List the conditions that would make this issue complete.
+      placeholder: |
+        - Ready probe returns 200 after successful bootstrap
+        - Regression coverage added for the failing path
+    validations:
+      required: true
