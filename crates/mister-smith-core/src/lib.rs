@@ -2,6 +2,7 @@
 
 //! Core types, traits, and error hierarchy for the Mister Smith multi-agent orchestration framework.
 
+mod autonomy;
 mod enums;
 mod error;
 mod ids;
@@ -9,11 +10,26 @@ mod supervision;
 mod traits;
 
 // ID newtypes
-pub use ids::{AgentId, MessageId, ResourceId, TaskId, ToolId};
+pub use ids::{
+    AgentId, CapabilityId, CheckpointId, ContextBudgetId, ExecutionBranchId, ExecutionGraphId,
+    ExecutionNodeId, GuardDecisionId, InterventionRecordId, MemoryFragmentId, MemorySnapshotId,
+    MessageId, ProfileSnapshotId, ResourceId, TaskId, ToolId,
+};
+
+// Shared autonomy value objects
+pub use autonomy::{
+    AuthorityPrincipal, ContextBudget, DelegationCapability, GuardDecision, GuardEvidence,
+    GuardTarget, InterventionRecord, MetricWindow, ProfileSnapshot, ProvenanceChain,
+    ProvenanceLink, SemanticSignal, TopologyPlan, TopologyRationale,
+};
 
 // Core enums
 pub use enums::{
-    AgentAvailability, AgentState, AgentType, MessagePriority, ProcessLifecycle, ShutdownReason,
+    AgentAvailability, AgentState, AgentType, BranchRecoveryStrategy, BranchState, BudgetPolicy,
+    BudgetScope, CheckpointPolicy, CoordinationPolicy, DelegationScope, DependencyType,
+    FailureClass, GraphState, HealthState, InterventionType, MessagePriority, NodeState,
+    ProcessLifecycle, ProfileTarget, RevocationState, SemanticSignalKind, ShutdownReason,
+    TopologyKind,
 };
 
 // Supervision types
@@ -23,9 +39,10 @@ pub use supervision::{
 
 // Error hierarchy
 pub use error::{
-    ActorError, ConfigError, ErrorSeverity, EventError, FrameworkResult, LlmError, NetworkError,
-    PersistenceError, RecoveryStrategy, ResourceError, RuntimeError, SecurityError, StreamError,
-    SupervisionError, SystemError, TaskError, ToolError,
+    ActorError, AutonomyError, ConfigError, DelegationError, ErrorSeverity, EventError,
+    FrameworkResult, GuardError, LlmError, MemoryError, NetworkError, PersistenceError,
+    RecoveryStrategy, ResourceError, RuntimeError, SecurityError, StreamError, SupervisionError,
+    SystemError, TaskError, ToolError, TopologyError,
 };
 
 // Core traits

@@ -178,6 +178,111 @@ impl AsRef<Uuid> for ResourceId {
     }
 }
 
+macro_rules! define_uuid_id {
+    ($(#[$meta:meta])* $name:ident, $new_doc:literal, $from_doc:literal) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        pub struct $name(pub Uuid);
+
+        impl $name {
+            #[doc = $new_doc]
+            pub fn new() -> Self {
+                Self(Uuid::new_v4())
+            }
+
+            #[doc = $from_doc]
+            pub fn from_uuid(uuid: Uuid) -> Self {
+                Self(uuid)
+            }
+        }
+
+        impl Default for $name {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl AsRef<Uuid> for $name {
+            fn as_ref(&self) -> &Uuid {
+                &self.0
+            }
+        }
+    };
+}
+
+define_uuid_id!(
+    /// Stable identifier for an execution graph.
+    ExecutionGraphId,
+    "Create a new random execution graph ID.",
+    "Create an execution graph ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for an execution branch.
+    ExecutionBranchId,
+    "Create a new random execution branch ID.",
+    "Create an execution branch ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for an execution node.
+    ExecutionNodeId,
+    "Create a new random execution node ID.",
+    "Create an execution node ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for a branch checkpoint.
+    CheckpointId,
+    "Create a new random checkpoint ID.",
+    "Create a checkpoint ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for a context budget.
+    ContextBudgetId,
+    "Create a new random context budget ID.",
+    "Create a context budget ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for a managed memory fragment.
+    MemoryFragmentId,
+    "Create a new random memory fragment ID.",
+    "Create a memory fragment ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for a memory snapshot.
+    MemorySnapshotId,
+    "Create a new random memory snapshot ID.",
+    "Create a memory snapshot ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for a profile snapshot.
+    ProfileSnapshotId,
+    "Create a new random profile snapshot ID.",
+    "Create a profile snapshot ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for a Guard decision.
+    GuardDecisionId,
+    "Create a new random Guard decision ID.",
+    "Create a Guard decision ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for an intervention record.
+    InterventionRecordId,
+    "Create a new random intervention record ID.",
+    "Create an intervention record ID from an existing UUID."
+);
+define_uuid_id!(
+    /// Stable identifier for a delegation capability.
+    CapabilityId,
+    "Create a new random capability ID.",
+    "Create a capability ID from an existing UUID."
+);
+
 #[cfg(test)]
 mod tests {
     use super::*;

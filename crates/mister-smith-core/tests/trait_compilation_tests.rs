@@ -5,6 +5,7 @@
 
 use async_trait::async_trait;
 use mister_smith_core::*;
+use serde::de::DeserializeOwned;
 use std::any::TypeId;
 use std::time::Duration;
 
@@ -333,4 +334,95 @@ fn trait_objects_are_object_safe() {
     // Verify Tool and EventPublisher can be used as trait objects
     fn _accepts_tool(_t: &dyn Tool) {}
     fn _accepts_publisher(_p: &dyn EventPublisher) {}
+}
+
+fn assert_autonomy_traits<T>()
+where
+    T: Clone + Send + Sync + std::fmt::Debug + serde::Serialize + DeserializeOwned + 'static,
+{
+}
+
+fn assert_error_traits<T>()
+where
+    T: std::error::Error + Send + Sync + 'static,
+{
+}
+
+#[test]
+fn autonomy_types_compile_with_shared_trait_bounds() {
+    assert_autonomy_traits::<TopologyRationale>();
+    assert_autonomy_traits::<TopologyPlan>();
+    assert_autonomy_traits::<ContextBudget>();
+    assert_autonomy_traits::<MetricWindow>();
+    assert_autonomy_traits::<SemanticSignal>();
+    assert_autonomy_traits::<ProfileSnapshot>();
+    assert_autonomy_traits::<GuardEvidence>();
+    assert_autonomy_traits::<GuardDecision>();
+    assert_autonomy_traits::<InterventionRecord>();
+    assert_autonomy_traits::<DelegationCapability>();
+    assert_autonomy_traits::<ProvenanceLink>();
+    assert_autonomy_traits::<ProvenanceChain>();
+}
+
+#[test]
+fn autonomy_ids_enums_and_errors_are_available() {
+    let graph_id = ExecutionGraphId::new();
+    let budget = ContextBudget {
+        budget_id: ContextBudgetId::new(),
+        scope: BudgetScope::Branch,
+        max_units: 2048,
+        reserved_units: 256,
+        policy: BudgetPolicy::Summarize,
+    };
+    let plan = TopologyPlan {
+        topology_kind: TopologyKind::Hybrid,
+        parallelism_width: 4,
+        rationale: TopologyRationale {
+            dependency_shape: "mixed dependency graph".to_string(),
+            operational_signals: vec!["budget.pressure".to_string()],
+            selected_for: "preserve concurrency without violating dependencies".to_string(),
+            fallback_reason: Some(
+                "degrade to sequential when supervision signals are stale".to_string(),
+            ),
+        },
+        coordination_policy: CoordinationPolicy::Mixed,
+        fallback_topology: Some(TopologyKind::Sequential),
+    };
+    let decision = GuardDecision {
+        decision_id: GuardDecisionId::new(),
+        failure_class: FailureClass::Streaming,
+        intervention: InterventionType::BranchIsolation,
+        evidence: GuardEvidence {
+            profile_id: None,
+            signal_descriptions: vec!["stream stalled".to_string()],
+            checkpoint_ids: vec![],
+            notes: vec!["operator-visible conservative intervention".to_string()],
+        },
+        target_scope: GuardTarget::Graph(graph_id),
+        operator_visibility: true,
+    };
+    let topology_error = TopologyError::CycleDetected {
+        graph_id: Some(graph_id),
+        message: "cycle detected in execution graph".to_string(),
+    };
+    let autonomy_error: AutonomyError = topology_error.into();
+    let system_error: SystemError = autonomy_error.into();
+
+    assert_ne!(graph_id.to_string(), "");
+    assert_eq!(budget.scope, BudgetScope::Branch);
+    assert_eq!(plan.topology_kind, TopologyKind::Hybrid);
+    assert_eq!(decision.intervention, InterventionType::BranchIsolation);
+    assert!(matches!(
+        system_error,
+        SystemError::Autonomy(AutonomyError::Topology(TopologyError::CycleDetected { .. }))
+    ));
+}
+
+#[test]
+fn autonomy_error_types_compile_as_standard_errors() {
+    assert_error_traits::<TopologyError>();
+    assert_error_traits::<MemoryError>();
+    assert_error_traits::<GuardError>();
+    assert_error_traits::<DelegationError>();
+    assert_error_traits::<AutonomyError>();
 }

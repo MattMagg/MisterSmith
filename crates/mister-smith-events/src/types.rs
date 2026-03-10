@@ -1,10 +1,12 @@
-//! Event types: SystemEventType, AgentEventType, ToolEventType, EventType, and Event.
+//! Event types: SystemEventType, AgentEventType, ToolEventType, AutonomyEventType, EventType,
+//! and Event.
 //!
 //! The [`Event`] struct is the rich event representation used throughout the events crate.
 //! It is distinct from [`mister_smith_core::SystemEvent`], which is a minimal struct
 //! used by the `EventPublisher` trait in the core crate. The `EventBus` converts
 //! between the two when implementing `EventPublisher`.
 
+use crate::autonomy::AutonomyEventType;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -80,6 +82,8 @@ pub enum EventType {
     Agent(AgentEventType),
     /// Tool-level events.
     Tool(ToolEventType),
+    /// Autonomy control-plane events.
+    Autonomy(AutonomyEventType),
     /// Custom event type identified by a string key.
     Custom(String),
 }
@@ -90,6 +94,7 @@ impl std::fmt::Display for EventType {
             EventType::System(t) => write!(f, "system.{t:?}"),
             EventType::Agent(t) => write!(f, "agent.{t:?}"),
             EventType::Tool(t) => write!(f, "tool.{t:?}"),
+            EventType::Autonomy(t) => write!(f, "autonomy.{t:?}"),
             EventType::Custom(s) => write!(f, "custom.{s}"),
         }
     }

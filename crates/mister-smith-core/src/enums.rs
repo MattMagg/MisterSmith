@@ -112,6 +112,257 @@ pub enum ShutdownReason {
     Forced,
 }
 
+/// Lifecycle state for a validated execution graph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum GraphState {
+    /// The graph exists but has not started running.
+    Pending,
+    /// The graph is actively executing.
+    Running,
+    /// The graph has a durable checkpoint boundary recorded.
+    Checkpointed,
+    /// The graph completed successfully.
+    Completed,
+    /// The graph failed and needs recovery or escalation.
+    Failed,
+    /// The graph was stopped intentionally.
+    Aborted,
+}
+
+/// Lifecycle state for an execution node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum NodeState {
+    /// The node has not yet been scheduled.
+    Pending,
+    /// The node is ready to run once capacity is available.
+    Ready,
+    /// The node is actively executing.
+    Running,
+    /// The node has a checkpoint boundary recorded.
+    Checkpointed,
+    /// The node completed successfully.
+    Completed,
+    /// The node failed.
+    Failed,
+    /// The node is blocked by dependencies or policy.
+    Blocked,
+}
+
+/// Lifecycle state for a checkpointable execution branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum BranchState {
+    /// The branch exists but has not started running.
+    Pending,
+    /// The branch is actively executing.
+    Running,
+    /// The branch has a usable checkpoint.
+    Checkpointed,
+    /// The branch was isolated for targeted recovery.
+    Isolated,
+    /// The branch completed successfully.
+    Completed,
+    /// The branch failed.
+    Failed,
+    /// The branch was reassigned to new execution capacity.
+    Reassigned,
+}
+
+/// Dependency semantics between execution nodes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DependencyType {
+    /// Downstream execution waits for upstream completion.
+    Completion,
+    /// Downstream context assembly depends on upstream output.
+    Data,
+    /// Downstream recovery depends on an upstream checkpoint.
+    Checkpoint,
+    /// Downstream execution is gated by policy or authorization.
+    Policy,
+}
+
+/// Execution topology chosen by the topology compiler.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TopologyKind {
+    /// Strictly ordered single-lane execution.
+    Sequential,
+    /// Independent branches execute concurrently.
+    Parallel,
+    /// Ordered stages execute with bounded overlap.
+    Pipeline,
+    /// Subtrees execute with local aggregation.
+    Hierarchical,
+    /// Mixed topology across graph regions.
+    Hybrid,
+}
+
+/// Coordination behavior used by the orchestrator for a topology.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CoordinationPolicy {
+    /// Each step waits for the prior step to finish.
+    StrictSequence,
+    /// Parallel branches synchronize at explicit barriers.
+    Barrier,
+    /// Results are consumed as they stream.
+    Streaming,
+    /// Subtrees aggregate before handing results upward.
+    HierarchicalReduce,
+    /// Mixed coordination rules across the graph.
+    Mixed,
+}
+
+/// Policy describing when branch checkpoints should be recorded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CheckpointPolicy {
+    /// Checkpoints are created only when explicitly requested.
+    Manual,
+    /// Checkpoints are created after each node completion.
+    OnNodeCompletion,
+    /// Checkpoints are created when branch state changes.
+    OnBranchChange,
+    /// Checkpoints are created on a periodic schedule.
+    Periodic,
+}
+
+/// Recovery strategy for a failed or degraded branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum BranchRecoveryStrategy {
+    /// Resume from the latest checkpoint.
+    Resume,
+    /// Reassign the branch to new capacity.
+    Reassign,
+    /// Isolate the branch from the rest of the graph.
+    Isolate,
+    /// Escalate to a supervisor or operator.
+    Escalate,
+}
+
+/// Scope that a context budget applies to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum BudgetScope {
+    /// Budget applies to an agent role.
+    Role,
+    /// Budget applies to a specific node.
+    Node,
+    /// Budget applies to a specific branch.
+    Branch,
+    /// Budget applies to a whole workflow.
+    Workflow,
+}
+
+/// Policy used when a context budget would be exceeded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum BudgetPolicy {
+    /// Evict low-priority context first.
+    Evict,
+    /// Summarize older context.
+    Summarize,
+    /// Consolidate context into managed memory.
+    Consolidate,
+    /// Reject the request rather than widening autonomy.
+    Reject,
+}
+
+/// Entity target for a runtime performance profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ProfileTarget {
+    /// Profile describes a specific agent.
+    Agent,
+    /// Profile describes a branch.
+    Branch,
+    /// Profile describes a topology or graph-level execution mode.
+    Topology,
+    /// Profile describes a provider dependency.
+    Provider,
+}
+
+/// Health signal used by routing and supervision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum HealthState {
+    /// Operating normally.
+    Healthy,
+    /// Operating but showing degraded signals.
+    Degraded,
+    /// Operating state is unhealthy.
+    Unhealthy,
+    /// Health is not currently known.
+    Unknown,
+}
+
+/// Step-level or stream-level semantic signal kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SemanticSignalKind {
+    /// Output or stream progress has stalled.
+    Stalled,
+    /// Output is repetitive or looping.
+    Repetitive,
+    /// Output quality or confidence is degraded.
+    LowConfidence,
+    /// Required tool or memory context is missing.
+    MissingContext,
+    /// Policy constraints conflict with the current execution path.
+    PolicyConflict,
+}
+
+/// Failure taxonomy used by the Guard layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum FailureClass {
+    /// Transient failure where retry or failover may help.
+    Transient,
+    /// Structural failure such as invalid config or auth.
+    Structural,
+    /// Streaming or transport degradation.
+    Streaming,
+    /// Semantic degradation in reasoning quality.
+    Semantic,
+}
+
+/// Intervention chosen by the Guard layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum InterventionType {
+    /// Retry the same work with the current configuration.
+    Retry,
+    /// Fail over to alternative capacity.
+    Failover,
+    /// Refresh or narrow the working context.
+    ContextRefresh,
+    /// Isolate a branch from the wider graph.
+    BranchIsolation,
+    /// Reassign work to a different execution target.
+    Reassignment,
+    /// Escalate to a supervisor or operator.
+    Escalation,
+    /// Abort the affected work entirely.
+    Abort,
+}
+
+/// Scope granted by a delegation capability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DelegationScope {
+    /// Execute or resume workflow-level work.
+    ExecuteWorkflow,
+    /// Manage a specific branch lifecycle.
+    ManageBranch,
+    /// Refresh or narrow runtime context.
+    RefreshContext,
+    /// Apply a supervisory intervention.
+    ApplyIntervention,
+    /// Access managed memory or snapshots.
+    AccessMemory,
+    /// Invoke a privileged tool or external action.
+    InvokeTool,
+}
+
+/// Revocation state for a delegation capability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RevocationState {
+    /// Capability is currently valid.
+    Active,
+    /// Capability was explicitly revoked.
+    Revoked,
+    /// Capability expired naturally.
+    Expired,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
