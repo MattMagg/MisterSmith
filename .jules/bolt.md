@@ -1,3 +1,7 @@
+## 2026-03-10 - [Optimize Metrics Tag Allocation]
+**Learning:** String allocations and deep copies for static identifiers (like Tokio worker IDs) inside high-frequency polling loops can create measurable CPU and allocator overhead. The `metrics` crate's macros (`gauge!`, `counter!`) require `SharedString` types, which, if created from `String` values via `worker.clone()` or `i.to_string()`, induce repeated heap allocations.
+**Action:** Use a `std::sync::OnceLock` containing cached worker-label strings so hot-path metric collection can reuse borrowed values instead of allocating new owned labels on each tick.
+
 ## 2024-03-12 - [Audit Persister Insert Loop Optimization]
 **Learning:** Cloned data inside an iterative insert loop for HashSets can often be replaced by the `.extend()` method, avoiding redundant and manual iterations. Additionally, predicting capacity bounds manually can be simplified by avoiding throwaway temporary collections (such as cloning a subset and replacing) when `.extend` and direct re-assignment achieves the correct result efficiently.
 **Action:** When seeing loops inserting into `HashSet`s or `HashMap`s with `.clone()`, check if `extend` with `into_iter` can avoid duplicate cloning and optimize allocations.
