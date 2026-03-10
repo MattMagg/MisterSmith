@@ -5,6 +5,8 @@
 //! pipeline so callers can distinguish between payloads that may be forwarded,
 //! sanitized, rejected, or fully quarantined for audit analysis.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -38,6 +40,28 @@ impl QuarantineAction {
     }
 }
 
+/// Direction of a shared-state transfer inspected by a quarantine actor.
+#[cfg(feature = "audit")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SharedStateAccess {
+    /// Agent writes data into shared state.
+    Write,
+    /// Agent reads data from shared state.
+    Read,
+}
+
+#[cfg(feature = "audit")]
+impl SharedStateAccess {
+    /// Return the canonical string for this shared-state access direction.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Write => "write",
+            Self::Read => "read",
+        }
+    }
+}
+
 /// Result of inspecting a payload through the quarantine pipeline.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QuarantineInspection {
@@ -54,6 +78,22 @@ pub struct QuarantineInspection {
     /// Malicious pattern captured during quarantine, when applicable.
     pub detected_pattern: Option<String>,
     /// Whether the payload should remain under heightened monitoring.
+    pub monitored: bool,
+}
+
+/// Payload that passed quarantine inspection and may be forwarded.
+#[cfg(feature = "audit")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuarantineTransfer {
+    /// Quarantine action that produced this forwardable payload.
+    pub action: QuarantineAction,
+    /// Final taint label associated with the payload.
+    pub taint_label: TaintLabel,
+    /// Payload to forward across the protected boundary.
+    pub payload: Value,
+    /// Schema version used for validation.
+    pub schema_version: Option<String>,
+    /// Whether downstream systems should keep monitoring the transfer.
     pub monitored: bool,
 }
 
@@ -154,6 +194,95 @@ fn inspection_from_error(error: ValidationError) -> QuarantineInspection {
 
 #[cfg(feature = "audit")]
 use crate::audit::{AuditEventType, AuditLogger, AuditOutcome, SecurityAuditEvent};
+
+/// Separate boundary inspector used by sandboxed agent crossings.
+#[cfg(feature = "audit")]
+#[derive(Clone)]
+pub struct QuarantineActor {
+    validator: Arc<dyn StateValidator>,
+    audit_logger: Arc<AuditLogger>,
+}
+
+#[cfg(feature = "audit")]
+impl QuarantineActor {
+    /// Create a new quarantine actor.
+    #[must_use]
+    pub fn new(validator: Arc<dyn StateValidator>, audit_logger: Arc<AuditLogger>) -> Self {
+        Self {
+            validator,
+            audit_logger,
+        }
+    }
+
+    /// Inspect a persistent/ephemeral crossing and return the forwardable
+    /// payload when the transfer is allowed.
+    pub fn inspect_cross_boundary_transfer(
+        &self,
+        principal: Option<&str>,
+        source_account: &str,
+        target_account: &str,
+        subject: &str,
+        state_type: &str,
+        payload: &Value,
+    ) -> Result<QuarantineTransfer, crate::SecurityError> {
+        let context = QuarantineAuditContext::new(
+            "cross_boundary",
+            source_account,
+            target_account,
+            subject,
+            state_type,
+        );
+        self.inspect(principal, &context, payload)
+    }
+
+    /// Inspect an agent/shared-state transfer and return the forwardable
+    /// payload when the transfer is allowed.
+    pub fn inspect_shared_state_access(
+        &self,
+        principal: Option<&str>,
+        access: SharedStateAccess,
+        state_type: &str,
+        state_key: &str,
+        payload: &Value,
+    ) -> Result<QuarantineTransfer, crate::SecurityError> {
+        let (source, target) = match access {
+            SharedStateAccess::Write => ("agent", "shared_state"),
+            SharedStateAccess::Read => ("shared_state", "agent"),
+        };
+        let resource = format!("{}:{state_key}", access.as_str());
+        let context =
+            QuarantineAuditContext::new("shared_state", source, target, resource, state_type);
+        self.inspect(principal, &context, payload)
+    }
+
+    fn inspect(
+        &self,
+        principal: Option<&str>,
+        context: &QuarantineAuditContext,
+        payload: &Value,
+    ) -> Result<QuarantineTransfer, crate::SecurityError> {
+        let inspection = inspect_quarantine_payload(&*self.validator, &context.state_type, payload);
+        record_quarantine_audit_event(&self.audit_logger, principal, context, &inspection);
+
+        match inspection.action {
+            QuarantineAction::Pass | QuarantineAction::Sanitize => Ok(QuarantineTransfer {
+                action: inspection.action,
+                taint_label: inspection.taint_label,
+                payload: inspection
+                    .forwarded_payload
+                    .expect("forwarded payload must exist for pass/sanitize decisions"),
+                schema_version: inspection.schema_version,
+                monitored: inspection.monitored,
+            }),
+            QuarantineAction::Reject | QuarantineAction::Quarantine => {
+                let reason = inspection
+                    .reason
+                    .unwrap_or_else(|| "payload failed quarantine inspection".to_string());
+                Err(crate::SecurityError::AuthorizationDenied(reason))
+            }
+        }
+    }
+}
 
 /// Record a quarantine decision to the audit log.
 #[cfg(feature = "audit")]

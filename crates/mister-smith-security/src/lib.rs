@@ -48,9 +48,11 @@ pub use auth_callout::{
 };
 pub use message_signer::{HmacKey, HmacMessageSigner, MessageSigner, MessageSigningConfig};
 pub use mister_smith_core::SecurityError;
-#[cfg(feature = "audit")]
-pub use quarantine::record_quarantine_audit_event;
 pub use quarantine::{inspect_quarantine_payload, QuarantineAction, QuarantineAuditContext};
+#[cfg(feature = "audit")]
+pub use quarantine::{
+    record_quarantine_audit_event, QuarantineActor, QuarantineTransfer, SharedStateAccess,
+};
 pub use sandbox::{
     AgentClass, CrossingDecision, CrossingRule, IOFirewall, SandboxAccountConfig,
     SandboxCredentialIssuer, SandboxCredentials,

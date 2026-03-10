@@ -64,7 +64,7 @@ fn sandbox(quarantine_actor: Arc<QuarantineActor>) -> AgentSandbox {
 #[test]
 fn sandbox_cross_boundary_transfer_is_sanitized_before_forwarding() {
     let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
-    let quarantine_actor = Arc::new(QuarantineActor::new(validator(), Some(audit.clone())));
+    let quarantine_actor = Arc::new(QuarantineActor::new(validator(), audit.clone()));
     let sandbox = sandbox(quarantine_actor);
 
     let transfer = sandbox
@@ -92,7 +92,7 @@ fn sandbox_cross_boundary_transfer_is_sanitized_before_forwarding() {
 #[test]
 fn sandbox_cross_boundary_transfer_blocks_malicious_payloads() {
     let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
-    let quarantine_actor = Arc::new(QuarantineActor::new(validator(), Some(audit.clone())));
+    let quarantine_actor = Arc::new(QuarantineActor::new(validator(), audit.clone()));
     let sandbox = sandbox(quarantine_actor);
 
     let error = sandbox
@@ -124,7 +124,7 @@ fn sandbox_cross_boundary_transfer_blocks_malicious_payloads() {
 #[test]
 fn shared_state_access_is_inspected_through_quarantine_actor() {
     let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
-    let actor = QuarantineActor::new(validator(), Some(audit.clone()));
+    let actor = QuarantineActor::new(validator(), audit.clone());
 
     let transfer = actor
         .inspect_shared_state_access(

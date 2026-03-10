@@ -12,6 +12,7 @@ pub use mister_smith_security::sandbox::{
     AgentClass, CrossingDecision, CrossingRule, IOFirewall, SandboxAccountConfig,
     SandboxCredentialIssuer, SandboxCredentials,
 };
+use mister_smith_security::TaintLabel;
 
 use crate::agent::{
     spawn_agent as spawn_runtime, spawn_supervised as spawn_supervised_runtime, AgentRuntime,
@@ -164,7 +165,9 @@ impl AgentSandbox {
         match self.check_crossing(source_account, target_account, subject)? {
             CrossingDecision::Allow => Ok(QuarantineTransfer {
                 action: mister_smith_security::QuarantineAction::Pass,
+                taint_label: TaintLabel::Clean,
                 payload: payload.clone(),
+                schema_version: None,
                 monitored: false,
             }),
             CrossingDecision::Quarantine => {
