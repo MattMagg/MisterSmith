@@ -1,0 +1,3 @@
+## 2026-03-10 - [Optimize Metrics Tag Allocation]
+**Learning:** String allocations and deep copies for static identifiers (like Tokio worker IDs) inside high-frequency polling loops can create measurable CPU and allocator overhead. The `metrics` crate's macros (`gauge!`, `counter!`) require `SharedString` types, which, if created from `String` values via `worker.clone()` or `i.to_string()`, induce repeated heap allocations.
+**Action:** Use a `std::sync::OnceLock` containing a `Vec<metrics::SharedString>` to pre-allocate and cache string representations for known identifier ranges (e.g., worker 0-1024), reducing per-tick allocation overhead significantly and speeding up the metric ingestion process.

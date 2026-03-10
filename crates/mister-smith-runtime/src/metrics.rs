@@ -12,7 +12,22 @@
 //! module records a richer set of per-worker and blocking-thread
 //! metrics. Without that flag, only the stable subset is collected.
 
+use metrics::SharedString;
+use std::sync::OnceLock;
 use tokio::runtime::Handle;
+
+static WORKER_LABELS: OnceLock<Vec<SharedString>> = OnceLock::new();
+
+fn get_worker_label(i: usize) -> SharedString {
+    let labels = WORKER_LABELS.get_or_init(|| {
+        (0..1024).map(|idx| idx.to_string().into()).collect()
+    });
+    if i < labels.len() {
+        labels[i].clone()
+    } else {
+        i.to_string().into()
+    }
+}
 
 /// Collects performance metrics from the Tokio runtime.
 ///
@@ -78,7 +93,7 @@ impl RuntimePerformanceMonitor {
         #[cfg(target_has_atomic = "64")]
         {
             for i in 0..m.num_workers() {
-                let worker = i.to_string();
+                let worker = get_worker_label(i);
 
                 metrics::gauge!(
                     "runtime.worker.busy_duration_secs",
@@ -112,7 +127,7 @@ impl RuntimePerformanceMonitor {
 
         // Per-worker extended metrics
         for i in 0..m.num_workers() {
-            let worker = i.to_string();
+            let worker = get_worker_label(i);
 
             metrics::gauge!(
                 "runtime.worker.local_queue_depth",
