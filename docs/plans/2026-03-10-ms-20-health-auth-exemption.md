@@ -26,7 +26,7 @@ Add a `#[tokio::test]` in `crates/mister-smith-http/src/server.rs` that:
 
 **Step 2: Run test to verify it fails**
 
-Run: `cargo test -p mister-smith-http build_router_keeps_health_public_when_security_enabled -- --exact`
+Run: `cargo test -p mister-smith-http build_router_keeps_health_public_when_security_enabled`
 Expected: FAIL because `/api/v1/health` currently inherits auth middleware and returns `401 Unauthorized`.
 
 ### Task 2: Implement the minimal router split
@@ -44,7 +44,7 @@ Expected: FAIL because `/api/v1/health` currently inherits auth middleware and r
 
 **Step 4: Run test to verify it passes**
 
-Run: `cargo test -p mister-smith-http build_router_keeps_health_public_when_security_enabled -- --exact`
+Run: `cargo test -p mister-smith-http build_router_keeps_health_public_when_security_enabled`
 Expected: PASS with `/api/v1/health` public and `/api/v1/agents` still protected.
 
 ### Task 3: Document and validate
