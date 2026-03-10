@@ -20,10 +20,11 @@
 //! # Event Types
 //!
 //! Events use a rich type hierarchy ([`EventType`]) covering
-//! system, agent, and tool domains, with a custom escape hatch. The
+//! system, agent, tool, and autonomy domains, with a custom escape hatch. The
 //! [`Event`] struct carries full metadata including correlation
 //! and causation IDs for distributed tracing.
 
+pub mod autonomy;
 pub mod builder;
 pub mod bus;
 pub mod dead_letter;
@@ -33,6 +34,11 @@ pub mod store;
 pub mod types;
 
 // Re-exports for convenience.
+pub use autonomy::{
+    AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
+    CapabilitySummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
+    TopologyPlanSummary,
+};
 pub use builder::EventBuilder;
 pub use bus::EventBus;
 pub use dead_letter::DeadLetterQueue;

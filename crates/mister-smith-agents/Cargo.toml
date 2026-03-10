@@ -36,6 +36,7 @@ futures = { workspace = true }
 
 # Concurrency
 dashmap = { workspace = true }
+petgraph = { workspace = true }
 
 # Time
 chrono = { workspace = true }

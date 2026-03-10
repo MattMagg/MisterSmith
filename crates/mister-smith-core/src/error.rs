@@ -3,6 +3,11 @@
 //! Provides a comprehensive error taxonomy with 12 domain-specific error types
 //! converging to a top-level [`SystemError`] via `#[from]` conversions.
 
+use crate::enums::DelegationScope;
+use crate::ids::{
+    CapabilityId, ContextBudgetId, ExecutionGraphId, ExecutionNodeId, MemoryFragmentId,
+    MemorySnapshotId, ProfileSnapshotId,
+};
 use std::time::Duration;
 use thiserror::Error;
 
@@ -356,6 +361,131 @@ pub enum SecurityError {
     RateLimited(Duration),
 }
 
+/// Topology compiler and execution-graph contract errors.
+#[derive(Debug, Error)]
+pub enum TopologyError {
+    /// A cycle was detected in the execution graph.
+    #[error("Execution graph cycle detected{graph_suffix}: {message}", graph_suffix = .graph_id.map(|id| format!(" ({id})")).unwrap_or_default())]
+    CycleDetected {
+        /// Optional graph identifier when available.
+        graph_id: Option<ExecutionGraphId>,
+        /// Human-readable explanation of the cycle.
+        message: String,
+    },
+    /// A node references an upstream dependency that does not exist.
+    #[error("Missing dependency '{dependency}'{node_suffix}", node_suffix = .node_id.map(|id| format!(" for node {id}")).unwrap_or_default())]
+    MissingDependency {
+        /// Optional node identifier that declared the missing dependency.
+        node_id: Option<ExecutionNodeId>,
+        /// Dependency that could not be resolved.
+        dependency: ExecutionNodeId,
+    },
+    /// The graph contains an unsupported topology or node shape.
+    #[error("Unsupported topology contract: {0}")]
+    Unsupported(String),
+    /// Topology rationale or execution metadata is invalid.
+    #[error("Invalid topology contract: {0}")]
+    Invalid(String),
+}
+
+/// Managed-memory and context-budget errors.
+#[derive(Debug, Error)]
+pub enum MemoryError {
+    /// Requested context exceeds the configured budget.
+    #[error("Context budget exceeded{budget_suffix}: requested {requested}, max {max}", budget_suffix = .budget_id.map(|id| format!(" ({id})")).unwrap_or_default())]
+    BudgetExceeded {
+        /// Optional budget identifier when available.
+        budget_id: Option<ContextBudgetId>,
+        /// Requested units.
+        requested: u64,
+        /// Maximum allowed units.
+        max: u64,
+    },
+    /// Snapshot required for recovery is unavailable.
+    #[error("Memory snapshot unavailable{snapshot_suffix}: {message}", snapshot_suffix = .snapshot_id.map(|id| format!(" ({id})")).unwrap_or_default())]
+    SnapshotUnavailable {
+        /// Optional snapshot identifier.
+        snapshot_id: Option<MemorySnapshotId>,
+        /// Human-readable detail.
+        message: String,
+    },
+    /// Managed-memory metadata is missing for a fragment.
+    #[error("Memory fragment metadata missing{fragment_suffix}: {field}", fragment_suffix = .fragment_id.map(|id| format!(" ({id})")).unwrap_or_default())]
+    FragmentMetadataMissing {
+        /// Optional fragment identifier.
+        fragment_id: Option<MemoryFragmentId>,
+        /// Field or metadata group that is missing.
+        field: String,
+    },
+}
+
+/// Guard / Advisor supervision errors.
+#[derive(Debug, Error)]
+pub enum GuardError {
+    /// Guard target is invalid or cannot be supervised.
+    #[error("Invalid Guard target: {0}")]
+    InvalidTarget(String),
+    /// Evidence is insufficient for a non-trivial intervention.
+    #[error("Insufficient Guard evidence: {0}")]
+    InsufficientEvidence(String),
+    /// A conflicting intervention is already active.
+    #[error("Guard intervention conflict: {0}")]
+    InterventionConflict(String),
+    /// Required profile snapshot is unavailable.
+    #[error("Profile snapshot unavailable{profile_suffix}: {message}", profile_suffix = .profile_id.map(|id| format!(" ({id})")).unwrap_or_default())]
+    ProfileUnavailable {
+        /// Optional profile identifier.
+        profile_id: Option<ProfileSnapshotId>,
+        /// Human-readable detail.
+        message: String,
+    },
+}
+
+/// Delegation and provenance enforcement errors.
+#[derive(Debug, Error)]
+pub enum DelegationError {
+    /// Capability is no longer valid because it expired.
+    #[error("Delegation capability expired{capability_suffix}", capability_suffix = .capability_id.map(|id| format!(" ({id})")).unwrap_or_default())]
+    Expired {
+        /// Optional capability identifier.
+        capability_id: Option<CapabilityId>,
+    },
+    /// Capability is no longer valid because it was revoked.
+    #[error("Delegation capability revoked{capability_suffix}", capability_suffix = .capability_id.map(|id| format!(" ({id})")).unwrap_or_default())]
+    Revoked {
+        /// Optional capability identifier.
+        capability_id: Option<CapabilityId>,
+    },
+    /// Provenance chain is invalid or incomplete.
+    #[error("Invalid delegation chain: {0}")]
+    InvalidChain(String),
+    /// Capability does not authorize the requested scope.
+    #[error("Delegation scope denied{capability_suffix}: {scope:?}", capability_suffix = .capability_id.map(|id| format!(" ({id})")).unwrap_or_default())]
+    ScopeDenied {
+        /// Optional capability identifier.
+        capability_id: Option<CapabilityId>,
+        /// Scope that was denied.
+        scope: DelegationScope,
+    },
+}
+
+/// Shared autonomy-domain errors used by Phase 10 control-plane contracts.
+#[derive(Debug, Error)]
+pub enum AutonomyError {
+    /// Topology contract error.
+    #[error("Topology error: {0}")]
+    Topology(#[from] TopologyError),
+    /// Managed-memory contract error.
+    #[error("Memory error: {0}")]
+    Memory(#[from] MemoryError),
+    /// Guard / Advisor contract error.
+    #[error("Guard error: {0}")]
+    Guard(#[from] GuardError),
+    /// Delegation / provenance contract error.
+    #[error("Delegation error: {0}")]
+    Delegation(#[from] DelegationError),
+}
+
 /// Top-level error type aggregating all subsystem errors.
 ///
 /// All domain-specific errors can be converted to `SystemError` via `#[from]`.
@@ -400,6 +530,9 @@ pub enum SystemError {
     /// Security error.
     #[error("Security error: {0}")]
     Security(#[from] SecurityError),
+    /// Shared autonomy contract error.
+    #[error("Autonomy error: {0}")]
+    Autonomy(#[from] AutonomyError),
 }
 
 /// Error severity for system-wide error handling.
@@ -456,6 +589,7 @@ impl SystemError {
             SystemError::Tool(_) => ErrorSeverity::Low,
             SystemError::Llm(_) => ErrorSeverity::Medium,
             SystemError::Security(_) => ErrorSeverity::High,
+            SystemError::Autonomy(_) => ErrorSeverity::High,
         }
     }
 
@@ -475,6 +609,7 @@ impl SystemError {
                 max_attempts: 2,
                 delay: Duration::from_millis(250),
             },
+            SystemError::Autonomy(_) => RecoveryStrategy::Escalate,
             _ => RecoveryStrategy::Retry {
                 max_attempts: 1,
                 delay: Duration::from_millis(100),
