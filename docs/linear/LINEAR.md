@@ -31,17 +31,16 @@ Projects serve two different purposes:
 
 Do not assume those are the same thing.
 
-Historical phase projects still exist for reporting, docs, and status updates. Symphony's live
-queue is currently a single watched project, and validated future work is intentionally kept in a
-separate backlog project.
+Historical phase projects are archived once they stop serving as an active workspace surface.
+Symphony's live queue is currently a single watched project, validated future work is intentionally
+kept in a separate backlog project, and cross-cutting docs live in a neutral docs hub.
 
 | Project | Role | State | Notes |
 |---------|------|-------|-------|
 | MisterSmith Execution Queue | Active Queue | In Progress | Current watched project for Symphony and the only project that should hold runnable `Todo` work |
 | MisterSmith Validated Backlog | Validated Backlog | Backlog | Curated repo-validated future work outside the live queue until explicitly staged |
-| Phase 9.1: Security Hardening | Historical phase | Completed | Completed hardening phase retained for shipped scope traceability |
-| Phase 9 Bug Fixes | Historical workstream | Completed | Completed focused bug-fix batch |
-| Phase 1-9 phase projects | Historical Phase | Completed | Retained for reporting, docs, and historical traceability |
+| MisterSmith Workspace Docs | Docs Hub | Backlog | Visible home for architecture, workflow, and Linear operating docs |
+| Archived historical phases | Historical Phase | Completed | Completed phase and batch projects are archived by default and can be unarchived if needed |
 
 ### Project Role Labels
 
@@ -248,16 +247,16 @@ Linear documents are used for reference material linked to projects:
 
 | Document | Project | Purpose |
 |----------|---------|---------|
-| Architecture Overview | Phase 1 | System architecture summary |
-| Crate Dependency Map | Phase 1 | 20-crate workspace structure |
-| Development Workflow | Phase 1 | Build, test, commit conventions |
-| Symphony Intake Template | Phase 1 | Canonical issue intake and readiness template |
-| Symphony Linear Feature Matrix | Phase 1 | Business vs Enterprise feature decisions and adoption stance |
-| Symphony Linear Operating Model | Phase 1 | Current-state audit, target model, and manual follow-up checklist |
+| Architecture Overview | MisterSmith Workspace Docs | System architecture summary |
+| Crate Dependency Map | MisterSmith Workspace Docs | 20-crate workspace structure |
+| Development Workflow | MisterSmith Workspace Docs | Build, test, commit conventions |
+| Symphony Intake Template | MisterSmith Workspace Docs | Canonical issue intake and readiness template |
+| Symphony Linear Feature Matrix | MisterSmith Workspace Docs | Business vs Enterprise feature decisions and adoption stance |
+| Symphony Linear Operating Model | MisterSmith Workspace Docs | Current-state audit, target model, and manual follow-up checklist |
 | Phase 9.1 Security Hardening Spec | Phase 9.1 | Security hardening specification |
-| Research Corpus Index | Phase 1 | Research program navigation |
+| Research Corpus Index | MisterSmith Workspace Docs | Research program navigation |
 
-Documents require a project link. For cross-cutting documents, link to Phase 1 (Foundation) as the general-purpose project.
+Documents require a project link. For cross-cutting documents, link them to `MisterSmith Workspace Docs` as the general-purpose project. Historical phase-specific specs can stay attached to their archived phase projects.
 
 ## Status Updates
 
@@ -391,7 +390,8 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 - Current watched project: `MisterSmith Execution Queue`
 - Current watched slug: `mistersmith-execution-queue-320a0741920c`
 - Validated future backlog: `MisterSmith Validated Backlog`
-- Completed historical queue: `Phase 9.1: Security Hardening`
+- Workspace docs hub: `MisterSmith Workspace Docs`
+- Completed historical queue: `Phase 9.1: Security Hardening` (archived)
 - `Todo` is a live dispatch queue, not a generic "next work" list
 - If `Todo` looks empty, verify whether the runnable issue has already been claimed and moved to `In Progress`
 
