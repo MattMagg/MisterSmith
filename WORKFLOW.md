@@ -2,7 +2,7 @@
 tracker:
   kind: linear
   api_key: $LINEAR_API_KEY
-  project_slug: "phase-91-security-hardening-e439446ddfb9"
+  project_slug: "mistersmith-execution-queue-320a0741920c"
   active_states:
     - Todo
     - In Progress

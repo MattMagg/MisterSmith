@@ -37,8 +37,9 @@ separate backlog project.
 
 | Project | Role | State | Notes |
 |---------|------|-------|-------|
-| Phase 9.1: Security Hardening | Active Queue | In Progress | Current watched project for Symphony |
-| Framework Hardening Backlog | Validated Backlog | Backlog | Curated repo-validated future work outside the live queue |
+| MisterSmith Execution Queue | Active Queue | In Progress | Current watched project for Symphony and the only project that should hold runnable `Todo` work |
+| MisterSmith Validated Backlog | Validated Backlog | Backlog | Curated repo-validated future work outside the live queue until explicitly staged |
+| Phase 9.1: Security Hardening | Historical phase | Completed | Completed hardening phase retained for shipped scope traceability |
 | Phase 9 Bug Fixes | Historical workstream | Completed | Completed focused bug-fix batch |
 | Phase 1-9 phase projects | Historical Phase | Completed | Retained for reporting, docs, and historical traceability |
 
@@ -123,7 +124,7 @@ Every issue should include:
 2. **Project**:
    - leave raw intake in `Triage` minimally routed until validated
    - use the watched project only for active-scope runnable work
-   - use `Framework Hardening Backlog` for validated future work outside the current queue
+   - use `MisterSmith Validated Backlog` for validated future work outside the current queue
 3. **Milestone**: Only when the project actively uses milestones
 4. **Priority**: 1-4 using Linear's built-in field
 5. **Labels**:
@@ -378,7 +379,7 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 | Setting | Value |
 |---------|-------|
 | `tracker.api_key` | `$LINEAR_API_KEY` |
-| `project_slug` | `phase-91-security-hardening-e439446ddfb9` |
+| `project_slug` | `mistersmith-execution-queue-320a0741920c` |
 | `active_states` | Todo, In Progress, Merging, Rework |
 | `terminal_states` | Done, Canceled, Duplicate |
 | `polling.interval_ms` | 5000 |
@@ -387,18 +388,23 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 
 ### Current Queue Contract
 
-- Current watched project: `Phase 9.1: Security Hardening`
-- Current watched slug: `phase-91-security-hardening-e439446ddfb9`
-- Validated future backlog: `Framework Hardening Backlog`
+- Current watched project: `MisterSmith Execution Queue`
+- Current watched slug: `mistersmith-execution-queue-320a0741920c`
+- Validated future backlog: `MisterSmith Validated Backlog`
+- Completed historical queue: `Phase 9.1: Security Hardening`
 - `Todo` is a live dispatch queue, not a generic "next work" list
 - If `Todo` looks empty, verify whether the runnable issue has already been claimed and moved to `In Progress`
 
-### Future Optimization
+### Queue Design
 
-If project retargeting becomes the main operational pain point, prefer a dedicated execution
-project such as `MisterSmith Queue` rather than collapsing all planning into one `MisterSmith`
-project. The better long-term fix is teaching Symphony to watch multiple projects or a team plus
-filters instead of a single project slug.
+The dedicated execution queue is now the canonical dispatch boundary. Keep it small, runnable, and
+deliberately staged:
+
+- `MisterSmith Execution Queue` is for active or immediately runnable work only
+- `MisterSmith Validated Backlog` is for real repo-validated work that is not yet scheduled
+- historical phase projects remain for reporting and traceability, not dispatch
+- if Symphony concurrency is underutilized, fill the execution queue with additional unblocked
+  `Symphony Candidate` issues instead of retargeting the runtime to a different phase project
 
 ### Required Credentials
 
