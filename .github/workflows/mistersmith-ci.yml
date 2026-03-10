@@ -23,7 +23,7 @@ jobs:
     name: Validate Documentation Phase
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Validate no implementation exists
         run: |
@@ -46,7 +46,7 @@ jobs:
           fi
       
       - name: Validate markdown formatting
-        uses: DavidAnson/markdownlint-cli2-action@v16
+        uses: DavidAnson/markdownlint-cli2-action@v22
         with:
           globs: |
             spec/**/*.md
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -72,7 +72,7 @@ jobs:
           components: rustfmt, clippy
       
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -122,7 +122,7 @@ jobs:
           fi
       
       - name: Upload dependency analysis
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dependency-analysis
           path: |
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: dependencies
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Setup Rust with cargo-audit
         uses: dtolnay/rust-toolchain@stable
@@ -185,7 +185,7 @@ jobs:
           fi
       
       - name: Upload security report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-audit
           path: audit-report.json
@@ -199,7 +199,7 @@ jobs:
       matrix:
         domain: [core-architecture, data-management, transport, security, operations]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Validate ${{ matrix.domain }} consistency
         run: |
@@ -232,7 +232,7 @@ jobs:
       matrix:
         agent: [agent1, agent2, agent3]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Simulate Agent ${{ matrix.agent }} work
         run: |
@@ -272,10 +272,10 @@ jobs:
     needs: [documentation, security, multi-agent]
     if: always()
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
       
@@ -319,14 +319,14 @@ jobs:
           echo "Report generated successfully"
       
       - name: Upload final report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: integration-report
           path: integration-report.md
       
       - name: Comment on PR
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const report = `## 🤖 MisterSmith CI Report
