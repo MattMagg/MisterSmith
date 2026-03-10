@@ -107,14 +107,11 @@ pub fn discover_config_paths() -> Vec<PathBuf> {
     paths
 }
 
-/// Load configuration using the full pipeline:
-/// discover paths → load first existing file → apply env overlay → validate.
-pub fn load_config() -> Result<FrameworkConfig, ConfigValidationError> {
-    let paths = discover_config_paths();
+fn load_config_from_paths(paths: &[PathBuf]) -> Result<FrameworkConfig, ConfigValidationError> {
     let mut config = FrameworkConfig::default();
 
     // Load from first existing config file
-    for path in &paths {
+    for path in paths {
         if path.exists() {
             let content = std::fs::read_to_string(path)?;
             config = toml::from_str(&content)
@@ -132,7 +129,95 @@ pub fn load_config() -> Result<FrameworkConfig, ConfigValidationError> {
     Ok(config)
 }
 
+/// Load configuration using the full pipeline:
+/// discover paths → load first existing file → apply env overlay → validate.
+pub fn load_config() -> Result<FrameworkConfig, ConfigValidationError> {
+    load_config_from_paths(&discover_config_paths())
+}
+
 /// Get the user's home directory.
 fn home_dir() -> Option<PathBuf> {
     std::env::var("HOME").ok().map(PathBuf::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EnvGuard {
+        _lock: MutexGuard<'static, ()>,
+        previous: Vec<(String, Option<OsString>)>,
+    }
+
+    impl EnvGuard {
+        fn new(entries: &[(&str, Option<&str>)]) -> Self {
+            let lock = env_lock()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let previous = entries
+                .iter()
+                .map(|(name, value)| {
+                    let previous = ((*name).to_string(), std::env::var_os(name));
+                    match value {
+                        Some(value) => std::env::set_var(name, value),
+                        None => std::env::remove_var(name),
+                    }
+                    previous
+                })
+                .collect();
+
+            Self {
+                _lock: lock,
+                previous,
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (name, previous) in self.previous.iter().rev() {
+                match previous {
+                    Some(value) => std::env::set_var(name, value),
+                    None => std::env::remove_var(name),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn load_config_from_paths_returns_defaults_when_no_files_exist() {
+        let _env = EnvGuard::new(&[
+            ("MISTER_SMITH_AGENT__RUNTIME__WORKER_THREADS", None),
+            ("MISTER_SMITH_AGENT__RUNTIME__BLOCKING_THREADS", None),
+            ("MISTER_SMITH_AGENT__RUNTIME__MAX_MEMORY", None),
+            (
+                "MISTER_SMITH_AGENT__SUPERVISION__MAX_RESTART_ATTEMPTS",
+                None,
+            ),
+            ("MISTER_SMITH_AGENT__MONITORING__LOG_LEVEL", None),
+            ("MISTER_SMITH_TRANSPORT__NATS_URL", None),
+            ("MISTER_SMITH_TRANSPORT__HTTP_PORT", None),
+            ("MISTER_SMITH_TRANSPORT__GRPC_PORT", None),
+            ("MISTER_SMITH_SECURITY__ENABLED", None),
+            ("MISTER_SMITH_SECURITY__TLS_ENABLED", None),
+            ("MISTER_SMITH_SECURITY__AUTH_ENABLED", None),
+        ]);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let paths = vec![
+            temp_dir.path().join("missing-system.toml"),
+            temp_dir.path().join("missing-home.toml"),
+            temp_dir.path().join("missing-local.toml"),
+        ];
+
+        let config = load_config_from_paths(&paths).unwrap();
+
+        assert_eq!(config.agent.runtime.blocking_threads, 512);
+    }
 }
