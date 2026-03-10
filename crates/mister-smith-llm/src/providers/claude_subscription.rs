@@ -169,7 +169,9 @@ impl ClaudeSubscriptionProvider {
 
     async fn execute_json(&self, request: &CompletionRequest) -> Result<Value, LlmError> {
         let body = self.build_request_body(request, false);
-        let body_bytes = serde_json::to_vec(&body).map_err(|error| LlmError::Serialization(format!("Failed to serialize request: {error}")))?;
+        let body_bytes = serde_json::to_vec(&body).map_err(|error| {
+            LlmError::Serialization(format!("Failed to serialize request: {error}"))
+        })?;
         let url = self.messages_url();
 
         for attempt in 0..=self.config.max_retries {
@@ -208,7 +210,9 @@ impl ClaudeSubscriptionProvider {
         stream_tx: mpsc::Sender<Result<StreamChunk, LlmError>>,
     ) -> Result<(), LlmError> {
         let body = self.build_request_body(&request, true);
-        let body_bytes = serde_json::to_vec(&body).map_err(|error| LlmError::Serialization(format!("Failed to serialize request: {error}")))?;
+        let body_bytes = serde_json::to_vec(&body).map_err(|error| {
+            LlmError::Serialization(format!("Failed to serialize request: {error}"))
+        })?;
         let url = self.messages_url();
 
         let mut response = None;
