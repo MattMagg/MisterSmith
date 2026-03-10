@@ -112,13 +112,18 @@ impl MigrationRunner {
         .await
         .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
 
+        let applied_map: std::collections::HashMap<i64, bool> =
+            applied.into_iter().map(|(v, _, s, _)| (v, s)).collect();
+
         let mut statuses = Vec::new();
         for migration in migrator.iter() {
-            let applied_info = applied.iter().find(|(v, _, _, _)| *v == migration.version);
             statuses.push(MigrationStatus {
                 version: migration.version,
                 description: migration.description.to_string(),
-                applied: applied_info.is_some_and(|(_, _, s, _)| *s),
+                applied: applied_map
+                    .get(&migration.version)
+                    .copied()
+                    .unwrap_or(false),
                 applied_at: None, // sqlx doesn't expose applied_at directly in this query
                 checksum: hex::encode(&migration.checksum),
             });
@@ -201,5 +206,56 @@ impl MigrationRunner {
                 .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
 
         Ok(row.0 as usize)
+    }
+}
+
+#[cfg(test)]
+mod perf_tests {
+    // use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn benchmark_migration_lookup() {
+        // Mock 10,000 applied migrations
+        let mut applied: Vec<(i64, String, bool, Vec<u8>)> = Vec::new();
+        for i in 1..=10_000 {
+            applied.push((i as i64, format!("migration_{}", i), true, vec![]));
+        }
+
+        // Mock 10,000 embedded migrations to look up
+        let to_lookup: Vec<i64> = (1..=10_000).collect();
+
+        let start = Instant::now();
+        let mut found_count = 0;
+        for version in &to_lookup {
+            let applied_info = applied.iter().find(|(v, _, _, _)| *v == *version);
+            if applied_info.is_some() {
+                found_count += 1;
+            }
+        }
+        let elapsed_linear = start.elapsed();
+        println!(
+            "Linear search found {} in {:?}",
+            found_count, elapsed_linear
+        );
+
+        let start = Instant::now();
+        let applied_map: std::collections::HashMap<i64, bool> = applied
+            .clone()
+            .into_iter()
+            .map(|(v, _, s, _)| (v, s))
+            .collect();
+
+        let mut found_count_hashmap = 0;
+        for version in &to_lookup {
+            if applied_map.contains_key(version) {
+                found_count_hashmap += 1;
+            }
+        }
+        let elapsed_hashmap = start.elapsed();
+        println!(
+            "Hashmap search found {} in {:?}",
+            found_count_hashmap, elapsed_hashmap
+        );
     }
 }
