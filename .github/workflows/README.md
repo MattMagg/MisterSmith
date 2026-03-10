@@ -1,50 +1,53 @@
-# MisterSmith Documentation Workflows
+# MisterSmith GitHub Workflows
 
-These workflows automatically improve the MisterSmith framework documentation using both Claude (Anthropic) and OpenAI models.
+This directory contains the active GitHub Actions workflows for the Rust
+workspace, Claude-assisted review flows, and the remaining documentation update
+jobs.
+
+## Active Workflows
+
+### Core automation
+
+- `ci.yml`: Required Rust CI for pushes and pull requests targeting `main`.
+- `claude.yml`: On-demand Claude assistant for `@claude` issue and pull request
+  interactions using `anthropics/claude-code-action@v1`.
+- `claude-code-review.yml`: Automatic Claude review on pull request updates using
+  the same OAuth-backed action.
+
+### Documentation workflows
+
+- `docs-async-runtime.yml`
+- `docs-transport-messaging.yml`
+- `docs-data-persistence.yml`
+- `docs-security-crypto.yml`
+- `documentation-validation.yml`
+- `markdown-lint-fixer.yml`
+
+### Legacy workflow
+
+- `mistersmith-ci.yml`: Retained as a manual historical workflow for the old
+  documentation-only phase. It is not part of the current implementation CI
+  path.
 
 ## Required Secrets
 
-You need to configure the following secrets in your GitHub repository settings:
+Configure only the secrets used by the workflows that remain active:
 
-1. **ANTHROPIC_API_KEY** - Already configured ✓
-2. **OPENAI_API_KEY** - Required for OpenAI o4-mini-2025-04-16 model
+- `CLAUDE_CODE_OAUTH_TOKEN`: Required by `claude.yml` and
+  `claude-code-review.yml`.
+- `ANTHROPIC_API_KEY`: Required by the documentation workflows that call
+  Anthropic models directly.
+- `OPENAI_API_KEY`: Required by the documentation workflows that call OpenAI
+  models directly.
 
-### Setting up OPENAI_API_KEY
+The legacy `grll/claude-code-action` OAuth bootstrap path has been removed, so
+the old `CLAUDE_ACCESS_TOKEN`, `CLAUDE_REFRESH_TOKEN`, `CLAUDE_EXPIRES_AT`, and
+`SECRETS_ADMIN_PAT` workflow path is no longer part of this repository.
 
-1. Go to Settings → Secrets and variables → Actions
-2. Click "New repository secret"
-3. Name: `OPENAI_API_KEY`
-4. Value: Your OpenAI API key
+## Notes
 
-## Workflow Model Distribution
-
-### docs-async-runtime.yml
-- **Tokio Runtime**: Claude Sonnet 4
-- **Async Patterns**: OpenAI o4-mini-2025-04-16
-- **Supervision Trees**: Claude Sonnet 4
-- **Agent Lifecycle**: OpenAI o4-mini-2025-04-16
-
-### docs-transport-messaging.yml
-- **NATS Transport**: OpenAI o4-mini-2025-04-16
-- **gRPC/Tonic**: Claude Sonnet 4
-- **HTTP/Axum**: OpenAI o4-mini-2025-04-16
-- **Message Schemas**: Claude Sonnet 4
-
-### docs-data-persistence.yml
-- **SQLx Patterns**: Claude Sonnet 4
-- **Redis Caching**: OpenAI o4-mini-2025-04-16
-- **Persistence Operations**: OpenAI o4-mini-2025-04-16
-- **JetStream KV**: Claude Sonnet 4
-
-### docs-security-crypto.yml
-- **Authentication**: OpenAI o4-mini-2025-04-16
-- **Authorization**: Claude Sonnet 4
-- **Encryption**: OpenAI o4-mini-2025-04-16
-- **Security Patterns**: Claude Sonnet 4
-
-## Important Notes
-
-- All workflows are restricted to only work with files in the `spec` directory
-- Both models use Context7 to retrieve real code examples before converting to pseudocode
-- OpenAI integration uses direct API calls since there's no GitHub Action for OpenAI yet
-- Temperature is set to 0.3 for consistent, focused improvements
+- The Rust CI is the repository's primary enforcement workflow.
+- The documentation workflows are still scoped to the `spec/` corpus.
+- Claude automation now uses a single authentication approach based on
+  `CLAUDE_CODE_OAUTH_TOKEN` rather than maintaining two competing action
+  families.
