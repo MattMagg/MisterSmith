@@ -191,7 +191,7 @@ pub enum AutonomyEvent {
     /// Delegation capability changed.
     DelegationUpdated(AutonomyEventEnvelope<CapabilitySummary>),
     /// Aggregate status view changed.
-    StatusUpdated(AutonomyEventEnvelope<AutonomyStatusView>),
+    StatusUpdated(Box<AutonomyEventEnvelope<AutonomyStatusView>>),
 }
 
 impl AutonomyEvent {

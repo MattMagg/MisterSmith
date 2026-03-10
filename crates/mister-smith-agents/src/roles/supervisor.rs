@@ -103,7 +103,7 @@ impl Actor for SupervisorAgent {
             SupervisorMessage::RecordGuardDecision(decision) => {
                 if decision.intervention == InterventionType::BranchIsolation {
                     if let GuardTarget::Branch(branch_id) = &decision.target_scope {
-                        if !state.isolated_branches.contains(&branch_id) {
+                        if !state.isolated_branches.contains(branch_id) {
                             state.isolated_branches.push(*branch_id);
                         }
                     }

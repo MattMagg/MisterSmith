@@ -171,6 +171,62 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
 }
 
 #[test]
+fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch_id = ExecutionBranchId::new();
+    let view = AutonomyStatusView {
+        graph: ExecutionGraphSummary {
+            graph_id,
+            workflow_id,
+            state: GraphState::Running,
+            branch_count: 1,
+            node_count: 3,
+            active_topology: Some(TopologyKind::Sequential),
+        },
+        topology: TopologyPlanSummary {
+            graph_id,
+            topology_kind: TopologyKind::Sequential,
+            parallelism_width: 1,
+            coordination_policy: CoordinationPolicy::Barrier,
+            rationale: TopologyRationale {
+                dependency_shape: "single branch".to_string(),
+                operational_signals: vec!["degraded stream".to_string()],
+                selected_for: "minimize restart blast radius".to_string(),
+                fallback_reason: Some("stay sequential until supervision stabilizes".to_string()),
+            },
+            fallback_topology: Some(TopologyKind::Sequential),
+        },
+        branches: vec![BranchSummary {
+            branch_id,
+            graph_id,
+            state: BranchState::Isolated,
+            assigned_agents: vec![AgentId::new()],
+            checkpoint_id: Some(CheckpointId::new()),
+            recovery_strategy: BranchRecoveryStrategy::Resume,
+        }],
+        memory_pressure: vec![],
+        interventions: vec![],
+        delegation_alerts: vec![],
+        profiles: vec![],
+        guard_decisions: vec![],
+        conservative_reasons: vec!["control-plane freshness unavailable".to_string()],
+    };
+    let event = AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
+        workflow_id,
+        graph_id: Some(graph_id),
+        branch_id: Some(branch_id),
+        payload: view,
+        operator_visible: true,
+    }));
+
+    let json = serde_json::to_string(&event).unwrap();
+    let roundtrip: AutonomyEvent = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(roundtrip, event);
+}
+
+#[test]
 fn capability_summary_preserves_policy_issuers() {
     let summary = CapabilitySummary {
         capability_id: CapabilityId::new(),
