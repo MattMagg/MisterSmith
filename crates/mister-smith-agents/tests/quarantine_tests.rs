@@ -4,8 +4,8 @@ use std::time::Duration;
 use nkeys::KeyPair;
 use serde_json::json;
 
-use mister_smith_agents::sandbox::AgentSandbox;
 use mister_smith_agents::quarantine::{QuarantineActor, SharedStateAccess};
+use mister_smith_agents::sandbox::AgentSandbox;
 use mister_smith_agents::AgentSystemError;
 use mister_smith_security::audit::{AuditLogger, AuditOutcome};
 use mister_smith_security::sandbox::{IOFirewall, SandboxAccountConfig, SandboxCredentialIssuer};
@@ -86,10 +86,7 @@ fn sandbox_cross_boundary_transfer_is_sanitized_before_forwarding() {
         .next()
         .expect("audit event should be recorded");
     assert_eq!(event.outcome, AuditOutcome::Warning);
-    assert_eq!(
-        event.details.get("decision"),
-        Some(&"Sanitize".to_string())
-    );
+    assert_eq!(event.details.get("decision"), Some(&"Sanitize".to_string()));
 }
 
 #[test]

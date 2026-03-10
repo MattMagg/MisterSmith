@@ -97,7 +97,8 @@ impl QuarantineActor {
             SharedStateAccess::Read => ("shared_state", "agent"),
         };
         let resource = format!("{}:{state_key}", access.as_str());
-        let context = QuarantineAuditContext::new("shared_state", source, target, resource, state_type);
+        let context =
+            QuarantineAuditContext::new("shared_state", source, target, resource, state_type);
         self.inspect(principal, &context, payload)
     }
 
@@ -127,7 +128,8 @@ impl QuarantineActor {
                 Err(SecurityError::AuthorizationDenied(reason))
             }
             _ => Err(SecurityError::AuthorizationDenied(
-                "payload failed quarantine inspection with an unknown quarantine action".to_string(),
+                "payload failed quarantine inspection with an unknown quarantine action"
+                    .to_string(),
             )),
         }
     }

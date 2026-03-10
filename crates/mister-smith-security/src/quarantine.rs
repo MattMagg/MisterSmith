@@ -112,8 +112,11 @@ pub fn inspect_quarantine_payload(
             QuarantineInspection {
                 action,
                 taint_label: validated.taint_label,
-                forwarded_payload: matches!(action, QuarantineAction::Pass | QuarantineAction::Sanitize)
-                    .then_some(validated.data),
+                forwarded_payload: matches!(
+                    action,
+                    QuarantineAction::Pass | QuarantineAction::Sanitize
+                )
+                .then_some(validated.data),
                 schema_version: Some(validated.schema_version),
                 reason: None,
                 detected_pattern: None,
@@ -131,7 +134,9 @@ fn inspection_from_error(error: ValidationError) -> QuarantineInspection {
             taint_label: TaintLabel::Rejected,
             forwarded_payload: None,
             schema_version: None,
-            reason: Some(format!("malicious pattern '{pattern}' detected at '{path}'")),
+            reason: Some(format!(
+                "malicious pattern '{pattern}' detected at '{path}'"
+            )),
             detected_pattern: Some(pattern),
             monitored: true,
         },
