@@ -25,6 +25,7 @@ Canonical representation of a workflow after planner output is normalized for ex
 | ----- | ---- | ----------- | ----------- |
 | graph_id | `ExecutionGraphId` | Required | Stable graph identifier |
 | workflow_id | `TaskId` or equivalent | Required | Parent workflow / task identifier |
+| branches | `Vec<ExecutionBranch>` | Non-empty | Checkpointable execution groups within the workflow |
 | nodes | `Vec<ExecutionNode>` | Non-empty | Executable nodes in the workflow |
 | edges | `Vec<ExecutionEdge>` | Required | Directed dependency edges |
 | topology_plan | `TopologyPlan` | Required | Selected execution shape and rationale |
@@ -82,6 +83,28 @@ Chosen execution shape for the graph.
 | fallback_topology | `Option<TopologyKind>` | Optional | Conservative fallback if signals degrade |
 
 **Invariant**: A `hybrid` topology must declare its branch-specific coordination policy explicitly.
+
+---
+
+### ExecutionBranch
+
+Checkpointable unit of work inside an `ExecutionGraph`.
+
+| Field | Type | Constraints | Description |
+| ----- | ---- | ----------- | ----------- |
+| branch_id | `ExecutionBranchId` | Required | Stable branch identifier |
+| graph_id | `ExecutionGraphId` | Required | Owning execution graph |
+| node_ids | `Vec<ExecutionNodeId>` | Non-empty | Nodes assigned to this branch |
+| state | `BranchState` | Required | Pending, running, checkpointed, isolated, completed, failed |
+| checkpoint_policy | `CheckpointPolicy` | Required | When checkpoints are captured for this branch |
+| assigned_agents | `Vec<AgentId>` | Optional | Agents currently executing or recovering the branch |
+| recovery_strategy | `RecoveryStrategy` | Required | Resume, reassign, isolate, or escalate behavior |
+
+**Invariant**: A branch must remain independently resumable without re-running nodes recorded as
+completed in its latest checkpoint.
+
+**Invariant**: Branch-level reassignment must preserve the same `branch_id` so checkpoints,
+provenance, and operator inspection remain stable.
 
 ---
 
@@ -239,6 +262,7 @@ Linked record of authority transfers.
 ## Relationships
 
 ```text
+ExecutionGraph 1──* ExecutionBranch
 ExecutionGraph 1──* ExecutionNode
 ExecutionGraph 1──* ExecutionEdge
 ExecutionGraph 1──1 TopologyPlan

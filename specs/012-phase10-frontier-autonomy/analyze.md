@@ -19,7 +19,7 @@
 
 | ID | Category | Severity | Location(s) | Summary |
 | -- | -------- | -------- | ----------- | ------- |
-| A1 | Coverage | INFO | `spec.md`, `tasks.md` | Four user stories and six requirement clusters map to 42 implementation and verification tasks across foundational work plus subphases 10.1-10.6. |
+| A1 | Coverage | INFO | `spec.md`, `tasks.md` | Four user stories and six requirement clusters map to 43 implementation and verification tasks across foundational work plus subphases 10.1-10.6. |
 | A2 | Dependency | INFO | `plan.md`, `tasks.md` | Phase 9 stream/routing and Phase 9.1 security remain explicit prerequisites; Phase 10 does not redefine those public contracts. |
 | A3 | Consistency | INFO | `data-model.md`, `contracts/`, `tasks.md` | Core autonomy entities stay aligned across the data model, contracts, and task plan. |
 | A4 | Scope | INFO | `spec.md`, `research.md`, `tasks.md` | Deferred learned routing, speculative decoding, local inference, consensus, and ML monitoring remain out of scope and absent from tasks. |
@@ -32,10 +32,10 @@
 | --------------- | --------- | -------- | ----- |
 | execution-graph-topology (`FR-201`..`FR-204`) | Yes | `T005`-`T015` | Covers graph compilation, topology selection, invalid-graph rejection, checkpointing, and resume/reassignment. |
 | managed-memory-context (`FR-205`..`FR-207`) | Yes | `T016`-`T021` | Covers context budgets, fragment metadata, paging, summaries, and checkpoint-ready snapshots. |
-| guard-supervision (`FR-208`..`FR-210`) | Yes | `T022`-`T026` | Covers failure taxonomy, degradation signals, profile snapshots, and intervention logic. |
+| guard-supervision (`FR-208`..`FR-210`) | Yes | `T022`-`T026`, `T025A` | Covers failure taxonomy, degradation signals, profile snapshots, and intervention logic. |
 | operator-visibility (`FR-211`..`FR-212`) | Yes | `T025`, `T027`-`T031` | Covers typed autonomy status, rationale inspection, memory pressure, and intervention history. |
 | delegation-provenance (`FR-213`..`FR-214`) | Yes | `T032`-`T037` | Covers bounded delegation, expiry/revocation, operator-visible provenance, and workflow audits. |
-| substrate-conservative-degradation (`FR-215`..`FR-216`) | Yes | `T001`-`T004`, `T011`-`T012`, `T025`, `T033`-`T035` | Preserves substrate boundaries and conservative fallback behavior. |
+| substrate-fallback (`FR-215`..`FR-216`) | Yes | `T001`-`T004`, `T011`-`T012`, `T025A`, `T031`, `T033`-`T035` | Preserves substrate boundaries and explicit conservative fallback behavior. |
 
 ## Constitution Alignment
 
@@ -50,7 +50,7 @@ None.
 ## Metrics
 
 - Requirement clusters analyzed: 6
-- Total tasks: 42
+- Total tasks: 43
 - Requirement-cluster coverage: 6/6 clusters have task coverage
 - Ambiguity findings: 0
 - Duplication findings: 0

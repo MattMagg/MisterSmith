@@ -160,7 +160,8 @@ metadata-preserving consolidation, and snapshot-based resume without replaying f
   `crates/mister-smith-persistence/src/memory/snapshot.rs` so branch resume reconstructs
   checkpoint-ready context snapshots instead of replaying full history.
 - [ ] T020 [US2] Add managed-memory and context-budget tests in `crates/mister-smith-persistence/tests/memory_manager_tests.rs` and `crates/mister-smith-agents/tests/context_manager_tests.rs`.
-- [ ] T021 [US2] Extend `crates/mister-smith-persistence/tests/performance_tests.rs` with context-reduction and async-consolidation assertions that prove `SC-202` and `SC-203`.
+- [ ] T021 [US2] Extend `crates/mister-smith-persistence/tests/performance_tests.rs`
+  with context-reduction and async-consolidation assertions that prove `SC-202`.
 
 **Checkpoint**: Context delivery is bounded, role-aware, metadata-rich, and checkpoint-ready.
 
@@ -187,6 +188,12 @@ the Guard layer chooses targeted interventions and emits operator-visible record
   `crates/mister-smith-agents/src/roles/supervisor.rs`, and
   `crates/mister-smith-agents/src/scheduler.rs`.
 - [ ] T025 [US3] Extend `crates/mister-smith-agents/src/profile.rs` and `crates/mister-smith-events/src/autonomy.rs` with supervisory profile snapshots, failure evidence, and intervention summaries.
+- [ ] T025A [US3] Implement conservative fallback behavior in
+  `crates/mister-smith-agents/src/orchestrator.rs`,
+  `crates/mister-smith-agents/src/profile.rs`,
+  `crates/mister-smith-agents/src/context_manager.rs`, and
+  `crates/mister-smith-events/src/autonomy.rs` so missing profile data, memory metadata,
+  or fresh control-plane state narrows autonomy and emits operator-visible reasons.
 - [ ] T026 [US3] Add Guard and stream-monitor tests in `crates/mister-smith-agents/tests/guard_tests.rs` and `crates/mister-smith-llm/tests/stream_monitor_tests.rs`.
 
 **Checkpoint**: Predictive supervision exists as a typed, branch-local layer above OTP restart
@@ -215,7 +222,9 @@ checkpoint lineage, memory pressure, and intervention history are visible withou
 - [ ] T030 [US3] Create `crates/mister-smith-app/tests/autonomy_status_tests.rs` and
   extend `crates/mister-smith-events/tests/autonomy_event_tests.rs` to verify
   operator-visible rationale and intervention history.
-- [ ] T031 [US3] Extend `crates/mister-smith-agents/tests/gate10_tests.rs` with transient, streaming, and semantic degradation scenarios that remain operator-visible without raw log inspection.
+- [ ] T031 [US3] Extend `crates/mister-smith-agents/tests/gate10_tests.rs` with
+  transient, streaming, semantic-degradation, and missing-input fallback scenarios that
+  remain operator-visible without raw log inspection and prove `SC-203`.
 
 **Checkpoint**: Operators can inspect the autonomy control plane directly from typed state.
 
@@ -279,7 +288,9 @@ allow execution while expired, revoked, or broken chains are blocked and surface
 - **10.3 Managed Memory / Context Manager**: Depends on 10.0 and the branch identity introduced in 10.1.
 - **10.4 Guard / Advisor Supervision**: Depends on 10.1 and stable Phase 9 stream surfaces.
 - **10.5 Operator Autonomy View**: Depends on 10.2, 10.3, and 10.4 because it aggregates their typed state.
-- **10.6 Bounded Delegation + Provenance**: Depends on 10.0 and the Phase 9.1 delegation-chain substrate; its operator surfacing benefits from 10.5 but execution-time enforcement can start earlier.
+- **10.6 Bounded Delegation + Provenance**: Depends on 10.5 and the Phase 9.1
+  delegation-chain substrate because operator-visible provenance is part of the phase
+  acceptance boundary.
 - **Verification**: Depends on all implemented subphases and documentation updates.
 
 ### User Story Dependencies
@@ -287,7 +298,8 @@ allow execution while expired, revoked, or broken chains are blocked and surface
 - **US1 (P1)**: Starts after 10.0; defines the execution control plane required by later stories.
 - **US2 (P1)**: Starts after 10.0 and integrates with US1 branch identity, but remains independently testable once memory surfaces exist.
 - **US3 (P1)**: Starts after US1 graph/topology work and Phase 9 streaming stability; operator views depend on US1/US2/US3 event emission, not on US4.
-- **US4 (P2)**: Starts after 10.0 and Phase 9.1 foundations; it integrates with US3 operator views but can enforce capabilities before full operator surfacing is complete.
+- **US4 (P2)**: Starts after US3 operator visibility and Phase 9.1 foundations because
+  bounded delegation is not complete until provenance is inspectable by operators.
 
 ### Parallel Opportunities
 
