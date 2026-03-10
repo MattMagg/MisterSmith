@@ -46,12 +46,20 @@ struct RateLimitEntry {
     request_times: Vec<Instant>,
 }
 
+/// Shared state guarded by the rate limiter mutex.
+struct RateLimiterState {
+    /// Per-IP request tracking.
+    entries: HashMap<String, RateLimitEntry>,
+    /// Last time the limiter swept expired buckets across all IPs.
+    last_cleanup: Instant,
+}
+
 /// Shared rate limiter state.
 pub struct RateLimiter {
     /// Maximum requests per second per IP.
     max_rps: u32,
-    /// Per-IP request tracking.
-    entries: Mutex<HashMap<String, RateLimitEntry>>,
+    /// Rate limiter state.
+    state: Mutex<RateLimiterState>,
 }
 
 impl RateLimiter {
@@ -59,7 +67,10 @@ impl RateLimiter {
     pub fn new(max_rps: u32) -> Self {
         Self {
             max_rps,
-            entries: Mutex::new(HashMap::new()),
+            state: Mutex::new(RateLimiterState {
+                entries: HashMap::new(),
+                last_cleanup: Instant::now(),
+            }),
         }
     }
 
@@ -67,25 +78,46 @@ impl RateLimiter {
     ///
     /// Returns `true` if the request is allowed, `false` if rate limited.
     pub async fn check(&self, ip: &str) -> bool {
-        let mut entries = self.entries.lock().await;
         let now = Instant::now();
         let window = std::time::Duration::from_secs(1);
+        let mut state = self.state.lock().await;
 
-        let entry = entries.entry(ip.to_string()).or_insert(RateLimitEntry {
-            request_times: Vec::new(),
-        });
-
-        // Remove timestamps older than the window.
-        entry
-            .request_times
-            .retain(|t| now.duration_since(*t) < window);
-
-        if entry.request_times.len() >= self.max_rps as usize {
-            return false;
+        if now.duration_since(state.last_cleanup) >= window {
+            state.entries.retain(|_, entry| {
+                entry
+                    .request_times
+                    .last()
+                    .is_some_and(|last_request| now.duration_since(*last_request) < window)
+            });
+            state.last_cleanup = now;
         }
 
-        entry.request_times.push(now);
-        true
+        let ip = ip.to_string();
+        let mut remove_current_entry = false;
+        let allowed = {
+            let entry = state.entries.entry(ip.clone()).or_insert(RateLimitEntry {
+                request_times: Vec::new(),
+            });
+
+            // Remove timestamps older than the window.
+            entry
+                .request_times
+                .retain(|t| now.duration_since(*t) < window);
+
+            if entry.request_times.len() >= self.max_rps as usize {
+                remove_current_entry = entry.request_times.is_empty();
+                false
+            } else {
+                entry.request_times.push(now);
+                true
+            }
+        };
+
+        if remove_current_entry {
+            state.entries.remove(&ip);
+        }
+
+        allowed
     }
 }
 
@@ -183,6 +215,39 @@ mod tests {
 
         // Different IP should still be allowed.
         assert!(limiter.check("10.0.0.2").await);
+    }
+
+    #[tokio::test]
+    async fn rate_limiter_evicts_expired_one_shot_ip_buckets() {
+        let limiter = RateLimiter::new(1);
+
+        for ip_index in 0..128_u16 {
+            let ip = format!("10.0.0.{ip_index}");
+            assert!(limiter.check(&ip).await);
+        }
+
+        assert_eq!(limiter.state.lock().await.entries.len(), 128);
+
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+
+        assert!(limiter.check("192.168.0.1").await);
+        assert_eq!(limiter.state.lock().await.entries.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn rate_limiter_preserves_active_buckets_across_cleanup_sweep() {
+        let limiter = RateLimiter::new(2);
+
+        assert!(limiter.check("10.0.0.1").await);
+        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+        assert!(limiter.check("10.0.0.1").await);
+
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        assert!(limiter.check("10.0.0.2").await);
+        assert_eq!(limiter.state.lock().await.entries.len(), 2);
+
+        assert!(limiter.check("10.0.0.1").await);
+        assert!(!limiter.check("10.0.0.1").await);
     }
 
     #[test]
