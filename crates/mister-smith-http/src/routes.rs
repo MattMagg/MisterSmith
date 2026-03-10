@@ -9,16 +9,25 @@ use crate::handlers;
 use crate::server::AppState;
 use crate::websocket;
 
-/// Build the complete API router with all REST and WebSocket routes.
-pub fn api_router() -> Router<AppState> {
+/// Build the public probe router that must remain reachable without auth.
+pub fn public_router() -> Router<AppState> {
+    Router::new().route("/api/v1/health", get(handlers::health_check))
+}
+
+/// Build the protected API router with authenticated REST and WebSocket routes.
+pub fn protected_api_router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/health", get(handlers::health_check))
         .route("/api/v1/agents", get(handlers::list_agents))
         .route("/api/v1/agents/{agent_id}", get(handlers::get_agent))
         .route("/api/v1/tasks", post(handlers::create_task))
         .route("/api/v1/tasks/{task_id}", get(handlers::get_task))
         .route("/api/v1/config", get(handlers::get_config))
         .route("/api/v1/events/ws", any(websocket::ws_handler))
+}
+
+/// Build the complete API router with both public probe and protected routes.
+pub fn api_router() -> Router<AppState> {
+    public_router().merge(protected_api_router())
 }
 
 #[cfg(test)]

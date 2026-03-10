@@ -16,7 +16,7 @@ use crate::config::HttpTransportConfig;
 use crate::middleware::{
     rate_limit_middleware, request_id_middleware, security_middleware, RateLimiter,
 };
-use crate::routes::api_router;
+use crate::routes::{protected_api_router, public_router};
 use crate::websocket::WsEvent;
 
 /// Default broadcast channel capacity for WebSocket events.
@@ -117,10 +117,11 @@ pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit_rps));
 
     // Axum executes layers in reverse declaration order (last = outermost = first).
-    // Rate limiting must be outermost to block floods of unauthenticated requests.
-    let router = api_router()
-        .layer(axum_mw::from_fn(request_id_middleware))
-        .layer(axum_mw::from_fn(security_middleware));
+    // Keep health public, but preserve the shared request ID, CORS, and rate-limit stack.
+    // Rate limiting must remain outermost to block floods of unauthenticated requests.
+    let router = public_router()
+        .merge(protected_api_router().layer(axum_mw::from_fn(security_middleware)))
+        .layer(axum_mw::from_fn(request_id_middleware));
 
     // Configure CORS based on allowed_origins.
     let router = if !config.allowed_origins.is_empty() {
@@ -200,6 +201,42 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use tower::ServiceExt;
+
+    #[cfg(feature = "security")]
+    use std::time::Duration;
+
+    #[cfg(feature = "security")]
+    use mister_smith_security::config::{AuditConfig, JwtConfig, KeySource, RbacConfig};
+    #[cfg(feature = "security")]
+    use mister_smith_security::middleware::{SecurityLayer, SecurityLayerConfig};
+
+    #[cfg(feature = "security")]
+    fn test_security_layer() -> Arc<SecurityLayer> {
+        Arc::new(
+            SecurityLayer::new(SecurityLayerConfig {
+                enabled: true,
+                auth_enabled: true,
+                authz_enabled: true,
+                audit_enabled: true,
+                tls_enabled: false,
+                jwt_config: Some(JwtConfig {
+                    algorithm: "HS256".to_string(),
+                    access_token_ttl: Duration::from_secs(300),
+                    refresh_token_ttl: Duration::from_secs(3_600),
+                    issuer: None,
+                    audience: Vec::new(),
+                    delegation_chain_max_depth: 5,
+                    key_source: KeySource::Hmac {
+                        secret: b"http-server-test-secret-key-at-least-32-bytes!".to_vec(),
+                    },
+                }),
+                rbac_config: Some(RbacConfig::default()),
+                audit_config: Some(AuditConfig::default()),
+                tls_config: None,
+            })
+            .expect("test security layer should initialize"),
+        )
+    }
 
     #[test]
     fn app_state_default() {
@@ -325,5 +362,32 @@ mod tests {
             .headers()
             .get("access-control-allow-origin")
             .is_none());
+    }
+
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn build_router_keeps_health_public_when_security_enabled() {
+        let config = HttpTransportConfig::default();
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40126);
+        let app = build_router(
+            &config,
+            AppState::new().with_security(test_security_layer()),
+        );
+
+        let health_request = Request::builder()
+            .uri("/api/v1/health")
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+        let health_response = app.clone().oneshot(health_request).await.unwrap();
+        assert_eq!(health_response.status(), StatusCode::OK);
+
+        let agents_request = Request::builder()
+            .uri("/api/v1/agents")
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+        let agents_response = app.oneshot(agents_request).await.unwrap();
+        assert_eq!(agents_response.status(), StatusCode::UNAUTHORIZED);
     }
 }
