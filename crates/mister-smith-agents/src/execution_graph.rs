@@ -196,7 +196,7 @@ impl ExecutionGraph {
             ));
         }
 
-        let mut branch_membership = HashSet::new();
+        let mut branch_membership = HashMap::new();
         for branch in &self.branches {
             if branch.node_ids.is_empty() {
                 return Err(TopologyError::Invalid(format!(
@@ -211,7 +211,14 @@ impl ExecutionGraph {
                         branch.branch_id, node_id
                     )));
                 }
-                branch_membership.insert(*node_id);
+                if let Some(existing_branch_id) =
+                    branch_membership.insert(*node_id, branch.branch_id)
+                {
+                    return Err(TopologyError::Invalid(format!(
+                        "node {} is assigned to multiple branches: {} and {}",
+                        node_id, existing_branch_id, branch.branch_id
+                    )));
+                }
             }
         }
 
@@ -231,7 +238,7 @@ impl ExecutionGraph {
                     node.node_id, node.branch_id
                 )));
             }
-            if !branch_membership.contains(&node.node_id) {
+            if !branch_membership.contains_key(&node.node_id) {
                 return Err(TopologyError::Invalid(format!(
                     "node {} is not assigned to any branch",
                     node.node_id

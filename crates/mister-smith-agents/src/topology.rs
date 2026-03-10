@@ -295,12 +295,21 @@ fn parse_steps(planner_output: &Value) -> Result<Vec<PlannerStepSpec>, TopologyE
 
     let mut specs = Vec::with_capacity(steps.len());
     let mut seen_keys = HashSet::new();
+    let mut seen_numeric_steps = HashSet::new();
     for (index, raw_step) in steps.iter().enumerate() {
         let object = raw_step.as_object().ok_or_else(|| {
             TopologyError::Invalid(format!("planner step {} must be an object", index + 1))
         })?;
 
         let numeric_step = object.get("step").and_then(Value::as_u64);
+        if let Some(step_number) = numeric_step {
+            if !seen_numeric_steps.insert(step_number) {
+                return Err(TopologyError::Invalid(format!(
+                    "planner output contains duplicate numeric step reference '{}'",
+                    step_number
+                )));
+            }
+        }
         let key = object
             .get("id")
             .and_then(Value::as_str)

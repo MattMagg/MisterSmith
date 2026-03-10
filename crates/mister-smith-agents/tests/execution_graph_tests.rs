@@ -74,6 +74,34 @@ fn cyclic_plan() -> serde_json::Value {
     })
 }
 
+fn duplicate_numeric_step_plan() -> serde_json::Value {
+    json!({
+        "goal": "ambiguous-workflow",
+        "steps": [
+            {
+                "id": "collect",
+                "step": 1,
+                "action": "collect-inputs",
+                "description": "Collect workflow inputs"
+            },
+            {
+                "id": "draft",
+                "step": 2,
+                "action": "draft-output",
+                "description": "Draft output",
+                "depends_on": ["collect"]
+            },
+            {
+                "id": "review",
+                "step": 2,
+                "action": "review-output",
+                "description": "Review output",
+                "depends_on": [2]
+            }
+        ]
+    })
+}
+
 #[test]
 fn compiler_builds_valid_execution_graph_from_planner_output() {
     let compiler = TopologyCompiler::default();
@@ -111,6 +139,43 @@ fn compiler_rejects_cycles_before_dispatch() {
         .expect_err("cycle should fail validation");
 
     assert!(matches!(err, TopologyError::CycleDetected { .. }));
+}
+
+#[test]
+fn compiler_rejects_duplicate_numeric_step_references() {
+    let compiler = TopologyCompiler::default();
+    let err = compiler
+        .compile(
+            TaskId::new(),
+            &duplicate_numeric_step_plan(),
+            &TopologySignals::default(),
+        )
+        .expect_err("duplicate numeric steps should fail validation");
+
+    assert!(matches!(
+        err,
+        TopologyError::Invalid(message)
+            if message.contains("duplicate numeric step reference")
+    ));
+}
+
+#[test]
+fn execution_graph_validation_rejects_nodes_in_multiple_branches() {
+    let compiler = TopologyCompiler::default();
+    let mut graph = compiler
+        .compile(TaskId::new(), &parallel_plan(), &TopologySignals::default())
+        .expect("planner output should compile");
+    let shared_node = graph.branches[0].node_ids[0];
+    graph.branches[1].node_ids.push(shared_node);
+
+    let err = graph
+        .validate()
+        .expect_err("shared branch membership should fail validation");
+
+    assert!(matches!(
+        err,
+        TopologyError::Invalid(message) if message.contains("multiple branches")
+    ));
 }
 
 #[tokio::test]
