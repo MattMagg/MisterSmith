@@ -13,6 +13,7 @@ pub mod error;
 pub mod health;
 pub mod hybrid;
 pub mod kv;
+pub mod memory;
 #[cfg(feature = "sqlx")]
 pub mod postgres;
 pub mod repository;
@@ -30,6 +31,12 @@ pub use error::from_sqlx_error;
 pub use hybrid::manager::HybridStateManager;
 pub use hybrid::router::{DataRouter, DataType, StorageLayer};
 pub use kv::state::{ConflictStrategy, Operation, StateChange, StateManager};
+pub use memory::{
+    AccessPolicy, FragmentClass, FragmentFreshness, FragmentProvenance, ManagedMemoryManager,
+    MaterializedSnapshot, MemoryFragment, MemoryFragmentMetadata, MemoryMetadataPage,
+    MemoryMetadataPageRequest, MemorySnapshot, MemorySnapshotMetadata, MemorySummary,
+    ResumeSource, SnapshotScope,
+};
 pub use repository::Repository;
 
 #[cfg(feature = "sqlx")]

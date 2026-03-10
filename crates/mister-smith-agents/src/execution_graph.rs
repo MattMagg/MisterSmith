@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use chrono::{DateTime, Utc};
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use serde::{Deserialize, Serialize};
@@ -10,16 +11,47 @@ use serde_json::Value;
 use mister_smith_core::{
     AgentId, AgentType, BranchRecoveryStrategy, BranchState, CheckpointId, CheckpointPolicy,
     ContextBudget, DelegationScope, DependencyType, ExecutionBranchId, ExecutionGraphId,
-    ExecutionNodeId, GraphState, NodeState, TaskId, TopologyError, TopologyPlan,
+    ExecutionNodeId, GraphState, MemorySnapshotId, NodeState, TaskId, TopologyError,
+    TopologyPlan,
 };
 
 /// Checkpoint lineage entry for a graph branch.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BranchCheckpoint {
     /// Stable checkpoint identifier.
     pub checkpoint_id: CheckpointId,
     /// Branch that owns this checkpoint.
     pub branch_id: ExecutionBranchId,
+    /// Nodes safely completed when the checkpoint was recorded.
+    pub completed_nodes: Vec<ExecutionNodeId>,
+    /// Nodes still pending when the checkpoint was recorded.
+    pub pending_nodes: Vec<ExecutionNodeId>,
+    /// Managed-memory snapshot used for resume.
+    pub memory_snapshot_id: MemorySnapshotId,
+    /// Optional failure or intervention context captured at checkpoint time.
+    pub failure_context: Option<Value>,
+    /// When the checkpoint was created.
+    pub created_at: DateTime<Utc>,
+}
+
+impl BranchCheckpoint {
+    /// Create a new branch checkpoint anchored to a managed-memory snapshot.
+    pub fn new(
+        branch_id: ExecutionBranchId,
+        completed_nodes: Vec<ExecutionNodeId>,
+        pending_nodes: Vec<ExecutionNodeId>,
+        memory_snapshot_id: MemorySnapshotId,
+    ) -> Self {
+        Self {
+            checkpoint_id: CheckpointId::new(),
+            branch_id,
+            completed_nodes,
+            pending_nodes,
+            memory_snapshot_id,
+            failure_context: None,
+            created_at: Utc::now(),
+        }
+    }
 }
 
 /// Checkpointable unit of work within an execution graph.

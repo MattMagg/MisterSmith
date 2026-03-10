@@ -1,6 +1,8 @@
 //! Critic agent role — reviews and validates outputs.
 
-use mister_smith_core::{Actor, AgentId};
+use crate::context_manager::{ContextManager, attach_managed_context};
+use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
+use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -72,6 +74,31 @@ impl CriticAgent {
             id,
             router: Some(router),
         }
+    }
+
+    /// Evaluate output after assembling bounded role-aware managed context.
+    pub async fn evaluate_with_managed_context(
+        &mut self,
+        output: serde_json::Value,
+        criteria: serde_json::Value,
+        context_manager: &mut ContextManager,
+        scope: SnapshotScope,
+        budget: ContextBudget,
+        state: &mut CriticState,
+    ) -> Result<serde_json::Value, CriticError> {
+        let managed_context = context_manager
+            .assemble_role_context(scope, AgentType::Critic, budget)
+            .await
+            .map_err(|error| CriticError::Internal(error.to_string()))?;
+
+        self.handle_message(
+            CriticMessage::Evaluate {
+                output,
+                criteria: attach_managed_context(criteria, managed_context.payload),
+            },
+            state,
+        )
+        .await
     }
 }
 

@@ -539,6 +539,31 @@ pub async fn update_task_status(
     Ok(())
 }
 
+/// Update a task's metadata document and return the updated row.
+pub async fn update_task_metadata(
+    pool: &PgPool,
+    task_id: Uuid,
+    metadata: serde_json::Value,
+) -> Result<TaskRecord, PersistenceError> {
+    sqlx::query_as::<_, TaskRecord>(
+        r#"
+        UPDATE tasks.records
+        SET metadata = $2
+        WHERE task_id = $1
+        RETURNING
+            task_id, task_type, agent_id, payload, result,
+            metadata, status::TEXT AS status, priority, correlation_id,
+            parent_task_id, created_at, started_at,
+            completed_at, expires_at
+        "#,
+    )
+    .bind(task_id)
+    .bind(&metadata)
+    .fetch_one(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
 /// Find all tasks assigned to a given agent.
 pub async fn find_tasks_by_agent(
     pool: &PgPool,

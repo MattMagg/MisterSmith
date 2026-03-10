@@ -1,6 +1,8 @@
 //! Executor agent role — carries out planned actions.
 
-use mister_smith_core::{Actor, AgentId};
+use crate::context_manager::{ContextManager, attach_managed_context};
+use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
+use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -80,6 +82,29 @@ impl ExecutorAgent {
             id,
             router: Some(router),
         }
+    }
+
+    /// Execute a plan after assembling bounded role-aware managed context.
+    pub async fn execute_plan_with_managed_context(
+        &mut self,
+        plan: serde_json::Value,
+        context_manager: &mut ContextManager,
+        scope: SnapshotScope,
+        budget: ContextBudget,
+        state: &mut ExecutorState,
+    ) -> Result<serde_json::Value, ExecutorError> {
+        let managed_context = context_manager
+            .assemble_role_context(scope, AgentType::Executor, budget)
+            .await
+            .map_err(|error| ExecutorError::Internal(error.to_string()))?;
+
+        self.handle_message(
+            ExecutorMessage::ExecutePlan {
+                plan: attach_managed_context(plan, managed_context.payload),
+            },
+            state,
+        )
+        .await
     }
 }
 

@@ -1,7 +1,9 @@
 //! Planner agent role — creates execution plans from goals.
 
+use crate::context_manager::{ContextManager, attach_managed_context};
 use crate::scheduler::TaskAssignment;
-use mister_smith_core::{Actor, AgentId};
+use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
+use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -73,6 +75,31 @@ impl PlannerAgent {
             id,
             router: Some(router),
         }
+    }
+
+    /// Plan a goal after assembling bounded role-aware managed context.
+    pub async fn plan_goal_with_managed_context(
+        &mut self,
+        goal: String,
+        context: serde_json::Value,
+        context_manager: &mut ContextManager,
+        scope: SnapshotScope,
+        budget: ContextBudget,
+        state: &mut PlannerState,
+    ) -> Result<serde_json::Value, PlannerError> {
+        let managed_context = context_manager
+            .assemble_role_context(scope, AgentType::Planner, budget)
+            .await
+            .map_err(|error| PlannerError::Internal(error.to_string()))?;
+
+        self.handle_message(
+            PlannerMessage::PlanGoal {
+                goal,
+                context: attach_managed_context(context, managed_context.payload),
+            },
+            state,
+        )
+        .await
     }
 }
 

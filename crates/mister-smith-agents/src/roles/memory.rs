@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use mister_smith_core::{Actor, AgentId};
+use crate::context_manager::{ContextManager, attach_managed_context};
+use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
+use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -69,6 +71,24 @@ impl MemoryAgent {
     /// Create a new `MemoryAgent` with the given identity.
     pub fn new(id: AgentId) -> Self {
         Self { id }
+    }
+
+    /// Retrieve a memory entry after assembling bounded role-aware managed context.
+    pub async fn retrieve_with_managed_context(
+        &mut self,
+        key: String,
+        context_manager: &mut ContextManager,
+        scope: SnapshotScope,
+        budget: ContextBudget,
+        state: &mut MemoryState,
+    ) -> Result<serde_json::Value, MemoryError> {
+        let managed_context = context_manager
+            .assemble_role_context(scope, AgentType::Memory, budget)
+            .await
+            .map_err(|error| MemoryError::Internal(error.to_string()))?;
+
+        let response = self.handle_message(MemoryMessage::Retrieve(key), state).await?;
+        Ok(attach_managed_context(response, managed_context.payload))
     }
 }
 
