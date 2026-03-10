@@ -34,10 +34,10 @@ jobs:
     name: Markdown Linting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
       
@@ -92,7 +92,7 @@ jobs:
     name: Documentation Completeness
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       
       - name: Check documentation structure
         run: |
@@ -172,7 +172,7 @@ jobs:
           done
       
       - name: Upload inventory
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: documentation-inventory
           path: doc-inventory.md
@@ -182,7 +182,7 @@ jobs:
     name: Cross-Reference Validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       
       - name: Check internal links
         run: |
@@ -251,7 +251,7 @@ jobs:
     name: Version Consistency
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       
       - name: Extract and validate versions
         run: |
@@ -302,7 +302,7 @@ jobs:
     name: Technical Debt Tracking
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       
       - name: Scan for TODOs and FIXMEs
         run: |
@@ -355,7 +355,7 @@ jobs:
           fi
       
       - name: Upload technical debt report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: technical-debt-report
           path: technical-debt.md
@@ -367,10 +367,10 @@ jobs:
     needs: [markdown-lint, completeness, cross-references, version-consistency, technical-debt]
     if: always()
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       
       - name: Download artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
       
@@ -437,7 +437,7 @@ jobs:
       
       - name: Create PR comment
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
@@ -458,7 +458,7 @@ jobs:
             });
       
       - name: Upload final report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: documentation-validation-report
           path: documentation-report.md
