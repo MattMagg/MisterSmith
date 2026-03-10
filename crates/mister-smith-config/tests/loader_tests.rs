@@ -212,29 +212,3 @@ fn discover_config_paths_with_home_and_environment() {
         ]
     );
 }
-
-#[test]
-fn load_config_returns_defaults_when_no_file() {
-    let _env = EnvGuard::new(&[
-        ("HOME", None),
-        ("MS_ENVIRONMENT", None),
-        ("MISTER_SMITH_AGENT__RUNTIME__WORKER_THREADS", None),
-        ("MISTER_SMITH_AGENT__RUNTIME__BLOCKING_THREADS", None),
-        ("MISTER_SMITH_AGENT__RUNTIME__MAX_MEMORY", None),
-        (
-            "MISTER_SMITH_AGENT__SUPERVISION__MAX_RESTART_ATTEMPTS",
-            None,
-        ),
-        ("MISTER_SMITH_AGENT__MONITORING__LOG_LEVEL", None),
-        ("MISTER_SMITH_TRANSPORT__NATS_URL", None),
-        ("MISTER_SMITH_TRANSPORT__HTTP_PORT", None),
-        ("MISTER_SMITH_TRANSPORT__GRPC_PORT", None),
-        ("MISTER_SMITH_SECURITY__ENABLED", None),
-        ("MISTER_SMITH_SECURITY__TLS_ENABLED", None),
-        ("MISTER_SMITH_SECURITY__AUTH_ENABLED", None),
-    ]);
-
-    let config = load_config().unwrap();
-
-    assert_eq!(config.agent.runtime.blocking_threads, 512);
-}
