@@ -15,6 +15,8 @@ jobs.
   the same OAuth-backed action.
 - `pr-labeler.yml`: Automatic pull request labeling based on changed files and
   branch patterns.
+- `release-drafter.yml`: Maintains a draft release on `main` so release notes
+  are ready when tags and published releases start being used.
 
 ### Documentation workflows
 
@@ -25,11 +27,10 @@ jobs.
 - `documentation-validation.yml`
 - `markdown-lint-fixer.yml`
 
-### Legacy workflow
+### Archived workflow
 
-- `mistersmith-ci.yml`: Retained as a manual historical workflow for the old
-  documentation-only phase. It is not part of the current implementation CI
-  path.
+- `mistersmith-ci.yml`: Archived under `.github/deactived-workflows/` as a
+  historical documentation-phase workflow. It is no longer active.
 
 ## Required Secrets
 
@@ -53,3 +54,5 @@ the old `CLAUDE_ACCESS_TOKEN`, `CLAUDE_REFRESH_TOKEN`, `CLAUDE_EXPIRES_AT`, and
 - Claude automation now uses a single authentication approach based on
   `CLAUDE_CODE_OAUTH_TOKEN` rather than maintaining two competing action
   families.
+- Release drafting prepares notes for future tags and published releases, but it
+  does not publish releases automatically.

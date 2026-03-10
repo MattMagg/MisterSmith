@@ -1,0 +1,49 @@
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
+change-title-escapes: "\\<*_&"
+template: |
+  ## Summary
+
+  $CHANGES
+
+  ## Notes
+
+  - Review validation evidence in the merged pull requests before publishing.
+  - Tag creation and release publication remain manual.
+
+no-changes-template: "- No user-facing changes were categorized for this draft."
+categories:
+  - title: "Features"
+    labels:
+      - "enhancement"
+  - title: "Bug Fixes"
+    labels:
+      - "bug"
+  - title: "Documentation"
+    labels:
+      - "documentation"
+  - title: "Maintenance"
+    labels:
+      - "dependencies"
+      - "github_actions"
+version-resolver:
+  major:
+    labels:
+      - "release:major"
+  minor:
+    labels:
+      - "release:minor"
+      - "enhancement"
+  patch:
+    labels:
+      - "release:patch"
+      - "bug"
+      - "documentation"
+      - "dependencies"
+      - "github_actions"
+  default: patch
+exclude-labels:
+  - "duplicate"
+  - "invalid"
+  - "wontfix"
