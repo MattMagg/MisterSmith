@@ -1,7 +1,8 @@
 name: Workflow / CI issue
 description: Report a broken GitHub workflow, automation path, or release process.
 title: "[Workflow] "
-labels: []
+labels:
+  - github_actions
 body:
   - type: input
     id: workflow

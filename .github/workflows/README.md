@@ -13,6 +13,8 @@ jobs.
   interactions using `anthropics/claude-code-action@v1`.
 - `claude-code-review.yml`: Automatic Claude review on pull request updates using
   the same OAuth-backed action.
+- `pr-labeler.yml`: Automatic pull request labeling based on changed files and
+  branch patterns.
 
 ### Documentation workflows
 

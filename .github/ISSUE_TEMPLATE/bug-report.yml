@@ -1,7 +1,8 @@
 name: Bug report
 description: Report incorrect behavior in the framework or runtime.
 title: "[Bug] "
-labels: []
+labels:
+  - bug
 body:
   - type: textarea
     id: summary

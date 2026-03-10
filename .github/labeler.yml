@@ -1,0 +1,44 @@
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "README.md"
+          - "ROADMAP.md"
+          - "AGENTS.md"
+          - "CLAUDE.md"
+          - "WORKFLOW.md"
+          - "docs/**"
+          - "plans/**"
+          - "spec/**"
+          - "specs/**"
+
+rust:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.rs"
+          - "**/Cargo.toml"
+          - "Cargo.lock"
+          - "**/build.rs"
+
+github_actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/Cargo.toml"
+          - "Cargo.lock"
+          - ".github/dependabot.yml"
+
+codex:
+  - head-branch:
+      - "^codex/"
+
+jules:
+  - any:
+      - head-branch:
+          - "^bolt-"
+      - changed-files:
+          - any-glob-to-any-file:
+              - ".jules/**"
