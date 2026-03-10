@@ -107,17 +107,17 @@ mod inner {
             // Batch insert
             let count = self.repository.append_batch(&entries).await?;
 
-            // Track persisted IDs (only the newly-persisted events)
-            for event in &new_events {
-                persisted.insert(event.event_id.clone());
-            }
+            let new_ids: HashSet<String> = new_events
+                .into_iter()
+                .map(|event| event.event_id.clone())
+                .collect();
 
             // Prevent unbounded growth — if tracking set exceeds 2x batch size,
             // only keep the newly-persisted IDs (not all ring buffer events).
-            if persisted.len() > self.batch_size * 2 {
-                let new_ids: HashSet<String> =
-                    new_events.iter().map(|e| e.event_id.clone()).collect();
+            if persisted.len() + new_ids.len() > self.batch_size * 2 {
                 *persisted = new_ids;
+            } else {
+                persisted.extend(new_ids);
             }
 
             debug!(
