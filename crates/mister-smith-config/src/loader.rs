@@ -197,7 +197,10 @@ mod tests {
             ("MISTER_SMITH_AGENT__RUNTIME__WORKER_THREADS", None),
             ("MISTER_SMITH_AGENT__RUNTIME__BLOCKING_THREADS", None),
             ("MISTER_SMITH_AGENT__RUNTIME__MAX_MEMORY", None),
-            ("MISTER_SMITH_AGENT__SUPERVISION__MAX_RESTART_ATTEMPTS", None),
+            (
+                "MISTER_SMITH_AGENT__SUPERVISION__MAX_RESTART_ATTEMPTS",
+                None,
+            ),
             ("MISTER_SMITH_AGENT__MONITORING__LOG_LEVEL", None),
             ("MISTER_SMITH_TRANSPORT__NATS_URL", None),
             ("MISTER_SMITH_TRANSPORT__HTTP_PORT", None),
