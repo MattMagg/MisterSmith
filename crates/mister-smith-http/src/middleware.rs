@@ -78,9 +78,9 @@ impl RateLimiter {
     ///
     /// Returns `true` if the request is allowed, `false` if rate limited.
     pub async fn check(&self, ip: &str) -> bool {
-        let now = Instant::now();
         let window = std::time::Duration::from_secs(1);
         let mut state = self.state.lock().await;
+        let now = Instant::now();
 
         if now.duration_since(state.last_cleanup) >= window {
             state.entries.retain(|_, entry| {
