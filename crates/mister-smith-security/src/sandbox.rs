@@ -406,7 +406,7 @@ fn validate_subject(subject: &str) -> Result<(), SecurityError> {
 }
 
 fn nats_subject_matches(pattern: &str, subject: &str) -> bool {
-    if pattern == ">" || pattern == "*" {
+    if pattern == ">" {
         return true;
     }
 
@@ -443,6 +443,8 @@ mod tests {
 
     #[test]
     fn wildcard_matching_supports_single_and_multi_token_patterns() {
+        assert!(nats_subject_matches("*", "tasks"));
+        assert!(!nats_subject_matches("*", "tasks.analysis.assignment"));
         assert!(nats_subject_matches(
             "tasks.*.assignment",
             "tasks.analysis.assignment"
