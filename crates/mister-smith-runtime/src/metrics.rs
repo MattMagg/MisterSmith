@@ -12,21 +12,7 @@
 //! module records a richer set of per-worker and blocking-thread
 //! metrics. Without that flag, only the stable subset is collected.
 
-use std::borrow::Cow;
-use std::sync::OnceLock;
 use tokio::runtime::Handle;
-
-static WORKER_LABELS: OnceLock<Vec<String>> = OnceLock::new();
-
-/// Pre-allocates and caches worker identifiers so hot-path metric collection can
-/// reuse borrowed labels instead of allocating owned strings on every tick.
-fn get_worker_label(i: usize) -> Cow<'static, str> {
-    let labels = WORKER_LABELS.get_or_init(|| (0..1024).map(|idx| idx.to_string()).collect());
-    labels
-        .get(i)
-        .map(|label| Cow::Borrowed(label.as_str()))
-        .unwrap_or_else(|| Cow::Owned(i.to_string()))
-}
 
 /// Collects performance metrics from the Tokio runtime.
 ///
@@ -92,7 +78,7 @@ impl RuntimePerformanceMonitor {
         #[cfg(target_has_atomic = "64")]
         {
             for i in 0..m.num_workers() {
-                let worker = get_worker_label(i);
+                let worker = i.to_string();
 
                 metrics::gauge!(
                     "runtime.worker.busy_duration_secs",
@@ -126,7 +112,7 @@ impl RuntimePerformanceMonitor {
 
         // Per-worker extended metrics
         for i in 0..m.num_workers() {
-            let worker = get_worker_label(i);
+            let worker = i.to_string();
 
             metrics::gauge!(
                 "runtime.worker.local_queue_depth",
