@@ -20,6 +20,7 @@ use crate::errors::AgentSystemError;
 
 const DEFAULT_LONG_RUNNING_THRESHOLD: Duration = Duration::from_secs(300);
 const CLEANUP_POLL_INTERVAL: Duration = Duration::from_millis(25);
+const TERMINATION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Wrapper around an [`AgentRuntime`] with lifecycle-scoped sandbox credentials.
 pub struct SandboxedAgentRuntime<M: Send + 'static, R: Send + 'static> {
@@ -121,9 +122,10 @@ impl AgentSandbox {
     }
 
     /// Remove active credentials for an agent.
-    pub fn cleanup(&self, agent_id: &AgentId) -> Result<(), AgentSystemError> {
-        let _ = self.issuer.cleanup(&agent_id.to_string());
-        Ok(())
+    ///
+    /// Returns the removed credentials, or `None` if no credentials were active.
+    pub fn cleanup(&self, agent_id: &AgentId) -> Option<SandboxCredentials> {
+        self.issuer.cleanup(&agent_id.to_string())
     }
 
     /// Evaluate whether a subject crossing is permitted.
@@ -159,7 +161,11 @@ impl AgentSandbox {
             Ok(credentials) => credentials,
             Err(error) => {
                 let _ = system.stop_actor(&agent_id).await;
-                wait_for_termination(system, agent_id).await;
+                let _ = tokio::time::timeout(
+                    TERMINATION_TIMEOUT,
+                    wait_for_termination(system, agent_id),
+                )
+                .await;
                 return Err(error);
             }
         };
@@ -197,7 +203,11 @@ impl AgentSandbox {
             Ok(credentials) => credentials,
             Err(error) => {
                 let _ = system.stop_actor(&agent_id).await;
-                wait_for_termination(system.clone(), agent_id).await;
+                let _ = tokio::time::timeout(
+                    TERMINATION_TIMEOUT,
+                    wait_for_termination(system.clone(), agent_id),
+                )
+                .await;
                 return Err(error);
             }
         };
@@ -230,7 +240,11 @@ impl AgentSandbox {
                 .is_err()
             {
                 let _ = system.stop_actor(&agent_id).await;
-                wait_for_termination(system, agent_id).await;
+                let _ = tokio::time::timeout(
+                    TERMINATION_TIMEOUT,
+                    wait_for_termination(system, agent_id),
+                )
+                .await;
             }
 
             let _ = sandbox.cleanup(&agent_id);

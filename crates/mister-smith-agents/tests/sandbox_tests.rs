@@ -204,9 +204,10 @@ async fn persistent_agents_do_not_auto_cleanup_on_timeout_window() {
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(sandbox.credentials(&agent_id).is_some());
 
-    sandbox
-        .cleanup(&agent_id)
-        .expect("manual cleanup should remove persistent credentials");
+    assert!(
+        sandbox.cleanup(&agent_id).is_some(),
+        "manual cleanup should remove persistent credentials"
+    );
     runtime
         .runtime()
         .stop()

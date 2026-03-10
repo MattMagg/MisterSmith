@@ -31,6 +31,10 @@ pub enum AgentClass {
 }
 
 /// Per-agent NATS credentials scoped by lifecycle class.
+///
+/// NOTE: `jwt` and `nats_user` contain sensitive key material. A future hardening
+/// pass should add `zeroize::ZeroizeOnDrop` to clear these fields on drop rather
+/// than relying on the allocator to reclaim the backing memory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SandboxCredentials {
     /// Agent identifier.
@@ -250,6 +254,12 @@ impl SandboxCredentialIssuer {
     }
 
     /// Issue credentials for the given agent and lifecycle class.
+    ///
+    /// If credentials already exist for `agent_id`, the previous entry is silently
+    /// replaced. The old JWT remains valid until its natural expiration since there
+    /// is no revocation step. Callers that re-issue credentials (e.g. after a
+    /// supervision restart) should explicitly [`cleanup`](Self::cleanup) the old
+    /// entry first if revocation semantics are needed.
     pub fn create_credentials(
         &self,
         agent_id: impl Into<String>,
@@ -326,6 +336,7 @@ impl SandboxCredentialIssuer {
     }
 
     /// Remove all expired credentials and return the number removed.
+    #[must_use]
     pub fn cleanup_expired(&self, now_millis: u64) -> usize {
         let mut guard = self.credentials.write();
         let before = guard.len();
