@@ -15,7 +15,7 @@ pub fn public_router() -> Router<AppState> {
 }
 
 /// Build the protected API router with authenticated REST and WebSocket routes.
-pub fn api_router() -> Router<AppState> {
+pub fn protected_api_router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/agents", get(handlers::list_agents))
         .route("/api/v1/agents/{agent_id}", get(handlers::get_agent))
@@ -23,6 +23,11 @@ pub fn api_router() -> Router<AppState> {
         .route("/api/v1/tasks/{task_id}", get(handlers::get_task))
         .route("/api/v1/config", get(handlers::get_config))
         .route("/api/v1/events/ws", any(websocket::ws_handler))
+}
+
+/// Build the complete API router with both public probe and protected routes.
+pub fn api_router() -> Router<AppState> {
+    public_router().merge(protected_api_router())
 }
 
 #[cfg(test)]
@@ -34,13 +39,11 @@ mod tests {
     use tower::ServiceExt;
 
     fn test_app() -> Router {
-        public_router()
-            .merge(api_router())
-            .with_state(AppState::new())
+        api_router().with_state(AppState::new())
     }
 
     fn test_app_with_transport(connected: bool) -> Router {
-        public_router().merge(api_router()).with_state(
+        api_router().with_state(
             AppState::new()
                 .with_transport_health(std::sync::Arc::new(NatsHealthCheck::new(connected))),
         )
