@@ -120,6 +120,7 @@ mister-smith-core          Foundation types, traits, error hierarchy
 | Transport layer | [`spec/transport/transport-layer-specifications.md`](spec/transport/transport-layer-specifications.md) |
 | Security framework | [`spec/security/security-framework.md`](spec/security/security-framework.md) |
 | Phase 9 LLM design | [`specs/009-phase9-llm-provider-integration/`](specs/009-phase9-llm-provider-integration/) |
+| Frontier autonomy note | [`docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`](docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md) |
 | Version baseline | [`VERSION_REFERENCE.md`](VERSION_REFERENCE.md) |
 | Deployment artifacts | [`deploy/`](deploy/) |
 
