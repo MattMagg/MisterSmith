@@ -1,4 +1,4 @@
-use mister_smith_core::{ActorError, ToolError, TopologyError};
+use mister_smith_core::{ActorError, GuardError, ToolError, TopologyError};
 use thiserror::Error;
 
 /// Errors produced by the agent system.
@@ -51,6 +51,9 @@ pub enum AgentSystemError {
 
     #[error("Topology error: {0}")]
     Topology(#[from] TopologyError),
+
+    #[error("Guard error: {0}")]
+    Guard(#[from] GuardError),
 
     #[cfg(feature = "llm")]
     #[error("LLM error: {0}")]

@@ -1,6 +1,9 @@
 //! Supervisor agent role — manages child agent lifecycles.
 
-use mister_smith_core::{Actor, AgentId};
+use mister_smith_core::{
+    Actor, AgentId, ExecutionBranchId, GuardDecision, GuardTarget, InterventionRecord,
+    InterventionType,
+};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -16,6 +19,12 @@ pub enum SupervisorMessage {
     RemoveChild(AgentId),
     /// Query the list of currently supervised children.
     QueryChildren,
+    /// Record a Guard decision affecting supervised execution.
+    RecordGuardDecision(GuardDecision),
+    /// Record an intervention applied to supervised execution.
+    RecordIntervention(InterventionRecord),
+    /// Query stored intervention state.
+    QueryInterventions,
 }
 
 // ---------------------------------------------------------------------------
@@ -27,6 +36,12 @@ pub enum SupervisorMessage {
 pub struct SupervisorState {
     /// IDs of agents currently supervised.
     pub children: Vec<AgentId>,
+    /// Guard decisions recorded by this supervisor.
+    pub guard_decisions: Vec<GuardDecision>,
+    /// Intervention records recorded by this supervisor.
+    pub interventions: Vec<InterventionRecord>,
+    /// Branches currently isolated under supervision.
+    pub isolated_branches: Vec<ExecutionBranchId>,
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +100,31 @@ impl Actor for SupervisorAgent {
                 let count = ids.len();
                 Ok(serde_json::json!({ "children": ids, "count": count }))
             }
+            SupervisorMessage::RecordGuardDecision(decision) => {
+                if decision.intervention == InterventionType::BranchIsolation {
+                    if let GuardTarget::Branch(branch_id) = &decision.target_scope {
+                        if !state.isolated_branches.contains(&branch_id) {
+                            state.isolated_branches.push(*branch_id);
+                        }
+                    }
+                }
+                state.guard_decisions.push(decision);
+                Ok(serde_json::json!({
+                    "guard_decisions": state.guard_decisions.len(),
+                    "isolated_branches": state.isolated_branches.iter().map(|branch| branch.to_string()).collect::<Vec<_>>(),
+                }))
+            }
+            SupervisorMessage::RecordIntervention(record) => {
+                state.interventions.push(record);
+                Ok(serde_json::json!({
+                    "interventions": state.interventions.len(),
+                }))
+            }
+            SupervisorMessage::QueryInterventions => Ok(serde_json::json!({
+                "guard_decisions": state.guard_decisions.len(),
+                "interventions": state.interventions.len(),
+                "isolated_branches": state.isolated_branches.iter().map(|branch| branch.to_string()).collect::<Vec<_>>(),
+            })),
         }
     }
 

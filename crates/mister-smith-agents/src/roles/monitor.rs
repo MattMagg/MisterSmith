@@ -1,6 +1,6 @@
 //! Monitor agent role — observes and reports on system state.
 
-use mister_smith_core::{Actor, AgentId};
+use mister_smith_core::{Actor, AgentId, GuardDecision, InterventionRecord};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -26,6 +26,12 @@ pub enum MonitorMessage {
     },
     /// Query all active alerts.
     QueryAlerts,
+    /// Record a Guard decision for operator-visible supervision state.
+    GuardDecisionEvaluated(GuardDecision),
+    /// Record an applied intervention.
+    InterventionApplied(InterventionRecord),
+    /// Query Guard/intervention counts.
+    QuerySupervision,
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +43,10 @@ pub enum MonitorMessage {
 pub struct MonitorState {
     /// Number of alerts currently active.
     pub active_alerts: u64,
+    /// Guard decisions seen by this monitor.
+    pub guard_decisions: Vec<GuardDecision>,
+    /// Interventions seen by this monitor.
+    pub interventions: Vec<InterventionRecord>,
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +106,28 @@ impl Actor for MonitorAgent {
                 "value": value,
             })),
             MonitorMessage::QueryAlerts => Ok(serde_json::json!({
+                "active_alerts": state.active_alerts,
+            })),
+            MonitorMessage::GuardDecisionEvaluated(decision) => {
+                if decision.operator_visibility {
+                    state.active_alerts += 1;
+                }
+                state.guard_decisions.push(decision);
+                Ok(serde_json::json!({
+                    "guard_decisions": state.guard_decisions.len(),
+                    "active_alerts": state.active_alerts,
+                }))
+            }
+            MonitorMessage::InterventionApplied(record) => {
+                state.interventions.push(record);
+                Ok(serde_json::json!({
+                    "interventions": state.interventions.len(),
+                    "active_alerts": state.active_alerts,
+                }))
+            }
+            MonitorMessage::QuerySupervision => Ok(serde_json::json!({
+                "guard_decisions": state.guard_decisions.len(),
+                "interventions": state.interventions.len(),
                 "active_alerts": state.active_alerts,
             })),
         }
@@ -165,7 +197,10 @@ mod tests {
     #[tokio::test]
     async fn query_alerts_returns_count() {
         let mut agent = MonitorAgent::new(AgentId::new());
-        let mut state = MonitorState { active_alerts: 5 };
+        let mut state = MonitorState {
+            active_alerts: 5,
+            ..MonitorState::default()
+        };
 
         let resp = agent
             .handle_message(MonitorMessage::QueryAlerts, &mut state)

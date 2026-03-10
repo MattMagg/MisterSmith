@@ -1,8 +1,9 @@
 use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
-    ExecutionBranchId, ExecutionGraphId, GraphState, RevocationState, TaskId, TopologyKind,
-    TopologyRationale,
+    ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
+    GuardEvidence, HealthState, InterventionRecordId, InterventionType, ProfileSnapshot,
+    ProfileSnapshotId, ProfileTarget, RevocationState, TaskId, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
@@ -116,7 +117,14 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             reserved_units: 3072,
             policy: BudgetPolicy::Summarize,
         }],
-        interventions: vec![],
+        interventions: vec![mister_smith_core::InterventionRecord {
+            record_id: InterventionRecordId::new(),
+            decision_id: GuardDecisionId::new(),
+            before_state: serde_json::json!({"state": "running"}),
+            after_state: Some(serde_json::json!({"state": "isolated"})),
+            rationale: "branch isolation".to_string(),
+            emitted_at: chrono::Utc::now(),
+        }],
         delegation_alerts: vec![
             DelegationAlert {
                 capability_id: Some(CapabilityId::new()),
@@ -131,6 +139,29 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
                 message: "operator review required for widened authority".to_string(),
             },
         ],
+        profiles: vec![ProfileSnapshot {
+            profile_id: ProfileSnapshotId::new(),
+            target: ProfileTarget::Branch,
+            health_state: HealthState::Degraded,
+            latency_window: None,
+            error_window: None,
+            semantic_signals: vec![],
+            updated_at: chrono::Utc::now(),
+        }],
+        guard_decisions: vec![GuardDecision {
+            decision_id: GuardDecisionId::new(),
+            failure_class: FailureClass::Semantic,
+            intervention: InterventionType::ContextRefresh,
+            evidence: GuardEvidence {
+                profile_id: None,
+                signal_descriptions: vec!["loop detected".to_string()],
+                checkpoint_ids: vec![],
+                notes: vec!["operator review available".to_string()],
+            },
+            target_scope: mister_smith_core::GuardTarget::Branch(branch_id),
+            operator_visibility: true,
+        }],
+        conservative_reasons: vec!["control-plane state unavailable".to_string()],
     };
 
     let json = serde_json::to_string(&view).unwrap();

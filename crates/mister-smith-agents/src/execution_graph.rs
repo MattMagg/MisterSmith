@@ -304,4 +304,18 @@ impl ExecutionGraph {
             .filter(|node| node.dependencies.is_empty())
             .collect()
     }
+
+    /// Borrow a branch by identifier.
+    pub fn branch(&self, branch_id: &ExecutionBranchId) -> Option<&ExecutionBranch> {
+        self.branches
+            .iter()
+            .find(|branch| branch.branch_id == *branch_id)
+    }
+
+    /// Mutably borrow a branch by identifier.
+    pub fn branch_mut(&mut self, branch_id: &ExecutionBranchId) -> Option<&mut ExecutionBranch> {
+        self.branches
+            .iter_mut()
+            .find(|branch| branch.branch_id == *branch_id)
+    }
 }

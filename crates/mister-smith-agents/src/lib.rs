@@ -35,12 +35,18 @@ pub mod config;
 pub mod errors;
 /// Execution graph contracts and validation.
 pub mod execution_graph;
+/// Predictive Guard / Advisor policy and context.
+pub mod guard;
 /// Periodic heartbeat emission for liveness detection.
 pub mod heartbeat;
+/// Typed intervention application for Guard decisions.
+pub mod intervention;
 /// Inter-agent messaging helpers (send, request, broadcast, durable).
 pub mod messaging;
 /// Task decomposition and result aggregation orchestration.
 pub mod orchestrator;
+/// Supervisory profile helpers and conservative fallback notes.
+pub mod profile;
 /// Cross-boundary quarantine inspection actor.
 pub mod quarantine;
 /// Concurrent agent registry with discovery queries.
@@ -65,9 +71,12 @@ pub use errors::AgentSystemError;
 pub use execution_graph::{
     BranchCheckpoint, ExecutionBranch, ExecutionEdge, ExecutionGraph, ExecutionNode,
 };
+pub use guard::{Guard, GuardContext, GuardPolicy};
 pub use heartbeat::HeartbeatEmitter;
+pub use intervention::InterventionEngine;
 pub use messaging::{broadcast, request, send, send_durable};
 pub use orchestrator::Orchestrator;
+pub use profile::ProfileAssessment;
 pub use quarantine::{QuarantineActor, QuarantineTransfer, SharedStateAccess};
 pub use registry::AgentRegistry;
 pub use sandbox::{AgentSandbox, SandboxedAgentRuntime};

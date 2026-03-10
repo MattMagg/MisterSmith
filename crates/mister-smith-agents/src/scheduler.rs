@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use mister_smith_core::{AgentId, TaskId};
+use mister_smith_core::{AgentId, InterventionType, TaskId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -219,6 +219,18 @@ impl TaskScheduler {
         Ok(())
     }
 
+    /// Cancel a task without widening the failure scope to sibling work.
+    pub fn cancel(&self, task_id: &TaskId) -> Result<(), AgentSystemError> {
+        let mut entry = self
+            .tasks
+            .get_mut(task_id)
+            .ok_or_else(|| AgentSystemError::SchedulingError("Task not found".into()))?;
+
+        entry.state = TaskState::Cancelled;
+        entry.completed_at = Some(Utc::now());
+        Ok(())
+    }
+
     /// Reset a task to Pending for reassignment.
     pub fn reset(&self, task_id: &TaskId) -> Result<(), AgentSystemError> {
         let mut entry = self
@@ -231,6 +243,24 @@ impl TaskScheduler {
         entry.assigned_at = None;
         entry.error_message = None;
         Ok(())
+    }
+
+    /// Apply a typed Guard intervention to a single scheduled task.
+    pub fn apply_intervention(
+        &self,
+        task_id: &TaskId,
+        intervention: InterventionType,
+    ) -> Result<(), AgentSystemError> {
+        match intervention {
+            InterventionType::Retry
+            | InterventionType::Failover
+            | InterventionType::ContextRefresh
+            | InterventionType::Reassignment => self.reset(task_id),
+            InterventionType::BranchIsolation | InterventionType::Escalation => {
+                self.cancel(task_id)
+            }
+            InterventionType::Abort => self.fail(task_id, "aborted by guard intervention"),
+        }
     }
 
     /// Get a task by ID.

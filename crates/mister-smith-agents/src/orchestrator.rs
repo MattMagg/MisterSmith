@@ -1,15 +1,22 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use mister_smith_core::{AgentId, TaskId};
+use mister_smith_core::{AgentId, GuardDecision, InterventionRecord, ProfileSnapshot, TaskId};
 use tracing::instrument;
 
 use crate::config::TaskState;
 use crate::errors::AgentSystemError;
 use crate::execution_graph::ExecutionGraph;
+use crate::guard::{Guard, GuardContext, GuardPolicy};
+use crate::intervention::InterventionEngine;
+use crate::profile::ProfileAssessment;
 use crate::roles::planner::planner_output_from_subtasks;
 use crate::scheduler::{ResultAggregator, TaskAssignment, TaskDecomposer, TaskScheduler};
 use crate::topology::{TopologyCompiler, TopologySignals};
+use mister_smith_events::{
+    AutonomyStatusView, BranchSummary, ContextPressureSummary, DelegationAlert,
+    ExecutionGraphSummary, TopologyPlanSummary,
+};
 
 /// Orchestrator holds decomposer, aggregator, team, and scheduler
 /// to manage the full lifecycle of a complex task.
@@ -19,7 +26,13 @@ pub struct Orchestrator {
     scheduler: Arc<TaskScheduler>,
     topology_compiler: TopologyCompiler,
     topology_signals: TopologySignals,
+    guard: Guard,
+    intervention_engine: InterventionEngine,
     execution_graphs: DashMap<TaskId, ExecutionGraph>,
+    guard_decisions: DashMap<TaskId, Vec<GuardDecision>>,
+    interventions: DashMap<TaskId, Vec<InterventionRecord>>,
+    profiles: DashMap<TaskId, Vec<ProfileAssessment>>,
+    conservative_reasons: DashMap<TaskId, Vec<String>>,
 }
 
 impl Orchestrator {
@@ -34,7 +47,13 @@ impl Orchestrator {
             scheduler,
             topology_compiler: TopologyCompiler,
             topology_signals: TopologySignals::default(),
+            guard: Guard::new(GuardPolicy::default()),
+            intervention_engine: InterventionEngine,
             execution_graphs: DashMap::new(),
+            guard_decisions: DashMap::new(),
+            interventions: DashMap::new(),
+            profiles: DashMap::new(),
+            conservative_reasons: DashMap::new(),
         }
     }
 
@@ -70,6 +89,128 @@ impl Orchestrator {
         self.execution_graphs
             .get(workflow_id)
             .map(|entry| entry.value().clone())
+    }
+
+    /// Register a precompiled execution graph for later supervision or inspection.
+    pub fn register_execution_graph(&self, graph: ExecutionGraph) {
+        self.execution_graphs.insert(graph.workflow_id, graph);
+    }
+
+    /// Evaluate and apply a typed Guard decision against an existing workflow.
+    pub async fn supervise(
+        &self,
+        workflow_id: &TaskId,
+        context: GuardContext,
+    ) -> Result<(GuardDecision, InterventionRecord), AgentSystemError> {
+        let decision = self.guard.evaluate(&context)?;
+        let record = {
+            let mut graph = self.execution_graphs.get_mut(workflow_id).ok_or_else(|| {
+                AgentSystemError::OrchestrationError(format!(
+                    "No execution graph found for workflow {workflow_id}"
+                ))
+            })?;
+            self.intervention_engine
+                .apply(&decision, &self.scheduler, graph.value_mut())?
+        };
+
+        self.guard_decisions
+            .entry(*workflow_id)
+            .or_default()
+            .push(decision.clone());
+        self.interventions
+            .entry(*workflow_id)
+            .or_default()
+            .push(record.clone());
+        if let Some(profile) = context.profile().cloned() {
+            self.profiles.entry(*workflow_id).or_default().push(profile);
+        }
+        let conservative = decision
+            .evidence
+            .notes
+            .iter()
+            .filter(|note| note.contains("conservative fallback"))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !conservative.is_empty() {
+            self.conservative_reasons
+                .entry(*workflow_id)
+                .or_default()
+                .extend(conservative);
+        }
+
+        Ok((decision, record))
+    }
+
+    /// Build the operator-visible autonomy status for a workflow.
+    pub fn autonomy_status(&self, workflow_id: &TaskId) -> Option<AutonomyStatusView> {
+        let graph = self.execution_graph(workflow_id)?;
+        let profiles = self
+            .profiles
+            .get(workflow_id)
+            .map(|profiles| {
+                profiles
+                    .iter()
+                    .filter_map(ProfileAssessment::snapshot)
+                    .cloned()
+                    .collect::<Vec<ProfileSnapshot>>()
+            })
+            .unwrap_or_default();
+        let guard_decisions = self
+            .guard_decisions
+            .get(workflow_id)
+            .map(|decisions| decisions.value().clone())
+            .unwrap_or_default();
+        let interventions = self
+            .interventions
+            .get(workflow_id)
+            .map(|records| records.value().clone())
+            .unwrap_or_default();
+        let conservative_reasons = self
+            .conservative_reasons
+            .get(workflow_id)
+            .map(|notes| notes.value().clone())
+            .unwrap_or_default();
+
+        Some(AutonomyStatusView {
+            graph: ExecutionGraphSummary {
+                graph_id: graph.graph_id,
+                workflow_id: graph.workflow_id,
+                state: graph.state,
+                branch_count: graph.branches.len(),
+                node_count: graph.nodes.len(),
+                active_topology: Some(graph.topology_plan.topology_kind),
+            },
+            topology: TopologyPlanSummary {
+                graph_id: graph.graph_id,
+                topology_kind: graph.topology_plan.topology_kind,
+                parallelism_width: graph.topology_plan.parallelism_width,
+                coordination_policy: graph.topology_plan.coordination_policy,
+                rationale: graph.topology_plan.rationale.clone(),
+                fallback_topology: graph.topology_plan.fallback_topology,
+            },
+            branches: graph
+                .branches
+                .iter()
+                .map(|branch| BranchSummary {
+                    branch_id: branch.branch_id,
+                    graph_id: branch.graph_id,
+                    state: branch.state,
+                    assigned_agents: branch.assigned_agents.clone(),
+                    checkpoint_id: graph
+                        .checkpoint_lineage
+                        .iter()
+                        .find(|checkpoint| checkpoint.branch_id == branch.branch_id)
+                        .map(|checkpoint| checkpoint.checkpoint_id),
+                    recovery_strategy: branch.recovery_strategy,
+                })
+                .collect(),
+            memory_pressure: Vec::<ContextPressureSummary>::new(),
+            interventions,
+            delegation_alerts: Vec::<DelegationAlert>::new(),
+            profiles,
+            guard_decisions,
+            conservative_reasons,
+        })
     }
 
     /// Aggregate results from completed subtasks of a parent task.
