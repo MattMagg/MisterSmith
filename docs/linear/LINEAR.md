@@ -253,6 +253,8 @@ Linear documents are used for reference material linked to projects:
 | Symphony Intake Template | MisterSmith Workspace Docs | Canonical issue intake and readiness template |
 | Symphony Linear Feature Matrix | MisterSmith Workspace Docs | Business vs Enterprise feature decisions and adoption stance |
 | Symphony Linear Operating Model | MisterSmith Workspace Docs | Current-state audit, target model, and manual follow-up checklist |
+| Execution Queue Operating Rules | MisterSmith Execution Queue | Project-specific routing and dispatch rules for the live Symphony queue |
+| Validated Backlog Admission Rules | MisterSmith Validated Backlog | Project-specific gating rules for what belongs in curated backlog |
 | Phase 9.1 Security Hardening Spec | Phase 9.1 | Security hardening specification |
 | Research Corpus Index | MisterSmith Workspace Docs | Research program navigation |
 
@@ -269,6 +271,10 @@ Post initiative-level status updates with health indicators:
 | Off Track | Behind schedule, needs intervention |
 
 Include: current state, key blockers, plan for the next cycle.
+
+The active execution queue now has a native Linear reminder cadence configured:
+
+- `MisterSmith Execution Queue`: weekly reminder, Mondays at 9:00 local time for the project lead
 
 ## Integration Points
 
@@ -289,13 +295,16 @@ Preference:
 - use `Tavily` for quick verification or extraction from known pages
 - for Linear product behavior, use official Linear docs and developer docs as the source base
 
-### GitHub Integration (manual setup required)
+### GitHub Integration
+
+GitHub connection is still a workspace/integration setting, but the team-level status automation is
+now aligned to the Symphony workflow:
 
 Settings > Integrations > GitHub > Connect `matthewmaggio/Mister-Smith`
 
 - Branch creation → issue moves to In Progress
-- PR opened / review requested → Symphony issues move to Human Review, not In Review
-- Approved and ready to land → issue moves to Merging
+- PR opened / review requested → issue moves to Human Review, not In Review
+- PR becomes mergeable → issue moves to Merging
 - PR merge to `main` → issue moves to Done
 - Include `MS-###` in branch names and commit messages
 
@@ -392,6 +401,7 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 - Validated future backlog: `MisterSmith Validated Backlog`
 - Workspace docs hub: `MisterSmith Workspace Docs`
 - Completed historical queue: `Phase 9.1: Security Hardening` (archived)
+- Queue reminder cadence: weekly Monday 9:00 local time to the project lead
 - `Todo` is a live dispatch queue, not a generic "next work" list
 - If `Todo` looks empty, verify whether the runnable issue has already been claimed and moved to `In Progress`
 
