@@ -1788,6 +1788,7 @@ dependencies = [
  "mister-smith-security",
  "mister-smith-supervision",
  "mister-smith-transport",
+ "nkeys",
  "semver",
  "serde",
  "serde_json",

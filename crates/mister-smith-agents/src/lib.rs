@@ -43,6 +43,8 @@ pub mod orchestrator;
 pub mod registry;
 /// Nine specialized agent role implementations.
 pub mod roles;
+/// Agent sandbox integration for lifecycle-scoped credentials.
+pub mod sandbox;
 /// Task scheduling with state machine and deadline monitoring.
 pub mod scheduler;
 /// Ephemeral team management for multi-agent collaboration.
@@ -58,6 +60,7 @@ pub use heartbeat::HeartbeatEmitter;
 pub use messaging::{broadcast, request, send, send_durable};
 pub use orchestrator::Orchestrator;
 pub use registry::AgentRegistry;
+pub use sandbox::{AgentSandbox, SandboxedAgentRuntime};
 pub use scheduler::{DeadlineMonitor, ResultAggregator, TaskDecomposer, TaskScheduler};
 pub use team::Team;
 pub use tool_bus::ToolBus;
