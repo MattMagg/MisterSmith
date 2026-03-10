@@ -91,6 +91,15 @@ Instructions:
 - GitHub CLI auth may be required for PR workflows.
 - If required non-GitHub auth or tooling is missing, record the blocker in the workpad and move the issue according to the workflow.
 
+## External knowledge and integrations
+
+- If the session has Rube MCP available, use it as the gateway for external apps, APIs, MCPs, and web research.
+- Use Context7 via Rube for version-specific framework or library documentation.
+- Use GitHub, Linear, and Mem0 via Rube when those systems are the source of truth.
+- Prefer Parallel via Rube for deeper or broader multi-source research that benefits from structured synthesis.
+- Prefer Tavily via Rube for lighter search, quick verification, or targeted extraction from known pages.
+- For Linear product behavior or configuration questions, ground claims in official Linear docs and developer docs even when Parallel or Tavily are doing the retrieval.
+
 ## Related skills
 
 - `linear`: raw Linear GraphQL operations during the Symphony session.
@@ -108,6 +117,9 @@ Instructions:
 - Keep ticket metadata current.
 - Treat any `Validation`, `Test Plan`, or `Testing` section in the issue as mandatory acceptance input.
 - When you discover meaningful out-of-scope work, create a follow-up issue instead of silently expanding scope.
+- This workflow is scoped to the single `tracker.project_slug` in this file; issues outside that watched project will not dispatch.
+- An empty `Todo` queue means there is no runnable issue in the watched project right now; it does not mean the `Todo` state is missing.
+- Do not move blocked or future work into the watched project just to keep Symphony busy.
 
 ## Status map
 

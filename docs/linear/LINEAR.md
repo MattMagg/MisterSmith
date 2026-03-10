@@ -17,42 +17,56 @@ Initiative (strategic goal)
 
 ### Initiatives
 
-| Initiative | Status | Scope |
-|-----------|--------|-------|
-| Mister Smith Framework | Active | Top-level parent for all sub-initiatives |
-| Framework Foundation & Stability | Completed | Phases 1-4 |
-| Security & Data Layer | Completed | Phases 5-6 |
-| Intelligence Layer | Active | Phases 7-9 |
-| Production Hardening | Planned | Phase 9.1+ |
-| Research & Innovation | Active | Ongoing research program |
+Use initiatives as the strategic layer, not as Symphony's dispatch boundary. Historical initiatives
+remain useful for reporting and status updates, but the current operational focus is
+`Production Hardening`, which is active and owns the current hardening queue plus follow-on
+validated backlog.
 
 ### Projects
 
-One project per implementation phase, plus workstream-specific projects (e.g., "Phase 9 Bug Fixes"). Each project is linked to its parent initiative and the MisterSmith team.
+Projects serve two different purposes:
 
-| Project | Initiative | State |
-|---------|-----------|-------|
-| Phase 1: Foundation | Foundation & Stability | Completed |
-| Phase 2: Runtime & Async | Foundation & Stability | Completed |
-| Phase 3: Actor System & Supervision | Foundation & Stability | Completed |
-| Phase 4: Transport & Messaging | Foundation & Stability | Completed |
-| Phase 5: Security | Security & Data Layer | Completed |
-| Phase 6: Persistence & State | Security & Data Layer | Completed |
-| Phase 7: Agent System | Intelligence Layer | Completed |
-| Phase 8: Operations | Intelligence Layer | Completed |
-| Phase 9: LLM Provider Integration | Intelligence Layer | Completed |
-| Phase 9 Bug Fixes | Intelligence Layer | In Progress |
-| Phase 9.1: Security Hardening | Production Hardening | Planned |
+1. planning and reporting
+2. Symphony dispatch
+
+Do not assume those are the same thing.
+
+Historical phase projects still exist for reporting, docs, and status updates. Symphony's live
+queue is currently a single watched project, and validated future work is intentionally kept in a
+separate backlog project.
+
+| Project | Role | State | Notes |
+|---------|------|-------|-------|
+| Phase 9.1: Security Hardening | Active Queue | In Progress | Current watched project for Symphony |
+| Framework Hardening Backlog | Validated Backlog | Backlog | Curated repo-validated future work outside the live queue |
+| Phase 9 Bug Fixes | Historical workstream | Completed | Completed focused bug-fix batch |
+| Phase 1-9 phase projects | Historical Phase | Completed | Retained for reporting, docs, and historical traceability |
+
+### Project Role Labels
+
+Project role is encoded with project labels, not additional issue labels:
+
+- `Active Queue`: the single project Symphony is currently watching
+- `Validated Backlog`: repo-validated work that should not dispatch yet
+- `Historical Phase`: completed phase or batch projects retained for context
+
+### Current Dispatch Boundary
+
+Symphony currently watches one `project_slug` from `WORKFLOW.md`. Only issues in that watched
+project and in active workflow states can dispatch. Project placement is therefore operational, not
+decorative.
+
+Do not collapse all planning into a single giant `MisterSmith` project just to satisfy that current
+runtime limitation. If project switching becomes the real bottleneck, prefer a dedicated execution
+project such as `MisterSmith Queue` over flattening the entire workspace taxonomy.
 
 ### Cycles
 
-Two-week cycles aligned to implementation sprints:
+Use cycles only for scheduled near-term work.
 
-- **Cycle 1** (Mar 9-23): Bug fixes + initial security hardening
-- **Cycle 2** (Apr 6-20): Remaining security hardening + verification
-- **Gap** (Mar 23 - Apr 6): Spillover buffer
-
-New cycles should follow the same two-week cadence. Assign issues to cycles during sprint planning.
+- Leave `Triage` and validated backlog items cycle-free until they are actually staged.
+- Assign a cycle only when the issue is moving toward `Todo`.
+- Do not bulk-assign the validated backlog to cycles just for visibility.
 
 ## Label System
 
@@ -78,6 +92,12 @@ New cycles should follow the same two-week cadence. Assign issues to cycles duri
 
 **Source** (`#F2994A`): source:code-review, source:spec-validation, source:research, source:ci-cd
 
+### Operational Standalone Labels
+
+- `Validated`: the work has been repo-validated and accepted as real
+- `Symphony Candidate`: the issue is structured tightly enough for unattended execution once
+  scheduled
+
 ### Group Label Constraint
 
 Linear group labels are **exclusive** — you can only apply one label from each group to an issue. For issues spanning multiple crates, apply the **primary** crate label and note secondary crates in the issue description (e.g., "Also touches: `crate:transport`").
@@ -100,12 +120,21 @@ Use Linear's built-in priority field, not labels:
 Every issue should include:
 
 1. **Title**: Short, descriptive (under 70 characters)
-2. **Project**: The phase or workstream it belongs to
-3. **Milestone**: The deliverable checkpoint within the project
+2. **Project**:
+   - leave raw intake in `Triage` minimally routed until validated
+   - use the watched project only for active-scope runnable work
+   - use `Framework Hardening Backlog` for validated future work outside the current queue
+3. **Milestone**: Only when the project actively uses milestones
 4. **Priority**: 1-4 using Linear's built-in field
-5. **Labels**: Type label + Phase label + Crate label + Source label (where applicable)
-6. **Assignee**: The person responsible
-7. **Cycle**: The sprint it's planned for
+5. **Labels**:
+   - one type label
+   - one primary crate label
+   - one source label when the source is known
+   - one phase label when it adds routing value
+   - `Validated` when the finding is repo-grounded
+   - `Symphony Candidate` when the issue is execution-ready once scheduled
+6. **Assignee**: Optional until real human ownership exists
+7. **Cycle**: Only after the issue is actually scheduled; validated backlog items can remain cycle-free
 8. **Description**: Structured markdown with:
    - Context (what spec, finding, or requirement drives this)
    - Location (`file:line` references for bugs)
@@ -152,6 +181,15 @@ Use Linear's blocking feature for dependency chains. Document the dependency in 
 **Blocked by**: [issue identifier] — [reason]
 ```
 
+### Admission Rules
+
+- `Triage`: raw suggestions, scanner output, Slack/Asks intake, or CI findings that are not yet repo-validated
+- `Backlog`: validated but unscheduled
+- `Todo`: unblocked, in the watched project, and safe to start now
+- `Symphony Candidate` does not mean `Todo`; it means the issue is safe once scheduled
+- An empty `Todo` list means nothing is runnable right now; it does not mean the state disappeared
+- Do not move work into the watched project simply to make it visible
+
 ### Branch Naming
 
 Linear auto-generates branch names from issues. The convention is:
@@ -166,10 +204,11 @@ Include `MS-###` in commit messages and PR titles to link them to Linear issues.
 
 | Status | Type | Meaning |
 |--------|------|---------|
-| Backlog | backlog | Acknowledged but not scheduled |
-| Todo | unstarted | Scheduled for a cycle, ready to start |
+| Triage | triage | Raw intake not yet validated |
+| Backlog | backlog | Validated but unscheduled |
+| Todo | unstarted | Unblocked work in the watched project, ready to start |
 | In Progress | started | Actively being worked on |
-| In Review | started | Code written, PR open, awaiting review |
+| In Review | started | Optional human-only review state; avoid using it for the Symphony path |
 | Human Review | started | Agent finished, awaiting human approval (Symphony) |
 | Rework | started | Reviewer requested changes, agent restarts (Symphony) |
 | Merging | started | PR approved, agent lands the merge (Symphony) |
@@ -180,13 +219,16 @@ Include `MS-###` in commit messages and PR titles to link them to Linear issues.
 ### Status Transitions (Manual)
 
 ```
-Backlog → Todo (sprint planning)
+Triage → Backlog (validated but not scheduled)
+Backlog → Todo (explicit staging into the watched project)
 Todo → In Progress (work begins)
-In Progress → In Review (PR opened)
+In Progress → In Review (human-only flow)
 In Review → Done (PR merged)
 ```
 
-With GitHub integration, branch creation moves to In Progress and PR merge moves to Done automatically.
+With GitHub integration, branch creation should move to `In Progress`, PR open/review-requested
+should move Symphony issues to `Human Review`, ready-to-merge work should move to `Merging`, and
+merge to `main` should move to `Done`.
 
 ### Status Transitions (Symphony)
 
@@ -208,6 +250,9 @@ Linear documents are used for reference material linked to projects:
 | Architecture Overview | Phase 1 | System architecture summary |
 | Crate Dependency Map | Phase 1 | 20-crate workspace structure |
 | Development Workflow | Phase 1 | Build, test, commit conventions |
+| Symphony Intake Template | Phase 1 | Canonical issue intake and readiness template |
+| Symphony Linear Feature Matrix | Phase 1 | Business vs Enterprise feature decisions and adoption stance |
+| Symphony Linear Operating Model | Phase 1 | Current-state audit, target model, and manual follow-up checklist |
 | Phase 9.1 Security Hardening Spec | Phase 9.1 | Security hardening specification |
 | Research Corpus Index | Phase 1 | Research program navigation |
 
@@ -227,12 +272,31 @@ Include: current state, key blockers, plan for the next cycle.
 
 ## Integration Points
 
+### External Knowledge (via Rube MCP)
+
+When agents need external documentation, research, or app connections, prefer Rube as the gateway.
+
+- `Context7 MCP`: version-specific API and library docs
+- `GitHub`: PR, branch, review, and CI state
+- `Linear`: live issue, project, view, and document state
+- `Mem0`: long-term memory when the task actually needs it
+- `Parallel`: deeper multi-source research and structured synthesis
+- `Tavily`: lighter search and targeted extraction
+
+Preference:
+
+- use `Parallel` for deeper or broader research
+- use `Tavily` for quick verification or extraction from known pages
+- for Linear product behavior, use official Linear docs and developer docs as the source base
+
 ### GitHub Integration (manual setup required)
 
 Settings > Integrations > GitHub > Connect `matthewmaggio/Mister-Smith`
 
-- PR merge → issue moves to Done
 - Branch creation → issue moves to In Progress
+- PR opened / review requested → Symphony issues move to Human Review, not In Review
+- Approved and ready to land → issue moves to Merging
+- PR merge to `main` → issue moves to Done
 - Include `MS-###` in branch names and commit messages
 
 ### Claude Code Integration (manual setup required)
@@ -247,7 +311,8 @@ Settings > Preferences > Enable Claude Code
 Team Settings > Triage > Enable
 
 - New issues from integrations go to Triage first
-- Review and assign during daily triage or sprint planning
+- Review and route during daily triage or sprint planning
+- Keep Triage as the only raw-intake state; do not let suggestions bypass it directly into backlog or queue
 
 ## Working with Specs
 
@@ -284,6 +349,9 @@ When adding a new crate to the workspace:
 
 [OpenAI Symphony](https://github.com/openai/symphony) orchestrates Codex agents against Linear issues. It polls for `Todo` issues, spawns a Codex `app-server` per issue, and manages the full lifecycle through the status state machine.
 
+Important: Symphony is currently scoped to one watched `project_slug`. Issues outside that watched
+project do not dispatch, even if their status is `Todo`.
+
 ### State Machine
 
 ```
@@ -316,6 +384,21 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 | `polling.interval_ms` | 5000 |
 | `agent.max_concurrent_agents` | 10 |
 | `agent.max_turns` | 150 |
+
+### Current Queue Contract
+
+- Current watched project: `Phase 9.1: Security Hardening`
+- Current watched slug: `phase-91-security-hardening-e439446ddfb9`
+- Validated future backlog: `Framework Hardening Backlog`
+- `Todo` is a live dispatch queue, not a generic "next work" list
+- If `Todo` looks empty, verify whether the runnable issue has already been claimed and moved to `In Progress`
+
+### Future Optimization
+
+If project retargeting becomes the main operational pain point, prefer a dedicated execution
+project such as `MisterSmith Queue` rather than collapsing all planning into one `MisterSmith`
+project. The better long-term fix is teaching Symphony to watch multiple projects or a team plus
+filters instead of a single project slug.
 
 ### Required Credentials
 

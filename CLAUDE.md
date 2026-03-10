@@ -137,10 +137,15 @@ Changes to these files cascade across the architecture:
 
 ## Available Apps (via Rube MCP)
 
+Use Rube as the gateway whenever you need an external MCP, API, or research connection. Prefer Parallel for deeper multi-source research, and prefer Tavily for lighter search or targeted extraction.
+
 The following apps are connected and available for use. Select the most appropriate app or tool based on the task at hand.
 
 | App | Description |
 |-----|-------------|
 | **Context7 MCP** | Fetches up-to-date, version-specific documentation and code examples directly into the prompt. Use when you need accurate library/framework docs or API references. |
 | **GitHub** | Code hosting and version control platform. Use for managing repositories, creating/reviewing pull requests, tracking issues, and CI/CD workflows. |
-| **Tavily** | AI-optimized search and data retrieval. Use for quickly searching the web or filtering relevant information from documents and databases. Load the Tavily-best-practices skill whenever you need to use Tavily > .claude/skills/tavily-best-practices |
+| **Linear** | Streamlined issue tracking and project planning tool. Use for managing issues, sprints, views, and project workflows with GitHub integrations. |
+| **Mem0** | Self-improving memory layer for LLM applications. Use for persisting, retrieving, and managing long-term memory across agent sessions and conversations. |
+| **Parallel** | Automated web research API. Use for transforming natural language queries into structured, schema-compliant research outputs at scale. |
+| **Tavily** | AI-optimized search and data retrieval. Use for quickly searching the web or filtering relevant information from documents and databases. Load the Tavily-best-practices skill whenever you need to use Tavily. |
