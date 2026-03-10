@@ -107,8 +107,10 @@ mod inner {
             // Batch insert
             let count = self.repository.append_batch(&entries).await?;
 
-            let new_ids: HashSet<String> =
-                new_events.into_iter().map(|event| event.event_id.clone()).collect();
+            let new_ids: HashSet<String> = new_events
+                .into_iter()
+                .map(|event| event.event_id.clone())
+                .collect();
 
             // Prevent unbounded growth — if tracking set exceeds 2x batch size,
             // only keep the newly-persisted IDs (not all ring buffer events).
