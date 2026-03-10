@@ -27,22 +27,22 @@ stories US1-US6 and audit findings F1-F7.
 
 **Goal**: HMAC-SHA256 message signing with nonce-based replay prevention and key rotation.
 
-- [ ] S001 [US1] Add `signature: Option<String>`, `nonce: Option<String>`, and
+- [x] S001 [US1] Add `signature: Option<String>`, `nonce: Option<String>`, and
   `capability_token: Option<String>` to `MessageEnvelope` in
   `crates/mister-smith-transport/src/envelope.rs` with `#[serde(default)]`.
-- [ ] S002 [US1] Create `crates/mister-smith-security/src/message_signer.rs` with
+- [x] S002 [US1] Create `crates/mister-smith-security/src/message_signer.rs` with
   `MessageSigner` trait: `sign()`, `verify()`, `generate_nonce()`, active key, grace keys
   for rotation, bounded nonce window for replay detection.
-- [ ] S003 [P] [US1] Implement HMAC-SHA256 signing using `ring` crate: compute signature
+- [x] S003 [P] [US1] Implement HMAC-SHA256 signing using `ring` crate: compute signature
   over serialized envelope contents (excluding signature field), produce hex-encoded output.
-- [ ] S004 [P] [US1] Implement monotonic nonce generation (UUID v7 or timestamp + counter)
+- [x] S004 [P] [US1] Implement monotonic nonce generation (UUID v7 or timestamp + counter)
   and replay detection with bounded `HashSet` (configurable window size, FIFO eviction).
-- [ ] S005 [US1] Implement key rotation: `rotate_key()` moves active key to grace list,
+- [x] S005 [US1] Implement key rotation: `rotate_key()` moves active key to grace list,
   `verify()` accepts both active and grace keys, grace keys expire after configurable TTL.
-- [ ] S006 [US1] Integrate `MessageSigner` into `SecureTransport<T>` in
+- [x] S006 [US1] Integrate `MessageSigner` into `SecureTransport<T>` in
   `crates/mister-smith-security/src/middleware/nats_mw.rs` — sign on publish, verify on
   receive, reject invalid/replayed messages with audit event.
-- [ ] S007 [US1] Add signing tests in `crates/mister-smith-security/tests/signer_tests.rs`:
+- [x] S007 [US1] Add signing tests in `crates/mister-smith-security/tests/signer_tests.rs`:
   sign/verify round-trip, forged message rejection, replay rejection, key rotation grace
   period, nonce window overflow/eviction, MessageEnvelope backward compatibility (missing
   signature fields).
@@ -56,16 +56,16 @@ prevention.
 
 **Goal**: Pluggable state sanitization between persistence retrieval and agent consumption.
 
-- [ ] S008 [US3] Create `crates/mister-smith-security/src/state_validator.rs` with
+- [x] S008 [US3] Create `crates/mister-smith-security/src/state_validator.rs` with
   `StateValidator` trait: `validate()` and `check_size()` methods, `ValidatedState` result
   type, `TaintLabel` enum (`Clean`, `Sanitized`, `Suspicious`, `Rejected`).
-- [ ] S009 [US3] Implement JSON Schema-based `StateValidator` using `jsonschema` crate:
+- [x] S009 [US3] Implement JSON Schema-based `StateValidator` using `jsonschema` crate:
   register schemas by type, validate state against registered schema, enforce size limits
   before schema validation.
-- [ ] S010 [US3] Integrate `StateValidator` into `AgentRepository::get_state()` in
+- [x] S010 [US3] Integrate `StateValidator` into `AgentRepository::get_state()` in
   `crates/mister-smith-persistence/src/repository/agent.rs` — validate before returning
   state to caller, emit audit events for rejected/sanitized state.
-- [ ] S011 [US3] Add validation tests in `crates/mister-smith-security/tests/validator_tests.rs`:
+- [x] S011 [US3] Add validation tests in `crates/mister-smith-security/tests/validator_tests.rs`:
   valid state passes, oversized state rejected, schema mismatch rejected, malicious pattern
   detected, taint labels correctly assigned.
 
@@ -77,18 +77,18 @@ prevention.
 
 **Goal**: Dynamic per-connection capability scoping via NATS Auth Callout protocol.
 
-- [ ] S012 [US2] Create `crates/mister-smith-security/src/auth_callout.rs` with
+- [x] S012 [US2] Create `crates/mister-smith-security/src/auth_callout.rs` with
   `AuthCalloutHandler`: trust store, signing key, default permissions, JWT generation
   from `TrustProfile` and `PermissionTier`.
-- [ ] S013 [US2] Implement NATS Auth Callout protocol: subscribe to `$SYS.REQ.USER.AUTH`,
+- [x] S013 [US2] Implement NATS Auth Callout protocol: subscribe to `$SYS.REQ.USER.AUTH`,
   receive connection requests, look up agent trust profile, generate scoped JWT, respond
   with authorization result.
-- [ ] S014 [US2] Implement trust-to-permission mapping: `Full` (score >= 0.9), `Standard`
+- [x] S014 [US2] Implement trust-to-permission mapping: `Full` (score >= 0.9), `Standard`
   (>= 0.5), `Restricted` (>= 0.2), `Quarantined` (< 0.2) with corresponding subject
   permissions and JWT TTL.
-- [ ] S015 [US2] Implement minimal-permission fallback when trust store lookup fails or
+- [x] S015 [US2] Implement minimal-permission fallback when trust store lookup fails or
   service is degraded — default to `Quarantined` tier, not full access.
-- [ ] S016 [US2] Add Auth Callout tests in
+- [x] S016 [US2] Add Auth Callout tests in
   `crates/mister-smith-security/tests/auth_callout_tests.rs` (env-gated with `NATS_URL`):
   dynamic JWT generation, trust tier mapping, permission narrowing on trust degradation,
   fallback behavior, JWT TTL enforcement.
@@ -101,18 +101,18 @@ prevention.
 
 **Goal**: Persistent/ephemeral agent separation with NATS account isolation.
 
-- [ ] S017 [US4] Create `crates/mister-smith-security/src/sandbox.rs` with `AgentClass`
+- [x] S017 [US4] Create `crates/mister-smith-security/src/sandbox.rs` with `AgentClass`
   enum (`Persistent`, `Ephemeral`), `SandboxCredentials`, `IOFirewall`, `CrossingRule`.
-- [ ] S018 [US4] Implement NATS account-based isolation: persistent agents assigned to
+- [x] S018 [US4] Implement NATS account-based isolation: persistent agents assigned to
   persistent account, ephemeral agents to ephemeral account, accounts configured with
   non-overlapping subject spaces.
-- [ ] S019 [US4] Create `crates/mister-smith-agents/src/sandbox.rs` with agent class
+- [x] S019 [US4] Create `crates/mister-smith-agents/src/sandbox.rs` with agent class
   assignment logic: classify agents based on lifecycle, spawn with appropriate
   `SandboxCredentials`, auto-cleanup ephemeral agent credentials on completion/timeout.
-- [ ] S020 [US4] Implement `IOFirewall` with `CrossingRule` enforcement: validate cross-
+- [x] S020 [US4] Implement `IOFirewall` with `CrossingRule` enforcement: validate cross-
   boundary communication against explicit rules, route data through quarantine when
   `requires_quarantine = true`, block unauthorized crossings.
-- [ ] S021 [US4] Add sandbox tests in `crates/mister-smith-security/tests/sandbox_tests.rs`:
+- [x] S021 [US4] Add sandbox tests in `crates/mister-smith-security/tests/sandbox_tests.rs`:
   account isolation (ephemeral cannot subscribe to persistent subjects), credential
   lifecycle (creation, expiration, cleanup), I/O firewall rule enforcement.
 
@@ -124,16 +124,16 @@ prevention.
 
 **Goal**: Cross-boundary data inspection with quarantine for infectious content.
 
-- [ ] S022 [US5] Create `crates/mister-smith-security/src/quarantine.rs` with
+- [x] S022 [US5] Create `crates/mister-smith-security/src/quarantine.rs` with
   `QuarantineAction` enum (`Pass`, `Sanitize`, `Reject`, `Quarantine`) and quarantine
   inspection logic.
-- [ ] S023 [US5] Create `crates/mister-smith-agents/src/quarantine.rs` with quarantine
+- [x] S023 [US5] Create `crates/mister-smith-agents/src/quarantine.rs` with quarantine
   actor implementation: receive cross-boundary data, inspect using `StateValidator` and
   pattern matching, emit `QuarantineAction`, forward or reject data, log to audit.
-- [ ] S024 [US5] Implement COWPOX-inspired edge monitoring pattern: deploy quarantine actors
+- [x] S024 [US5] Implement COWPOX-inspired edge monitoring pattern: deploy quarantine actors
   at agent boundary crossings (persistent <-> ephemeral, agent <-> shared state), inspect
   all data transfers through these actors.
-- [ ] S025 [US5] Add quarantine tests in
+- [x] S025 [US5] Add quarantine tests in
   `crates/mister-smith-security/tests/quarantine_tests.rs`: clean data passes with
   sub-millisecond overhead, malicious payload detected and quarantined, audit event emitted
   for quarantined data, concurrent transfers handled without deadlock.
@@ -147,16 +147,16 @@ clean data.
 
 **Goal**: Infrastructure hardening and delegation chain resolution.
 
-- [ ] S026 [US6] Update `deploy/docker-compose.yml` and `deploy/kubernetes/` manifests to
+- [x] S026 [US6] Update `deploy/docker-compose.yml` and `deploy/kubernetes/` manifests to
   pin NATS server image to >= v2.11.1. Add version check to deployment documentation.
-- [ ] S027 [P] [US6] Create a permission audit script that scans NATS authorization
+- [x] S027 [P] [US6] Create a permission audit script that scans NATS authorization
   configurations for wildcard `>` and `$JS.>` permissions and reports violations.
-- [ ] S028 [P] [US6] Validate `AgentClaims.delegation_chain` in
+- [x] S028 [P] [US6] Validate `AgentClaims.delegation_chain` in
   `crates/mister-smith-security/src/jwt/claims.rs`: check non-empty entries, enforce
   maximum depth (configurable, default 5), detect and reject circular references.
-- [ ] S029 [US6] Propagate `delegation_chain` across agent boundaries: when agent A spawns
+- [x] S029 [US6] Propagate `delegation_chain` across agent boundaries: when agent A spawns
   agent B, B's delegation chain includes A's identity. Validate chain on JWT issuance.
-- [ ] S030 [US6] Add delegation chain tests in
+- [x] S030 [US6] Add delegation chain tests in
   `crates/mister-smith-security/tests/`: valid chain propagation, max depth rejection,
   circular reference detection, empty entry rejection.
 
@@ -166,16 +166,16 @@ clean data.
 
 ## Verification & Readiness
 
-- [ ] S031 [P] Run security crate verification:
+- [x] S031 [P] Run security crate verification:
   `cargo test -p mister-smith-security` and `cargo clippy -p mister-smith-security`.
-- [ ] S032 [P] Run transport crate verification:
+- [x] S032 [P] Run transport crate verification:
   `cargo test -p mister-smith-transport` — verify MessageEnvelope backward compatibility.
-- [ ] S033 Run persistence integration:
+- [x] S033 Run persistence integration:
   `cargo test -p mister-smith-persistence` — verify StateValidator integration.
-- [ ] S034 Run agent integration:
+- [x] S034 Run agent integration:
   `cargo test -p mister-smith-agents` — verify sandbox and quarantine actors.
-- [ ] S035 Run workspace hygiene: `cargo clippy --workspace -- -D warnings`.
-- [ ] S036 Update `CLAUDE.md` implementation status and deploy documentation.
+- [x] S035 Run workspace hygiene: `cargo clippy --workspace -- -D warnings`.
+- [x] S036 Update `CLAUDE.md` implementation status and deploy documentation.
 
 ---
 
