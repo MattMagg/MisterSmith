@@ -126,6 +126,7 @@ impl FrameworkConfig {
         self.transport.validate()?;
         self.security.validate()?;
         self.persistence.validate()?;
+        self.observability.validate()?;
         Ok(())
     }
 }

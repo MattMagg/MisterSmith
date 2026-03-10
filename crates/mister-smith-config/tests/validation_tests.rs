@@ -3,6 +3,26 @@
 use mister_smith_config::*;
 use std::time::Duration;
 
+fn invalid_observability_configs() -> Vec<(&'static str, ObservabilityConfig)> {
+    let mut invalid_trace_sampling_ratio = ObservabilityConfig::default();
+    invalid_trace_sampling_ratio.trace_sampling_ratio = 1.5;
+
+    let mut invalid_metrics_export_interval_secs = ObservabilityConfig::default();
+    invalid_metrics_export_interval_secs.metrics_export_interval_secs = 4;
+
+    let mut invalid_buffer_size = ObservabilityConfig::default();
+    invalid_buffer_size.buffer_size = 1000;
+
+    vec![
+        ("trace_sampling_ratio", invalid_trace_sampling_ratio),
+        (
+            "metrics_export_interval_secs",
+            invalid_metrics_export_interval_secs,
+        ),
+        ("buffer_size", invalid_buffer_size),
+    ]
+}
+
 #[test]
 fn valid_config_passes() {
     let config = FrameworkConfig::default();
@@ -142,4 +162,52 @@ fn error_messages_are_actionable() {
     // Should contain field name and valid range
     assert!(msg.contains("worker_threads"));
     assert!(msg.contains("1..=1024"));
+}
+
+#[test]
+fn observability_boundary_values_accepted() {
+    let mut min_config = ObservabilityConfig::default();
+    min_config.trace_sampling_ratio = 0.0;
+    min_config.metrics_export_interval_secs = 5;
+    min_config.buffer_size = 1024;
+    assert!(min_config.validate().is_ok());
+
+    let mut max_config = ObservabilityConfig::default();
+    max_config.trace_sampling_ratio = 1.0;
+    max_config.buffer_size = 65536;
+    assert!(max_config.validate().is_ok());
+}
+
+#[test]
+fn observability_invalid_values_rejected() {
+    for (field, config) in invalid_observability_configs() {
+        let err = config.validate().unwrap_err();
+        match err {
+            ConfigValidationError::InvalidValue {
+                field: actual_field,
+                ..
+            } => assert_eq!(actual_field, field),
+            other => panic!("expected invalid value error for {field}, got {other}"),
+        }
+    }
+}
+
+#[test]
+fn framework_config_rejects_invalid_observability() {
+    for (field, observability) in invalid_observability_configs() {
+        let mut config = FrameworkConfig::default();
+        config.observability = observability;
+
+        let err = config
+            .validate()
+            .expect_err(&format!("expected invalid {field} to fail"));
+
+        match err {
+            ConfigValidationError::InvalidValue {
+                field: actual_field,
+                ..
+            } => assert_eq!(actual_field, field),
+            other => panic!("expected invalid value error for {field}, got {other}"),
+        }
+    }
 }
