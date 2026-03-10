@@ -19,9 +19,8 @@ use tokio::runtime::Handle;
 static WORKER_LABELS: OnceLock<Vec<SharedString>> = OnceLock::new();
 
 fn get_worker_label(i: usize) -> SharedString {
-    let labels = WORKER_LABELS.get_or_init(|| {
-        (0..1024).map(|idx| idx.to_string().into()).collect()
-    });
+    let labels =
+        WORKER_LABELS.get_or_init(|| (0..1024).map(|idx| idx.to_string().into()).collect());
     if i < labels.len() {
         labels[i].clone()
     } else {
