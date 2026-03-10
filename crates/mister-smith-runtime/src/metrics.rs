@@ -18,6 +18,8 @@ use tokio::runtime::Handle;
 
 static WORKER_LABELS: OnceLock<Vec<SharedString>> = OnceLock::new();
 
+/// Pre-allocates and caches `SharedString` instances for worker identifiers to avoid
+/// repeated allocations and string formatting inside high-frequency polling loops.
 fn get_worker_label(i: usize) -> SharedString {
     let labels =
         WORKER_LABELS.get_or_init(|| (0..1024).map(|idx| idx.to_string().into()).collect());
