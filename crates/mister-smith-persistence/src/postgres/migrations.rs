@@ -112,17 +112,18 @@ impl MigrationRunner {
         .await
         .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
 
-        let applied_map: std::collections::HashMap<i64, bool> = applied
-            .into_iter()
-            .map(|(v, _, s, _)| (v, s))
-            .collect();
+        let applied_map: std::collections::HashMap<i64, bool> =
+            applied.into_iter().map(|(v, _, s, _)| (v, s)).collect();
 
         let mut statuses = Vec::new();
         for migration in migrator.iter() {
             statuses.push(MigrationStatus {
                 version: migration.version,
                 description: migration.description.to_string(),
-                applied: applied_map.get(&migration.version).copied().unwrap_or(false),
+                applied: applied_map
+                    .get(&migration.version)
+                    .copied()
+                    .unwrap_or(false),
                 applied_at: None, // sqlx doesn't expose applied_at directly in this query
                 checksum: hex::encode(&migration.checksum),
             });
@@ -233,7 +234,10 @@ mod perf_tests {
             }
         }
         let elapsed_linear = start.elapsed();
-        println!("Linear search found {} in {:?}", found_count, elapsed_linear);
+        println!(
+            "Linear search found {} in {:?}",
+            found_count, elapsed_linear
+        );
 
         let start = Instant::now();
         let applied_map: std::collections::HashMap<i64, bool> = applied
@@ -249,6 +253,9 @@ mod perf_tests {
             }
         }
         let elapsed_hashmap = start.elapsed();
-        println!("Hashmap search found {} in {:?}", found_count_hashmap, elapsed_hashmap);
+        println!(
+            "Hashmap search found {} in {:?}",
+            found_count_hashmap, elapsed_hashmap
+        );
     }
 }

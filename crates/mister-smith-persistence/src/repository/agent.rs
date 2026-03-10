@@ -223,11 +223,12 @@ impl AgentRepository {
 
         // Read all state from SQL
         let rows = queries::get_all_state(&self.pool, agent_id).await?;
+        let keys = rows.len();
 
         // Build snapshot as a JSON object
         let mut snapshot = serde_json::Map::new();
-        for row in &rows {
-            snapshot.insert(row.state_key.clone(), row.state_value.clone());
+        for row in rows {
+            snapshot.insert(row.state_key, row.state_value);
         }
 
         let snapshot_value = Value::Object(snapshot);
@@ -239,7 +240,7 @@ impl AgentRepository {
         debug!(
             agent_id = %agent_id,
             checkpoint_id = %checkpoint_id,
-            keys = rows.len(),
+            keys = keys,
             "Checkpoint created"
         );
 
