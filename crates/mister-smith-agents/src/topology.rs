@@ -189,11 +189,7 @@ impl TopologyCompiler {
     }
 }
 
-type GraphComponents = (
-    Vec<ExecutionBranch>,
-    Vec<ExecutionNode>,
-    Vec<ExecutionEdge>,
-);
+type GraphComponents = (Vec<ExecutionBranch>, Vec<ExecutionNode>, Vec<ExecutionEdge>);
 
 fn build_graph_components(
     workflow_id: TaskId,
