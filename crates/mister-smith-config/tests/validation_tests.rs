@@ -184,7 +184,8 @@ fn observability_invalid_values_rejected() {
         let err = config.validate().unwrap_err();
         match err {
             ConfigValidationError::InvalidValue {
-                field: actual_field, ..
+                field: actual_field,
+                ..
             } => assert_eq!(actual_field, field),
             other => panic!("expected invalid value error for {field}, got {other}"),
         }
@@ -203,7 +204,8 @@ fn framework_config_rejects_invalid_observability() {
 
         match err {
             ConfigValidationError::InvalidValue {
-                field: actual_field, ..
+                field: actual_field,
+                ..
             } => assert_eq!(actual_field, field),
             other => panic!("expected invalid value error for {field}, got {other}"),
         }
