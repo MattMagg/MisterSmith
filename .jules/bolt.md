@@ -1,3 +1,7 @@
+## 2026-03-10 - [Optimize Metrics Tag Allocation]
+**Learning:** String allocations and deep copies for static identifiers (like Tokio worker IDs) inside high-frequency polling loops can create measurable CPU and allocator overhead. The `metrics` crate's macros (`gauge!`, `counter!`) require `SharedString` types, which, if created from `String` values via `worker.clone()` or `i.to_string()`, induce repeated heap allocations.
+**Action:** Use a `std::sync::OnceLock` containing cached worker-label strings so hot-path metric collection can reuse borrowed values instead of allocating new owned labels on each tick.
+
 ## 2023-10-27 - [Optimize Database Migration Status Lookup]
 **Learning:** `Vec::binary_search_by_key` is fast but requires the array to be explicitly sorted by the key, and relying on implicit SQL `ORDER BY` without enforcement in Rust is risky for binary search correctness. Converting an array to a `HashMap` prior to a lookup loop is a safer approach for turning O(N^2) lookups into O(N) when slice order cannot be perfectly guaranteed.
 **Action:** When optimizing loop lookups, prefer `HashMap`/`HashSet` if the dataset size justifies allocation, rather than `binary_search` on vectors that aren't explicitly sorted in memory.
