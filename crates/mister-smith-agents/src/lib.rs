@@ -39,6 +39,8 @@ pub mod heartbeat;
 pub mod messaging;
 /// Task decomposition and result aggregation orchestration.
 pub mod orchestrator;
+/// Cross-boundary quarantine inspection actor.
+pub mod quarantine;
 /// Concurrent agent registry with discovery queries.
 pub mod registry;
 /// Nine specialized agent role implementations.
@@ -59,6 +61,7 @@ pub use errors::AgentSystemError;
 pub use heartbeat::HeartbeatEmitter;
 pub use messaging::{broadcast, request, send, send_durable};
 pub use orchestrator::Orchestrator;
+pub use quarantine::{QuarantineActor, QuarantineTransfer, SharedStateAccess};
 pub use registry::AgentRegistry;
 pub use sandbox::{AgentSandbox, SandboxedAgentRuntime};
 pub use scheduler::{DeadlineMonitor, ResultAggregator, TaskDecomposer, TaskScheduler};

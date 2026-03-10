@@ -23,6 +23,7 @@ pub mod auth_callout;
 pub mod config;
 mod error;
 pub mod message_signer;
+pub mod quarantine;
 pub mod sandbox;
 pub mod state_validator;
 
@@ -47,6 +48,11 @@ pub use auth_callout::{
 };
 pub use message_signer::{HmacKey, HmacMessageSigner, MessageSigner, MessageSigningConfig};
 pub use mister_smith_core::SecurityError;
+pub use quarantine::{inspect_quarantine_payload, QuarantineAction, QuarantineAuditContext};
+#[cfg(feature = "audit")]
+pub use quarantine::{
+    record_quarantine_audit_event, QuarantineActor, QuarantineTransfer, SharedStateAccess,
+};
 pub use sandbox::{
     AgentClass, CrossingDecision, CrossingRule, IOFirewall, SandboxAccountConfig,
     SandboxCredentialIssuer, SandboxCredentials,

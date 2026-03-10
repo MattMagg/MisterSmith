@@ -6,17 +6,20 @@ use std::time::Duration;
 use mister_smith_actor::system::ActorSystem;
 use mister_smith_core::{Actor, AgentId, AgentState, AgentType};
 use mister_smith_supervision::SupervisedSystem;
+use serde_json::Value;
 
 pub use mister_smith_security::sandbox::{
     AgentClass, CrossingDecision, CrossingRule, IOFirewall, SandboxAccountConfig,
     SandboxCredentialIssuer, SandboxCredentials,
 };
+use mister_smith_security::TaintLabel;
 
 use crate::agent::{
     spawn_agent as spawn_runtime, spawn_supervised as spawn_supervised_runtime, AgentRuntime,
 };
 use crate::config::AgentConfig;
 use crate::errors::AgentSystemError;
+use crate::quarantine::{QuarantineActor, QuarantineTransfer};
 
 const DEFAULT_LONG_RUNNING_THRESHOLD: Duration = Duration::from_secs(300);
 const CLEANUP_POLL_INTERVAL: Duration = Duration::from_millis(25);
@@ -51,6 +54,7 @@ impl<M: Send + 'static, R: Send + 'static> SandboxedAgentRuntime<M, R> {
 pub struct AgentSandbox {
     issuer: SandboxCredentialIssuer,
     firewall: IOFirewall,
+    quarantine_actor: Option<Arc<QuarantineActor>>,
     long_running_threshold: Duration,
 }
 
@@ -61,6 +65,7 @@ impl AgentSandbox {
         Self {
             issuer,
             firewall,
+            quarantine_actor: None,
             long_running_threshold: DEFAULT_LONG_RUNNING_THRESHOLD,
         }
     }
@@ -69,6 +74,13 @@ impl AgentSandbox {
     #[must_use]
     pub fn with_long_running_threshold(mut self, threshold: Duration) -> Self {
         self.long_running_threshold = threshold;
+        self
+    }
+
+    /// Attach a quarantine actor used for required cross-boundary transfers.
+    #[must_use]
+    pub fn with_quarantine_actor(mut self, quarantine_actor: Arc<QuarantineActor>) -> Self {
+        self.quarantine_actor = Some(quarantine_actor);
         self
     }
 
@@ -138,6 +150,44 @@ impl AgentSandbox {
         self.firewall
             .check_crossing(source_account, target_account, subject)
             .map_err(|error| AgentSystemError::PermissionDenied(error.to_string()))
+    }
+
+    /// Inspect and forward a cross-boundary payload when sandbox policy allows
+    /// the subject crossing.
+    pub fn inspect_cross_boundary_transfer(
+        &self,
+        source_account: &str,
+        target_account: &str,
+        subject: &str,
+        state_type: &str,
+        payload: &Value,
+    ) -> Result<QuarantineTransfer, AgentSystemError> {
+        match self.check_crossing(source_account, target_account, subject)? {
+            CrossingDecision::Allow => Ok(QuarantineTransfer {
+                action: mister_smith_security::QuarantineAction::Pass,
+                taint_label: TaintLabel::Clean,
+                payload: payload.clone(),
+                schema_version: None,
+                monitored: false,
+            }),
+            CrossingDecision::Quarantine => {
+                let actor = self.quarantine_actor.as_ref().ok_or_else(|| {
+                    AgentSystemError::PermissionDenied(format!(
+                        "cross-boundary subject '{subject}' requires a quarantine actor"
+                    ))
+                })?;
+                actor
+                    .inspect_cross_boundary_transfer(
+                        None,
+                        source_account,
+                        target_account,
+                        subject,
+                        state_type,
+                        payload,
+                    )
+                    .map_err(|error| AgentSystemError::PermissionDenied(error.to_string()))
+            }
+        }
     }
 
     /// Spawn a sandboxed agent and attach lifecycle cleanup for ephemeral credentials.
