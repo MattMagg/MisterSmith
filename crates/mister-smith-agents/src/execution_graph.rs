@@ -11,8 +11,7 @@ use serde_json::Value;
 use mister_smith_core::{
     AgentId, AgentType, BranchRecoveryStrategy, BranchState, CheckpointId, CheckpointPolicy,
     ContextBudget, DelegationScope, DependencyType, ExecutionBranchId, ExecutionGraphId,
-    ExecutionNodeId, GraphState, MemorySnapshotId, NodeState, TaskId, TopologyError,
-    TopologyPlan,
+    ExecutionNodeId, GraphState, MemorySnapshotId, NodeState, TaskId, TopologyError, TopologyPlan,
 };
 
 /// Checkpoint lineage entry for a graph branch.

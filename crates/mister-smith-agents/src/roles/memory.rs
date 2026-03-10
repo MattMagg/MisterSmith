@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::context_manager::{ContextManager, attach_managed_context};
+use crate::context_manager::{attach_managed_context, ContextManager};
 use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
 use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
@@ -87,7 +87,9 @@ impl MemoryAgent {
             .await
             .map_err(|error| MemoryError::Internal(error.to_string()))?;
 
-        let response = self.handle_message(MemoryMessage::Retrieve(key), state).await?;
+        let response = self
+            .handle_message(MemoryMessage::Retrieve(key), state)
+            .await?;
         Ok(attach_managed_context(response, managed_context.payload))
     }
 }

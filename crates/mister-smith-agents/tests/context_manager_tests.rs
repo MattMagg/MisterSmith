@@ -90,28 +90,37 @@ async fn context_manager_assembles_role_specific_payloads() {
     ));
 
     let planner = manager
-        .assemble_role_context(scope.clone(), AgentType::Planner, budget(6, BudgetPolicy::Summarize))
+        .assemble_role_context(
+            scope.clone(),
+            AgentType::Planner,
+            budget(6, BudgetPolicy::Summarize),
+        )
         .await
         .expect("planner context should assemble");
     let executor = manager
-        .assemble_role_context(scope, AgentType::Executor, budget(6, BudgetPolicy::Summarize))
+        .assemble_role_context(
+            scope,
+            AgentType::Executor,
+            budget(6, BudgetPolicy::Summarize),
+        )
         .await
         .expect("executor context should assemble");
 
     assert_eq!(planner.snapshot.role, AgentType::Planner);
     assert_eq!(planner.fragments.len(), 2);
     assert_eq!(planner.payload["fragments"].as_array().unwrap().len(), 2);
-    assert!(
-        planner.payload["fragments"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|entry| entry["content"]["kind"] != "executor-trace")
-    );
+    assert!(planner.payload["fragments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|entry| entry["content"]["kind"] != "executor-trace"));
 
     assert_eq!(executor.snapshot.role, AgentType::Executor);
     assert_eq!(executor.fragments.len(), 1);
-    assert_eq!(executor.payload["fragments"][0]["content"]["kind"], "executor-trace");
+    assert_eq!(
+        executor.payload["fragments"][0]["content"]["kind"],
+        "executor-trace"
+    );
 }
 
 #[tokio::test]
@@ -161,7 +170,10 @@ async fn checkpoint_resume_materializes_snapshot_without_raw_history_replay() {
     assert_eq!(resumed.snapshot.snapshot_id, checkpoint.memory_snapshot_id);
     assert_eq!(resumed.resume_source, ResumeSource::Checkpoint);
     assert_eq!(resumed.fragments.len(), 1);
-    assert_eq!(resumed.fragments[0].fragment_class, FragmentClass::Checkpoint);
+    assert_eq!(
+        resumed.fragments[0].fragment_class,
+        FragmentClass::Checkpoint
+    );
 }
 
 #[tokio::test]

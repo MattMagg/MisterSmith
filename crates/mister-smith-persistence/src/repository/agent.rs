@@ -335,7 +335,8 @@ pub fn snapshot_state_key(snapshot_id: MemorySnapshotId) -> String {
 pub fn serialize_materialized_snapshot(
     snapshot: &MaterializedSnapshot,
 ) -> Result<Value, PersistenceError> {
-    serde_json::to_value(snapshot).map_err(|error| PersistenceError::SerializationFailed(error.to_string()))
+    serde_json::to_value(snapshot)
+        .map_err(|error| PersistenceError::SerializationFailed(error.to_string()))
 }
 
 /// Deserialize a materialized snapshot loaded from the hybrid state backend.

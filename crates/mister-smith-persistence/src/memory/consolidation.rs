@@ -21,7 +21,10 @@ pub fn build_summary(
     }
 
     Some(MemorySummary {
-        derived_from: fragments.iter().map(|fragment| fragment.fragment_id).collect(),
+        derived_from: fragments
+            .iter()
+            .map(|fragment| fragment.fragment_id)
+            .collect(),
         content: json!({
             "scope": format!("{scope:?}"),
             "fragment_count": fragments.len(),
@@ -46,7 +49,11 @@ pub fn consolidate_fragments(
         left.freshness
             .recorded_at
             .cmp(&right.freshness.recorded_at)
-            .then_with(|| left.provenance.recorded_at.cmp(&right.provenance.recorded_at))
+            .then_with(|| {
+                left.provenance
+                    .recorded_at
+                    .cmp(&right.provenance.recorded_at)
+            })
             .then_with(|| left.fragment_id.as_ref().cmp(right.fragment_id.as_ref()))
     });
 
@@ -60,13 +67,13 @@ pub fn consolidate_fragments(
     let allowed_roles = ordered_fragments
         .iter()
         .fold(Vec::new(), |mut roles, fragment| {
-        for role in &fragment.access_policy.allowed_roles {
-            if !roles.contains(role) {
-                roles.push(*role);
+            for role in &fragment.access_policy.allowed_roles {
+                if !roles.contains(role) {
+                    roles.push(*role);
+                }
             }
-        }
-        roles
-    });
+            roles
+        });
     let derived_from = ordered_fragments
         .iter()
         .map(|fragment| fragment.fragment_id)
@@ -75,11 +82,15 @@ pub fn consolidate_fragments(
         .iter()
         .map(|fragment| fragment.units)
         .sum::<u64>();
-    let summary = build_summary(&scope, &ordered_fragments, std::cmp::max(1, total_units / 2))
-        .ok_or_else(|| MemoryError::SnapshotUnavailable {
-            snapshot_id: None,
-            message: "unable to build consolidation summary".to_string(),
-        })?;
+    let summary = build_summary(
+        &scope,
+        &ordered_fragments,
+        std::cmp::max(1, total_units / 2),
+    )
+    .ok_or_else(|| MemoryError::SnapshotUnavailable {
+        snapshot_id: None,
+        message: "unable to build consolidation summary".to_string(),
+    })?;
 
     let mut provenance = FragmentProvenance::new(
         workflow_id,

@@ -63,7 +63,7 @@ pub mod topology;
 // Re-exports
 pub use agent::AgentRuntime;
 pub use config::AgentConfig;
-pub use context_manager::{ContextManager, RoleContext, attach_managed_context};
+pub use context_manager::{attach_managed_context, ContextManager, RoleContext};
 pub use errors::AgentSystemError;
 pub use execution_graph::{
     BranchCheckpoint, ExecutionBranch, ExecutionEdge, ExecutionGraph, ExecutionNode,

@@ -209,8 +209,15 @@ impl MemoryFragment {
     }
 
     /// Returns true when this fragment is visible to `role` for `scope`.
-    pub fn is_visible_to(&self, role: AgentType, scope: &SnapshotScope, now: DateTime<Utc>) -> bool {
-        self.scope == *scope && !self.freshness.is_expired_at(now) && self.access_policy.allows(role, scope)
+    pub fn is_visible_to(
+        &self,
+        role: AgentType,
+        scope: &SnapshotScope,
+        now: DateTime<Utc>,
+    ) -> bool {
+        self.scope == *scope
+            && !self.freshness.is_expired_at(now)
+            && self.access_policy.allows(role, scope)
     }
 
     /// Build lightweight fragment metadata for task-level indexes.

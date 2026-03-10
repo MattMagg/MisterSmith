@@ -34,8 +34,8 @@ pub use kv::state::{ConflictStrategy, Operation, StateChange, StateManager};
 pub use memory::{
     AccessPolicy, FragmentClass, FragmentFreshness, FragmentProvenance, ManagedMemoryManager,
     MaterializedSnapshot, MemoryFragment, MemoryFragmentMetadata, MemoryMetadataPage,
-    MemoryMetadataPageRequest, MemorySnapshot, MemorySnapshotMetadata, MemorySummary,
-    ResumeSource, SnapshotScope,
+    MemoryMetadataPageRequest, MemorySnapshot, MemorySnapshotMetadata, MemorySummary, ResumeSource,
+    SnapshotScope,
 };
 pub use repository::Repository;
 

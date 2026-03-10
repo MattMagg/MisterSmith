@@ -59,8 +59,10 @@ impl ManagedMemoryManager {
             });
         }
 
-        let snapshot = self.build_snapshot(scope, role, budget, candidates, total_candidate_units)?;
-        self.snapshots.insert(snapshot.snapshot_id, snapshot.clone());
+        let snapshot =
+            self.build_snapshot(scope, role, budget, candidates, total_candidate_units)?;
+        self.snapshots
+            .insert(snapshot.snapshot_id, snapshot.clone());
         Ok(snapshot)
     }
 
@@ -142,7 +144,8 @@ impl ManagedMemoryManager {
         self.record_fragment(checkpoint_fragment);
 
         snapshot.checkpoint_fragment_id = Some(checkpoint_fragment_id);
-        self.snapshots.insert(snapshot.snapshot_id, snapshot.clone());
+        self.snapshots
+            .insert(snapshot.snapshot_id, snapshot.clone());
 
         Ok(snapshot.snapshot_id)
     }
@@ -152,14 +155,12 @@ impl ManagedMemoryManager {
         &self,
         snapshot_id: MemorySnapshotId,
     ) -> Result<MaterializedSnapshot, MemoryError> {
-        let snapshot = self
-            .snapshots
-            .get(&snapshot_id)
-            .cloned()
-            .ok_or_else(|| MemoryError::SnapshotUnavailable {
+        let snapshot = self.snapshots.get(&snapshot_id).cloned().ok_or_else(|| {
+            MemoryError::SnapshotUnavailable {
                 snapshot_id: Some(snapshot_id),
                 message: "snapshot not found".to_string(),
-            })?;
+            }
+        })?;
 
         if let Some(checkpoint_fragment_id) = snapshot.checkpoint_fragment_id {
             let checkpoint_fragment = self
@@ -180,14 +181,12 @@ impl ManagedMemoryManager {
 
         let mut fragments = Vec::with_capacity(snapshot.fragment_ids.len());
         for fragment_id in &snapshot.fragment_ids {
-            let fragment = self
-                .fragments
-                .get(fragment_id)
-                .cloned()
-                .ok_or_else(|| MemoryError::SnapshotUnavailable {
+            let fragment = self.fragments.get(fragment_id).cloned().ok_or_else(|| {
+                MemoryError::SnapshotUnavailable {
                     snapshot_id: Some(snapshot_id),
                     message: format!("fragment {fragment_id} missing"),
-                })?;
+                }
+            })?;
             fragments.push(fragment);
         }
 
@@ -215,14 +214,19 @@ impl ManagedMemoryManager {
                 let (selected, selected_units) = select_under_budget(candidates, budget.max_units);
                 (selected, None, selected_units)
             }
-            BudgetPolicy::Summarize => summarize_under_budget(scope.clone(), candidates, budget.max_units),
+            BudgetPolicy::Summarize => {
+                summarize_under_budget(scope.clone(), candidates, budget.max_units)
+            }
         };
 
         Ok(MemorySnapshot {
             snapshot_id: MemorySnapshotId::new(),
             target_scope: scope,
             role,
-            fragment_ids: selected.iter().map(|fragment| fragment.fragment_id).collect(),
+            fragment_ids: selected
+                .iter()
+                .map(|fragment| fragment.fragment_id)
+                .collect(),
             summary,
             created_at: Utc::now(),
             budget_id: budget.budget_id,
@@ -283,7 +287,11 @@ fn summarize_under_budget(
     scope: SnapshotScope,
     candidates: Vec<MemoryFragment>,
     max_units: u64,
-) -> (Vec<MemoryFragment>, Option<super::snapshot::MemorySummary>, u64) {
+) -> (
+    Vec<MemoryFragment>,
+    Option<super::snapshot::MemorySummary>,
+    u64,
+) {
     let mut selected = Vec::new();
     let mut selected_units = 0;
 
@@ -306,7 +314,11 @@ fn attach_summary(
     mut selected_units: u64,
     mut overflow: Vec<MemoryFragment>,
     max_units: u64,
-) -> (Vec<MemoryFragment>, Option<super::snapshot::MemorySummary>, u64) {
+) -> (
+    Vec<MemoryFragment>,
+    Option<super::snapshot::MemorySummary>,
+    u64,
+) {
     let mut remaining_capacity = max_units.saturating_sub(selected_units);
     if remaining_capacity == 0 && !selected.is_empty() {
         if let Some(last_fragment) = selected.pop() {
@@ -317,7 +329,8 @@ fn attach_summary(
     }
 
     let summary = build_summary(&scope, &overflow, remaining_capacity);
-    let delivered_units = selected_units + summary.as_ref().map(|summary| summary.units).unwrap_or(0);
+    let delivered_units =
+        selected_units + summary.as_ref().map(|summary| summary.units).unwrap_or(0);
 
     (selected, summary, delivered_units)
 }

@@ -1,6 +1,6 @@
 //! Executor agent role — carries out planned actions.
 
-use crate::context_manager::{ContextManager, attach_managed_context};
+use crate::context_manager::{attach_managed_context, ContextManager};
 use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
 use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};

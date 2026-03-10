@@ -463,13 +463,10 @@ async fn async_consolidation_completes_within_background_budget() {
     }
 
     let start = Instant::now();
-    let consolidated = tokio::time::timeout(
-        Duration::from_millis(250),
-        manager.consolidate(scope),
-    )
-    .await
-    .expect("consolidation should remain backgroundable")
-    .expect("consolidation should succeed");
+    let consolidated = tokio::time::timeout(Duration::from_millis(250), manager.consolidate(scope))
+        .await
+        .expect("consolidation should remain backgroundable")
+        .expect("consolidation should succeed");
     let elapsed = start.elapsed();
 
     assert_eq!(consolidated.len(), 1);

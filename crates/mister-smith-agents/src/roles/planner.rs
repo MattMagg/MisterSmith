@@ -1,6 +1,6 @@
 //! Planner agent role — creates execution plans from goals.
 
-use crate::context_manager::{ContextManager, attach_managed_context};
+use crate::context_manager::{attach_managed_context, ContextManager};
 use crate::scheduler::TaskAssignment;
 use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
 use mister_smith_persistence::SnapshotScope;

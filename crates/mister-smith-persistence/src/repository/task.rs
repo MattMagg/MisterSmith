@@ -5,17 +5,17 @@
 //! querying tasks by agent, time range, and correlation ID.
 
 use async_trait::async_trait;
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
 use mister_smith_core::PersistenceError;
 
-#[cfg(feature = "sqlx")]
-use crate::postgres::queries::{self, TaskRecord};
 use crate::memory::{
     MemoryFragmentMetadata, MemoryMetadataPage, MemoryMetadataPageRequest, MemorySnapshotMetadata,
 };
+#[cfg(feature = "sqlx")]
+use crate::postgres::queries::{self, TaskRecord};
 
 use super::Repository;
 
@@ -88,9 +88,9 @@ impl TaskRepository {
         fragments: &[MemoryFragmentMetadata],
         snapshots: &[MemorySnapshotMetadata],
     ) -> Result<TaskRecord, PersistenceError> {
-        let mut record = queries::find_task(&self.pool, task_id).await?.ok_or_else(|| {
-            PersistenceError::NotFound(format!("task {task_id} not found"))
-        })?;
+        let mut record = queries::find_task(&self.pool, task_id)
+            .await?
+            .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
 
         merge_fragment_metadata(&mut record.metadata, fragments)?;
         merge_snapshot_metadata(&mut record.metadata, snapshots)?;
@@ -105,9 +105,9 @@ impl TaskRepository {
         task_id: Uuid,
         request: MemoryMetadataPageRequest,
     ) -> Result<MemoryMetadataPage<MemoryFragmentMetadata>, PersistenceError> {
-        let record = queries::find_task(&self.pool, task_id).await?.ok_or_else(|| {
-            PersistenceError::NotFound(format!("task {task_id} not found"))
-        })?;
+        let record = queries::find_task(&self.pool, task_id)
+            .await?
+            .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
 
         page_fragment_metadata(&record.metadata, request)
     }
@@ -119,9 +119,9 @@ impl TaskRepository {
         task_id: Uuid,
         request: MemoryMetadataPageRequest,
     ) -> Result<MemoryMetadataPage<MemorySnapshotMetadata>, PersistenceError> {
-        let record = queries::find_task(&self.pool, task_id).await?.ok_or_else(|| {
-            PersistenceError::NotFound(format!("task {task_id} not found"))
-        })?;
+        let record = queries::find_task(&self.pool, task_id)
+            .await?
+            .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
 
         page_snapshot_metadata(&record.metadata, request)
     }
@@ -160,7 +160,8 @@ pub fn page_fragment_metadata(
     metadata: &Value,
     request: MemoryMetadataPageRequest,
 ) -> Result<MemoryMetadataPage<MemoryFragmentMetadata>, PersistenceError> {
-    let mut entries = load_index_entries_from_value::<MemoryFragmentMetadata>(metadata, FRAGMENT_INDEX_KEY)?;
+    let mut entries =
+        load_index_entries_from_value::<MemoryFragmentMetadata>(metadata, FRAGMENT_INDEX_KEY)?;
 
     if let Some(scope) = request.scope.as_ref() {
         entries.retain(|entry| &entry.scope == scope);
@@ -177,7 +178,8 @@ pub fn page_snapshot_metadata(
     metadata: &Value,
     request: MemoryMetadataPageRequest,
 ) -> Result<MemoryMetadataPage<MemorySnapshotMetadata>, PersistenceError> {
-    let mut entries = load_index_entries_from_value::<MemorySnapshotMetadata>(metadata, SNAPSHOT_INDEX_KEY)?;
+    let mut entries =
+        load_index_entries_from_value::<MemorySnapshotMetadata>(metadata, SNAPSHOT_INDEX_KEY)?;
 
     if let Some(scope) = request.scope.as_ref() {
         entries.retain(|entry| &entry.target_scope == scope);
@@ -371,8 +373,8 @@ mod tests {
     use serde_json::json;
 
     use mister_smith_core::{
-        AgentId, AgentType, ContextBudgetId, ExecutionBranchId, MemoryFragmentId,
-        MemorySnapshotId, TaskId,
+        AgentId, AgentType, ContextBudgetId, ExecutionBranchId, MemoryFragmentId, MemorySnapshotId,
+        TaskId,
     };
 
     use crate::memory::{

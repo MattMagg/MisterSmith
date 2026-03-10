@@ -77,12 +77,8 @@ impl ContextManager {
         pending_nodes: Vec<ExecutionNodeId>,
     ) -> Result<BranchCheckpoint, MemoryError> {
         let snapshot_id = self.memory.checkpoint(branch_id, role, budget).await?;
-        let mut checkpoint = BranchCheckpoint::new(
-            branch_id,
-            completed_nodes,
-            pending_nodes,
-            snapshot_id,
-        );
+        let mut checkpoint =
+            BranchCheckpoint::new(branch_id, completed_nodes, pending_nodes, snapshot_id);
         checkpoint.created_at = Utc::now();
         Ok(checkpoint)
     }

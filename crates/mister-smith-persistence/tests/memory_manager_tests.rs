@@ -198,7 +198,10 @@ async fn checkpoint_creates_resume_ready_snapshot_without_raw_history_replay() {
     assert_eq!(resumed.resume_source, ResumeSource::Checkpoint);
     assert_eq!(resumed.snapshot.snapshot_id, snapshot_id);
     assert_eq!(resumed.fragments.len(), 1);
-    assert_eq!(resumed.fragments[0].fragment_class, FragmentClass::Checkpoint);
+    assert_eq!(
+        resumed.fragments[0].fragment_class,
+        FragmentClass::Checkpoint
+    );
 }
 
 #[tokio::test]
