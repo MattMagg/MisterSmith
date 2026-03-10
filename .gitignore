@@ -1,5 +1,6 @@
 # macOS
 .DS_Store
+AGENTS_READ_IMPORTANT_mistersmith_frontier_mandate.md
 
 # Rust build output
 /target/
