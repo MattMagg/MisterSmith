@@ -125,8 +125,8 @@ crates/mister-smith-app/
 |   +-- main.rs                             # CLI or app wiring for autonomy views
 
 deploy/
-+-- grafana/                               # Dashboards for topology, checkpoints, and interventions
-+-- prometheus/                            # Alerts for autonomy degradation / checkpoint failures
++-- dashboards/                            # Dashboards for topology, checkpoints, and interventions
++-- alerts/                                # Alerts for autonomy degradation / checkpoint failures
 ```
 
 ## Design Decisions

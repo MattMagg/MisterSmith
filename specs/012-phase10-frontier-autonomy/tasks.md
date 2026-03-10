@@ -218,7 +218,9 @@ checkpoint lineage, memory pressure, and intervention history are visible withou
   `crates/mister-smith-events/src/bus.rs`, and
   `crates/mister-smith-events/src/types.rs` to assemble `AutonomyStatusView` from typed
   topology, checkpoint, memory-pressure, and intervention events.
-- [ ] T029 [P] [US3] Add autonomy dashboards and alerts in `deploy/grafana/` and `deploy/prometheus/` for topology choice, branch health, checkpoint staleness, context pressure, and intervention spikes.
+- [ ] T029 [P] [US3] Add autonomy dashboards and alerts in `deploy/dashboards/` and
+  `deploy/alerts/` for topology choice, branch health, checkpoint staleness, context
+  pressure, and intervention spikes.
 - [ ] T030 [US3] Create `crates/mister-smith-app/tests/autonomy_status_tests.rs` and
   extend `crates/mister-smith-events/tests/autonomy_event_tests.rs` to verify
   operator-visible rationale and intervention history.
@@ -273,7 +275,8 @@ allow execution while expired, revoked, or broken chains are blocked and surface
 - [ ] T038 [P] Run `cargo test -p mister-smith-agents` after `T005`-`T015`, `T022`-`T031`, and `T034`-`T037`.
 - [ ] T039 [P] Run `cargo test -p mister-smith-persistence` and `cargo test -p mister-smith-security` after `T010`, `T016`-`T021`, and `T032`-`T036`.
 - [ ] T040 [P] Run `cargo test -p mister-smith-llm` and `cargo test -p mister-smith-core` after `T002`-`T004` and `T023`.
-- [ ] T041 [P] Run `cargo test -p mister-smith-app` after `T027`-`T035` and verify deploy artifact syntax for `deploy/grafana/` and `deploy/prometheus/`.
+- [ ] T041 [P] Run `cargo test -p mister-smith-app` after `T027`-`T035` and verify
+  deploy artifact syntax for `deploy/dashboards/` and `deploy/alerts/`.
 - [ ] T042 Update `ROADMAP.md`, `CLAUDE.md`, and `README.md` with Phase 10 implementation status, then run `cargo build --workspace` and the scenarios in `specs/012-phase10-frontier-autonomy/quickstart.md`.
 
 ---
