@@ -1,5 +1,6 @@
 //! Planner agent role — creates execution plans from goals.
 
+use crate::scheduler::TaskAssignment;
 use mister_smith_core::{Actor, AgentId};
 use serde::{Deserialize, Serialize};
 
@@ -75,6 +76,106 @@ impl PlannerAgent {
     }
 }
 
+/// Normalize planner output into the minimum shape required by the Phase 10 control plane.
+pub fn normalize_planner_output(
+    goal: &str,
+    context: &serde_json::Value,
+    plan: serde_json::Value,
+) -> serde_json::Value {
+    let has_steps = plan
+        .get("steps")
+        .and_then(serde_json::Value::as_array)
+        .map(|steps| !steps.is_empty())
+        .unwrap_or(false);
+    if has_steps {
+        let mut object = plan.as_object().cloned().unwrap_or_default();
+        object
+            .entry("goal".to_string())
+            .or_insert_with(|| serde_json::json!(goal));
+        object
+            .entry("context".to_string())
+            .or_insert_with(|| context.clone());
+        serde_json::Value::Object(object)
+    } else {
+        serde_json::json!({
+            "goal": goal,
+            "steps": [
+                {
+                    "id": "step-1",
+                    "step": 1,
+                    "action": "analyze",
+                    "description": goal,
+                    "role": "worker",
+                }
+            ],
+            "context": context,
+        })
+    }
+}
+
+/// Synthesize planner-shaped output from decomposed scheduler tasks.
+pub fn planner_output_from_subtasks(
+    task: &TaskAssignment,
+    subtasks: &[TaskAssignment],
+) -> serde_json::Value {
+    let sequential = subtasks.iter().all(|subtask| {
+        subtask
+            .input
+            .get("step_index")
+            .and_then(serde_json::Value::as_u64)
+            .is_some()
+    });
+    let mut ordered = subtasks.to_vec();
+    if sequential {
+        ordered.sort_by_key(|subtask| {
+            subtask
+                .input
+                .get("step_index")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(u64::MAX)
+        });
+    }
+
+    let mut previous_step_id = None;
+    let steps: Vec<serde_json::Value> = ordered
+        .iter()
+        .enumerate()
+        .map(|(index, subtask)| {
+            let step_id = subtask.task_id.to_string();
+            let step_description = subtask
+                .input
+                .get("step")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(subtask.task_type.as_str());
+            let depends_on = if sequential {
+                previous_step_id
+                    .iter()
+                    .map(|step: &String| serde_json::Value::String(step.clone()))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+            previous_step_id = Some(step_id.clone());
+
+            serde_json::json!({
+                "id": step_id,
+                "step": index + 1,
+                "action": subtask.task_type,
+                "description": step_description,
+                "role": "worker",
+                "depends_on": depends_on,
+                "input": subtask.input,
+            })
+        })
+        .collect();
+
+    serde_json::json!({
+        "goal": task.task_type,
+        "steps": steps,
+        "context": task.input,
+    })
+}
+
 #[async_trait::async_trait]
 impl Actor for PlannerAgent {
     type Message = PlannerMessage;
@@ -126,13 +227,18 @@ impl Actor for PlannerAgent {
                             })
                             .unwrap_or("");
 
-                        let plan: serde_json::Value =
-                            serde_json::from_str(text).unwrap_or_else(|_| {
-                                serde_json::json!({
-                                    "goal": goal,
-                                    "raw_response": text,
-                                    "context": context,
-                                })
+                        let plan: serde_json::Value = serde_json::from_str(text)
+                            .map(|value| normalize_planner_output(&goal, &context, value))
+                            .unwrap_or_else(|_| {
+                                normalize_planner_output(
+                                    &goal,
+                                    &context,
+                                    serde_json::json!({
+                                        "goal": goal,
+                                        "raw_response": text,
+                                        "context": context,
+                                    }),
+                                )
                             });
 
                         Ok(plan)
@@ -145,17 +251,23 @@ impl Actor for PlannerAgent {
                 }
 
                 // Stub implementation — deterministic plan without an LLM.
-                let plan = serde_json::json!({
-                    "goal": goal,
-                    "steps": [
-                        {
-                            "step": 1,
-                            "action": "analyze",
-                            "description": goal,
-                        }
-                    ],
-                    "context": context,
-                });
+                let plan = normalize_planner_output(
+                    &goal,
+                    &context,
+                    serde_json::json!({
+                        "goal": goal,
+                        "steps": [
+                            {
+                                "id": "step-1",
+                                "step": 1,
+                                "action": "analyze",
+                                "description": goal,
+                                "role": "worker",
+                            }
+                        ],
+                        "context": context,
+                    }),
+                );
                 state.current_plan = Some(plan.clone());
                 Ok(plan)
             }
@@ -211,7 +323,13 @@ mod tests {
 
         let expected = serde_json::json!({
             "goal": "deploy service",
-            "steps": [{"step": 1, "action": "analyze", "description": "deploy service"}],
+            "steps": [{
+                "id": "step-1",
+                "step": 1,
+                "action": "analyze",
+                "description": "deploy service",
+                "role": "worker",
+            }],
             "context": {"env": "staging"},
         });
         assert_eq!(plan, expected);

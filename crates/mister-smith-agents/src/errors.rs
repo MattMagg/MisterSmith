@@ -1,4 +1,4 @@
-use mister_smith_core::{ActorError, ToolError};
+use mister_smith_core::{ActorError, ToolError, TopologyError};
 use thiserror::Error;
 
 /// Errors produced by the agent system.
@@ -48,6 +48,9 @@ pub enum AgentSystemError {
 
     #[error("Serialization error: {0}")]
     Serialization(String),
+
+    #[error("Topology error: {0}")]
+    Topology(#[from] TopologyError),
 
     #[cfg(feature = "llm")]
     #[error("LLM error: {0}")]

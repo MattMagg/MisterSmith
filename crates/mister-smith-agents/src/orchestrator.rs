@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
+use dashmap::DashMap;
 use mister_smith_core::{AgentId, TaskId};
 use tracing::instrument;
 
 use crate::config::TaskState;
 use crate::errors::AgentSystemError;
+use crate::execution_graph::ExecutionGraph;
+use crate::roles::planner::planner_output_from_subtasks;
 use crate::scheduler::{ResultAggregator, TaskAssignment, TaskDecomposer, TaskScheduler};
+use crate::topology::{TopologyCompiler, TopologySignals};
 
 /// Orchestrator holds decomposer, aggregator, team, and scheduler
 /// to manage the full lifecycle of a complex task.
@@ -13,6 +17,9 @@ pub struct Orchestrator {
     decomposer: Arc<dyn TaskDecomposer>,
     aggregator: Arc<dyn ResultAggregator>,
     scheduler: Arc<TaskScheduler>,
+    topology_compiler: TopologyCompiler,
+    topology_signals: TopologySignals,
+    execution_graphs: DashMap<TaskId, ExecutionGraph>,
 }
 
 impl Orchestrator {
@@ -25,6 +32,9 @@ impl Orchestrator {
             decomposer,
             aggregator,
             scheduler,
+            topology_compiler: TopologyCompiler,
+            topology_signals: TopologySignals::default(),
+            execution_graphs: DashMap::new(),
         }
     }
 
@@ -32,6 +42,20 @@ impl Orchestrator {
     #[instrument(skip(self, task), fields(task.id = %task.task_id, task.type = %task.task_type))]
     pub async fn decompose(&self, task: &TaskAssignment) -> Result<Vec<TaskId>, AgentSystemError> {
         let subtasks = self.decomposer.decompose(task).await?;
+        if subtasks.is_empty() {
+            return Err(AgentSystemError::OrchestrationError(
+                "Decomposition produced no subtasks".into(),
+            ));
+        }
+
+        let planner_output = planner_output_from_subtasks(task, &subtasks);
+        let graph = self.topology_compiler.compile(
+            task.task_id,
+            &planner_output,
+            &self.topology_signals,
+        )?;
+        self.execution_graphs.insert(task.task_id, graph);
+
         let mut ids = Vec::with_capacity(subtasks.len());
         for mut subtask in subtasks {
             subtask.parent_task_id = Some(task.task_id);
@@ -39,6 +63,13 @@ impl Orchestrator {
             ids.push(id);
         }
         Ok(ids)
+    }
+
+    /// Return the latest compiled execution graph for a workflow, when available.
+    pub fn execution_graph(&self, workflow_id: &TaskId) -> Option<ExecutionGraph> {
+        self.execution_graphs
+            .get(workflow_id)
+            .map(|entry| entry.value().clone())
     }
 
     /// Aggregate results from completed subtasks of a parent task.
