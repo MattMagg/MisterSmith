@@ -260,6 +260,22 @@ Linear documents are used for reference material linked to projects:
 
 Documents require a project link. For cross-cutting documents, link them to `MisterSmith Workspace Docs` as the general-purpose project. Historical phase-specific specs can stay attached to their archived phase projects.
 
+## Templates
+
+The `MisterSmith` team now has a small issue-template set focused on Symphony execution hygiene and
+operator handoff. These are standard issue templates, not form templates, and there is currently no
+default template for members or non-members.
+
+| Template | Use |
+|----------|-----|
+| Symphony Execution-Ready Issue | Work that is truly safe to stage into the watched execution queue |
+| Validated Backlog Item | Repo-validated work that is real but not yet scheduled |
+| Human Review Handoff | PR-ready or review-ready work that needs human sign-off or merge action |
+| Workflow / CI Issue | Repo workflow, automation, CI, tooling, or release-process failures |
+
+Keep templates opinionated and small. They should enforce issue quality and routing clarity, not
+become a second workflow engine hidden inside descriptions.
+
 ## Status Updates
 
 Post initiative-level status updates with health indicators:
@@ -294,6 +310,20 @@ Preference:
 - use `Parallel` for deeper or broader research
 - use `Tavily` for quick verification or extraction from known pages
 - for Linear product behavior, use official Linear docs and developer docs as the source base
+
+### Slack and Asks
+
+Slack is not part of Symphony's execution control plane today. For unattended agent work, Linear is
+the source of truth and Slack is optional.
+
+Use Slack only when it adds one of these concrete benefits:
+
+- low-friction human intake through Slack threads or Asks
+- synced human discussion on an issue that should remain visible outside Linear
+- project or initiative status distribution for humans
+
+Do not depend on Slack notifications to keep Symphony moving. The queue must remain correct in
+Linear even if Slack is ignored.
 
 ### GitHub Integration
 
