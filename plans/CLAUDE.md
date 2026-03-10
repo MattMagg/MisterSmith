@@ -23,7 +23,7 @@ Implementation specs are generated via SpecKit into `specs/`:
 - `specs/008-agent-system/` — Phase 7 additional agent system artifacts (complete)
 - `specs/009-phase9-llm-provider-integration/` — Phase 9 LLM provider spec, plan, tasks, contracts (complete — implementation merged, stabilized via PRs #118-#128)
 - `specs/010-phase8-operations/` — Phase 8 operations spec, plan, tasks, contracts (complete)
-- `specs/011-phase9.1-security-hardening/` — Phase 9.1 security hardening spec, plan, tasks (spec complete, implementation not started)
+- `specs/011-phase9.1-security-hardening/` — Phase 9.1 security hardening spec, plan, tasks (complete)
 
 ## Usage
 
