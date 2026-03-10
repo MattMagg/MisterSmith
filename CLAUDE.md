@@ -25,6 +25,7 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 7. Agent System | Complete | `mister-smith-agents` |
 | 8. Operations | Complete | `mister-smith-app` (binary entry point, bootstrap, shutdown, health probes, observability, cross-phase bridges) |
 | 9. LLM Providers | Complete | `mister-smith-llm` (ModelProvider trait, MockProvider, OpenAI/Anthropic/Claude providers, ModelRouter, circuit breaker, budget enforcement, dual-stream, ModelEvent, cascade routing); `mister-smith-agents` extended with `llm` feature (Planner/Critic/Executor LLM integration, ToolBus bridge) |
+| 9.1 Security Hardening | Complete | `mister-smith-transport`, `mister-smith-security`, `mister-smith-persistence`, `mister-smith-agents` |
 
 ## Workspace Crate Dependencies
 
@@ -38,15 +39,15 @@ mister-smith-core (foundation types, traits, errors)
 ├── mister-smith-resources (ConnectionPool, pool sizing, health reports)
 ├── mister-smith-actor (ActorCell, ActorRef, lifecycle management, mailbox)
 ├── mister-smith-supervision (SupervisedSystem, restart strategies, health checks)
-├── mister-smith-transport (MessageEnvelope, Transport trait, serialization, InMemoryTransport)
+├── mister-smith-transport (MessageEnvelope, Transport trait, serialization, InMemoryTransport, Phase 9.1 security envelope fields)
 ├── mister-smith-nats (NATS pub/sub, request-reply, JetStream, health checks)
 ├── mister-smith-http (Axum REST API, WebSocket, middleware, rate limiting)
 ├── mister-smith-grpc (Tonic gRPC services, health, protobuf)
 ├── mister-smith-mcp (MCP client/server, tool registry, NATS bridge)
-├── mister-smith-security (JWT auth, RBAC, TLS/mTLS, audit logging)
-├── mister-smith-persistence (PostgreSQL + JetStream KV dual-store, repositories, audit bridge)
+├── mister-smith-security (JWT auth, RBAC, TLS/mTLS, audit logging, message signing, Auth Callout, state validation, sandbox/quarantine primitives)
+├── mister-smith-persistence (PostgreSQL + JetStream KV dual-store, repositories, audit bridge, quarantined shared-state boundaries)
 ├── mister-smith-llm (ModelProvider trait, MockProvider, OpenAI/Anthropic/Claude providers, ModelRouter, circuit breaker, budget, dual-stream, ModelEvent)
-├── mister-smith-agents (AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles, optional LLM bridge)
+├── mister-smith-agents (AgentRuntime, registry, scheduler, orchestrator, team, tool bus, 9 roles, optional LLM bridge, sandbox/quarantine integration)
 ├── mister-smith-app (binary entry point, bootstrap, shutdown, observability, health probes, cross-phase bridges)
 └── mister-smith-integration-tests (cross-crate validation)
 ```
@@ -55,7 +56,7 @@ mister-smith-core (foundation types, traits, errors)
 
 | Directory | Contents |
 |-----------|----------|
-| `crates/` | Rust workspace — 20 crates (Phase 1-9: foundation, runtime/async, actor/supervision, transport, security, persistence, agents, operations, LLM providers) |
+| `crates/` | Rust workspace — 20 crates (Phase 1-9.1: foundation, runtime/async, actor/supervision, transport, security, persistence, agents, operations, LLM providers, security hardening) |
 | `spec/` | Canonical architecture specifications — 65+ files across 8 domains (the system contract) |
 | `specs/` | SpecKit implementation artifacts — per-phase spec, plan, and task files (the build instructions) |
 | `ROADMAP.md` | 9-phase build roadmap — dependency-aware implementation order |
