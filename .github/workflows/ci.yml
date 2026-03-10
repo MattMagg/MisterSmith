@@ -20,6 +20,9 @@ jobs:
         with:
           toolchain: "1.88.0"
           components: clippy, rustfmt
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
       - uses: Swatinem/rust-cache@v2
       - name: Install protoc
         uses: arduino/setup-protoc@v3
@@ -43,6 +46,8 @@ jobs:
 
           docker logs nats-server
           exit 1
+      - name: Validate deploy assets
+        run: python3 scripts/validate_deploy_assets.py
       - name: Build
         run: cargo build --workspace
       - name: Test

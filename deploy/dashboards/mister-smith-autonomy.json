@@ -1,0 +1,191 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Mister Smith Framework — Phase 10 autonomy observability scaffold. All PromQL queries are placeholders that MS-33 must wire to typed AutonomyStatusView state.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "description": "Placeholder gauge for operator-visible workflow state derived from AutonomyStatusView.graph.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(mistersmith_autonomy_workflows_active)",
+          "legendFormat": "Active Workflows"
+        }
+      ],
+      "title": "Active Autonomy Workflows",
+      "type": "stat"
+    },
+    {
+      "description": "Placeholder branch-health summary from AutonomyStatusView.branches. Assumes one gauge per branch with a state label.",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(mistersmith_autonomy_branches{state=~\"degraded|failed|isolated\"})",
+          "legendFormat": "Degraded Branches"
+        }
+      ],
+      "title": "Degraded Branches",
+      "type": "stat"
+    },
+    {
+      "description": "Placeholder checkpoint freshness gauge from branch checkpoint lineage. MS-33 must emit seconds since the last durable checkpoint.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 1800,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 300 },
+              { "color": "red", "value": 900 }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "max(mistersmith_autonomy_branch_checkpoint_age_seconds)",
+          "legendFormat": "Checkpoint Age"
+        }
+      ],
+      "title": "Max Checkpoint Age",
+      "type": "gauge"
+    },
+    {
+      "description": "Placeholder memory-pressure ratio from AutonomyStatusView.memory_pressure. Assumes a normalized 0..1 pressure ratio.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 0.7 },
+              { "color": "red", "value": 0.9 }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "max(mistersmith_autonomy_context_pressure_ratio)",
+          "legendFormat": "Pressure Ratio"
+        }
+      ],
+      "title": "Max Context Pressure",
+      "type": "gauge"
+    },
+    {
+      "description": "Placeholder topology selection table from AutonomyStatusView.topology. Prefer stable rationale codes over free-form labels if label cardinality becomes unsafe.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by (workflow_id, topology, rationale) (mistersmith_autonomy_topology_info)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{workflow_id}} {{topology}}"
+        }
+      ],
+      "title": "Current Topology Selection",
+      "type": "table"
+    },
+    {
+      "description": "Placeholder branch-state visibility for operator inspection. Assumes one active series per workflow and state.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by (workflow_id, state) (mistersmith_autonomy_branches)",
+          "legendFormat": "{{workflow_id}} {{state}}"
+        }
+      ],
+      "title": "Branch State by Workflow",
+      "type": "timeseries"
+    },
+    {
+      "description": "Placeholder checkpoint lineage panel. MS-33 should back this with per-branch checkpoint age or freshness metrics derived from typed state.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "max by (workflow_id, branch_id) (mistersmith_autonomy_branch_checkpoint_age_seconds)",
+          "legendFormat": "{{workflow_id}} {{branch_id}}"
+        }
+      ],
+      "title": "Checkpoint Freshness by Branch",
+      "type": "timeseries"
+    },
+    {
+      "description": "Placeholder context-pressure panel. Assumes the runtime exports a normalized pressure ratio and a coarse pressure_level label.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "max by (workflow_id, branch_id, pressure_level) (mistersmith_autonomy_context_pressure_ratio)",
+          "legendFormat": "{{workflow_id}} {{branch_id}} {{pressure_level}}"
+        }
+      ],
+      "title": "Context Pressure by Branch",
+      "type": "timeseries"
+    },
+    {
+      "description": "Placeholder intervention history from AutonomyStatusView.interventions. Assumes a counter labeled by intervention type and decision source.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "sum by (intervention) (increase(mistersmith_autonomy_interventions_total[15m]))",
+          "legendFormat": "{{intervention}}"
+        }
+      ],
+      "title": "Interventions by Type (15m)",
+      "type": "timeseries"
+    },
+    {
+      "description": "Placeholder delegation and provenance visibility from AutonomyStatusView.delegation_alerts. Intended for invalid, expired, revoked, or otherwise rejected chains only.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "expr": "sum by (reason) (increase(mistersmith_autonomy_delegation_rejections_total[15m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "title": "Provenance Rejections by Reason (15m)",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["mister-smith", "autonomy", "phase10"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Mister Smith Autonomy",
+  "uid": "mister-smith-autonomy",
+  "version": 1
+}
