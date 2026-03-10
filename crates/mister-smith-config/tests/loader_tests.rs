@@ -146,7 +146,10 @@ fn env_overlay_log_level() {
 fn env_overlay_transport() {
     let mut config = FrameworkConfig::default();
     let _env = EnvGuard::new(&[
-        ("TEST_PREFIX4_TRANSPORT__NATS_URL", Some("nats://remote:4222")),
+        (
+            "TEST_PREFIX4_TRANSPORT__NATS_URL",
+            Some("nats://remote:4222"),
+        ),
         ("TEST_PREFIX4_TRANSPORT__HTTP_PORT", Some("8080")),
         ("TEST_PREFIX4_TRANSPORT__GRPC_PORT", Some("9090")),
     ]);
@@ -218,7 +221,10 @@ fn load_config_returns_defaults_when_no_file() {
         ("MISTER_SMITH_AGENT__RUNTIME__WORKER_THREADS", None),
         ("MISTER_SMITH_AGENT__RUNTIME__BLOCKING_THREADS", None),
         ("MISTER_SMITH_AGENT__RUNTIME__MAX_MEMORY", None),
-        ("MISTER_SMITH_AGENT__SUPERVISION__MAX_RESTART_ATTEMPTS", None),
+        (
+            "MISTER_SMITH_AGENT__SUPERVISION__MAX_RESTART_ATTEMPTS",
+            None,
+        ),
         ("MISTER_SMITH_AGENT__MONITORING__LOG_LEVEL", None),
         ("MISTER_SMITH_TRANSPORT__NATS_URL", None),
         ("MISTER_SMITH_TRANSPORT__HTTP_PORT", None),
