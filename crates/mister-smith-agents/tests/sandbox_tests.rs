@@ -220,7 +220,7 @@ async fn sandboxed_spawn_stops_actor_when_credential_issue_fails() {
     let system = Arc::new(ActorSystem::new(ActorSystemConfig::default()));
     let agent_id = AgentId::new();
 
-    let err = sandbox
+    let err = match sandbox
         .spawn_agent(
             system.clone(),
             SandboxActor { id: agent_id },
@@ -229,7 +229,10 @@ async fn sandboxed_spawn_stops_actor_when_credential_issue_fails() {
             None,
         )
         .await
-        .expect_err("sandboxed spawn should fail with invalid signing key");
+    {
+        Ok(_) => panic!("sandboxed spawn should fail with invalid signing key"),
+        Err(err) => err,
+    };
     assert!(matches!(err, AgentSystemError::PermissionDenied(_)));
 
     tokio::time::timeout(Duration::from_secs(1), async {
