@@ -91,8 +91,8 @@ mod inner {
             let mut persisted = self.persisted_ids.lock().await;
 
             // Filter out already-persisted events
-            let new_events: Vec<&SecurityAuditEvent> = events
-                .iter()
+            let new_events: Vec<SecurityAuditEvent> = events
+                .into_iter()
                 .filter(|e| !persisted.contains(&e.event_id))
                 .collect();
 
@@ -100,17 +100,17 @@ mod inner {
                 return Ok(0);
             }
 
+            let new_ids: HashSet<String> = new_events
+                .iter()
+                .map(|event| event.event_id.clone())
+                .collect();
+
             // Convert to AuditEntry
             let entries: Vec<AuditEntry> =
-                new_events.iter().map(|e| Self::convert_event(e)).collect();
+                new_events.into_iter().map(Self::convert_event).collect();
 
             // Batch insert
             let count = self.repository.append_batch(&entries).await?;
-
-            let new_ids: HashSet<String> = new_events
-                .into_iter()
-                .map(|event| event.event_id.clone())
-                .collect();
 
             // Prevent unbounded growth — if tracking set exceeds 2x batch size,
             // only keep the newly-persisted IDs (not all ring buffer events).
@@ -122,7 +122,7 @@ mod inner {
 
             debug!(
                 count = count,
-                total_events = events.len(),
+                total_events = count,
                 "Flushed audit events to PostgreSQL"
             );
 
@@ -130,34 +130,34 @@ mod inner {
         }
 
         /// Convert a Phase 5 `SecurityAuditEvent` to a persistence `AuditEntry`.
-        pub fn convert_event(event: &SecurityAuditEvent) -> AuditEntry {
+        pub fn convert_event(event: SecurityAuditEvent) -> AuditEntry {
             let id = Uuid::parse_str(&event.event_id).unwrap_or_else(|_| Uuid::new_v4());
 
             // Map event_type enum to string
             let event_type = format!("{:?}", event.event_type);
 
             // Action: use the event's action field or derive from event_type
-            let action = event.action.clone().unwrap_or_else(|| event_type.clone());
+            let action = event.action.unwrap_or_else(|| event_type.clone());
 
             // Build metadata from details + source_ip + outcome
             let mut meta = serde_json::Map::new();
-            for (k, v) in &event.details {
-                meta.insert(k.clone(), serde_json::Value::String(v.clone()));
+            for (k, v) in event.details.into_iter() {
+                meta.insert(k, serde_json::Value::String(v));
             }
-            if let Some(ref ip) = event.source_ip {
+            if let Some(ip) = event.source_ip {
                 meta.insert(
                     "source_ip".to_string(),
-                    serde_json::Value::String(ip.clone()),
+                    serde_json::Value::String(ip),
                 );
             }
             meta.insert(
                 "outcome".to_string(),
                 serde_json::Value::String(format!("{:?}", event.outcome)),
             );
-            if let Some(ref hash) = event.previous_hash {
+            if let Some(hash) = event.previous_hash {
                 meta.insert(
                     "previous_hash".to_string(),
-                    serde_json::Value::String(hash.clone()),
+                    serde_json::Value::String(hash),
                 );
             }
 
@@ -167,12 +167,17 @@ mod inner {
                 .as_ref()
                 .and_then(|p| Uuid::parse_str(p).ok());
 
+            let resource_id = event
+                .resource
+                .as_ref()
+                .and_then(|r| Uuid::parse_str(r).ok());
+
             AuditEntry {
                 id,
                 event_type,
                 agent_id,
                 resource_type: Some("security".to_string()),
-                resource_id: None,
+                resource_id,
                 action,
                 old_values: None,
                 new_values: None,
@@ -221,7 +226,7 @@ mod tests {
     #[test]
     fn convert_security_event_to_audit_entry() {
         let event = sample_security_event();
-        let entry = AuditPersister::convert_event(&event);
+        let entry = AuditPersister::convert_event(event);
 
         assert_eq!(entry.event_type, "Authentication");
         assert_eq!(entry.action, "login");
@@ -246,7 +251,7 @@ mod tests {
         let mut event = sample_security_event();
         event.principal = Some(agent_id.to_string());
 
-        let entry = AuditPersister::convert_event(&event);
+        let entry = AuditPersister::convert_event(event);
         assert_eq!(entry.agent_id, Some(agent_id));
     }
 
@@ -255,7 +260,7 @@ mod tests {
         let mut event = sample_security_event();
         event.action = None;
 
-        let entry = AuditPersister::convert_event(&event);
+        let entry = AuditPersister::convert_event(event);
         assert_eq!(entry.action, "Authentication");
     }
 }

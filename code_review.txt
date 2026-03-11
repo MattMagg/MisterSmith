@@ -1,0 +1,9 @@
+Review of `crates/mister-smith-persistence/src/audit_persister.rs` changes:
+- `convert_event` signature changed from taking a reference (`&SecurityAuditEvent`) to taking ownership (`SecurityAuditEvent`).
+- Inside `convert_event`, `.into_iter()` is used on `event.details`, avoiding the `.clone()` inside the loop and `String` allocation overhead.
+- `flush` method updated to filter `events` into an owned `Vec<SecurityAuditEvent>`.
+- Ownership flow is clean: `events` (owned by caller `flush`) -> `new_events` (filtered owned) -> `entries` (mapped to `AuditEntry` using `convert_event` by value). `new_ids` extracted before `convert_event` consumes `new_events`.
+- Tests updated to call `convert_event` with an owned event instead of a reference. All tests pass.
+- Removed arbitrary benchmark code that shouldn't be checked in to production.
+
+The optimization is sound and correctly implemented.

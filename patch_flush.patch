@@ -1,0 +1,37 @@
+--- crates/mister-smith-persistence/src/audit_persister.rs
++++ crates/mister-smith-persistence/src/audit_persister.rs
+@@ -94,22 +94,21 @@
+             // Hold lock across entire flush to prevent TOCTOU race
+             let mut persisted = self.persisted_ids.lock().await;
+
+             // Filter out already-persisted events
+-            let new_events: Vec<&SecurityAuditEvent> = events
+-                .iter()
++            let new_events: Vec<SecurityAuditEvent> = events
++                .into_iter()
+                 .filter(|e| !persisted.contains(&e.event_id))
+                 .collect();
+
+             if new_events.is_empty() {
+                 return Ok(0);
+             }
+
++            let new_ids: HashSet<String> = new_events
++                .iter()
++                .map(|event| event.event_id.clone())
++                .collect();
++
+             // Convert to AuditEntry
+             let entries: Vec<AuditEntry> =
+-                new_events.iter().map(|e| Self::convert_event(e)).collect();
++                new_events.into_iter().map(|e| Self::convert_event(e)).collect();
+
+             // Batch insert
+             let count = self.repository.append_batch(&entries).await?;
+
+-            let new_ids: HashSet<String> = new_events
+-                .into_iter()
+-                .map(|event| event.event_id.clone())
+-                .collect();
+-
+             // Prevent unbounded growth — if tracking set exceeds 2x batch size,
