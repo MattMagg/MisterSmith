@@ -52,7 +52,7 @@ class BootstrapControlPlaneScriptTests(unittest.TestCase):
                 text = skill_path.read_text(encoding="utf-8")
                 self.assertIn("Use the `smith` MCP tools first", text)
 
-    def test_accepts_legacy_control_plane_server_name(self) -> None:
+    def test_rejects_legacy_control_plane_server_name(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir) / "mister-smith"
             repo_root.mkdir()
@@ -63,10 +63,10 @@ class BootstrapControlPlaneScriptTests(unittest.TestCase):
             )
 
             result = self.run_script(repo_root, config_path)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.returncode, 1, result.stderr)
             payload = json.loads(result.stdout)
-            self.assertEqual(payload["config"]["server_name"], "mistersmith_control_plane")
-            self.assertFalse(payload["config"]["missing"])
+            self.assertIsNone(payload["config"]["server_name"])
+            self.assertTrue(payload["config"]["missing"])
 
 
 if __name__ == "__main__":

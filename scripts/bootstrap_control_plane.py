@@ -44,7 +44,7 @@ Use the `smith` MCP tools first for any Mister Smith workflow request.
     ),
     "mister-smith-control-plane-bootstrap": SkillTemplate(
         name="mister-smith-control-plane-bootstrap",
-        description="Use when the Mister Smith control-plane MCP or compatibility skill shims need to be installed, repaired, re-pointed, or audited in the local Codex environment.",
+        description="Use when the Mister Smith control-plane MCP or repo-local skill shims need to be installed, repaired, re-pointed, or audited in the local Codex environment.",
         body="""# Mister Smith Control-Plane Bootstrap
 
 Use the `smith` MCP tools first when checking bootstrap and readiness.
@@ -53,11 +53,13 @@ Use the `smith` MCP tools first when checking bootstrap and readiness.
 
 1. Call `audit_workflow_readiness`.
 2. If repo-local canonical skills are missing, run `python3 scripts/bootstrap_control_plane.py` from the Mister Smith repo.
-3. If readiness still fails, fix the reported checks before continuing.
+3. Call `get_server_runtime_info` after control-plane source edits to verify the live MCP version.
+4. If runtime metadata is stale, call `reload_server`.
+5. If readiness still fails, fix the reported checks before continuing.
 
 ## Notes
 
-- Accept either `smith` or `mistersmith_control_plane` as the configured MCP server name.
+- Require `smith` as the configured MCP server name.
 - Treat repo-local canonical skills as the authoritative skill pack for this repository.
 """,
     ),
@@ -183,7 +185,7 @@ def detect_server_name(config_path: Path) -> tuple[bool, str | None]:
         return True, None
 
     raw = config_path.read_text(encoding="utf-8")
-    match = re.search(r"\[mcp_servers\.(mistersmith_control_plane|smith)\]", raw)
+    match = re.search(r"\[mcp_servers\.(smith)\]", raw)
     return False, match.group(1) if match else None
 
 
@@ -239,7 +241,7 @@ def main() -> int:
             "server_name": server_name,
         },
         "next_action": (
-            "Run smith.audit_workflow_readiness to verify bootstrap and workspace readiness."
+            "Run smith.audit_workflow_readiness, then smith.get_server_runtime_info, to verify bootstrap and live runtime readiness."
         ),
     }
     json.dump(payload, sys.stdout, indent=2)
