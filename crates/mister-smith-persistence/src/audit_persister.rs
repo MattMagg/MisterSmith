@@ -145,20 +145,14 @@ mod inner {
                 meta.insert(k, serde_json::Value::String(v));
             }
             if let Some(ip) = event.source_ip {
-                meta.insert(
-                    "source_ip".to_string(),
-                    serde_json::Value::String(ip),
-                );
+                meta.insert("source_ip".to_string(), serde_json::Value::String(ip));
             }
             meta.insert(
                 "outcome".to_string(),
                 serde_json::Value::String(format!("{:?}", event.outcome)),
             );
             if let Some(hash) = event.previous_hash {
-                meta.insert(
-                    "previous_hash".to_string(),
-                    serde_json::Value::String(hash),
-                );
+                meta.insert("previous_hash".to_string(), serde_json::Value::String(hash));
             }
 
             // Try to parse principal as UUID for agent_id
