@@ -266,17 +266,17 @@ impl AnthropicProvider {
         let mut content = Vec::new();
         let mut tool_calls = Vec::new();
 
-        for block in &response.content {
+        for block in response.content {
             match block.block_type.as_str() {
                 "text" => {
-                    if let Some(text) = &block.text {
-                        content.push(ContentBlock::Text { text: text.clone() });
+                    if let Some(text) = block.text {
+                        content.push(ContentBlock::Text { text });
                     }
                 }
                 "tool_use" => {
-                    let call_id = block.id.clone().unwrap_or_default();
-                    let name = block.name.clone().unwrap_or_default();
-                    let input = block.input.clone().unwrap_or(serde_json::json!({}));
+                    let call_id = block.id.unwrap_or_default();
+                    let name = block.name.unwrap_or_default();
+                    let input = block.input.unwrap_or_else(|| serde_json::json!({}));
                     content.push(ContentBlock::ToolUse {
                         call_id: call_id.clone(),
                         name: name.clone(),
