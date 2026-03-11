@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -892,8 +892,6 @@ fn ready_node_ids_for_branch(
     recovery_node_ids: &[ExecutionNodeId],
     tasks_by_node: &HashMap<ExecutionNodeId, TaskAssignment>,
 ) -> Vec<ExecutionNodeId> {
-    let recovery_scope = recovery_node_ids.iter().copied().collect::<HashSet<_>>();
-
     recovery_node_ids
         .iter()
         .copied()
@@ -915,13 +913,9 @@ fn ready_node_ids_for_branch(
                 return false;
             }
 
-            node.dependencies.iter().all(|dependency| {
-                if recovery_scope.contains(dependency) {
-                    node_completed(graph, tasks_by_node, *dependency)
-                } else {
-                    node_completed(graph, tasks_by_node, *dependency)
-                }
-            })
+            node.dependencies
+                .iter()
+                .all(|dependency| node_completed(graph, tasks_by_node, *dependency))
         })
         .collect()
 }

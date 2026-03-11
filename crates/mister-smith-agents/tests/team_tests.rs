@@ -244,9 +244,7 @@ async fn test_orchestrator_execute_routes_using_current_worker_load() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|value| {
-            TaskId::from_uuid(Uuid::parse_str(value.as_str().unwrap()).unwrap())
-        })
+        .map(|value| TaskId::from_uuid(Uuid::parse_str(value.as_str().unwrap()).unwrap()))
         .collect::<Vec<_>>();
 
     assert_eq!(subtask_ids.len(), 2);
@@ -259,7 +257,10 @@ async fn test_orchestrator_execute_routes_using_current_worker_load() {
     assert!(orchestrator
         .autonomy_events(&task.task_id)
         .iter()
-        .any(|event| matches!(event, mister_smith_events::AutonomyEvent::RoutingDecisionRecorded(_))));
+        .any(|event| matches!(
+            event,
+            mister_smith_events::AutonomyEvent::RoutingDecisionRecorded(_)
+        )));
 }
 
 #[tokio::test]

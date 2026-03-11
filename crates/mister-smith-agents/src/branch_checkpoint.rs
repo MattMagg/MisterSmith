@@ -55,6 +55,13 @@ pub struct BranchRecoveryPlan {
     pub resume_metadata: BranchResumeMetadata,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RecoveryPlanRequest {
+    strategy: BranchRecoveryStrategy,
+    assigned_agent: Option<AgentId>,
+    state_override: Option<BranchState>,
+}
+
 /// Durable storage surface for branch checkpoints and resume metadata.
 #[async_trait::async_trait]
 pub trait BranchCheckpointStore: Send + Sync {
@@ -281,9 +288,11 @@ impl BranchCheckpointCoordinator {
             workflow_id,
             graph,
             branch_id,
-            BranchRecoveryStrategy::Resume,
-            assigned_agent,
-            None,
+            RecoveryPlanRequest {
+                strategy: BranchRecoveryStrategy::Resume,
+                assigned_agent,
+                state_override: None,
+            },
         )
         .await
     }
@@ -302,9 +311,11 @@ impl BranchCheckpointCoordinator {
             workflow_id,
             graph,
             branch_id,
-            BranchRecoveryStrategy::Reassign,
-            Some(assigned_agent),
-            Some(BranchState::Reassigned),
+            RecoveryPlanRequest {
+                strategy: BranchRecoveryStrategy::Reassign,
+                assigned_agent: Some(assigned_agent),
+                state_override: Some(BranchState::Reassigned),
+            },
         )
         .await
     }
@@ -315,9 +326,7 @@ impl BranchCheckpointCoordinator {
         workflow_id: TaskId,
         graph: &mut ExecutionGraph,
         branch_id: ExecutionBranchId,
-        strategy: BranchRecoveryStrategy,
-        assigned_agent: Option<AgentId>,
-        state_override: Option<BranchState>,
+        request: RecoveryPlanRequest,
     ) -> Result<BranchRecoveryPlan, AgentSystemError> {
         let checkpoint = latest_checkpoint(store, workflow_id, graph, branch_id).await?;
         let recovery_node_ids = graph.recovery_node_ids(&branch_id);
@@ -326,23 +335,23 @@ impl BranchCheckpointCoordinator {
         })?;
         let previous_assigned_agents = branch.assigned_agents.clone();
 
-        if let Some(agent_id) = assigned_agent {
+        if let Some(agent_id) = request.assigned_agent {
             branch.assigned_agents = vec![agent_id];
         }
 
-        branch.state = state_override.unwrap_or(BranchState::Checkpointed);
+        branch.state = request.state_override.unwrap_or(BranchState::Checkpointed);
 
         let resume_metadata = BranchResumeMetadata {
             workflow_id,
             branch_id,
             checkpoint_id: checkpoint.checkpoint_id,
-            recovery_strategy: strategy,
+            recovery_strategy: request.strategy,
             recovery_node_ids: recovery_node_ids.clone(),
             completed_nodes: checkpoint.completed_nodes.clone(),
             pending_nodes: checkpoint.pending_nodes.clone(),
             previous_assigned_agents,
-            assigned_agent,
-            notes: vec![match strategy {
+            assigned_agent: request.assigned_agent,
+            notes: vec![match request.strategy {
                 BranchRecoveryStrategy::Resume => {
                     "resume planned from latest branch checkpoint".to_string()
                 }
@@ -520,7 +529,11 @@ mod tests {
     async fn repository_persist_remains_authoritative_when_cache_write_fails() {
         let result = persist_repository_then_cache(
             async { Ok(()) },
-            async { Err(PersistenceError::ConnectionFailed("kv unavailable".to_string())) },
+            async {
+                Err(PersistenceError::ConnectionFailed(
+                    "kv unavailable".to_string(),
+                ))
+            },
             "branch checkpoint",
         )
         .await;
