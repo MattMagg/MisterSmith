@@ -217,6 +217,52 @@ async fn test_orchestrator_execute_assigns_subtasks() {
 }
 
 #[tokio::test]
+async fn test_orchestrator_execute_routes_using_current_worker_load() {
+    let scheduler = Arc::new(TaskScheduler::new());
+    let orchestrator = Orchestrator::new(
+        Arc::new(SplitDecomposer(2)),
+        Arc::new(ArrayAggregator),
+        scheduler.clone(),
+    );
+
+    let overloaded_worker = AgentId::new();
+    let available_worker = AgentId::new();
+    let preload_a = TaskAssignment::new("preload-a", serde_json::json!({}));
+    let preload_b = TaskAssignment::new("preload-b", serde_json::json!({}));
+    let preload_a_id = scheduler.submit(preload_a);
+    let preload_b_id = scheduler.submit(preload_b);
+    scheduler.assign(&preload_a_id, overloaded_worker).unwrap();
+    scheduler.assign(&preload_b_id, overloaded_worker).unwrap();
+
+    let task = TaskAssignment::new("execute-routing", serde_json::json!({"data": 42}));
+    let result = orchestrator
+        .execute(&task, &[overloaded_worker, available_worker])
+        .await
+        .unwrap();
+
+    let subtask_ids = result["subtask_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| {
+            TaskId::from_uuid(Uuid::parse_str(value.as_str().unwrap()).unwrap())
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(subtask_ids.len(), 2);
+    for subtask_id in subtask_ids {
+        assert_eq!(
+            scheduler.get(&subtask_id).unwrap().assigned_to,
+            Some(available_worker)
+        );
+    }
+    assert!(orchestrator
+        .autonomy_events(&task.task_id)
+        .iter()
+        .any(|event| matches!(event, mister_smith_events::AutonomyEvent::RoutingDecisionRecorded(_))));
+}
+
+#[tokio::test]
 async fn test_team_member_management() {
     let mut team = Team::new(
         AgentId::new(),

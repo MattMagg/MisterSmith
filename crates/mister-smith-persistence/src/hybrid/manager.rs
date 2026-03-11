@@ -277,7 +277,7 @@ impl HybridStateManager {
         }
     }
 
-    /// Persist the latest durable branch checkpoint for a workflow namespace.
+    /// Cache the latest branch checkpoint for a workflow namespace.
     pub async fn write_branch_checkpoint(
         &self,
         workflow_id: Uuid,
@@ -295,7 +295,7 @@ impl HybridStateManager {
             .await
     }
 
-    /// Load the latest durable branch checkpoint for a workflow namespace.
+    /// Load the latest cached branch checkpoint for a workflow namespace.
     pub async fn read_branch_checkpoint(
         &self,
         workflow_id: Uuid,
@@ -309,7 +309,7 @@ impl HybridStateManager {
             .await
     }
 
-    /// Persist ordered branch resume metadata for a workflow namespace.
+    /// Cache ordered branch resume metadata for a workflow namespace.
     pub async fn write_branch_resume_history(
         &self,
         workflow_id: Uuid,
@@ -327,7 +327,7 @@ impl HybridStateManager {
             .await
     }
 
-    /// Load ordered branch resume metadata for a workflow namespace.
+    /// Load ordered cached branch resume metadata for a workflow namespace.
     pub async fn read_branch_resume_history(
         &self,
         workflow_id: Uuid,

@@ -1,9 +1,11 @@
 //! Branch-local checkpoint capture, resume, and reassignment helpers.
 
+use std::future::Future;
 use std::sync::Arc;
 
 use chrono::Utc;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tracing::warn;
 
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, ExecutionBranchId, ExecutionNodeId,
@@ -84,7 +86,8 @@ pub trait BranchCheckpointStore: Send + Sync {
     ) -> Result<Vec<BranchResumeMetadata>, PersistenceError>;
 }
 
-/// Repository-backed branch checkpoint persistence over the Phase 6 dual-store substrate.
+/// Repository-backed branch checkpoint persistence with SQL-authoritative metadata
+/// and best-effort KV cache hydration.
 pub struct RepositoryBranchCheckpointStore {
     hybrid: Arc<HybridStateManager>,
     task_repository: Arc<TaskRepository>,
@@ -108,21 +111,30 @@ impl BranchCheckpointStore for RepositoryBranchCheckpointStore {
         checkpoint: &BranchCheckpoint,
     ) -> Result<(), PersistenceError> {
         let checkpoint_value = serialize_value(checkpoint)?;
-        self.hybrid
-            .write_branch_checkpoint(
-                *workflow_id.as_ref(),
-                *checkpoint.branch_id.as_ref(),
-                &checkpoint_value,
-            )
-            .await?;
-        self.task_repository
-            .persist_branch_recovery_metadata(
-                *workflow_id.as_ref(),
-                &[checkpoint_record(checkpoint)],
-                &[],
-            )
-            .await?;
-        Ok(())
+        persist_repository_then_cache(
+            async {
+                self.task_repository
+                    .persist_branch_recovery_metadata(
+                        *workflow_id.as_ref(),
+                        &[checkpoint_record(checkpoint)],
+                        &[],
+                    )
+                    .await
+                    .map(|_| ())
+            },
+            async {
+                self.hybrid
+                    .write_branch_checkpoint(
+                        *workflow_id.as_ref(),
+                        *checkpoint.branch_id.as_ref(),
+                        &checkpoint_value,
+                    )
+                    .await
+                    .map(|_| ())
+            },
+            "branch checkpoint",
+        )
+        .await
     }
 
     async fn persist_branch_resume(
@@ -136,21 +148,30 @@ impl BranchCheckpointStore for RepositoryBranchCheckpointStore {
         history.sort_by(|left, right| left.resumed_at.cmp(&right.resumed_at));
 
         let history_value = serialize_value(&history)?;
-        self.hybrid
-            .write_branch_resume_history(
-                *resume.workflow_id.as_ref(),
-                *resume.branch_id.as_ref(),
-                &history_value,
-            )
-            .await?;
-        self.task_repository
-            .persist_branch_recovery_metadata(
-                *resume.workflow_id.as_ref(),
-                &[],
-                &[resume_record(resume)],
-            )
-            .await?;
-        Ok(())
+        persist_repository_then_cache(
+            async {
+                self.task_repository
+                    .persist_branch_recovery_metadata(
+                        *resume.workflow_id.as_ref(),
+                        &[],
+                        &[resume_record(resume)],
+                    )
+                    .await
+                    .map(|_| ())
+            },
+            async {
+                self.hybrid
+                    .write_branch_resume_history(
+                        *resume.workflow_id.as_ref(),
+                        *resume.branch_id.as_ref(),
+                        &history_value,
+                    )
+                    .await
+                    .map(|_| ())
+            },
+            "branch resume history",
+        )
+        .await
     }
 
     async fn latest_branch_checkpoint(
@@ -158,18 +179,22 @@ impl BranchCheckpointStore for RepositoryBranchCheckpointStore {
         workflow_id: TaskId,
         branch_id: ExecutionBranchId,
     ) -> Result<Option<BranchCheckpoint>, PersistenceError> {
-        if let Some(value) = self
-            .hybrid
-            .read_branch_checkpoint(*workflow_id.as_ref(), *branch_id.as_ref())
-            .await?
-        {
-            return deserialize_value(value).map(Some);
-        }
-
-        self.task_repository
-            .load_latest_branch_checkpoint(*workflow_id.as_ref(), branch_id)
-            .await
-            .map(|record| record.map(checkpoint_from_record))
+        read_repository_then_cache(
+            async {
+                self.task_repository
+                    .load_latest_branch_checkpoint(*workflow_id.as_ref(), branch_id)
+                    .await
+                    .map(|record| record.map(checkpoint_from_record))
+            },
+            async {
+                self.hybrid
+                    .read_branch_checkpoint(*workflow_id.as_ref(), *branch_id.as_ref())
+                    .await?
+                    .map_or(Ok(None), |value| deserialize_value(value).map(Some))
+            },
+            "branch checkpoint",
+        )
+        .await
     }
 
     async fn branch_resume_history(
@@ -177,18 +202,38 @@ impl BranchCheckpointStore for RepositoryBranchCheckpointStore {
         workflow_id: TaskId,
         branch_id: ExecutionBranchId,
     ) -> Result<Vec<BranchResumeMetadata>, PersistenceError> {
-        if let Some(value) = self
-            .hybrid
-            .read_branch_resume_history(*workflow_id.as_ref(), *branch_id.as_ref())
-            .await?
-        {
-            return deserialize_value(value);
-        }
-
-        self.task_repository
+        match self
+            .task_repository
             .load_branch_resume_history(*workflow_id.as_ref(), branch_id)
             .await
-            .map(|records| records.into_iter().map(resume_from_record).collect())
+        {
+            Ok(records) if !records.is_empty() => {
+                Ok(records.into_iter().map(resume_from_record).collect())
+            }
+            Ok(_) => self
+                .hybrid
+                .read_branch_resume_history(*workflow_id.as_ref(), *branch_id.as_ref())
+                .await?
+                .map_or(Ok(Vec::new()), deserialize_value),
+            Err(repository_error) => {
+                warn!(
+                    cache = "branch resume history",
+                    error = %repository_error,
+                    "branch recovery repository read failed; falling back to cache"
+                );
+                match self
+                    .hybrid
+                    .read_branch_resume_history(*workflow_id.as_ref(), *branch_id.as_ref())
+                    .await
+                {
+                    Ok(Some(value)) => deserialize_value(value),
+                    Ok(None) => Ok(Vec::new()),
+                    Err(cache_error) => Err(PersistenceError::ConnectionFailed(format!(
+                        "repository read failed: {repository_error}; cache fallback failed: {cache_error}"
+                    ))),
+                }
+            }
+        }
     }
 }
 
@@ -416,4 +461,100 @@ fn serialize_value<T: Serialize>(value: &T) -> Result<serde_json::Value, Persist
 fn deserialize_value<T: DeserializeOwned>(value: serde_json::Value) -> Result<T, PersistenceError> {
     serde_json::from_value(value)
         .map_err(|error| PersistenceError::SerializationFailed(error.to_string()))
+}
+
+async fn persist_repository_then_cache<RepositoryWrite, CacheWrite>(
+    repository_write: RepositoryWrite,
+    cache_write: CacheWrite,
+    cache_label: &str,
+) -> Result<(), PersistenceError>
+where
+    RepositoryWrite: Future<Output = Result<(), PersistenceError>>,
+    CacheWrite: Future<Output = Result<(), PersistenceError>>,
+{
+    repository_write.await?;
+    if let Err(error) = cache_write.await {
+        warn!(
+            cache = cache_label,
+            error = %error,
+            "branch recovery cache write failed after durable repository persistence"
+        );
+    }
+    Ok(())
+}
+
+async fn read_repository_then_cache<T, RepositoryRead, CacheRead>(
+    repository_read: RepositoryRead,
+    cache_read: CacheRead,
+    cache_label: &str,
+) -> Result<Option<T>, PersistenceError>
+where
+    RepositoryRead: Future<Output = Result<Option<T>, PersistenceError>>,
+    CacheRead: Future<Output = Result<Option<T>, PersistenceError>>,
+{
+    match repository_read.await {
+        Ok(Some(value)) => Ok(Some(value)),
+        Ok(None) => cache_read.await,
+        Err(repository_error) => {
+            warn!(
+                cache = cache_label,
+                error = %repository_error,
+                "branch recovery repository read failed; falling back to cache"
+            );
+            match cache_read.await {
+                Ok(value) => Ok(value),
+                Err(cache_error) => Err(PersistenceError::ConnectionFailed(format!(
+                    "repository read failed: {repository_error}; cache fallback failed: {cache_error}"
+                ))),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{persist_repository_then_cache, read_repository_then_cache};
+    use mister_smith_core::PersistenceError;
+
+    #[tokio::test]
+    async fn repository_persist_remains_authoritative_when_cache_write_fails() {
+        let result = persist_repository_then_cache(
+            async { Ok(()) },
+            async { Err(PersistenceError::ConnectionFailed("kv unavailable".to_string())) },
+            "branch checkpoint",
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn repository_read_falls_back_to_cache_when_repository_is_degraded() {
+        let result = read_repository_then_cache(
+            async {
+                Err(PersistenceError::ConnectionFailed(
+                    "repository unavailable".to_string(),
+                ))
+            },
+            async { Ok(Some("cached-checkpoint")) },
+            "branch checkpoint",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result, Some("cached-checkpoint"));
+    }
+
+    #[tokio::test]
+    async fn repository_read_prefers_durable_value_when_available() {
+        let result = read_repository_then_cache(
+            async { Ok(Some("durable-checkpoint")) },
+            async { Ok(Some("cached-checkpoint")) },
+            "branch checkpoint",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result, Some("durable-checkpoint"));
+    }
 }

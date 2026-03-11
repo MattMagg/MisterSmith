@@ -698,15 +698,12 @@ impl Orchestrator {
             ));
         }
 
-        // 2. Assign subtasks round-robin to available workers
-        for (i, subtask_id) in subtask_ids.iter().enumerate() {
-            if worker_ids.is_empty() {
-                return Err(AgentSystemError::OrchestrationError(
-                    "No workers available for assignment".into(),
-                ));
-            }
-            let worker = worker_ids[i % worker_ids.len()];
-            self.scheduler.assign(subtask_id, worker)?;
+        // 2. Route only the ready branch scope using resilience-aware signals.
+        let routed = self.route_ready_branches(&task.task_id, worker_ids)?;
+        if routed.is_empty() {
+            return Err(AgentSystemError::OrchestrationError(
+                "No ready branches available for routing".into(),
+            ));
         }
 
         // 3. Aggregate results (caller is responsible for driving subtask completion)
