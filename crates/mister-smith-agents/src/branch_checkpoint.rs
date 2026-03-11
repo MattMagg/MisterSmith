@@ -1,5 +1,6 @@
 //! Branch-local checkpoint capture, resume, and reassignment helpers.
 
+use std::collections::HashSet;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -329,7 +330,8 @@ impl BranchCheckpointCoordinator {
         request: RecoveryPlanRequest,
     ) -> Result<BranchRecoveryPlan, AgentSystemError> {
         let checkpoint = latest_checkpoint(store, workflow_id, graph, branch_id).await?;
-        let recovery_node_ids = graph.recovery_node_ids(&branch_id);
+        hydrate_checkpoint_lineage(graph, checkpoint.clone());
+        let recovery_node_ids = recovery_node_ids_from_checkpoint(graph, branch_id, &checkpoint);
         let branch = graph.branch_mut(&branch_id).ok_or_else(|| {
             AgentSystemError::OrchestrationError(format!("No branch {branch_id} found for resume"))
         })?;
@@ -340,6 +342,7 @@ impl BranchCheckpointCoordinator {
         }
 
         branch.state = request.state_override.unwrap_or(BranchState::Checkpointed);
+        branch.recovery_strategy = request.strategy;
 
         let resume_metadata = BranchResumeMetadata {
             workflow_id,
@@ -379,6 +382,50 @@ impl BranchCheckpointCoordinator {
             resume_metadata,
         })
     }
+}
+
+fn hydrate_checkpoint_lineage(graph: &mut ExecutionGraph, checkpoint: BranchCheckpoint) {
+    let branch_id = checkpoint.branch_id;
+    let checkpoint_id = checkpoint.checkpoint_id;
+
+    graph.checkpoint_lineage.retain(|existing| {
+        existing.branch_id != branch_id || existing.checkpoint_id != checkpoint_id
+    });
+
+    if graph
+        .latest_checkpoint(&branch_id)
+        .is_some_and(|existing| existing.checkpoint_id == checkpoint_id)
+    {
+        return;
+    }
+
+    graph.checkpoint_lineage.push(checkpoint);
+}
+
+fn recovery_node_ids_from_checkpoint(
+    graph: &ExecutionGraph,
+    branch_id: ExecutionBranchId,
+    checkpoint: &BranchCheckpoint,
+) -> Vec<ExecutionNodeId> {
+    if !checkpoint.pending_nodes.is_empty() {
+        return checkpoint.pending_nodes.clone();
+    }
+
+    let Some(branch) = graph.branch(&branch_id) else {
+        return Vec::new();
+    };
+
+    if !checkpoint.completed_nodes.is_empty() {
+        let completed: HashSet<_> = checkpoint.completed_nodes.iter().copied().collect();
+        return branch
+            .node_ids
+            .iter()
+            .copied()
+            .filter(|node_id| !completed.contains(node_id))
+            .collect();
+    }
+
+    branch.node_ids.clone()
 }
 
 async fn latest_checkpoint<S: BranchCheckpointStore + ?Sized>(

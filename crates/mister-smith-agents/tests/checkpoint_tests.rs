@@ -234,6 +234,43 @@ async fn checkpoint_coordinator_records_checkpoint_and_resumes_pending_nodes_onl
 }
 
 #[tokio::test]
+async fn checkpoint_coordinator_hydrates_durable_checkpoint_when_graph_lineage_is_cold() {
+    let mut graph = compile_graph();
+    let workflow_id = graph.workflow_id;
+    let branch_id = branch_id_for(&graph, "branch-a-1");
+    let completed = node_id_for(&graph, "branch-a-1");
+    let pending = node_id_for(&graph, "branch-a-2");
+    let store = InMemoryBranchCheckpointStore::default();
+    let coordinator = BranchCheckpointCoordinator::default();
+    let checkpoint = BranchCheckpoint::new(
+        branch_id,
+        vec![completed],
+        vec![pending],
+        mister_smith_core::MemorySnapshotId::new(),
+    );
+
+    store
+        .persist_branch_checkpoint(workflow_id, &checkpoint)
+        .await
+        .expect("durable checkpoint should persist without hydrating the graph");
+
+    let recovery = coordinator
+        .resume_branch(&store, workflow_id, &mut graph, branch_id, None)
+        .await
+        .expect("resume should recover from the durable checkpoint");
+
+    assert_eq!(recovery.checkpoint.checkpoint_id, checkpoint.checkpoint_id);
+    assert_recovery_scope(&recovery, vec![pending]);
+    assert_eq!(
+        graph
+            .latest_checkpoint(&branch_id)
+            .expect("durable checkpoint should hydrate graph lineage")
+            .checkpoint_id,
+        checkpoint.checkpoint_id
+    );
+}
+
+#[tokio::test]
 async fn checkpoint_coordinator_reassigns_failed_branch_without_touching_completed_siblings() {
     let mut graph = compile_graph();
     let workflow_id = graph.workflow_id;
@@ -275,6 +312,10 @@ async fn checkpoint_coordinator_reassigns_failed_branch_without_touching_complet
     assert_eq!(
         graph.branch(&branch_a).unwrap().state,
         BranchState::Reassigned
+    );
+    assert_eq!(
+        graph.branch(&branch_a).unwrap().recovery_strategy,
+        BranchRecoveryStrategy::Reassign
     );
     assert_eq!(
         graph.branch(&branch_a).unwrap().assigned_agents,
@@ -405,6 +446,14 @@ async fn orchestrator_reassign_branch_updates_branch_state_and_persists_history(
             .expect("branch should remain registered")
             .state,
         BranchState::Reassigned
+    );
+    assert_eq!(
+        orchestrator
+            .execution_graph(&workflow_id)
+            .and_then(|graph| graph.branch(&branch_id).cloned())
+            .expect("branch should remain registered")
+            .recovery_strategy,
+        BranchRecoveryStrategy::Reassign
     );
     assert_eq!(
         store
