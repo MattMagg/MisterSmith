@@ -13,3 +13,7 @@
 ## 2025-02-17 - Serialize Request Body Outside Loop
 **Learning:** Avoid `serde_json::to_vec` and JSON serialization on each retry loop iteration, since the request payload is static. Even though `reqwest` exposes `.json()`, passing `.body()` directly with a cloned `Vec<u8>` is considerably faster and avoids excessive object creation in high-latency network retries.
 **Action:** Identify serialization inside retry loops and move it outside to save CPU cycles and reduce overall latency.
+
+## 2025-02-14 - Replace Mutex<HashMap> with DashMap in HTTP RateLimiter
+**Learning:** `tokio::sync::Mutex<HashMap>` for global state accessed by every request is a severe performance bottleneck. A mutex wraps the entire map, preventing parallel processing. `DashMap` provides fine-grained locking and allows concurrent updates across different keys (IPs). In addition, checking the cleanup timestamp via `AtomicU64` prevents blocking requests just for cleanup state tracking.
+**Action:** Default to `DashMap` or equivalent concurrent hash maps instead of `Mutex<HashMap>` for high-concurrency middleware state that receives updates frequently. For shared counters or timestamps, prefer `Atomic` types over locks.
