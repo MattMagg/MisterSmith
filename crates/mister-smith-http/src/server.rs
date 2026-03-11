@@ -9,6 +9,7 @@ use axum::Router;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use axum::http::{header, Method};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::info;
 
@@ -138,8 +139,21 @@ pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
 
         let cors = CorsLayer::new()
             .allow_origin(allow_origin)
-            .allow_methods(tower_http::cors::Any)
-            .allow_headers(tower_http::cors::Any);
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::DELETE,
+                Method::PATCH,
+                Method::OPTIONS,
+            ])
+            .allow_headers([
+                header::AUTHORIZATION,
+                header::CONTENT_TYPE,
+                header::ACCEPT,
+                header::ORIGIN,
+                header::HeaderName::from_static("x-request-id"),
+            ]);
 
         router.layer(cors)
     } else {
