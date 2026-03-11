@@ -71,7 +71,7 @@ pub struct McpClient {
     /// Tool list change notifications from rmcp.
     tool_list_version: Arc<RwLock<Option<watch::Receiver<u64>>>>,
     /// Cached tool list, keyed by namespaced name.
-    tool_cache: Arc<RwLock<HashMap<String, McpTool>>>,
+    tool_cache: Arc<RwLock<HashMap<String, std::sync::Arc<McpTool>>>>,
     /// Whether the client is connected.
     connected: Arc<RwLock<bool>>,
 }
@@ -191,7 +191,7 @@ impl McpClient {
     }
 
     /// Discover available tools from the MCP server.
-    pub async fn discover_tools(&self) -> Result<Vec<McpTool>, McpError> {
+    pub async fn discover_tools(&self) -> Result<Vec<std::sync::Arc<McpTool>>, McpError> {
         if !*self.connected.read().await {
             return Err(McpError::ConnectionFailed(
                 "not connected to MCP server".into(),
@@ -212,14 +212,14 @@ impl McpClient {
             .await
             .map_err(|e| McpError::SessionError(e.to_string()))?;
 
-        let discovered: Vec<McpTool> = tools
+        let discovered: Vec<std::sync::Arc<McpTool>> = tools
             .into_iter()
             .filter(|tool| self.tool_allowed(tool.name.as_ref()))
-            .map(|tool| McpTool {
+            .map(|tool| std::sync::Arc::new(McpTool {
                 name: tool.name.into_owned(),
                 description: tool.description.map(|d| d.into_owned()).unwrap_or_default(),
                 input_schema: serde_json::Value::Object((*tool.input_schema).clone()),
-            })
+            }))
             .collect();
 
         let mut cache = self.tool_cache.write().await;
@@ -228,14 +228,14 @@ impl McpClient {
             let namespace = &self.config.namespace;
             let name = &tool.name;
             let namespaced = format!("{namespace}.{name}");
-            cache.insert(namespaced, tool.clone());
+            cache.insert(namespaced, std::sync::Arc::clone(tool));
         }
 
         Ok(discovered)
     }
 
     /// Get a tool by its namespaced name.
-    pub async fn get_tool(&self, namespaced_name: &str) -> Result<McpTool, McpError> {
+    pub async fn get_tool(&self, namespaced_name: &str) -> Result<std::sync::Arc<McpTool>, McpError> {
         let cache = self.tool_cache.read().await;
         cache
             .get(namespaced_name)
@@ -244,7 +244,7 @@ impl McpClient {
     }
 
     /// Register a tool in the cache (used during discovery).
-    pub async fn register_tool(&self, tool: McpTool) {
+    pub async fn register_tool(&self, tool: std::sync::Arc<McpTool>) {
         let namespace = &self.config.namespace;
         let name = &tool.name;
         let namespaced = format!("{namespace}.{name}");
