@@ -215,11 +215,13 @@ impl McpClient {
         let discovered: Vec<std::sync::Arc<McpTool>> = tools
             .into_iter()
             .filter(|tool| self.tool_allowed(tool.name.as_ref()))
-            .map(|tool| std::sync::Arc::new(McpTool {
-                name: tool.name.into_owned(),
-                description: tool.description.map(|d| d.into_owned()).unwrap_or_default(),
-                input_schema: serde_json::Value::Object((*tool.input_schema).clone()),
-            }))
+            .map(|tool| {
+                std::sync::Arc::new(McpTool {
+                    name: tool.name.into_owned(),
+                    description: tool.description.map(|d| d.into_owned()).unwrap_or_default(),
+                    input_schema: serde_json::Value::Object((*tool.input_schema).clone()),
+                })
+            })
             .collect();
 
         let mut cache = self.tool_cache.write().await;
@@ -235,7 +237,10 @@ impl McpClient {
     }
 
     /// Get a tool by its namespaced name.
-    pub async fn get_tool(&self, namespaced_name: &str) -> Result<std::sync::Arc<McpTool>, McpError> {
+    pub async fn get_tool(
+        &self,
+        namespaced_name: &str,
+    ) -> Result<std::sync::Arc<McpTool>, McpError> {
         let cache = self.tool_cache.read().await;
         cache
             .get(namespaced_name)
