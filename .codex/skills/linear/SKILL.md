@@ -1,13 +1,21 @@
 ---
 name: linear
 description: |
-  Use Symphony's `linear_graphql` tool for raw Linear GraphQL operations during
-  app-server sessions.
+  Use when raw Linear GraphQL is required during Symphony-managed sessions and
+  the Mister Smith constitutional control-plane MCP does not expose the needed
+  operation.
 ---
 
 # Linear GraphQL
 
-Use this skill for direct Linear GraphQL work inside Symphony-managed Codex sessions.
+Use this skill as an escape hatch for direct Linear GraphQL work inside Symphony-managed Codex
+sessions.
+
+Default routing order:
+
+1. use `mistersmith_control_plane` MCP first
+2. use `$mister-smith-control-plane-router` if the request is ambiguous
+3. use this skill only when the control-plane MCP does not expose the required Linear operation
 
 ## Primary tool
 
@@ -26,6 +34,7 @@ Tool input:
 
 Rules:
 
+- prefer the control-plane MCP for queue staging, runtime reconciliation, legitimacy, review-dispatch, and phase planning
 - Send one GraphQL operation per tool call.
 - Treat a top-level `errors` array as failure even if the tool call itself succeeds.
 - Keep reads and mutations narrow.

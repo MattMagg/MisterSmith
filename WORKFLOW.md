@@ -103,6 +103,9 @@ Instructions:
 
 ## Symphony prerequisites
 
+- The local Codex environment should register the `mistersmith_control_plane` MCP server from `/Users/matthewmaggio/Repos/mister-smith-constitutional-control-plane`.
+- The real Symphony source checkout lives at `/Users/matthewmaggio/Repos/symphony`, with the Elixir runtime under `/Users/matthewmaggio/Repos/symphony/elixir`.
+- Use the control-plane MCP tools `get_symphony_checkout_snapshot` and `sync_symphony_main` before doing upstream sync or launcher-maintenance work on that Symphony checkout.
 - A Linear connection is available either through Symphony's tracker integration or the `linear_graphql` tool.
 - The Linear team workflow must define the non-standard states `Rework`, `Human Review`, and `Merging`.
 - GitHub CLI auth may be required for PR workflows.
@@ -110,15 +113,24 @@ Instructions:
 
 ## External knowledge and integrations
 
-- If the session has Rube MCP available, use it as the gateway for external apps, APIs, MCPs, and web research.
+- For Mister Smith control-plane work, use the `mistersmith_control_plane` MCP first.
+- For maintenance on the real Symphony checkout or launcher configuration, stay inside the control-plane MCP first instead of shelling directly into `/Users/matthewmaggio/Repos/symphony`.
+- Use the repo-local `linear` skill only when raw Linear GraphQL is required and the control-plane MCP does not expose the needed operation.
+- If the session has Rube MCP available, use it as the gateway for external apps, APIs, MCPs, and web research that are outside the Mister Smith control plane.
 - Use Context7 via Rube for version-specific framework or library documentation.
-- Use GitHub, Linear, and Mem0 via Rube when those systems are the source of truth.
+- Use GitHub, Linear, and Mem0 via Rube only when the task falls outside the dedicated Mister Smith control-plane MCP surface.
 - Prefer Parallel via Rube for deeper or broader multi-source research that benefits from structured synthesis.
 - Prefer Tavily via Rube for lighter search, quick verification, or targeted extraction from known pages.
 - For Linear product behavior or configuration questions, ground claims in official Linear docs and developer docs even when Parallel or Tavily are doing the retrieval.
 
 ## Related skills
 
+- `mister-smith-control-plane-router`: default entry point for Symphony/Linear/Mister Smith workflow routing.
+- `mister-smith-control-plane-bootstrap`: install or repair the local MCP registration and compatibility shims.
+- `symphony-linear-mister-smith`: broad operational wrapper around the control-plane MCP.
+- `stage-mister-smith-phase`: phase/spec-pack slicing and staging through the control-plane MCP.
+- `symphony-mister-smith-review-dispatch`: review -> merge -> refill queue loop through the control-plane MCP.
+- `mister-smith-frontier-mandate`: legitimacy and anti-drift guardrail, backed by control-plane judgments.
 - `linear`: raw Linear GraphQL operations during the Symphony session.
 - `commit`: create clean conventional commits with rationale and validation notes.
 - `pull`: merge `origin/main` into the current branch and resolve conflicts.

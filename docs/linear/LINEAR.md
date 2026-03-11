@@ -303,9 +303,16 @@ The active execution queue now has a native Linear reminder cadence configured:
 
 ## Integration Points
 
-### External Knowledge (via Rube MCP)
+### External Knowledge and Control-Plane Routing
 
-When agents need external documentation, research, or app connections, prefer Rube as the gateway.
+For Mister Smith workflow operations, the constitutional control-plane MCP is the primary backend.
+Use Rube only for external systems and research that sit outside that backend.
+
+Routing precedence:
+
+1. `mistersmith_control_plane` MCP for Mister Smith queue, runtime, review, and staging operations
+2. repo-local `linear` skill for raw Linear GraphQL gaps
+3. Rube for external apps, research, and non-Mister-Smith workflows
 
 - `Context7 MCP`: version-specific API and library docs
 - `GitHub`: PR, branch, review, and CI state
@@ -471,6 +478,10 @@ deliberately staged:
 
 `/Users/matthewmaggio/Mister-Smith/scripts/run-symphony.sh` is the supported launcher for this repo. It loads `/Users/matthewmaggio/Mister-Smith/.env`, verifies `LINEAR_API_KEY`, then starts the upstream Symphony checkout against this repo's `WORKFLOW.md`.
 
+By default that launcher expects the Symphony source repo at `/Users/matthewmaggio/Repos/symphony` and runs the Elixir service from `/Users/matthewmaggio/Repos/symphony/elixir`.
+
+For maintenance on that upstream checkout, prefer the control-plane MCP tools `get_symphony_checkout_snapshot` and `sync_symphony_main` before making manual repo or launcher changes.
+
 Important: Symphony does not auto-read repo `.env` files. Keeping `LINEAR_API_KEY` in `.env` is not sufficient unless the launch path exports it into the Symphony process environment first.
 
 ### Codex Skills
@@ -479,6 +490,12 @@ Symphony agents use skills defined in `.codex/skills/`:
 
 | Skill | Purpose |
 |-------|---------|
+| `mister-smith-control-plane-router` | Default route into the workflow system |
+| `mister-smith-control-plane-bootstrap` | Install or repair the local MCP + shim setup |
+| `symphony-linear-mister-smith` | Broad control-plane operations, including Symphony checkout maintenance routing |
+| `stage-mister-smith-phase` | Phase/spec-pack slicing and staging |
+| `symphony-mister-smith-review-dispatch` | Review / merge / dispatch loop |
+| `mister-smith-frontier-mandate` | Frontier legitimacy and anti-drift judgment |
 | `commit` | Create conventional commits with rationale |
 | `linear` | Raw Linear GraphQL operations |
 | `pull` | Merge `origin/main` into current branch |
