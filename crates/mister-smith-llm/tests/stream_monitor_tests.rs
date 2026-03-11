@@ -58,6 +58,30 @@ fn stream_monitor_detects_stall_from_idle_heartbeats() {
 }
 
 #[test]
+fn stream_monitor_carries_forward_last_step_boundary_when_stall_is_detected() {
+    let mut monitor = StreamMonitor::new(StreamMonitorConfig {
+        max_idle_heartbeats: 2,
+        repetitive_delta_threshold: 3,
+    });
+
+    let started = monitor.observe(&ModelEvent::StreamStarted {
+        model_id: "gpt-test".to_string(),
+        request_id: "req-3".to_string(),
+    });
+    assert_eq!(started.step_boundaries, vec![StepBoundary::StreamStarted]);
+
+    monitor.observe(&ModelEvent::Heartbeat { sequence: 1 });
+    let stalled = monitor.observe(&ModelEvent::Heartbeat { sequence: 2 });
+
+    assert_eq!(stalled.step_boundaries, vec![StepBoundary::StreamStarted]);
+    assert_eq!(stalled.degradation_signals.len(), 1);
+    assert_eq!(
+        stalled.degradation_signals[0].signal_kind,
+        SemanticSignalKind::Stalled
+    );
+}
+
+#[test]
 fn stream_monitor_detects_repetitive_text_deltas() {
     let mut monitor = StreamMonitor::new(StreamMonitorConfig {
         max_idle_heartbeats: 3,

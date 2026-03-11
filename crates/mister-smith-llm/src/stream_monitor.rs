@@ -38,6 +38,7 @@ pub struct StreamMonitor {
     idle_heartbeats: u64,
     last_text_delta: Option<String>,
     repeated_text_deltas: usize,
+    last_step_boundary: Option<StepBoundary>,
 }
 
 impl StreamMonitor {
@@ -48,6 +49,7 @@ impl StreamMonitor {
             idle_heartbeats: 0,
             last_text_delta: None,
             repeated_text_deltas: 0,
+            last_step_boundary: None,
         }
     }
 
@@ -56,6 +58,7 @@ impl StreamMonitor {
         let mut observation = StreamObservation::default();
 
         if let Some(boundary) = event.step_boundary() {
+            self.last_step_boundary = Some(boundary.clone());
             observation.step_boundaries.push(boundary);
             self.reset_progress_state();
         }
@@ -119,6 +122,12 @@ impl StreamMonitor {
                 self.reset_progress_state();
             }
             ModelEvent::Error { .. } | ModelEvent::Unknown => {}
+        }
+
+        if !observation.degradation_signals.is_empty() && observation.step_boundaries.is_empty() {
+            if let Some(boundary) = self.last_step_boundary.clone() {
+                observation.step_boundaries.push(boundary);
+            }
         }
 
         observation

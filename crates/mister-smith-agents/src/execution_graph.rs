@@ -20,6 +20,12 @@ pub struct BranchCheckpoint {
     pub checkpoint_id: CheckpointId,
     /// Branch that owns this checkpoint.
     pub branch_id: ExecutionBranchId,
+    /// Nodes already completed safely at this checkpoint.
+    #[serde(default)]
+    pub completed_nodes: Vec<ExecutionNodeId>,
+    /// Nodes still pending from the checkpoint-safe recovery point.
+    #[serde(default)]
+    pub pending_nodes: Vec<ExecutionNodeId>,
 }
 
 /// Checkpointable unit of work within an execution graph.
@@ -222,6 +228,40 @@ impl ExecutionGraph {
             }
         }
 
+        for checkpoint in &self.checkpoint_lineage {
+            let Some(branch) = branch_lookup.get(&checkpoint.branch_id) else {
+                return Err(TopologyError::Invalid(format!(
+                    "checkpoint {} references unknown branch {}",
+                    checkpoint.checkpoint_id, checkpoint.branch_id
+                )));
+            };
+
+            for node_id in checkpoint
+                .completed_nodes
+                .iter()
+                .chain(checkpoint.pending_nodes.iter())
+            {
+                if !branch.node_ids.contains(node_id) {
+                    return Err(TopologyError::Invalid(format!(
+                        "checkpoint {} references node {} outside branch {}",
+                        checkpoint.checkpoint_id, node_id, checkpoint.branch_id
+                    )));
+                }
+            }
+
+            let completed: HashSet<_> = checkpoint.completed_nodes.iter().copied().collect();
+            if checkpoint
+                .pending_nodes
+                .iter()
+                .any(|node_id| completed.contains(node_id))
+            {
+                return Err(TopologyError::Invalid(format!(
+                    "checkpoint {} overlaps completed and pending nodes",
+                    checkpoint.checkpoint_id
+                )));
+            }
+        }
+
         for node in &self.nodes {
             if !branch_lookup.contains_key(&node.branch_id) {
                 return Err(TopologyError::Invalid(format!(
@@ -317,5 +357,38 @@ impl ExecutionGraph {
         self.branches
             .iter_mut()
             .find(|branch| branch.branch_id == *branch_id)
+    }
+
+    /// Return the latest checkpoint recorded for a branch, if any.
+    pub fn latest_checkpoint(&self, branch_id: &ExecutionBranchId) -> Option<&BranchCheckpoint> {
+        self.checkpoint_lineage
+            .iter()
+            .rev()
+            .find(|checkpoint| checkpoint.branch_id == *branch_id)
+    }
+
+    /// Return the checkpoint-safe node scope for a branch intervention.
+    pub fn recovery_node_ids(&self, branch_id: &ExecutionBranchId) -> Vec<ExecutionNodeId> {
+        let Some(branch) = self.branch(branch_id) else {
+            return Vec::new();
+        };
+
+        if let Some(checkpoint) = self.latest_checkpoint(branch_id) {
+            if !checkpoint.pending_nodes.is_empty() {
+                return checkpoint.pending_nodes.clone();
+            }
+
+            if !checkpoint.completed_nodes.is_empty() {
+                let completed: HashSet<_> = checkpoint.completed_nodes.iter().copied().collect();
+                return branch
+                    .node_ids
+                    .iter()
+                    .copied()
+                    .filter(|node_id| !completed.contains(node_id))
+                    .collect();
+            }
+        }
+
+        branch.node_ids.clone()
     }
 }

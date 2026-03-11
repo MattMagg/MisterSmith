@@ -1,6 +1,8 @@
 pub mod coordinator;
 pub mod critic;
 pub mod executor;
+#[cfg(feature = "llm")]
+pub(crate) mod llm_bridge;
 pub mod memory;
 pub mod monitor;
 pub mod planner;

@@ -25,68 +25,84 @@ impl InterventionEngine {
     ) -> Result<InterventionRecord, GuardError> {
         match &decision.target_scope {
             GuardTarget::Branch(branch_id) => {
-                let branch_index = graph
-                    .branches
-                    .iter()
-                    .position(|branch| branch.branch_id == *branch_id)
-                    .ok_or_else(|| {
-                        GuardError::InvalidTarget(format!("unknown branch {branch_id}"))
-                    })?;
-                let before_state = serde_json::to_value(graph.branches[branch_index].clone())
-                    .unwrap_or_else(|_| json!({}));
-                let node_ids = graph.branches[branch_index].node_ids.clone();
+                let before_state = serde_json::to_value(
+                    graph
+                        .branch(branch_id)
+                        .ok_or_else(|| {
+                            GuardError::InvalidTarget(format!("unknown branch {branch_id}"))
+                        })?
+                        .clone(),
+                )
+                .unwrap_or_else(|_| json!({}));
+                let task_ids = branch_task_ids(graph, branch_id)?;
                 let mut abort_graph = false;
 
                 match decision.intervention {
                     InterventionType::Retry | InterventionType::ContextRefresh => {
                         graph.state = mister_smith_core::GraphState::Running;
-                        let branch = &mut graph.branches[branch_index];
+                        let branch = graph.branch_mut(branch_id).ok_or_else(|| {
+                            GuardError::InvalidTarget(format!("unknown branch {branch_id}"))
+                        })?;
                         branch.state = BranchState::Checkpointed;
                         branch.recovery_strategy = BranchRecoveryStrategy::Resume;
-                        for node_id in &node_ids {
-                            let task_id = TaskId::from_uuid(*node_id.as_ref());
-                            let _ = scheduler.apply_intervention(&task_id, decision.intervention);
-                        }
+                        apply_scheduler_intervention(scheduler, &task_ids, decision.intervention)?;
                     }
                     InterventionType::Failover | InterventionType::Reassignment => {
                         graph.state = mister_smith_core::GraphState::Running;
-                        let branch = &mut graph.branches[branch_index];
+                        let branch = graph.branch_mut(branch_id).ok_or_else(|| {
+                            GuardError::InvalidTarget(format!("unknown branch {branch_id}"))
+                        })?;
                         branch.state = BranchState::Reassigned;
                         branch.recovery_strategy = BranchRecoveryStrategy::Reassign;
-                        for node_id in &node_ids {
-                            let task_id = TaskId::from_uuid(*node_id.as_ref());
-                            let _ = scheduler
-                                .apply_intervention(&task_id, InterventionType::Reassignment);
-                        }
+                        apply_scheduler_intervention(
+                            scheduler,
+                            &task_ids,
+                            InterventionType::Reassignment,
+                        )?;
                     }
                     InterventionType::BranchIsolation => {
                         graph.state = mister_smith_core::GraphState::Running;
-                        let branch = &mut graph.branches[branch_index];
+                        let branch = graph.branch_mut(branch_id).ok_or_else(|| {
+                            GuardError::InvalidTarget(format!("unknown branch {branch_id}"))
+                        })?;
                         branch.state = BranchState::Isolated;
                         branch.recovery_strategy = BranchRecoveryStrategy::Isolate;
-                        for node_id in &node_ids {
-                            let task_id = TaskId::from_uuid(*node_id.as_ref());
-                            let _ = scheduler
-                                .apply_intervention(&task_id, InterventionType::BranchIsolation);
-                        }
+                        apply_scheduler_intervention(
+                            scheduler,
+                            &task_ids,
+                            InterventionType::BranchIsolation,
+                        )?;
                     }
                     InterventionType::Escalation => {
-                        let branch = &mut graph.branches[branch_index];
+                        let branch = graph.branch_mut(branch_id).ok_or_else(|| {
+                            GuardError::InvalidTarget(format!("unknown branch {branch_id}"))
+                        })?;
                         branch.state = BranchState::Failed;
                         branch.recovery_strategy = BranchRecoveryStrategy::Escalate;
+                        apply_scheduler_intervention(
+                            scheduler,
+                            &task_ids,
+                            InterventionType::Escalation,
+                        )?;
                     }
                     InterventionType::Abort => {
-                        let branch = &mut graph.branches[branch_index];
+                        let branch = graph.branch_mut(branch_id).ok_or_else(|| {
+                            GuardError::InvalidTarget(format!("unknown branch {branch_id}"))
+                        })?;
                         branch.state = BranchState::Failed;
                         abort_graph = true;
-                        for node_id in &node_ids {
-                            let task_id = TaskId::from_uuid(*node_id.as_ref());
-                            let _ = scheduler.apply_intervention(&task_id, InterventionType::Abort);
-                        }
+                        apply_scheduler_intervention(
+                            scheduler,
+                            &task_ids,
+                            InterventionType::Abort,
+                        )?;
                     }
                 }
 
-                let after_state = serde_json::to_value(graph.branches[branch_index].clone()).ok();
+                let after_state = graph
+                    .branch(branch_id)
+                    .cloned()
+                    .and_then(|branch| serde_json::to_value(branch).ok());
                 if abort_graph {
                     graph.state = mister_smith_core::GraphState::Aborted;
                 }
@@ -125,6 +141,12 @@ impl InterventionEngine {
                     serde_json::to_value(graph.clone()).unwrap_or_else(|_| json!({}));
                 if matches!(decision.intervention, InterventionType::Abort) {
                     graph.state = mister_smith_core::GraphState::Aborted;
+                    let task_ids = graph
+                        .nodes
+                        .iter()
+                        .map(|node| TaskId::from_uuid(*node.node_id.as_ref()))
+                        .collect::<Vec<_>>();
+                    apply_scheduler_intervention(scheduler, &task_ids, InterventionType::Abort)?;
                 }
                 let after_state = serde_json::to_value(graph.clone()).ok();
                 Ok(InterventionRecord {
@@ -149,6 +171,41 @@ impl InterventionEngine {
             }),
         }
     }
+}
+
+fn branch_task_ids(
+    graph: &ExecutionGraph,
+    branch_id: &mister_smith_core::ExecutionBranchId,
+) -> Result<Vec<TaskId>, GuardError> {
+    let branch = graph
+        .branch(branch_id)
+        .ok_or_else(|| GuardError::InvalidTarget(format!("unknown branch {branch_id}")))?;
+    let scoped_node_ids = graph.recovery_node_ids(branch_id);
+    if scoped_node_ids.is_empty() {
+        return Ok(branch
+            .node_ids
+            .iter()
+            .map(|node_id| TaskId::from_uuid(*node_id.as_ref()))
+            .collect());
+    }
+
+    Ok(scoped_node_ids
+        .into_iter()
+        .map(|node_id| TaskId::from_uuid(*node_id.as_ref()))
+        .collect())
+}
+
+fn apply_scheduler_intervention(
+    scheduler: &TaskScheduler,
+    task_ids: &[TaskId],
+    intervention: InterventionType,
+) -> Result<(), GuardError> {
+    for task_id in task_ids {
+        scheduler
+            .apply_intervention(task_id, intervention)
+            .map_err(|error| GuardError::InvalidTarget(error.to_string()))?;
+    }
+    Ok(())
 }
 
 fn rationale_for(decision: &GuardDecision) -> String {
