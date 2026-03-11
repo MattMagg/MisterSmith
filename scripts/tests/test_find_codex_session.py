@@ -83,6 +83,20 @@ class FindCodexSessionScriptTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("No Codex session file found", result.stderr)
 
+    def test_preserves_raw_cwd_matches_when_repo_path_is_a_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            real_repo = root / "workspace" / "MS-38"
+            real_repo.mkdir(parents=True)
+            symlink_repo = root / "linked-MS-38"
+            symlink_repo.symlink_to(real_repo, target_is_directory=True)
+            self.write_session_meta(root, "2026/03/11/a.jsonl", "thread-a", str(symlink_repo))
+
+            result = self.run_script(root, str(symlink_repo), thread_id="thread-a")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), str(root / "2026/03/11/a.jsonl"))
+
 
 if __name__ == "__main__":
     unittest.main()

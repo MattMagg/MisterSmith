@@ -23,8 +23,12 @@ class SessionMeta:
 
 def load_session_meta(path: Path) -> Optional[SessionMeta]:
     try:
-        first_line = path.read_text(encoding="utf-8").splitlines()[0]
-    except (IndexError, OSError):
+        with path.open(encoding="utf-8") as handle:
+            first_line = handle.readline()
+    except OSError:
+        return None
+
+    if not first_line:
         return None
 
     try:
@@ -62,13 +66,27 @@ def newest_session(sessions: Iterable[SessionMeta]) -> Optional[SessionMeta]:
     return max(sessions, key=lambda session: session.modified_at, default=None)
 
 
+def session_matches_cwd(session_cwd: str, requested_cwd: str) -> bool:
+    if session_cwd == requested_cwd:
+        return True
+
+    try:
+        return Path(session_cwd).resolve() == Path(requested_cwd).resolve()
+    except OSError:
+        return False
+
+
 def select_session(
     sessions: Iterable[SessionMeta],
     cwd: str,
     thread_id: Optional[str],
 ) -> Optional[SessionMeta]:
     session_list = list(sessions)
-    cwd_matches = [session for session in session_list if session.cwd == cwd]
+    cwd_matches = [
+        session
+        for session in session_list
+        if session_matches_cwd(session.cwd, cwd)
+    ]
 
     if thread_id:
         # In app-server sessions CODEX_THREAD_ID can reference a parent thread, so
@@ -110,7 +128,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     session_root = Path(args.session_root).expanduser()
-    cwd = str(Path(args.cwd).resolve())
+    cwd = os.path.abspath(args.cwd)
 
     if not session_root.exists():
         print(
