@@ -2,7 +2,10 @@
 
 use std::collections::HashMap;
 
-use crate::context_manager::{attach_managed_context, ContextManager};
+use crate::context_manager::{
+    attach_managed_context, resolve_managed_context_input, ContextManager, ManagedContextInput,
+    ManagedContextRuntime,
+};
 use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
 use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
@@ -22,7 +25,12 @@ pub enum MemoryMessage {
         value: serde_json::Value,
     },
     /// Retrieve a value by key.
-    Retrieve(String),
+    Retrieve {
+        /// The key to fetch.
+        key: String,
+        /// Optional managed context payload or runtime request.
+        managed_context: Option<ManagedContextInput>,
+    },
     /// Search for entries matching a key prefix.
     Search {
         /// The prefix to search for.
@@ -65,12 +73,29 @@ pub enum MemoryError {
 /// and deletion of key-value entries.
 pub struct MemoryAgent {
     id: AgentId,
+    managed_context: Option<ManagedContextRuntime>,
 }
 
 impl MemoryAgent {
     /// Create a new `MemoryAgent` with the given identity.
     pub fn new(id: AgentId) -> Self {
-        Self { id }
+        Self {
+            id,
+            managed_context: None,
+        }
+    }
+
+    /// Create a new `MemoryAgent` with a managed-context runtime.
+    pub fn with_managed_context(id: AgentId, managed_context: ManagedContextRuntime) -> Self {
+        Self {
+            id,
+            managed_context: Some(managed_context),
+        }
+    }
+
+    /// Attach or replace the managed-context runtime for this agent.
+    pub fn set_managed_context(&mut self, managed_context: ManagedContextRuntime) {
+        self.managed_context = Some(managed_context);
     }
 
     /// Retrieve a memory entry after assembling bounded role-aware managed context.
@@ -88,9 +113,15 @@ impl MemoryAgent {
             .map_err(|error| MemoryError::Internal(error.to_string()))?;
 
         let response = self
-            .handle_message(MemoryMessage::Retrieve(key), state)
+            .handle_message(
+                MemoryMessage::Retrieve {
+                    key,
+                    managed_context: Some(ManagedContextInput::Payload(managed_context.payload)),
+                },
+                state,
+            )
             .await?;
-        Ok(attach_managed_context(response, managed_context.payload))
+        Ok(response)
     }
 }
 
@@ -115,12 +146,27 @@ impl Actor for MemoryAgent {
                     "entry_count": state.entry_count,
                 }))
             }
-            MemoryMessage::Retrieve(key) => {
+            MemoryMessage::Retrieve {
+                key,
+                managed_context,
+            } => {
                 let value = state.entries.get(&key).cloned();
-                Ok(serde_json::json!({
+                let response = serde_json::json!({
                     "key": key,
                     "value": value,
-                }))
+                });
+                match resolve_managed_context_input(
+                    self.managed_context.as_mut(),
+                    self.id,
+                    AgentType::Memory,
+                    managed_context,
+                )
+                .await
+                .map_err(|error| MemoryError::Internal(error.to_string()))?
+                {
+                    Some(payload) => Ok(attach_managed_context(response, payload)),
+                    None => Ok(response),
+                }
             }
             MemoryMessage::Search { prefix } => {
                 let matches: serde_json::Map<String, serde_json::Value> = state
@@ -184,7 +230,13 @@ mod tests {
 
         // 2. Retrieve the stored value.
         let resp = agent
-            .handle_message(MemoryMessage::Retrieve("user.name".into()), &mut state)
+            .handle_message(
+                MemoryMessage::Retrieve {
+                    key: "user.name".into(),
+                    managed_context: None,
+                },
+                &mut state,
+            )
             .await
             .unwrap();
         assert_eq!(resp["key"], "user.name");
@@ -192,7 +244,13 @@ mod tests {
 
         // 3. Retrieve a missing key returns null.
         let resp = agent
-            .handle_message(MemoryMessage::Retrieve("missing".into()), &mut state)
+            .handle_message(
+                MemoryMessage::Retrieve {
+                    key: "missing".into(),
+                    managed_context: None,
+                },
+                &mut state,
+            )
             .await
             .unwrap();
         assert_eq!(resp["key"], "missing");
@@ -237,7 +295,13 @@ mod tests {
 
         // 6. Retrieve deleted key returns null.
         let resp = agent
-            .handle_message(MemoryMessage::Retrieve("user.name".into()), &mut state)
+            .handle_message(
+                MemoryMessage::Retrieve {
+                    key: "user.name".into(),
+                    managed_context: None,
+                },
+                &mut state,
+            )
             .await
             .unwrap();
         assert!(resp["value"].is_null());

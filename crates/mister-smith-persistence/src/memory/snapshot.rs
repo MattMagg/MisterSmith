@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use mister_smith_core::{AgentType, ContextBudgetId, MemoryFragmentId, MemorySnapshotId};
 
-use super::fragment::{MemoryFragment, SnapshotScope};
+use super::fragment::{FragmentClass, MemoryFragment, SnapshotScope};
 
 /// Inline summary attached to a snapshot when older context is reduced.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -15,6 +15,55 @@ pub struct MemorySummary {
     pub content: Value,
     /// Units consumed by the summary.
     pub units: u64,
+}
+
+/// Serialized fragment payload embedded in a checkpoint fragment for restart-safe reconstruction.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CheckpointFragmentPayload {
+    /// Snapshot this checkpoint payload belongs to.
+    pub snapshot_id: MemorySnapshotId,
+    /// Role the checkpoint snapshot was assembled for.
+    pub role: AgentType,
+    /// Delivered units captured by the checkpoint snapshot.
+    pub delivered_units: u64,
+    /// Optional reduced summary attached to the snapshot.
+    pub summary: Option<MemorySummary>,
+    /// Full bounded fragment payload required to reconstruct the resume context.
+    pub fragments: Vec<CheckpointFragmentEntry>,
+}
+
+/// Serializable checkpoint copy of a fragment selected for a snapshot.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CheckpointFragmentEntry {
+    /// Stable fragment identifier.
+    pub fragment_id: MemoryFragmentId,
+    /// Scope the fragment belongs to.
+    pub scope: SnapshotScope,
+    /// Semantic class of the fragment.
+    pub fragment_class: FragmentClass,
+    /// Context units represented by the fragment.
+    pub units: u64,
+    /// Source role that produced the fragment.
+    pub source_role: AgentType,
+    /// Logical source namespace.
+    pub source_key: String,
+    /// Original fragment payload.
+    pub content: Value,
+}
+
+impl CheckpointFragmentEntry {
+    /// Build a checkpoint entry from a stored managed-memory fragment.
+    pub fn from_fragment(fragment: &MemoryFragment) -> Self {
+        Self {
+            fragment_id: fragment.fragment_id,
+            scope: fragment.scope.clone(),
+            fragment_class: fragment.fragment_class,
+            units: fragment.units,
+            source_role: fragment.provenance.source_role,
+            source_key: fragment.provenance.source_key.clone(),
+            content: fragment.content.clone(),
+        }
+    }
 }
 
 /// Lightweight snapshot metadata suitable for task-level indexes.

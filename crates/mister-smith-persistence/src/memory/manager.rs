@@ -3,7 +3,6 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use uuid::Uuid;
 
 use mister_smith_core::{
@@ -15,7 +14,10 @@ use super::fragment::{
     AccessPolicy, FragmentClass, FragmentFreshness, FragmentProvenance, MemoryFragment,
     SnapshotScope,
 };
-use super::snapshot::{MaterializedSnapshot, MemorySnapshot, ResumeSource};
+use super::snapshot::{
+    CheckpointFragmentEntry, CheckpointFragmentPayload, MaterializedSnapshot, MemorySnapshot,
+    ResumeSource,
+};
 
 /// In-process managed-memory coordinator used by Phase 10 context assembly.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -33,6 +35,17 @@ impl ManagedMemoryManager {
     /// Fetch a stored snapshot by identifier.
     pub fn snapshot(&self, snapshot_id: MemorySnapshotId) -> Option<MemorySnapshot> {
         self.snapshots.get(&snapshot_id).cloned()
+    }
+
+    /// Restore a previously materialized snapshot into the in-memory manager.
+    pub fn restore_materialized_snapshot(&mut self, materialized: &MaterializedSnapshot) {
+        self.snapshots.insert(
+            materialized.snapshot.snapshot_id,
+            materialized.snapshot.clone(),
+        );
+        for fragment in &materialized.fragments {
+            self.record_fragment(fragment.clone());
+        }
     }
 
     /// Assemble a role-aware snapshot under the provided budget.
@@ -71,11 +84,13 @@ impl ManagedMemoryManager {
         &mut self,
         scope: SnapshotScope,
     ) -> Result<Vec<MemoryFragment>, MemoryError> {
+        let now = Utc::now();
         let eligible = self
             .fragments
             .values()
             .filter(|fragment| {
                 fragment.scope == scope
+                    && !fragment.freshness.is_expired_at(now)
                     && matches!(
                         fragment.fragment_class,
                         FragmentClass::Episodic | FragmentClass::Summary | FragmentClass::Audit
@@ -108,6 +123,13 @@ impl ManagedMemoryManager {
             .assemble_snapshot(scope.clone(), role, budget.clone())
             .await?;
 
+        if snapshot.fragment_ids.is_empty() {
+            return Err(MemoryError::SnapshotUnavailable {
+                snapshot_id: Some(snapshot.snapshot_id),
+                message: "cannot checkpoint an empty managed-memory snapshot".to_string(),
+            });
+        }
+
         let workflow_id = snapshot
             .fragment_ids
             .first()
@@ -125,15 +147,27 @@ impl ManagedMemoryManager {
         provenance.derived_from = snapshot.fragment_ids.clone();
         provenance.recorded_at = Utc::now();
 
+        let checkpoint_payload = CheckpointFragmentPayload {
+            snapshot_id: snapshot.snapshot_id,
+            role,
+            delivered_units: snapshot.delivered_units,
+            summary: snapshot.summary.clone(),
+            fragments: snapshot
+                .fragment_ids
+                .iter()
+                .filter_map(|fragment_id| self.fragments.get(fragment_id))
+                .map(CheckpointFragmentEntry::from_fragment)
+                .collect(),
+        };
+
         let checkpoint_fragment = MemoryFragment::new(
             scope.clone(),
-            json!({
-                "snapshot_id": snapshot.snapshot_id,
-                "summary": snapshot.summary,
-                "fragment_ids": snapshot.fragment_ids,
-                "role": format!("{role:?}"),
-                "delivered_units": snapshot.delivered_units,
-            }),
+            serde_json::to_value(checkpoint_payload).map_err(|error| {
+                MemoryError::SnapshotUnavailable {
+                    snapshot_id: Some(snapshot.snapshot_id),
+                    message: format!("failed to serialize checkpoint payload: {error}"),
+                }
+            })?,
             std::cmp::max(1, snapshot.delivered_units),
             FragmentClass::Checkpoint,
             provenance,
@@ -172,9 +206,28 @@ impl ManagedMemoryManager {
                     message: "checkpoint fragment missing".to_string(),
                 })?;
 
+            let payload: CheckpointFragmentPayload =
+                serde_json::from_value(checkpoint_fragment.content.clone()).map_err(|error| {
+                    MemoryError::SnapshotUnavailable {
+                        snapshot_id: Some(snapshot_id),
+                        message: format!("checkpoint payload is invalid: {error}"),
+                    }
+                })?;
+
+            let fragments = payload
+                .fragments
+                .into_iter()
+                .map(|entry| {
+                    self.fragments
+                        .get(&entry.fragment_id)
+                        .cloned()
+                        .unwrap_or_else(|| checkpoint_entry_fragment(&checkpoint_fragment, entry))
+                })
+                .collect::<Vec<_>>();
+
             return Ok(MaterializedSnapshot {
                 snapshot,
-                fragments: vec![checkpoint_fragment],
+                fragments,
                 resume_source: ResumeSource::Checkpoint,
             });
         }
@@ -294,13 +347,15 @@ fn summarize_under_budget(
 ) {
     let mut selected = Vec::new();
     let mut selected_units = 0;
+    let mut remaining = candidates.into_iter();
 
-    for fragment in candidates {
+    while let Some(fragment) = remaining.next() {
         if selected_units + fragment.units <= max_units {
             selected_units += fragment.units;
             selected.push(fragment);
         } else {
-            let overflow = vec![fragment];
+            let mut overflow = vec![fragment];
+            overflow.extend(remaining);
             return attach_summary(scope, selected, selected_units, overflow, max_units);
         }
     }
@@ -333,4 +388,23 @@ fn attach_summary(
         selected_units + summary.as_ref().map(|summary| summary.units).unwrap_or(0);
 
     (selected, summary, delivered_units)
+}
+
+fn checkpoint_entry_fragment(
+    checkpoint_fragment: &MemoryFragment,
+    entry: CheckpointFragmentEntry,
+) -> MemoryFragment {
+    let mut fragment = MemoryFragment::new(
+        entry.scope,
+        entry.content,
+        entry.units,
+        entry.fragment_class,
+        checkpoint_fragment.provenance.clone(),
+        checkpoint_fragment.freshness.clone(),
+        checkpoint_fragment.access_policy.clone(),
+    );
+    fragment.fragment_id = entry.fragment_id;
+    fragment.provenance.source_role = entry.source_role;
+    fragment.provenance.source_key = entry.source_key;
+    fragment
 }

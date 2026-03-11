@@ -1,6 +1,8 @@
 //! Planner agent role — creates execution plans from goals.
 
-use crate::context_manager::{attach_managed_context, ContextManager};
+use crate::context_manager::{
+    resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
+};
 use crate::scheduler::TaskAssignment;
 use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
 use mister_smith_persistence::SnapshotScope;
@@ -19,6 +21,8 @@ pub enum PlannerMessage {
         goal: String,
         /// Additional context for planning.
         context: serde_json::Value,
+        /// Optional managed context payload or runtime request.
+        managed_context: Option<ManagedContextInput>,
     },
     /// Query the current or most recent plan.
     QueryPlan,
@@ -54,6 +58,7 @@ pub enum PlannerError {
 /// Creates execution plans from high-level goals and contextual information.
 pub struct PlannerAgent {
     id: AgentId,
+    managed_context: Option<ManagedContextRuntime>,
     #[cfg(feature = "llm")]
     router: Option<std::sync::Arc<mister_smith_llm::ModelRouter>>,
 }
@@ -63,6 +68,17 @@ impl PlannerAgent {
     pub fn new(id: AgentId) -> Self {
         Self {
             id,
+            managed_context: None,
+            #[cfg(feature = "llm")]
+            router: None,
+        }
+    }
+
+    /// Create a new `PlannerAgent` with a managed-context runtime.
+    pub fn with_managed_context(id: AgentId, managed_context: ManagedContextRuntime) -> Self {
+        Self {
+            id,
+            managed_context: Some(managed_context),
             #[cfg(feature = "llm")]
             router: None,
         }
@@ -73,8 +89,28 @@ impl PlannerAgent {
     pub fn with_router(id: AgentId, router: std::sync::Arc<mister_smith_llm::ModelRouter>) -> Self {
         Self {
             id,
+            managed_context: None,
             router: Some(router),
         }
+    }
+
+    /// Create a new `PlannerAgent` with both router and managed-context runtime.
+    #[cfg(feature = "llm")]
+    pub fn with_router_and_managed_context(
+        id: AgentId,
+        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+        managed_context: ManagedContextRuntime,
+    ) -> Self {
+        Self {
+            id,
+            managed_context: Some(managed_context),
+            router: Some(router),
+        }
+    }
+
+    /// Attach or replace the managed-context runtime for this agent.
+    pub fn set_managed_context(&mut self, managed_context: ManagedContextRuntime) {
+        self.managed_context = Some(managed_context);
     }
 
     /// Plan a goal after assembling bounded role-aware managed context.
@@ -95,7 +131,8 @@ impl PlannerAgent {
         self.handle_message(
             PlannerMessage::PlanGoal {
                 goal,
-                context: attach_managed_context(context, managed_context.payload),
+                context,
+                managed_context: Some(ManagedContextInput::Payload(managed_context.payload)),
             },
             state,
         )
@@ -216,7 +253,26 @@ impl Actor for PlannerAgent {
         state: &mut Self::State,
     ) -> Result<Self::Response, Self::Error> {
         match message {
-            PlannerMessage::PlanGoal { goal, context } => {
+            PlannerMessage::PlanGoal {
+                goal,
+                context,
+                managed_context,
+            } => {
+                let context = match resolve_managed_context_input(
+                    self.managed_context.as_mut(),
+                    self.id,
+                    AgentType::Planner,
+                    managed_context,
+                )
+                .await
+                .map_err(|error| PlannerError::Internal(error.to_string()))?
+                {
+                    Some(payload) => {
+                        crate::context_manager::attach_managed_context(context, payload)
+                    }
+                    None => context,
+                };
+
                 // When the `llm` feature is enabled and a router is configured,
                 // ask the model to decompose the goal into concrete steps.
                 #[cfg(feature = "llm")]
@@ -342,6 +398,7 @@ mod tests {
                 PlannerMessage::PlanGoal {
                     goal: goal.clone(),
                     context: context.clone(),
+                    managed_context: None,
                 },
                 &mut state,
             )
