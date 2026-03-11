@@ -337,14 +337,15 @@ mod tests {
         let shutdown = Arc::new(AtomicBool::new(false));
 
         // Schedule a few tasks.
+        let mut futures = Vec::new();
         for _ in 0..5 {
             let c = Arc::clone(&counter);
-            scheduler
-                .schedule(MessagePriority::Normal, async move {
-                    c.fetch_add(1, Ordering::Relaxed);
-                })
-                .await
-                .expect("schedule should succeed");
+            futures.push(scheduler.schedule(MessagePriority::Normal, async move {
+                c.fetch_add(1, Ordering::Relaxed);
+            }));
+        }
+        for f in futures {
+            f.await.expect("schedule should succeed");
         }
 
         // Start the run loop in a background task.
@@ -376,19 +377,20 @@ mod tests {
         let peak = Arc::new(AtomicUsize::new(0));
 
         // Schedule tasks that hold a slot for a short duration.
+        let mut futures = Vec::new();
         for _ in 0..6 {
             let r = Arc::clone(&running);
             let p = Arc::clone(&peak);
-            scheduler
-                .schedule(MessagePriority::Normal, async move {
-                    let current = r.fetch_add(1, Ordering::SeqCst) + 1;
-                    // Update peak concurrency.
-                    p.fetch_max(current, Ordering::SeqCst);
-                    time::sleep(Duration::from_millis(50)).await;
-                    r.fetch_sub(1, Ordering::SeqCst);
-                })
-                .await
-                .expect("schedule should succeed");
+            futures.push(scheduler.schedule(MessagePriority::Normal, async move {
+                let current = r.fetch_add(1, Ordering::SeqCst) + 1;
+                // Update peak concurrency.
+                p.fetch_max(current, Ordering::SeqCst);
+                time::sleep(Duration::from_millis(50)).await;
+                r.fetch_sub(1, Ordering::SeqCst);
+            }));
+        }
+        for f in futures {
+            f.await.expect("schedule should succeed");
         }
 
         let sched = Arc::clone(&scheduler);
