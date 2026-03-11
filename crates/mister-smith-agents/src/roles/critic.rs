@@ -1,6 +1,10 @@
 //! Critic agent role — reviews and validates outputs.
 
-use mister_smith_core::{Actor, AgentId};
+use crate::context_manager::{
+    resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
+};
+use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
+use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -16,6 +20,8 @@ pub enum CriticMessage {
         output: serde_json::Value,
         /// Criteria for evaluation.
         criteria: serde_json::Value,
+        /// Optional managed context payload or runtime request.
+        managed_context: Option<ManagedContextInput>,
     },
     /// Query the evaluation history.
     QueryHistory,
@@ -51,6 +57,7 @@ pub enum CriticError {
 /// Reviews and validates outputs against specified criteria.
 pub struct CriticAgent {
     id: AgentId,
+    managed_context: Option<ManagedContextRuntime>,
     #[cfg(feature = "llm")]
     router: Option<std::sync::Arc<mister_smith_llm::ModelRouter>>,
 }
@@ -60,6 +67,17 @@ impl CriticAgent {
     pub fn new(id: AgentId) -> Self {
         Self {
             id,
+            managed_context: None,
+            #[cfg(feature = "llm")]
+            router: None,
+        }
+    }
+
+    /// Create a new `CriticAgent` with a managed-context runtime.
+    pub fn with_managed_context(id: AgentId, managed_context: ManagedContextRuntime) -> Self {
+        Self {
+            id,
+            managed_context: Some(managed_context),
             #[cfg(feature = "llm")]
             router: None,
         }
@@ -70,8 +88,54 @@ impl CriticAgent {
     pub fn with_router(id: AgentId, router: std::sync::Arc<mister_smith_llm::ModelRouter>) -> Self {
         Self {
             id,
+            managed_context: None,
             router: Some(router),
         }
+    }
+
+    /// Create a new `CriticAgent` with both router and managed-context runtime.
+    #[cfg(feature = "llm")]
+    pub fn with_router_and_managed_context(
+        id: AgentId,
+        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+        managed_context: ManagedContextRuntime,
+    ) -> Self {
+        Self {
+            id,
+            managed_context: Some(managed_context),
+            router: Some(router),
+        }
+    }
+
+    /// Attach or replace the managed-context runtime for this agent.
+    pub fn set_managed_context(&mut self, managed_context: ManagedContextRuntime) {
+        self.managed_context = Some(managed_context);
+    }
+
+    /// Evaluate output after assembling bounded role-aware managed context.
+    pub async fn evaluate_with_managed_context(
+        &mut self,
+        output: serde_json::Value,
+        criteria: serde_json::Value,
+        context_manager: &mut ContextManager,
+        scope: SnapshotScope,
+        budget: ContextBudget,
+        state: &mut CriticState,
+    ) -> Result<serde_json::Value, CriticError> {
+        let managed_context = context_manager
+            .assemble_role_context(scope, AgentType::Critic, budget)
+            .await
+            .map_err(|error| CriticError::Internal(error.to_string()))?;
+
+        self.handle_message(
+            CriticMessage::Evaluate {
+                output,
+                criteria,
+                managed_context: Some(ManagedContextInput::Payload(managed_context.payload)),
+            },
+            state,
+        )
+        .await
     }
 }
 
@@ -88,7 +152,26 @@ impl Actor for CriticAgent {
         state: &mut Self::State,
     ) -> Result<Self::Response, Self::Error> {
         match message {
-            CriticMessage::Evaluate { output, criteria } => {
+            CriticMessage::Evaluate {
+                output,
+                criteria,
+                managed_context,
+            } => {
+                let criteria = match resolve_managed_context_input(
+                    self.managed_context.as_mut(),
+                    self.id,
+                    AgentType::Critic,
+                    managed_context,
+                )
+                .await
+                .map_err(|error| CriticError::Internal(error.to_string()))?
+                {
+                    Some(payload) => {
+                        crate::context_manager::attach_managed_context(criteria, payload)
+                    }
+                    None => criteria,
+                };
+
                 state.evaluations_completed += 1;
 
                 // When the `llm` feature is enabled and a router is configured,
@@ -196,6 +279,7 @@ mod tests {
                 CriticMessage::Evaluate {
                     output: serde_json::json!("result-1"),
                     criteria: serde_json::json!(["accuracy"]),
+                    managed_context: None,
                 },
                 &mut state,
             )
@@ -209,6 +293,7 @@ mod tests {
                 CriticMessage::Evaluate {
                     output: serde_json::json!("result-2"),
                     criteria: serde_json::json!(["completeness"]),
+                    managed_context: None,
                 },
                 &mut state,
             )

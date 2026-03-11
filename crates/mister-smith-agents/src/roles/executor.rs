@@ -1,6 +1,10 @@
 //! Executor agent role — carries out planned actions.
 
-use mister_smith_core::{Actor, AgentId};
+use crate::context_manager::{
+    resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
+};
+use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
+use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -14,6 +18,8 @@ pub enum ExecutorMessage {
     ExecutePlan {
         /// The plan to execute (structured as JSON).
         plan: serde_json::Value,
+        /// Optional managed context payload or runtime request.
+        managed_context: Option<ManagedContextInput>,
     },
     /// Report that a plan step has completed.
     StepComplete {
@@ -59,6 +65,7 @@ pub enum ExecutorError {
 /// progress queries.
 pub struct ExecutorAgent {
     id: AgentId,
+    managed_context: Option<ManagedContextRuntime>,
     #[cfg(feature = "llm")]
     router: Option<std::sync::Arc<mister_smith_llm::ModelRouter>>,
 }
@@ -68,6 +75,17 @@ impl ExecutorAgent {
     pub fn new(id: AgentId) -> Self {
         Self {
             id,
+            managed_context: None,
+            #[cfg(feature = "llm")]
+            router: None,
+        }
+    }
+
+    /// Create a new `ExecutorAgent` with a managed-context runtime.
+    pub fn with_managed_context(id: AgentId, managed_context: ManagedContextRuntime) -> Self {
+        Self {
+            id,
+            managed_context: Some(managed_context),
             #[cfg(feature = "llm")]
             router: None,
         }
@@ -78,8 +96,52 @@ impl ExecutorAgent {
     pub fn with_router(id: AgentId, router: std::sync::Arc<mister_smith_llm::ModelRouter>) -> Self {
         Self {
             id,
+            managed_context: None,
             router: Some(router),
         }
+    }
+
+    /// Create a new `ExecutorAgent` with both router and managed-context runtime.
+    #[cfg(feature = "llm")]
+    pub fn with_router_and_managed_context(
+        id: AgentId,
+        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+        managed_context: ManagedContextRuntime,
+    ) -> Self {
+        Self {
+            id,
+            managed_context: Some(managed_context),
+            router: Some(router),
+        }
+    }
+
+    /// Attach or replace the managed-context runtime for this agent.
+    pub fn set_managed_context(&mut self, managed_context: ManagedContextRuntime) {
+        self.managed_context = Some(managed_context);
+    }
+
+    /// Execute a plan after assembling bounded role-aware managed context.
+    pub async fn execute_plan_with_managed_context(
+        &mut self,
+        plan: serde_json::Value,
+        context_manager: &mut ContextManager,
+        scope: SnapshotScope,
+        budget: ContextBudget,
+        state: &mut ExecutorState,
+    ) -> Result<serde_json::Value, ExecutorError> {
+        let managed_context = context_manager
+            .assemble_role_context(scope, AgentType::Executor, budget)
+            .await
+            .map_err(|error| ExecutorError::Internal(error.to_string()))?;
+
+        self.handle_message(
+            ExecutorMessage::ExecutePlan {
+                plan,
+                managed_context: Some(ManagedContextInput::Payload(managed_context.payload)),
+            },
+            state,
+        )
+        .await
     }
 }
 
@@ -96,7 +158,23 @@ impl Actor for ExecutorAgent {
         state: &mut Self::State,
     ) -> Result<Self::Response, Self::Error> {
         match message {
-            ExecutorMessage::ExecutePlan { plan } => {
+            ExecutorMessage::ExecutePlan {
+                plan,
+                managed_context,
+            } => {
+                let plan = match resolve_managed_context_input(
+                    self.managed_context.as_mut(),
+                    self.id,
+                    AgentType::Executor,
+                    managed_context,
+                )
+                .await
+                .map_err(|error| ExecutorError::Internal(error.to_string()))?
+                {
+                    Some(payload) => crate::context_manager::attach_managed_context(plan, payload),
+                    None => plan,
+                };
+
                 state.executing = true;
                 state.steps_completed = 0;
 
@@ -205,7 +283,10 @@ mod tests {
         let plan = serde_json::json!({"steps": ["a", "b", "c"]});
         let resp = agent
             .handle_message(
-                ExecutorMessage::ExecutePlan { plan: plan.clone() },
+                ExecutorMessage::ExecutePlan {
+                    plan: plan.clone(),
+                    managed_context: None,
+                },
                 &mut state,
             )
             .await

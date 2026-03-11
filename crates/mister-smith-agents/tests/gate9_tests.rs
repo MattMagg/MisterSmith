@@ -94,6 +94,7 @@ async fn planner_produces_plan_via_mock_provider() {
             PlannerMessage::PlanGoal {
                 goal: "deploy service".into(),
                 context: serde_json::json!({"env": "staging"}),
+                managed_context: None,
             },
             &mut state,
         )
@@ -115,6 +116,7 @@ async fn critic_evaluates_via_mock_provider() {
             CriticMessage::Evaluate {
                 output: serde_json::json!("some output"),
                 criteria: serde_json::json!(["accuracy", "completeness"]),
+                managed_context: None,
             },
             &mut state,
         )
@@ -135,6 +137,7 @@ async fn executor_analyzes_plan_via_mock_provider() {
         .handle_message(
             ExecutorMessage::ExecutePlan {
                 plan: serde_json::json!({"steps": ["a", "b"]}),
+                managed_context: None,
             },
             &mut state,
         )
@@ -184,6 +187,7 @@ async fn planner_falls_back_to_stub_without_router() {
             PlannerMessage::PlanGoal {
                 goal: "test goal".into(),
                 context: serde_json::json!({}),
+                managed_context: None,
             },
             &mut state,
         )
@@ -204,6 +208,7 @@ async fn planner_returns_error_when_router_has_no_providers() {
             PlannerMessage::PlanGoal {
                 goal: "no providers".into(),
                 context: serde_json::json!({}),
+                managed_context: None,
             },
             &mut state,
         )
@@ -225,6 +230,7 @@ async fn critic_returns_error_when_router_provider_fails() {
             CriticMessage::Evaluate {
                 output: serde_json::json!("bad output"),
                 criteria: serde_json::json!(["accuracy"]),
+                managed_context: None,
             },
             &mut state,
         )
@@ -244,6 +250,7 @@ async fn executor_returns_error_when_router_has_no_providers() {
         .handle_message(
             ExecutorMessage::ExecutePlan {
                 plan: serde_json::json!({"steps": ["x"]}),
+                managed_context: None,
             },
             &mut state,
         )
