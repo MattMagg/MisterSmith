@@ -112,13 +112,17 @@ pub fn read_credentials() -> Result<ClaudeOAuthCredentials, LlmError> {
 
 #[cfg(target_os = "macos")]
 fn keychain_service() -> String {
-    std::env::var("CLAUDE_KEYCHAIN_SERVICE").unwrap_or_else(|_| "Claude Code-credentials".to_string())
+    std::env::var("CLAUDE_KEYCHAIN_SERVICE")
+        .unwrap_or_else(|_| "Claude Code-credentials".to_string())
 }
 
 #[cfg(target_os = "macos")]
 fn read_keychain_credentials() -> Result<Option<ClaudeOAuthCredentials>, LlmError> {
     let output = std::process::Command::new("security")
-        .arg("find-generic-password").arg("-s").arg(&keychain_service()).arg("-w")
+        .arg("find-generic-password")
+        .arg("-s")
+        .arg(&keychain_service())
+        .arg("-w")
         .output();
 
     match output {
