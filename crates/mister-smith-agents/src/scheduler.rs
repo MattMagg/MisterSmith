@@ -338,22 +338,24 @@ impl DeadlineMonitor {
                     _ = ticker.tick() => {
                         let now = Utc::now();
                         // Check running and assigned tasks for deadline expiry
-                        let active: Vec<TaskAssignment> = scheduler
+                        let expired_tasks: Vec<TaskId> = scheduler
                             .tasks
                             .iter()
-                            .filter(|e| {
-                                matches!(e.value().state, TaskState::Running | TaskState::Assigned)
-                                    && e.value().deadline.is_some()
+                            .filter_map(|e| {
+                                let task = e.value();
+                                if matches!(task.state, TaskState::Running | TaskState::Assigned) {
+                                    if let Some(deadline) = task.deadline {
+                                        if now > deadline {
+                                            return Some(task.task_id);
+                                        }
+                                    }
+                                }
+                                None
                             })
-                            .map(|e| e.value().clone())
                             .collect();
 
-                        for task in active {
-                            if let Some(deadline) = task.deadline {
-                                if now > deadline {
-                                    let _ = scheduler.timeout(&task.task_id);
-                                }
-                            }
+                        for task_id in expired_tasks {
+                            let _ = scheduler.timeout(&task_id);
                         }
                     }
                     _ = stop_rx.changed() => {
