@@ -1,12 +1,12 @@
 //! Planner agent role — creates execution plans from goals.
 
+use crate::context_manager::{
+    resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
+};
 #[cfg(feature = "llm")]
 use crate::orchestrator::LlmSupervision;
 #[cfg(feature = "llm")]
 use crate::roles::llm_bridge::complete_with_optional_supervision;
-use crate::context_manager::{
-    resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
-};
 use crate::scheduler::TaskAssignment;
 use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
 use mister_smith_persistence::SnapshotScope;
