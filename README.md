@@ -43,6 +43,24 @@ cargo clippy --workspace -- -D warnings
 
 **Rust MSRV**: 1.88.0 (driven by async-nats 0.46.0)
 
+## Vet
+
+Pull requests now run a dedicated `Vet` GitHub Actions workflow from
+`.github/workflows/vet.yml`. The workflow uses the repo-local `.vet/configs.toml`
+`ci` profile, so the PR review configuration lives with the repository instead
+of inside the GitHub UI.
+
+For local Codex sessions, run:
+
+```bash
+scripts/run-vet.sh "Describe the change you want vet to review"
+```
+
+The wrapper auto-discovers the newest Codex session file for this repository,
+loads the project-level Codex history exporter, and uses the repo's `codex`
+profile by default. Local non-agentic runs therefore need `OPENAI_API_KEY` or a
+compatible custom `vet` model configuration.
+
 ## Workspace Crates
 
 ```
