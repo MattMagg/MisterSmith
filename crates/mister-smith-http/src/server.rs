@@ -4,12 +4,12 @@
 //! function that composes the router with middleware and starts the Axum server
 //! with graceful shutdown.
 
+use axum::http::{header, Method};
 use axum::middleware as axum_mw;
 use axum::Router;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use axum::http::{header, Method};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::info;
 
