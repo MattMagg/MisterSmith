@@ -1,0 +1,10 @@
+[ci]
+confidence_threshold = 0.9
+max_workers = 4
+model = "gpt-5.2"
+quiet = true
+
+[codex]
+confidence_threshold = 0.8
+max_workers = 2
+model = "gpt-5.2"
