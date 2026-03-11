@@ -264,6 +264,45 @@ fn delegation_propagation_roundtrip() {
 }
 
 #[test]
+fn delegation_expired_child_token_is_rejected() {
+    let config = JwtConfig {
+        access_token_ttl: Duration::from_secs(0),
+        ..hmac_config()
+    };
+    let mgr = JwtManager::new(&config).unwrap();
+    let mut parent = test_claims();
+    parent.agent_type = "coordinator".to_string();
+    let child = parent.delegated_to("agent-expiring", "worker");
+
+    let pair = mgr.generate_token_pair(&child).unwrap();
+
+    std::thread::sleep(Duration::from_secs(6));
+
+    assert!(matches!(
+        mgr.validate_token(&pair.access_token),
+        Err(mister_smith_core::SecurityError::TokenExpired)
+    ));
+}
+
+#[test]
+fn delegation_revoked_child_token_is_rejected() {
+    let mgr = JwtManager::new(&hmac_config()).unwrap();
+    let mut parent = test_claims();
+    parent.agent_type = "coordinator".to_string();
+    let child = parent.delegated_to("agent-revoked", "worker");
+
+    let pair = mgr.generate_token_pair(&child).unwrap();
+    let validated = mgr.validate_token(&pair.access_token).unwrap();
+
+    mgr.revoke_token(&validated.jti);
+
+    assert!(matches!(
+        mgr.validate_token(&pair.access_token),
+        Err(mister_smith_core::SecurityError::TokenRevoked)
+    ));
+}
+
+#[test]
 fn delegation_empty_entry_rejected_on_issue() {
     let mgr = JwtManager::new(&hmac_config()).unwrap();
     let mut claims = test_claims();
