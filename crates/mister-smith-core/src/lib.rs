@@ -47,6 +47,6 @@ pub use error::{
 
 // Core traits
 pub use traits::{
-    Actor, Agent, ConnectionStatus, EventPublisher, HealthStatus, Resource, Supervisor,
-    SystemEvent, Tool, ToolCapabilities, ToolSchema, Transport, TransportConfig, ResourceConfig,
+    Actor, Agent, ConnectionStatus, EventPublisher, HealthStatus, Resource, ResourceConfig,
+    Supervisor, SystemEvent, Tool, ToolCapabilities, ToolSchema, Transport, TransportConfig,
 };
