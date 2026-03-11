@@ -364,8 +364,9 @@ impl HybridStateManager {
 
         let mut flushed = 0usize;
 
-        for (i, kv_key) in keys.iter().enumerate() {
-            let (agent_id, state_key) = match parse_kv_key(kv_key) {
+        let mut keys_iter = keys.into_iter();
+        while let Some(kv_key) = keys_iter.next() {
+            let (agent_id, state_key) = match parse_kv_key(&kv_key) {
                 Some(parts) => parts,
                 None => {
                     warn!(key = %kv_key, "Skipping dirty key with invalid format");
@@ -373,7 +374,7 @@ impl HybridStateManager {
                 }
             };
 
-            match self.kv.get::<Value>(kv_key).await {
+            match self.kv.get::<Value>(&kv_key).await {
                 Ok(Some(value)) => {
                     match crate::postgres::queries::upsert_state(
                         &self.pool, agent_id, state_key, value, None,
@@ -387,9 +388,9 @@ impl HybridStateManager {
                             warn!(key = %kv_key, error = %e, "SQL upsert failed during flush");
                             // Re-mark this key and all remaining unprocessed keys
                             let mut dirty = self.dirty.lock().await;
-                            dirty.re_mark(kv_key.clone(), saved_oldest);
-                            for remaining_key in &keys[i + 1..] {
-                                dirty.re_mark(remaining_key.clone(), saved_oldest);
+                            dirty.re_mark(kv_key, saved_oldest);
+                            for remaining_key in keys_iter {
+                                dirty.re_mark(remaining_key, saved_oldest);
                             }
                             return Err(e);
                         }
