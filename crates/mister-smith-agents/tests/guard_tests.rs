@@ -53,6 +53,9 @@ fn stalled_profile_context(branch_id: ExecutionBranchId) -> GuardContext {
             branch_id,
             completed_nodes: Vec::new(),
             pending_nodes: Vec::new(),
+            memory_snapshot_id: mister_smith_core::MemorySnapshotId::new(),
+            failure_context: None,
+            created_at: Utc::now(),
         }])
 }
 
@@ -228,6 +231,9 @@ fn checkpointed_branch_graph() -> (
         branch_id,
         completed_nodes: vec![branch_a_node_1],
         pending_nodes: vec![branch_a_node_2],
+        memory_snapshot_id: mister_smith_core::MemorySnapshotId::new(),
+        failure_context: None,
+        created_at: Utc::now(),
     });
 
     let task_ids = graph

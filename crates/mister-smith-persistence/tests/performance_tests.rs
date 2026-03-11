@@ -8,17 +8,28 @@
 //! DATABASE_URL=postgres://... NATS_URL=nats://localhost:4222 \
 //!   cargo test -p mister-smith-persistence --test performance_tests -- --ignored
 //! ```
+//!
+//! The final two tests in this file are lightweight local assertions for Phase 10
+//! managed-memory reduction and consolidation behavior and do not require external services.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use chrono::Utc;
+use chrono::{Duration as ChronoDuration, Utc};
 use uuid::Uuid;
 
+use mister_smith_core::{
+    AgentId, AgentType, BudgetPolicy, BudgetScope, ContextBudget, ContextBudgetId,
+    ExecutionBranchId, TaskId,
+};
 use mister_smith_persistence::config::{FlushConfig, KvConfig};
 use mister_smith_persistence::hybrid::manager::HybridStateManager;
 use mister_smith_persistence::kv::buckets::{KvBucketManager, AGENT_STATE};
 use mister_smith_persistence::kv::state::{ConflictStrategy, StateManager};
+use mister_smith_persistence::memory::{
+    AccessPolicy, FragmentClass, FragmentFreshness, FragmentProvenance, ManagedMemoryManager,
+    MemoryFragment, SnapshotScope,
+};
 use mister_smith_persistence::postgres::migrations::MigrationRunner;
 use mister_smith_persistence::postgres::queries::*;
 
@@ -112,6 +123,48 @@ async fn create_test_agent(pool: &sqlx::PgPool) -> Uuid {
     };
     insert_agent(pool, &record).await.unwrap();
     agent_id
+}
+
+fn branch_scope() -> (TaskId, ExecutionBranchId, SnapshotScope) {
+    let workflow_id = TaskId::new();
+    let branch_id = ExecutionBranchId::new();
+    (workflow_id, branch_id, SnapshotScope::Branch(branch_id))
+}
+
+fn context_budget(max_units: u64, policy: BudgetPolicy) -> ContextBudget {
+    ContextBudget {
+        budget_id: ContextBudgetId::new(),
+        scope: BudgetScope::Branch,
+        max_units,
+        reserved_units: 0,
+        policy,
+    }
+}
+
+fn memory_fragment(
+    workflow_id: TaskId,
+    branch_id: ExecutionBranchId,
+    role: AgentType,
+    fragment_class: FragmentClass,
+    units: u64,
+    allowed_roles: Vec<AgentType>,
+    content: serde_json::Value,
+) -> MemoryFragment {
+    MemoryFragment::new(
+        SnapshotScope::Branch(branch_id),
+        content,
+        units,
+        fragment_class,
+        FragmentProvenance::new(
+            workflow_id,
+            Some(branch_id),
+            AgentId::new(),
+            role,
+            "performance.managed_memory",
+        ),
+        FragmentFreshness::ttl(Utc::now(), ChronoDuration::hours(1)),
+        AccessPolicy::for_roles(allowed_roles).for_branch(branch_id),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -330,5 +383,97 @@ async fn bulk_task_insert_and_query() {
     assert!(
         corr_query_elapsed < Duration::from_secs(30),
         "Correlation query took {corr_query_elapsed:?}, expected < 30s"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// SC-202 / T021: Managed-memory reduction and consolidation coverage
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn role_aware_context_reduction_cuts_delivered_volume_by_thirty_percent() {
+    let (workflow_id, branch_id, scope) = branch_scope();
+    let mut manager = ManagedMemoryManager::default();
+
+    manager.record_fragment(memory_fragment(
+        workflow_id,
+        branch_id,
+        AgentType::Planner,
+        FragmentClass::Working,
+        5,
+        vec![AgentType::Planner],
+        serde_json::json!({"kind": "brief-1"}),
+    ));
+    manager.record_fragment(memory_fragment(
+        workflow_id,
+        branch_id,
+        AgentType::Planner,
+        FragmentClass::Episodic,
+        5,
+        vec![AgentType::Planner],
+        serde_json::json!({"kind": "brief-2"}),
+    ));
+    manager.record_fragment(memory_fragment(
+        workflow_id,
+        branch_id,
+        AgentType::Memory,
+        FragmentClass::Episodic,
+        5,
+        vec![AgentType::Planner],
+        serde_json::json!({"kind": "brief-3"}),
+    ));
+
+    let snapshot = manager
+        .assemble_snapshot(
+            scope,
+            AgentType::Planner,
+            context_budget(8, BudgetPolicy::Summarize),
+        )
+        .await
+        .expect("snapshot should assemble");
+
+    assert_eq!(snapshot.total_candidate_units, 15);
+    assert!(
+        snapshot.summary.is_some(),
+        "reduction should synthesize a summary when over budget"
+    );
+    assert!(
+        snapshot.delivered_units * 10 <= snapshot.total_candidate_units * 7,
+        "expected at least 30% reduction, delivered {} of {} units",
+        snapshot.delivered_units,
+        snapshot.total_candidate_units
+    );
+}
+
+#[tokio::test]
+async fn async_consolidation_completes_within_background_budget() {
+    let (workflow_id, branch_id, scope) = branch_scope();
+    let mut manager = ManagedMemoryManager::default();
+
+    for index in 0..64 {
+        manager.record_fragment(memory_fragment(
+            workflow_id,
+            branch_id,
+            AgentType::Memory,
+            FragmentClass::Episodic,
+            2,
+            vec![AgentType::Planner, AgentType::Executor],
+            serde_json::json!({"kind": "historic", "index": index}),
+        ));
+    }
+
+    let start = Instant::now();
+    let consolidated = tokio::time::timeout(Duration::from_millis(250), manager.consolidate(scope))
+        .await
+        .expect("consolidation should remain backgroundable")
+        .expect("consolidation should succeed");
+    let elapsed = start.elapsed();
+
+    assert_eq!(consolidated.len(), 1);
+    assert_eq!(consolidated[0].fragment_class, FragmentClass::Summary);
+    assert_eq!(consolidated[0].provenance.derived_from.len(), 64);
+    assert!(
+        elapsed < Duration::from_millis(250),
+        "consolidation took {elapsed:?}, expected < 250ms"
     );
 }

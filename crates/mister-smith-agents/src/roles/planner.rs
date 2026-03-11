@@ -4,8 +4,12 @@
 use crate::orchestrator::LlmSupervision;
 #[cfg(feature = "llm")]
 use crate::roles::llm_bridge::complete_with_optional_supervision;
+use crate::context_manager::{
+    resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
+};
 use crate::scheduler::TaskAssignment;
-use mister_smith_core::{Actor, AgentId};
+use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
+use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -21,6 +25,8 @@ pub enum PlannerMessage {
         goal: String,
         /// Additional context for planning.
         context: serde_json::Value,
+        /// Optional managed context payload or runtime request.
+        managed_context: Option<ManagedContextInput>,
     },
     /// Query the current or most recent plan.
     QueryPlan,
@@ -56,6 +62,7 @@ pub enum PlannerError {
 /// Creates execution plans from high-level goals and contextual information.
 pub struct PlannerAgent {
     id: AgentId,
+    managed_context: Option<ManagedContextRuntime>,
     #[cfg(feature = "llm")]
     router: Option<std::sync::Arc<mister_smith_llm::ModelRouter>>,
     #[cfg(feature = "llm")]
@@ -67,6 +74,19 @@ impl PlannerAgent {
     pub fn new(id: AgentId) -> Self {
         Self {
             id,
+            managed_context: None,
+            #[cfg(feature = "llm")]
+            router: None,
+            #[cfg(feature = "llm")]
+            supervision: None,
+        }
+    }
+
+    /// Create a new `PlannerAgent` with a managed-context runtime.
+    pub fn with_managed_context(id: AgentId, managed_context: ManagedContextRuntime) -> Self {
+        Self {
+            id,
+            managed_context: Some(managed_context),
             #[cfg(feature = "llm")]
             router: None,
             #[cfg(feature = "llm")]
@@ -79,6 +99,7 @@ impl PlannerAgent {
     pub fn with_router(id: AgentId, router: std::sync::Arc<mister_smith_llm::ModelRouter>) -> Self {
         Self {
             id,
+            managed_context: None,
             router: Some(router),
             supervision: None,
         }
@@ -93,9 +114,56 @@ impl PlannerAgent {
     ) -> Self {
         Self {
             id,
+            managed_context: None,
             router: Some(router),
             supervision: Some(supervision),
         }
+    }
+
+    /// Create a new `PlannerAgent` with both router and managed-context runtime.
+    #[cfg(feature = "llm")]
+    pub fn with_router_and_managed_context(
+        id: AgentId,
+        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+        managed_context: ManagedContextRuntime,
+    ) -> Self {
+        Self {
+            id,
+            managed_context: Some(managed_context),
+            router: Some(router),
+            supervision: None,
+        }
+    }
+
+    /// Attach or replace the managed-context runtime for this agent.
+    pub fn set_managed_context(&mut self, managed_context: ManagedContextRuntime) {
+        self.managed_context = Some(managed_context);
+    }
+
+    /// Plan a goal after assembling bounded role-aware managed context.
+    pub async fn plan_goal_with_managed_context(
+        &mut self,
+        goal: String,
+        context: serde_json::Value,
+        context_manager: &mut ContextManager,
+        scope: SnapshotScope,
+        budget: ContextBudget,
+        state: &mut PlannerState,
+    ) -> Result<serde_json::Value, PlannerError> {
+        let managed_context = context_manager
+            .assemble_role_context(scope, AgentType::Planner, budget)
+            .await
+            .map_err(|error| PlannerError::Internal(error.to_string()))?;
+
+        self.handle_message(
+            PlannerMessage::PlanGoal {
+                goal,
+                context,
+                managed_context: Some(ManagedContextInput::Payload(managed_context.payload)),
+            },
+            state,
+        )
+        .await
     }
 }
 
@@ -212,7 +280,26 @@ impl Actor for PlannerAgent {
         state: &mut Self::State,
     ) -> Result<Self::Response, Self::Error> {
         match message {
-            PlannerMessage::PlanGoal { goal, context } => {
+            PlannerMessage::PlanGoal {
+                goal,
+                context,
+                managed_context,
+            } => {
+                let context = match resolve_managed_context_input(
+                    self.managed_context.as_mut(),
+                    self.id,
+                    AgentType::Planner,
+                    managed_context,
+                )
+                .await
+                .map_err(|error| PlannerError::Internal(error.to_string()))?
+                {
+                    Some(payload) => {
+                        crate::context_manager::attach_managed_context(context, payload)
+                    }
+                    None => context,
+                };
+
                 // When the `llm` feature is enabled and a router is configured,
                 // ask the model to decompose the goal into concrete steps.
                 #[cfg(feature = "llm")]
@@ -342,6 +429,7 @@ mod tests {
                 PlannerMessage::PlanGoal {
                     goal: goal.clone(),
                     context: context.clone(),
+                    managed_context: None,
                 },
                 &mut state,
             )

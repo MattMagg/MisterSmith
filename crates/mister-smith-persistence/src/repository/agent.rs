@@ -11,15 +11,18 @@ use serde_json::Value;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use mister_smith_core::PersistenceError;
+use mister_smith_core::{MemorySnapshotId, PersistenceError};
 #[cfg(feature = "security")]
 use mister_smith_security::{QuarantineActor, SharedStateAccess, ValidatedState};
 
+use crate::memory::MaterializedSnapshot;
 #[cfg(feature = "sqlx")]
 use crate::postgres::queries::{self, AgentRecord};
 
 use super::Repository;
 use crate::hybrid::manager::HybridStateManager;
+
+const MANAGED_MEMORY_SNAPSHOT_PREFIX: &str = "managed_memory.snapshot";
 
 /// Repository for agent registry records and agent state.
 ///
@@ -163,6 +166,39 @@ impl AgentRepository {
         self.hybrid.read_state(agent_id, key).await
     }
 
+    /// Persist a materialized managed-memory snapshot in the agent state store.
+    pub async fn persist_materialized_snapshot(
+        &self,
+        agent_id: Uuid,
+        snapshot: &MaterializedSnapshot,
+    ) -> Result<(), PersistenceError> {
+        let key = snapshot_state_key(snapshot.snapshot.snapshot_id);
+        self.save_state(agent_id, &key, serialize_materialized_snapshot(snapshot)?)
+            .await
+    }
+
+    /// Load a previously persisted managed-memory snapshot from the agent state store.
+    pub async fn get_materialized_snapshot(
+        &self,
+        agent_id: Uuid,
+        snapshot_id: MemorySnapshotId,
+    ) -> Result<Option<MaterializedSnapshot>, PersistenceError> {
+        let key = snapshot_state_key(snapshot_id);
+
+        #[cfg(feature = "security")]
+        let maybe_value = self
+            .get_state(agent_id, &key)
+            .await?
+            .map(|validated| validated.data);
+
+        #[cfg(not(feature = "security"))]
+        let maybe_value = self.get_state(agent_id, &key).await?;
+
+        maybe_value
+            .map(deserialize_materialized_snapshot)
+            .transpose()
+    }
+
     /// Get all state keys for an agent from SQL, validating each entry.
     ///
     /// Each row is passed through the quarantine actor exactly as
@@ -290,6 +326,27 @@ impl AgentRepository {
     }
 }
 
+/// Build the agent-state key used for persisted managed-memory snapshots.
+pub fn snapshot_state_key(snapshot_id: MemorySnapshotId) -> String {
+    format!("{MANAGED_MEMORY_SNAPSHOT_PREFIX}.{snapshot_id}")
+}
+
+/// Serialize a materialized snapshot for storage in the hybrid state backend.
+pub fn serialize_materialized_snapshot(
+    snapshot: &MaterializedSnapshot,
+) -> Result<Value, PersistenceError> {
+    serde_json::to_value(snapshot)
+        .map_err(|error| PersistenceError::SerializationFailed(error.to_string()))
+}
+
+/// Deserialize a materialized snapshot loaded from the hybrid state backend.
+pub fn deserialize_materialized_snapshot(
+    value: Value,
+) -> Result<MaterializedSnapshot, PersistenceError> {
+    serde_json::from_value(value)
+        .map_err(|error| PersistenceError::DataCorrupted(error.to_string()))
+}
+
 #[cfg(feature = "security")]
 fn inspect_shared_state_entry(
     quarantine_actor: &QuarantineActor,
@@ -360,6 +417,17 @@ impl Repository<AgentRecord> for AgentRepository {
 mod tests {
     use std::sync::Arc;
 
+    use chrono::{Duration, Utc};
+
+    use mister_smith_core::{
+        AgentId, AgentType, ContextBudgetId, ExecutionBranchId, MemorySnapshotId, TaskId,
+    };
+
+    use crate::memory::{
+        AccessPolicy, FragmentClass, FragmentFreshness, FragmentProvenance, MemoryFragment,
+        MemorySnapshot, ResumeSource, SnapshotScope,
+    };
+
     use super::*;
 
     #[cfg(feature = "security")]
@@ -415,6 +483,65 @@ mod tests {
         let key = format!("{id}:config.model");
         assert!(key.contains(':'));
         assert!(key.starts_with(&id.to_string()));
+    }
+
+    #[test]
+    fn snapshot_state_key_uses_managed_memory_namespace() {
+        let snapshot_id = MemorySnapshotId::new();
+        let key = snapshot_state_key(snapshot_id);
+
+        assert_eq!(
+            key,
+            format!("{MANAGED_MEMORY_SNAPSHOT_PREFIX}.{snapshot_id}")
+        );
+    }
+
+    #[test]
+    fn materialized_snapshot_serializes_and_roundtrips() {
+        let workflow_id = TaskId::new();
+        let branch_id = ExecutionBranchId::new();
+        let fragment = MemoryFragment::new(
+            SnapshotScope::Branch(branch_id),
+            serde_json::json!({"kind": "checkpoint"}),
+            4,
+            FragmentClass::Checkpoint,
+            FragmentProvenance::new(
+                workflow_id,
+                Some(branch_id),
+                AgentId::new(),
+                AgentType::Memory,
+                "managed_memory.checkpoint",
+            ),
+            FragmentFreshness::ttl(Utc::now(), Duration::hours(1)),
+            AccessPolicy::for_roles(vec![AgentType::Executor]).for_branch(branch_id),
+        );
+        let snapshot = MaterializedSnapshot {
+            snapshot: MemorySnapshot {
+                snapshot_id: MemorySnapshotId::new(),
+                target_scope: SnapshotScope::Branch(branch_id),
+                role: AgentType::Executor,
+                fragment_ids: vec![fragment.fragment_id],
+                summary: None,
+                created_at: Utc::now(),
+                budget_id: ContextBudgetId::new(),
+                total_candidate_units: 4,
+                delivered_units: 4,
+                checkpoint_fragment_id: Some(fragment.fragment_id),
+            },
+            fragments: vec![fragment.clone()],
+            resume_source: ResumeSource::Checkpoint,
+        };
+
+        let encoded =
+            serialize_materialized_snapshot(&snapshot).expect("snapshot should serialize");
+        let decoded =
+            deserialize_materialized_snapshot(encoded).expect("snapshot should deserialize");
+
+        assert_eq!(decoded, snapshot);
+        assert_eq!(
+            decoded.snapshot.checkpoint_fragment_id,
+            Some(fragment.fragment_id)
+        );
     }
 
     #[test]

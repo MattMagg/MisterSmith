@@ -43,3 +43,23 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
+      - name: Classify Claude review outcome
+        if: always()
+        shell: bash
+        env:
+          CLAUDE_REVIEW_OUTCOME: ${{ steps.claude-review.outcome }}
+        run: |
+          {
+            echo "## Claude review status"
+            if [[ "$CLAUDE_REVIEW_OUTCOME" == "success" ]]; then
+              echo "- Result: review completed successfully."
+            else
+              echo "- Result: the Claude review step exited before producing a usable review."
+              echo "- Classification: inspect the action log before treating this as advisory infrastructure noise."
+              echo "- Merge posture: only treat this as advisory when the log shows the known SDK crash signature (\`SDK execution error: Error: Claude Code process exited with code 1\`), the PR does not change the Claude review workflow or plugin configuration, and required repository validation is green."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$CLAUDE_REVIEW_OUTCOME" == "failure" ]]; then
+            echo "::warning title=Claude review requires log inspection::Check the workflow log for the known SDK crash signature before treating this failure as advisory infrastructure noise."
+          fi
