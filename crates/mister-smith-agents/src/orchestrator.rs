@@ -1,9 +1,17 @@
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use mister_smith_core::{AgentId, GuardDecision, InterventionRecord, ProfileSnapshot, TaskId};
+use mister_smith_core::{
+    AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, ExecutionBranchId, ExecutionNodeId,
+    GuardDecision, GuardTarget, HealthState, InterventionRecord, ProfileSnapshot, TaskId,
+};
 use tracing::instrument;
 
+use crate::branch_checkpoint::{
+    BranchCheckpointCoordinator, BranchCheckpointStore, BranchRecoveryPlan,
+};
 use crate::config::TaskState;
 use crate::errors::AgentSystemError;
 use crate::execution_graph::ExecutionGraph;
@@ -12,16 +20,16 @@ use crate::intervention::InterventionEngine;
 use crate::profile::ProfileAssessment;
 use crate::roles::monitor::{MonitorMessage, MonitorState};
 use crate::roles::planner::planner_output_from_subtasks;
+use crate::roles::router::BranchRoutingDecision;
 use crate::roles::supervisor::{SupervisorMessage, SupervisorState};
 use crate::scheduler::{ResultAggregator, TaskAssignment, TaskDecomposer, TaskScheduler};
 use crate::topology::{TopologyCompiler, TopologySignals};
 use mister_smith_events::{
-    AutonomyStatusView, BranchSummary, ContextPressureSummary, DelegationAlert,
-    ExecutionGraphSummary, TopologyPlanSummary,
+    AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary,
+    CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
+    RoutingDecisionSummary, TopologyPlanSummary,
 };
 
-#[cfg(feature = "llm")]
-use mister_smith_core::GuardTarget;
 #[cfg(feature = "llm")]
 use mister_smith_llm::router::ConfidenceSignal;
 #[cfg(feature = "llm")]
@@ -39,11 +47,13 @@ pub struct Orchestrator {
     topology_signals: TopologySignals,
     guard: Guard,
     intervention_engine: InterventionEngine,
+    branch_checkpoint_coordinator: BranchCheckpointCoordinator,
     execution_graphs: DashMap<TaskId, ExecutionGraph>,
     guard_decisions: DashMap<TaskId, Vec<GuardDecision>>,
     interventions: DashMap<TaskId, Vec<InterventionRecord>>,
     profiles: DashMap<TaskId, Vec<ProfileAssessment>>,
     conservative_reasons: DashMap<TaskId, Vec<String>>,
+    autonomy_events: DashMap<TaskId, Vec<AutonomyEvent>>,
     monitor_states: DashMap<TaskId, MonitorState>,
     supervisor_states: DashMap<TaskId, SupervisorState>,
 }
@@ -62,11 +72,13 @@ impl Orchestrator {
             topology_signals: TopologySignals::default(),
             guard: Guard::new(GuardPolicy::default()),
             intervention_engine: InterventionEngine,
+            branch_checkpoint_coordinator: BranchCheckpointCoordinator,
             execution_graphs: DashMap::new(),
             guard_decisions: DashMap::new(),
             interventions: DashMap::new(),
             profiles: DashMap::new(),
             conservative_reasons: DashMap::new(),
+            autonomy_events: DashMap::new(),
             monitor_states: DashMap::new(),
             supervisor_states: DashMap::new(),
         }
@@ -88,7 +100,7 @@ impl Orchestrator {
             &planner_output,
             &self.topology_signals,
         )?;
-        self.execution_graphs.insert(task.task_id, graph);
+        self.register_execution_graph(graph);
 
         let mut ids = Vec::with_capacity(subtasks.len());
         for mut subtask in subtasks {
@@ -108,7 +120,158 @@ impl Orchestrator {
 
     /// Register a precompiled execution graph for later supervision or inspection.
     pub fn register_execution_graph(&self, graph: ExecutionGraph) {
-        self.execution_graphs.insert(graph.workflow_id, graph);
+        let workflow_id = graph.workflow_id;
+        let graph_id = graph.graph_id;
+        let checkpoint_events = graph
+            .branches
+            .iter()
+            .filter_map(|branch| {
+                graph
+                    .latest_checkpoint(&branch.branch_id)
+                    .map(|checkpoint| {
+                        AutonomyEvent::CheckpointRecorded(AutonomyEventEnvelope {
+                            workflow_id,
+                            graph_id: Some(graph_id),
+                            branch_id: Some(branch.branch_id),
+                            payload: CheckpointRecordSummary {
+                                checkpoint_id: checkpoint.checkpoint_id,
+                                memory_snapshot_id: checkpoint.memory_snapshot_id,
+                                completed_nodes: checkpoint.completed_nodes.clone(),
+                                pending_nodes: checkpoint.pending_nodes.clone(),
+                                recovery_strategy: branch.recovery_strategy,
+                                failure_context: checkpoint.failure_context.clone(),
+                            },
+                            operator_visible: true,
+                        })
+                    })
+            })
+            .collect::<Vec<_>>();
+
+        self.execution_graphs.insert(workflow_id, graph);
+        for event in checkpoint_events {
+            self.record_autonomy_event(&workflow_id, event);
+        }
+    }
+
+    /// Record a branch checkpoint after graph registration and emit a typed autonomy event.
+    pub async fn record_branch_checkpoint<S: BranchCheckpointStore + ?Sized>(
+        &self,
+        workflow_id: &TaskId,
+        store: &S,
+        checkpoint: crate::execution_graph::BranchCheckpoint,
+    ) -> Result<(), AgentSystemError> {
+        let mut graph = self.execution_graphs.get_mut(workflow_id).ok_or_else(|| {
+            AgentSystemError::OrchestrationError(format!(
+                "No execution graph found for workflow {workflow_id}"
+            ))
+        })?;
+
+        self.branch_checkpoint_coordinator
+            .record_checkpoint(store, *workflow_id, graph.value_mut(), checkpoint.clone())
+            .await?;
+
+        let branch = graph.branch(&checkpoint.branch_id).ok_or_else(|| {
+            AgentSystemError::OrchestrationError(format!(
+                "No branch {} found after checkpoint record",
+                checkpoint.branch_id
+            ))
+        })?;
+
+        self.record_autonomy_event(
+            workflow_id,
+            AutonomyEvent::CheckpointRecorded(AutonomyEventEnvelope {
+                workflow_id: *workflow_id,
+                graph_id: Some(graph.graph_id),
+                branch_id: Some(checkpoint.branch_id),
+                payload: CheckpointRecordSummary {
+                    checkpoint_id: checkpoint.checkpoint_id,
+                    memory_snapshot_id: checkpoint.memory_snapshot_id,
+                    completed_nodes: checkpoint.completed_nodes,
+                    pending_nodes: checkpoint.pending_nodes,
+                    recovery_strategy: branch.recovery_strategy,
+                    failure_context: checkpoint.failure_context,
+                },
+                operator_visible: true,
+            }),
+        );
+
+        Ok(())
+    }
+
+    /// Record a profile assessment for later routing and operator inspection.
+    pub fn record_profile_assessment(&self, workflow_id: &TaskId, assessment: ProfileAssessment) {
+        let graph = self.execution_graph(workflow_id);
+        let graph_id = graph.as_ref().map(|graph| graph.graph_id);
+        let branch_id = match assessment.target() {
+            Some(GuardTarget::Branch(branch_id)) => Some(*branch_id),
+            Some(GuardTarget::Node(node_id)) => graph
+                .as_ref()
+                .and_then(|graph| graph.nodes.iter().find(|node| node.node_id == *node_id))
+                .map(|node| node.branch_id),
+            _ => None,
+        };
+
+        if let Some(snapshot) = assessment.snapshot().cloned() {
+            self.record_autonomy_event(
+                workflow_id,
+                AutonomyEvent::ProfileSnapshotRecorded(AutonomyEventEnvelope {
+                    workflow_id: *workflow_id,
+                    graph_id,
+                    branch_id,
+                    payload: snapshot,
+                    operator_visible: true,
+                }),
+            );
+        }
+
+        self.profiles
+            .entry(*workflow_id)
+            .or_default()
+            .push(assessment);
+    }
+
+    /// Plan branch-local resume from the latest durable checkpoint and record routing rationale.
+    pub async fn resume_branch<S: BranchCheckpointStore + ?Sized>(
+        &self,
+        workflow_id: &TaskId,
+        store: &S,
+        branch_id: ExecutionBranchId,
+        assigned_agent: Option<AgentId>,
+    ) -> Result<BranchRecoveryPlan, AgentSystemError> {
+        self.recover_branch(
+            workflow_id,
+            store,
+            branch_id,
+            assigned_agent,
+            RecoveryAction::Resume,
+        )
+        .await
+    }
+
+    /// Plan branch reassignment from the latest durable checkpoint and record routing rationale.
+    pub async fn reassign_branch<S: BranchCheckpointStore + ?Sized>(
+        &self,
+        workflow_id: &TaskId,
+        store: &S,
+        branch_id: ExecutionBranchId,
+        assigned_agent: AgentId,
+    ) -> Result<BranchRecoveryPlan, AgentSystemError> {
+        self.recover_branch(
+            workflow_id,
+            store,
+            branch_id,
+            Some(assigned_agent),
+            RecoveryAction::Reassign,
+        )
+        .await
+    }
+
+    /// Return recorded autonomy events for a workflow.
+    pub fn autonomy_events(&self, workflow_id: &TaskId) -> Vec<AutonomyEvent> {
+        self.autonomy_events
+            .get(workflow_id)
+            .map(|events| events.value().clone())
+            .unwrap_or_default()
     }
 
     /// Evaluate and apply a typed Guard decision against an existing workflow.
@@ -137,7 +300,7 @@ impl Orchestrator {
             .or_default()
             .push(record.clone());
         if let Some(profile) = context.profile().cloned() {
-            self.profiles.entry(*workflow_id).or_default().push(profile);
+            self.record_profile_assessment(workflow_id, profile);
         }
         let conservative = decision
             .evidence
@@ -236,9 +399,7 @@ impl Orchestrator {
                     state: branch.state,
                     assigned_agents: branch.assigned_agents.clone(),
                     checkpoint_id: graph
-                        .checkpoint_lineage
-                        .iter()
-                        .find(|checkpoint| checkpoint.branch_id == branch.branch_id)
+                        .latest_checkpoint(&branch.branch_id)
                         .map(|checkpoint| checkpoint.checkpoint_id),
                     recovery_strategy: branch.recovery_strategy,
                 })
@@ -297,6 +458,221 @@ impl Orchestrator {
             .collect()
     }
 
+    /// Route ready branches using health, budget, dependency-depth, and profile signals.
+    pub fn route_ready_branches(
+        &self,
+        workflow_id: &TaskId,
+        worker_ids: &[AgentId],
+    ) -> Result<Vec<BranchRoutingDecision>, AgentSystemError> {
+        if worker_ids.is_empty() {
+            return Err(AgentSystemError::OrchestrationError(
+                "No workers available for branch routing".to_string(),
+            ));
+        }
+
+        let graph = self.execution_graph(workflow_id).ok_or_else(|| {
+            AgentSystemError::OrchestrationError(format!(
+                "No execution graph found for workflow {workflow_id}"
+            ))
+        })?;
+        graph.validate()?;
+
+        let tasks_by_node = graph
+            .nodes
+            .iter()
+            .filter_map(|node| {
+                self.scheduler
+                    .get(&task_id_for_node(node.node_id))
+                    .map(|task| (node.node_id, task))
+            })
+            .collect::<HashMap<_, _>>();
+        let depth_by_node = dependency_depths(&graph);
+        let profiles = self
+            .profiles
+            .get(workflow_id)
+            .map(|entries| entries.value().clone())
+            .unwrap_or_default();
+
+        struct Candidate {
+            decision: BranchRoutingDecision,
+            recovery_strategy: BranchRecoveryStrategy,
+            checkpoint_id: Option<CheckpointId>,
+        }
+
+        let mut candidates = graph
+            .branches
+            .iter()
+            .filter_map(|branch| {
+                if branch.state == BranchState::Completed {
+                    return None;
+                }
+
+                let recovery_node_ids = recovery_scope_node_ids(&graph, branch.branch_id);
+                let ready_node_ids = ready_node_ids_for_branch(
+                    &graph,
+                    branch.branch_id,
+                    &recovery_node_ids,
+                    &tasks_by_node,
+                );
+                if ready_node_ids.is_empty() {
+                    return None;
+                }
+
+                let profile = latest_branch_profile(&profiles, branch.branch_id);
+                let health_state = profile
+                    .and_then(|assessment| {
+                        assessment.snapshot().map(|snapshot| snapshot.health_state)
+                    })
+                    .unwrap_or(HealthState::Unknown);
+                let profile_id = profile.and_then(|assessment| {
+                    assessment.snapshot().map(|snapshot| snapshot.profile_id)
+                });
+                let budget_pressure = budget_pressure_score(&graph, &recovery_node_ids);
+                let dependency_depth = ready_node_ids
+                    .iter()
+                    .filter_map(|node_id| depth_by_node.get(node_id))
+                    .copied()
+                    .max()
+                    .unwrap_or(0);
+                let checkpoint_id = graph
+                    .latest_checkpoint(&branch.branch_id)
+                    .map(|checkpoint| checkpoint.checkpoint_id);
+                let task_ids = ready_node_ids
+                    .iter()
+                    .copied()
+                    .map(task_id_for_node)
+                    .collect::<Vec<_>>();
+                let rationale = routing_rationale(
+                    budget_pressure,
+                    dependency_depth,
+                    profile,
+                    recovery_node_ids.len(),
+                    checkpoint_id,
+                );
+
+                Some(Candidate {
+                    decision: BranchRoutingDecision {
+                        workflow_id: *workflow_id,
+                        graph_id: graph.graph_id,
+                        branch_id: branch.branch_id,
+                        task_ids,
+                        recovery_node_ids,
+                        recovery_strategy: branch.recovery_strategy,
+                        checkpoint_id,
+                        selected_agent: Some(worker_ids[0]),
+                        health_state,
+                        budget_pressure,
+                        dependency_depth,
+                        profile_id,
+                        rationale,
+                    },
+                    recovery_strategy: branch.recovery_strategy,
+                    checkpoint_id,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        candidates.sort_by(|left, right| {
+            health_priority(left.decision.health_state)
+                .cmp(&health_priority(right.decision.health_state))
+                .then_with(|| {
+                    left.decision
+                        .budget_pressure
+                        .partial_cmp(&right.decision.budget_pressure)
+                        .unwrap_or(Ordering::Equal)
+                })
+                .then_with(|| {
+                    left.decision
+                        .dependency_depth
+                        .cmp(&right.decision.dependency_depth)
+                })
+                .then_with(|| {
+                    left.decision
+                        .branch_id
+                        .to_string()
+                        .cmp(&right.decision.branch_id.to_string())
+                })
+        });
+
+        let mut worker_loads = worker_loads(&self.scheduler, worker_ids);
+        let mut decisions = Vec::new();
+        for mut candidate in candidates {
+            let worker = select_worker(worker_ids, &worker_loads);
+            let mut assigned_task_ids = Vec::new();
+            for task_id in &candidate.decision.task_ids {
+                let Some(task) = self.scheduler.get(task_id) else {
+                    continue;
+                };
+
+                match task.state {
+                    TaskState::Completed | TaskState::Assigned | TaskState::Running => continue,
+                    TaskState::Failed | TaskState::TimedOut | TaskState::Cancelled => {
+                        self.scheduler.reset(task_id)?;
+                    }
+                    TaskState::Pending => {}
+                }
+
+                self.scheduler.assign(task_id, worker)?;
+                assigned_task_ids.push(*task_id);
+            }
+
+            if assigned_task_ids.is_empty() {
+                continue;
+            }
+
+            candidate.decision.selected_agent = Some(worker);
+            candidate.decision.task_ids = assigned_task_ids.clone();
+            *worker_loads.entry(worker).or_default() += assigned_task_ids.len();
+
+            self.record_autonomy_event(
+                workflow_id,
+                AutonomyEvent::RoutingDecisionRecorded(AutonomyEventEnvelope {
+                    workflow_id: *workflow_id,
+                    graph_id: Some(candidate.decision.graph_id),
+                    branch_id: Some(candidate.decision.branch_id),
+                    payload: RoutingDecisionSummary {
+                        selected_agent: worker,
+                        task_ids: assigned_task_ids,
+                        recovery_strategy: candidate.recovery_strategy,
+                        checkpoint_id: candidate.checkpoint_id,
+                        dependency_depth: candidate.decision.dependency_depth,
+                        budget_pressure: candidate.decision.budget_pressure,
+                        health_state: candidate.decision.health_state,
+                        profile_id: candidate.decision.profile_id,
+                        rationale: candidate.decision.rationale.clone(),
+                    },
+                    operator_visible: true,
+                }),
+            );
+
+            decisions.push(candidate.decision);
+        }
+
+        if !decisions.is_empty() {
+            let mut graph = self.execution_graphs.get_mut(workflow_id).ok_or_else(|| {
+                AgentSystemError::OrchestrationError(format!(
+                    "No execution graph found for workflow {workflow_id}"
+                ))
+            })?;
+
+            for decision in &decisions {
+                let has_checkpoint = graph.latest_checkpoint(&decision.branch_id).is_some();
+                if let Some(branch) = graph.branch_mut(&decision.branch_id) {
+                    if let Some(agent_id) = decision.selected_agent {
+                        branch.assigned_agents = vec![agent_id];
+                    }
+                    branch.state = if has_checkpoint {
+                        BranchState::Checkpointed
+                    } else {
+                        BranchState::Running
+                    };
+                }
+            }
+        }
+
+        Ok(decisions)
+    }
+
     /// Get the scheduler.
     pub fn scheduler(&self) -> &TaskScheduler {
         &self.scheduler
@@ -322,15 +698,12 @@ impl Orchestrator {
             ));
         }
 
-        // 2. Assign subtasks round-robin to available workers
-        for (i, subtask_id) in subtask_ids.iter().enumerate() {
-            if worker_ids.is_empty() {
-                return Err(AgentSystemError::OrchestrationError(
-                    "No workers available for assignment".into(),
-                ));
-            }
-            let worker = worker_ids[i % worker_ids.len()];
-            self.scheduler.assign(subtask_id, worker)?;
+        // 2. Route only the ready branch scope using resilience-aware signals.
+        let routed = self.route_ready_branches(&task.task_id, worker_ids)?;
+        if routed.is_empty() {
+            return Err(AgentSystemError::OrchestrationError(
+                "No ready branches available for routing".into(),
+            ));
         }
 
         // 3. Aggregate results (caller is responsible for driving subtask completion)
@@ -366,6 +739,89 @@ impl Orchestrator {
             .into_iter()
             .filter(|t| t.state == TaskState::Failed || t.state == TaskState::TimedOut)
             .collect()
+    }
+
+    async fn recover_branch<S: BranchCheckpointStore + ?Sized>(
+        &self,
+        workflow_id: &TaskId,
+        store: &S,
+        branch_id: ExecutionBranchId,
+        assigned_agent: Option<AgentId>,
+        action: RecoveryAction,
+    ) -> Result<BranchRecoveryPlan, AgentSystemError> {
+        let profiles = self
+            .profiles
+            .get(workflow_id)
+            .map(|entries| entries.value().clone())
+            .unwrap_or_default();
+        let (recovery, routing_event) = {
+            let mut graph = self.execution_graphs.get_mut(workflow_id).ok_or_else(|| {
+                AgentSystemError::OrchestrationError(format!(
+                    "No execution graph found for workflow {workflow_id}"
+                ))
+            })?;
+
+            let recovery = match action {
+                RecoveryAction::Resume => {
+                    self.branch_checkpoint_coordinator
+                        .resume_branch(
+                            store,
+                            *workflow_id,
+                            graph.value_mut(),
+                            branch_id,
+                            assigned_agent,
+                        )
+                        .await?
+                }
+                RecoveryAction::Reassign => {
+                    let assigned_agent = assigned_agent.ok_or_else(|| {
+                        AgentSystemError::OrchestrationError(
+                            "branch reassignment requires a target agent".to_string(),
+                        )
+                    })?;
+                    self.branch_checkpoint_coordinator
+                        .reassign_branch(
+                            store,
+                            *workflow_id,
+                            graph.value_mut(),
+                            branch_id,
+                            assigned_agent,
+                        )
+                        .await?
+                }
+            };
+
+            let selected_agent = recovery.resume_metadata.assigned_agent.or_else(|| {
+                graph
+                    .branch(&branch_id)
+                    .and_then(|branch| branch.assigned_agents.first().copied())
+            });
+            let routing_event = selected_agent.map(|selected_agent| {
+                recovery_routing_event(
+                    *workflow_id,
+                    &graph,
+                    branch_id,
+                    selected_agent,
+                    &profiles,
+                    &recovery,
+                )
+            });
+
+            (recovery, routing_event)
+        };
+
+        if let Some(event) = routing_event {
+            self.record_autonomy_event(workflow_id, event);
+        }
+
+        Ok(recovery)
+    }
+
+    fn record_autonomy_event(&self, workflow_id: &TaskId, event: AutonomyEvent) {
+        self.autonomy_events
+            .entry(*workflow_id)
+            .or_default()
+            .push(event);
     }
 
     fn record_monitor_message(&self, workflow_id: &TaskId, message: &MonitorMessage) {
@@ -410,6 +866,286 @@ impl Orchestrator {
             GuardTarget::Provider(_) => Vec::new(),
         }
     }
+}
+
+fn task_id_for_node(node_id: ExecutionNodeId) -> TaskId {
+    TaskId::from_uuid(*node_id.as_ref())
+}
+
+fn recovery_scope_node_ids(
+    graph: &ExecutionGraph,
+    branch_id: ExecutionBranchId,
+) -> Vec<ExecutionNodeId> {
+    if graph.latest_checkpoint(&branch_id).is_some() {
+        graph.recovery_node_ids(&branch_id)
+    } else {
+        graph
+            .branch(&branch_id)
+            .map(|branch| branch.node_ids.clone())
+            .unwrap_or_default()
+    }
+}
+
+fn ready_node_ids_for_branch(
+    graph: &ExecutionGraph,
+    branch_id: ExecutionBranchId,
+    recovery_node_ids: &[ExecutionNodeId],
+    tasks_by_node: &HashMap<ExecutionNodeId, TaskAssignment>,
+) -> Vec<ExecutionNodeId> {
+    recovery_node_ids
+        .iter()
+        .copied()
+        .filter(|node_id| {
+            let Some(node) = graph.nodes.iter().find(|node| node.node_id == *node_id) else {
+                return false;
+            };
+            if node.branch_id != branch_id {
+                return false;
+            }
+
+            let Some(task) = tasks_by_node.get(node_id) else {
+                return false;
+            };
+            if matches!(
+                task.state,
+                TaskState::Completed | TaskState::Assigned | TaskState::Running
+            ) {
+                return false;
+            }
+
+            node.dependencies
+                .iter()
+                .all(|dependency| node_completed(graph, tasks_by_node, *dependency))
+        })
+        .collect()
+}
+
+fn node_completed(
+    graph: &ExecutionGraph,
+    tasks_by_node: &HashMap<ExecutionNodeId, TaskAssignment>,
+    node_id: ExecutionNodeId,
+) -> bool {
+    graph
+        .nodes
+        .iter()
+        .find(|node| node.node_id == node_id)
+        .map(|node| node.state == mister_smith_core::NodeState::Completed)
+        .unwrap_or(false)
+        || tasks_by_node
+            .get(&node_id)
+            .map(|task| task.state == TaskState::Completed)
+            .unwrap_or(false)
+}
+
+fn dependency_depths(graph: &ExecutionGraph) -> HashMap<ExecutionNodeId, usize> {
+    let node_lookup = graph
+        .nodes
+        .iter()
+        .map(|node| (node.node_id, node))
+        .collect::<HashMap<_, _>>();
+    let mut memo = HashMap::new();
+    for node in &graph.nodes {
+        let _ = dependency_depth(node.node_id, &node_lookup, &mut memo);
+    }
+    memo
+}
+
+fn dependency_depth(
+    node_id: ExecutionNodeId,
+    node_lookup: &HashMap<ExecutionNodeId, &crate::execution_graph::ExecutionNode>,
+    memo: &mut HashMap<ExecutionNodeId, usize>,
+) -> usize {
+    if let Some(depth) = memo.get(&node_id) {
+        return *depth;
+    }
+
+    let depth = node_lookup
+        .get(&node_id)
+        .map(|node| {
+            node.dependencies
+                .iter()
+                .copied()
+                .map(|dependency| dependency_depth(dependency, node_lookup, memo) + 1)
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+    memo.insert(node_id, depth);
+    depth
+}
+
+fn latest_branch_profile(
+    profiles: &[ProfileAssessment],
+    branch_id: ExecutionBranchId,
+) -> Option<&ProfileAssessment> {
+    profiles.iter().rev().find(|assessment| {
+        matches!(
+            assessment.target(),
+            Some(GuardTarget::Branch(target_branch_id)) if *target_branch_id == branch_id
+        )
+    })
+}
+
+fn budget_pressure_score(graph: &ExecutionGraph, node_ids: &[ExecutionNodeId]) -> u8 {
+    node_ids
+        .iter()
+        .filter_map(|node_id| {
+            graph
+                .nodes
+                .iter()
+                .find(|node| node.node_id == *node_id)
+                .and_then(|node| {
+                    (node.budget.max_units > 0).then_some(
+                        ((node.budget.reserved_units as f32 / node.budget.max_units as f32) * 100.0)
+                            .round()
+                            .clamp(0.0, 100.0) as u8,
+                    )
+                })
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+fn routing_rationale(
+    budget_pressure: u8,
+    dependency_depth: usize,
+    profile: Option<&ProfileAssessment>,
+    recovery_scope_len: usize,
+    checkpoint_id: Option<CheckpointId>,
+) -> Vec<String> {
+    let mut rationale = vec![
+        format!("budget pressure {budget_pressure}% across routed scope"),
+        format!("dependency depth {dependency_depth} across ready branch frontier"),
+        format!("checkpoint recovery scope covers {recovery_scope_len} nodes"),
+    ];
+
+    if let Some(checkpoint_id) = checkpoint_id {
+        rationale.push(format!(
+            "checkpoint {checkpoint_id} limits replay to pending work"
+        ));
+    } else {
+        rationale.push("checkpoint unavailable; routing original branch scope".to_string());
+    }
+
+    if let Some(profile) = profile {
+        if let Some(snapshot) = profile.snapshot() {
+            rationale.push(format!(
+                "profile {} reports {:?} health",
+                snapshot.profile_id, snapshot.health_state
+            ));
+        } else {
+            rationale.push("profile present without snapshot payload".to_string());
+        }
+        rationale.extend(
+            profile
+                .notes()
+                .iter()
+                .map(|note| format!("profile note: {note}")),
+        );
+    } else {
+        rationale.push("profile unavailable; defaulting to unknown health".to_string());
+    }
+
+    rationale
+}
+
+fn health_priority(health_state: HealthState) -> u8 {
+    match health_state {
+        HealthState::Healthy => 0,
+        HealthState::Degraded => 1,
+        HealthState::Unhealthy => 2,
+        HealthState::Unknown => 3,
+    }
+}
+
+fn worker_loads(scheduler: &TaskScheduler, worker_ids: &[AgentId]) -> HashMap<AgentId, usize> {
+    let mut loads = worker_ids
+        .iter()
+        .copied()
+        .map(|worker_id| (worker_id, 0_usize))
+        .collect::<HashMap<_, _>>();
+
+    for task in scheduler.all_tasks() {
+        if let Some(agent_id) = task.assigned_to {
+            if matches!(task.state, TaskState::Assigned | TaskState::Running) {
+                if let Some(load) = loads.get_mut(&agent_id) {
+                    *load += 1;
+                }
+            }
+        }
+    }
+
+    loads
+}
+
+fn select_worker(worker_ids: &[AgentId], worker_loads: &HashMap<AgentId, usize>) -> AgentId {
+    worker_ids
+        .iter()
+        .copied()
+        .min_by_key(|worker_id| worker_loads.get(worker_id).copied().unwrap_or(0))
+        .unwrap_or(worker_ids[0])
+}
+
+fn recovery_routing_event(
+    workflow_id: TaskId,
+    graph: &ExecutionGraph,
+    branch_id: ExecutionBranchId,
+    selected_agent: AgentId,
+    profiles: &[ProfileAssessment],
+    recovery: &BranchRecoveryPlan,
+) -> AutonomyEvent {
+    let profile = latest_branch_profile(profiles, branch_id);
+    let budget_pressure = budget_pressure_score(graph, &recovery.recovery_node_ids);
+    let dependency_depths = dependency_depths(graph);
+    let dependency_depth = recovery
+        .recovery_node_ids
+        .iter()
+        .filter_map(|node_id| dependency_depths.get(node_id))
+        .copied()
+        .max()
+        .unwrap_or(0);
+    let health_state = profile
+        .and_then(|assessment| assessment.snapshot().map(|snapshot| snapshot.health_state))
+        .unwrap_or(HealthState::Unknown);
+    let profile_id =
+        profile.and_then(|assessment| assessment.snapshot().map(|snapshot| snapshot.profile_id));
+    let mut rationale = routing_rationale(
+        budget_pressure,
+        dependency_depth,
+        profile,
+        recovery.recovery_node_ids.len(),
+        Some(recovery.checkpoint.checkpoint_id),
+    );
+    rationale.extend(recovery.resume_metadata.notes.iter().cloned());
+
+    AutonomyEvent::RoutingDecisionRecorded(AutonomyEventEnvelope {
+        workflow_id,
+        graph_id: Some(graph.graph_id),
+        branch_id: Some(branch_id),
+        payload: RoutingDecisionSummary {
+            selected_agent,
+            task_ids: recovery
+                .recovery_node_ids
+                .iter()
+                .copied()
+                .map(task_id_for_node)
+                .collect(),
+            recovery_strategy: recovery.resume_metadata.recovery_strategy,
+            checkpoint_id: Some(recovery.checkpoint.checkpoint_id),
+            dependency_depth,
+            budget_pressure,
+            health_state,
+            profile_id,
+            rationale,
+        },
+        operator_visible: true,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RecoveryAction {
+    Resume,
+    Reassign,
 }
 
 #[cfg(feature = "llm")]

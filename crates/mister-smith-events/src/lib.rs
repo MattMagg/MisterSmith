@@ -36,8 +36,8 @@ pub mod types;
 // Re-exports for convenience.
 pub use autonomy::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
-    CapabilitySummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
-    TopologyPlanSummary,
+    CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert,
+    ExecutionGraphSummary, RoutingDecisionSummary, TopologyPlanSummary,
 };
 pub use builder::EventBuilder;
 pub use bus::EventBus;

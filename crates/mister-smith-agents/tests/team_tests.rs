@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
+use chrono::Utc;
 use mister_smith_agents::config::{TaskState, TeamPattern};
 use mister_smith_agents::orchestrator::Orchestrator;
 use mister_smith_agents::scheduler::{
     ArrayAggregator, IdentityDecomposer, TaskAssignment, TaskDecomposer, TaskScheduler,
 };
 use mister_smith_agents::team::Team;
-use mister_smith_agents::AgentSystemError;
-use mister_smith_core::{AgentId, TaskId};
+use mister_smith_agents::{AgentSystemError, BranchCheckpoint, TopologyCompiler, TopologySignals};
+use mister_smith_core::{AgentId, BranchState, MemorySnapshotId, TaskId};
+use serde_json::json;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_team_assembly_supervisor_worker() {
@@ -214,6 +217,53 @@ async fn test_orchestrator_execute_assigns_subtasks() {
 }
 
 #[tokio::test]
+async fn test_orchestrator_execute_routes_using_current_worker_load() {
+    let scheduler = Arc::new(TaskScheduler::new());
+    let orchestrator = Orchestrator::new(
+        Arc::new(SplitDecomposer(2)),
+        Arc::new(ArrayAggregator),
+        scheduler.clone(),
+    );
+
+    let overloaded_worker = AgentId::new();
+    let available_worker = AgentId::new();
+    let preload_a = TaskAssignment::new("preload-a", serde_json::json!({}));
+    let preload_b = TaskAssignment::new("preload-b", serde_json::json!({}));
+    let preload_a_id = scheduler.submit(preload_a);
+    let preload_b_id = scheduler.submit(preload_b);
+    scheduler.assign(&preload_a_id, overloaded_worker).unwrap();
+    scheduler.assign(&preload_b_id, overloaded_worker).unwrap();
+
+    let task = TaskAssignment::new("execute-routing", serde_json::json!({"data": 42}));
+    let result = orchestrator
+        .execute(&task, &[overloaded_worker, available_worker])
+        .await
+        .unwrap();
+
+    let subtask_ids = result["subtask_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| TaskId::from_uuid(Uuid::parse_str(value.as_str().unwrap()).unwrap()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(subtask_ids.len(), 2);
+    for subtask_id in subtask_ids {
+        assert_eq!(
+            scheduler.get(&subtask_id).unwrap().assigned_to,
+            Some(available_worker)
+        );
+    }
+    assert!(orchestrator
+        .autonomy_events(&task.task_id)
+        .iter()
+        .any(|event| matches!(
+            event,
+            mister_smith_events::AutonomyEvent::RoutingDecisionRecorded(_)
+        )));
+}
+
+#[tokio::test]
 async fn test_team_member_management() {
     let mut team = Team::new(
         AgentId::new(),
@@ -234,6 +284,195 @@ async fn test_team_member_management() {
     assert_eq!(team.member_count(), 1);
     assert!(team.members.contains(&member2));
     assert!(!team.members.contains(&member1));
+}
+
+fn submit_task(
+    scheduler: &TaskScheduler,
+    task_id: TaskId,
+    task_type: &str,
+    parent_task_id: TaskId,
+    state: TaskState,
+) {
+    scheduler.submit(TaskAssignment {
+        task_id,
+        task_type: task_type.to_string(),
+        priority: 128,
+        deadline: None,
+        input: json!({ "source": "team-routing-test" }),
+        output: None,
+        state,
+        assigned_to: None,
+        parent_task_id: Some(parent_task_id),
+        team_id: None,
+        message_id: Uuid::new_v4(),
+        created_at: Utc::now(),
+        assigned_at: None,
+        completed_at: (state == TaskState::Completed).then_some(Utc::now()),
+        error_message: None,
+    });
+}
+
+#[tokio::test]
+async fn branch_routing_assigns_only_checkpoint_recovery_scope() {
+    let scheduler = Arc::new(TaskScheduler::new());
+    let orchestrator = Orchestrator::new(
+        Arc::new(IdentityDecomposer),
+        Arc::new(ArrayAggregator),
+        scheduler.clone(),
+    );
+    let mut graph = TopologyCompiler::default()
+        .compile(
+            TaskId::new(),
+            &json!({
+                "goal": "checkpoint-routing",
+                "steps": [
+                    {
+                        "id": "root",
+                        "step": 1,
+                        "action": "root",
+                        "description": "root"
+                    },
+                    {
+                        "id": "branch-a-1",
+                        "step": 2,
+                        "action": "branch-a-1",
+                        "description": "branch-a-1",
+                        "depends_on": ["root"],
+                        "branch": "branch-a"
+                    },
+                    {
+                        "id": "branch-a-2",
+                        "step": 3,
+                        "action": "branch-a-2",
+                        "description": "branch-a-2",
+                        "depends_on": ["branch-a-1"],
+                        "branch": "branch-a"
+                    },
+                    {
+                        "id": "branch-b",
+                        "step": 4,
+                        "action": "branch-b",
+                        "description": "branch-b",
+                        "depends_on": ["root"],
+                        "branch": "branch-b"
+                    }
+                ]
+            }),
+            &TopologySignals::default(),
+        )
+        .expect("checkpoint routing graph should compile");
+    let workflow_id = graph.workflow_id;
+    let root = graph
+        .nodes
+        .iter()
+        .find(|node| node.step_key == "root")
+        .map(|node| node.node_id)
+        .expect("root should exist");
+    let a1 = graph
+        .nodes
+        .iter()
+        .find(|node| node.step_key == "branch-a-1")
+        .map(|node| node.node_id)
+        .expect("branch-a-1 should exist");
+    let a2 = graph
+        .nodes
+        .iter()
+        .find(|node| node.step_key == "branch-a-2")
+        .map(|node| node.node_id)
+        .expect("branch-a-2 should exist");
+    let b = graph
+        .nodes
+        .iter()
+        .find(|node| node.step_key == "branch-b")
+        .map(|node| node.node_id)
+        .expect("branch-b should exist");
+    let root_branch = graph
+        .nodes
+        .iter()
+        .find(|node| node.step_key == "root")
+        .map(|node| node.branch_id)
+        .expect("root branch should exist");
+    let a_branch = graph
+        .nodes
+        .iter()
+        .find(|node| node.step_key == "branch-a-1")
+        .map(|node| node.branch_id)
+        .expect("branch-a should exist");
+    let b_branch = graph
+        .nodes
+        .iter()
+        .find(|node| node.step_key == "branch-b")
+        .map(|node| node.branch_id)
+        .expect("branch-b should exist");
+
+    graph.branch_mut(&root_branch).unwrap().state = BranchState::Completed;
+    graph.branch_mut(&a_branch).unwrap().state = BranchState::Checkpointed;
+    graph.branch_mut(&b_branch).unwrap().state = BranchState::Completed;
+    graph.checkpoint_lineage.push(BranchCheckpoint::new(
+        a_branch,
+        vec![a1],
+        vec![a2],
+        MemorySnapshotId::new(),
+    ));
+    orchestrator.register_execution_graph(graph);
+
+    submit_task(
+        &scheduler,
+        TaskId::from_uuid(*root.as_ref()),
+        "root",
+        workflow_id,
+        TaskState::Completed,
+    );
+    submit_task(
+        &scheduler,
+        TaskId::from_uuid(*a1.as_ref()),
+        "branch-a-1",
+        workflow_id,
+        TaskState::Completed,
+    );
+    submit_task(
+        &scheduler,
+        TaskId::from_uuid(*a2.as_ref()),
+        "branch-a-2",
+        workflow_id,
+        TaskState::Failed,
+    );
+    submit_task(
+        &scheduler,
+        TaskId::from_uuid(*b.as_ref()),
+        "branch-b",
+        workflow_id,
+        TaskState::Completed,
+    );
+
+    let worker = AgentId::new();
+    let decisions = orchestrator
+        .route_ready_branches(&workflow_id, &[worker])
+        .expect("checkpoint recovery should route pending recovery scope");
+
+    assert_eq!(decisions.len(), 1);
+    assert_eq!(decisions[0].task_ids, vec![TaskId::from_uuid(*a2.as_ref())]);
+    assert_eq!(
+        scheduler
+            .get(&TaskId::from_uuid(*a1.as_ref()))
+            .unwrap()
+            .state,
+        TaskState::Completed
+    );
+    assert_eq!(
+        scheduler
+            .get(&TaskId::from_uuid(*b.as_ref()))
+            .unwrap()
+            .state,
+        TaskState::Completed
+    );
+    assert_eq!(
+        scheduler
+            .get(&TaskId::from_uuid(*a2.as_ref()))
+            .unwrap()
+            .assigned_to,
+        Some(worker)
+    );
 }
 
 // --- Test helpers ---

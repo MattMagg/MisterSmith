@@ -1,7 +1,62 @@
-//! Router agent role — routes messages between agents.
+//! Router agent role and branch-routing decision surfaces.
 
-use mister_smith_core::{Actor, AgentId};
+use mister_smith_core::{
+    Actor, AgentId, BranchRecoveryStrategy, CheckpointId, ExecutionBranchId, ExecutionGraphId,
+    ExecutionNodeId, HealthState, ProfileSnapshotId, TaskId,
+};
 use serde::{Deserialize, Serialize};
+
+/// Branch routing decision recorded for resilience-aware orchestration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BranchRoutingDecision {
+    /// Workflow that owns the decision.
+    pub workflow_id: TaskId,
+    /// Graph whose branch was routed.
+    pub graph_id: ExecutionGraphId,
+    /// Branch selected for dispatch.
+    pub branch_id: ExecutionBranchId,
+    /// Tasks assigned in this routing pass.
+    pub task_ids: Vec<TaskId>,
+    /// Checkpoint-safe node scope for the branch.
+    pub recovery_node_ids: Vec<ExecutionNodeId>,
+    /// Recovery strategy active for the branch when it was routed.
+    pub recovery_strategy: BranchRecoveryStrategy,
+    /// Latest checkpoint used to narrow the branch scope, when available.
+    pub checkpoint_id: Option<CheckpointId>,
+    /// Worker chosen for the routed tasks, when assignment has occurred.
+    pub selected_agent: Option<AgentId>,
+    /// Latest health signal considered during routing.
+    pub health_state: HealthState,
+    /// Highest reserved-to-max pressure ratio, rounded to a 0..=100 score.
+    pub budget_pressure: u8,
+    /// Deepest dependency depth among the routed nodes.
+    pub dependency_depth: usize,
+    /// Profile snapshot that informed the decision, when available.
+    pub profile_id: Option<ProfileSnapshotId>,
+    /// Operator-visible rationale for the choice.
+    pub rationale: Vec<String>,
+}
+
+impl BranchRoutingDecision {
+    /// Sort key that prefers healthier, lower-pressure, shallower branches first.
+    pub fn sort_key(&self) -> (u8, u8, usize, String) {
+        (
+            health_rank(self.health_state),
+            self.budget_pressure,
+            self.dependency_depth,
+            self.branch_id.to_string(),
+        )
+    }
+}
+
+fn health_rank(health_state: HealthState) -> u8 {
+    match health_state {
+        HealthState::Healthy => 0,
+        HealthState::Degraded => 1,
+        HealthState::Unhealthy => 2,
+        HealthState::Unknown => 3,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Messages

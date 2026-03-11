@@ -10,13 +10,18 @@ use mister_smith_core::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProfileAssessment {
     snapshot: Option<ProfileSnapshot>,
+    target: Option<GuardTarget>,
     notes: Vec<String>,
 }
 
 impl ProfileAssessment {
     /// Create a new profile assessment.
     pub fn new(snapshot: Option<ProfileSnapshot>, notes: Vec<String>) -> Self {
-        Self { snapshot, notes }
+        Self {
+            snapshot,
+            target: None,
+            notes,
+        }
     }
 
     /// Borrow the underlying profile snapshot when available.
@@ -24,9 +29,20 @@ impl ProfileAssessment {
         self.snapshot.as_ref()
     }
 
+    /// Borrow the runtime target associated with this profile, when known.
+    pub fn target(&self) -> Option<&GuardTarget> {
+        self.target.as_ref()
+    }
+
     /// Borrow operator-facing notes captured during profile assessment.
     pub fn notes(&self) -> &[String] {
         &self.notes
+    }
+
+    /// Attach a concrete runtime target to this assessment.
+    pub fn with_target(mut self, target: GuardTarget) -> Self {
+        self.target = Some(target);
+        self
     }
 
     /// Build a supervisory profile assessment from stream or runtime signals.
@@ -47,6 +63,7 @@ impl ProfileAssessment {
             }),
             notes,
         )
+        .with_target(target.clone())
     }
 }
 
