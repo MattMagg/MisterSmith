@@ -277,6 +277,70 @@ impl HybridStateManager {
         }
     }
 
+    /// Persist the latest durable branch checkpoint for a workflow namespace.
+    pub async fn write_branch_checkpoint(
+        &self,
+        workflow_id: Uuid,
+        branch_id: Uuid,
+        checkpoint: &Value,
+    ) -> Result<u64, PersistenceError> {
+        self.kv
+            .save(
+                &crate::kv::state::branch_checkpoint_key(
+                    mister_smith_core::TaskId::from_uuid(workflow_id),
+                    mister_smith_core::ExecutionBranchId::from_uuid(branch_id),
+                ),
+                checkpoint,
+            )
+            .await
+    }
+
+    /// Load the latest durable branch checkpoint for a workflow namespace.
+    pub async fn read_branch_checkpoint(
+        &self,
+        workflow_id: Uuid,
+        branch_id: Uuid,
+    ) -> Result<Option<Value>, PersistenceError> {
+        self.kv
+            .get(&crate::kv::state::branch_checkpoint_key(
+                mister_smith_core::TaskId::from_uuid(workflow_id),
+                mister_smith_core::ExecutionBranchId::from_uuid(branch_id),
+            ))
+            .await
+    }
+
+    /// Persist ordered branch resume metadata for a workflow namespace.
+    pub async fn write_branch_resume_history(
+        &self,
+        workflow_id: Uuid,
+        branch_id: Uuid,
+        resumes: &Value,
+    ) -> Result<u64, PersistenceError> {
+        self.kv
+            .save(
+                &crate::kv::state::branch_resume_history_key(
+                    mister_smith_core::TaskId::from_uuid(workflow_id),
+                    mister_smith_core::ExecutionBranchId::from_uuid(branch_id),
+                ),
+                resumes,
+            )
+            .await
+    }
+
+    /// Load ordered branch resume metadata for a workflow namespace.
+    pub async fn read_branch_resume_history(
+        &self,
+        workflow_id: Uuid,
+        branch_id: Uuid,
+    ) -> Result<Option<Value>, PersistenceError> {
+        self.kv
+            .get(&crate::kv::state::branch_resume_history_key(
+                mister_smith_core::TaskId::from_uuid(workflow_id),
+                mister_smith_core::ExecutionBranchId::from_uuid(branch_id),
+            ))
+            .await
+    }
+
     /// Flush all dirty keys from KV to PostgreSQL.
     ///
     /// Reads each dirty key from KV and upserts it into the SQL agent state table

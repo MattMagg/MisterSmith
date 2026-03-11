@@ -241,6 +241,8 @@ impl TaskScheduler {
         entry.state = TaskState::Pending;
         entry.assigned_to = None;
         entry.assigned_at = None;
+        entry.output = None;
+        entry.completed_at = None;
         entry.error_message = None;
         Ok(())
     }

@@ -5,12 +5,14 @@
 //! supervision, and delegation visibility.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
-    ExecutionBranchId, ExecutionGraphId, GraphState, GuardDecision, InterventionRecord,
-    ProfileSnapshot, RevocationState, TaskId, TopologyKind, TopologyRationale,
+    ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
+    InterventionRecord, MemorySnapshotId, ProfileSnapshot, ProfileSnapshotId, RevocationState,
+    TaskId, TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -65,6 +67,46 @@ pub struct BranchSummary {
     pub checkpoint_id: Option<CheckpointId>,
     /// Recovery strategy the branch will use on failure.
     pub recovery_strategy: BranchRecoveryStrategy,
+}
+
+/// Summary of a durable branch checkpoint capture.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CheckpointRecordSummary {
+    /// Stable checkpoint identifier.
+    pub checkpoint_id: CheckpointId,
+    /// Managed-memory snapshot used for branch resume.
+    pub memory_snapshot_id: MemorySnapshotId,
+    /// Nodes already completed safely at this checkpoint.
+    pub completed_nodes: Vec<ExecutionNodeId>,
+    /// Nodes still pending from the checkpoint-safe recovery point.
+    pub pending_nodes: Vec<ExecutionNodeId>,
+    /// Recovery strategy active for the branch when the checkpoint was recorded.
+    pub recovery_strategy: BranchRecoveryStrategy,
+    /// Optional failure or intervention context captured at checkpoint time.
+    pub failure_context: Option<Value>,
+}
+
+/// Summary of a routing decision emitted for a ready branch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoutingDecisionSummary {
+    /// Agent selected to execute or resume the branch.
+    pub selected_agent: AgentId,
+    /// Task identifiers assigned by the routing decision.
+    pub task_ids: Vec<TaskId>,
+    /// Recovery strategy that shaped the routing path.
+    pub recovery_strategy: BranchRecoveryStrategy,
+    /// Latest checkpoint used for branch-local recovery when available.
+    pub checkpoint_id: Option<CheckpointId>,
+    /// Deepest dependency distance across the routed branch scope.
+    pub dependency_depth: usize,
+    /// Coarse pressure score from 0 to 100 derived from branch budgets.
+    pub budget_pressure: u8,
+    /// Health state observed for the branch at routing time.
+    pub health_state: HealthState,
+    /// Latest profile snapshot that informed the routing decision, when available.
+    pub profile_id: Option<ProfileSnapshotId>,
+    /// Operator-visible rationale lines explaining the decision.
+    pub rationale: Vec<String>,
 }
 
 /// Summary of context-pressure state for a budget.
@@ -165,6 +207,10 @@ pub enum AutonomyEventType {
     GuardDecisionEvaluated,
     /// Intervention record emitted after an action.
     InterventionRecorded,
+    /// Branch checkpoint captured for targeted recovery.
+    CheckpointRecorded,
+    /// Routing decision recorded for a ready branch.
+    RoutingDecisionRecorded,
     /// Delegation capability or provenance state changed.
     DelegationUpdated,
     /// Aggregate autonomy status view changed.
@@ -188,6 +234,10 @@ pub enum AutonomyEvent {
     GuardDecisionEvaluated(AutonomyEventEnvelope<GuardDecision>),
     /// Intervention recorded.
     InterventionRecorded(AutonomyEventEnvelope<InterventionRecord>),
+    /// Branch checkpoint recorded.
+    CheckpointRecorded(AutonomyEventEnvelope<CheckpointRecordSummary>),
+    /// Routing decision recorded.
+    RoutingDecisionRecorded(AutonomyEventEnvelope<RoutingDecisionSummary>),
     /// Delegation capability changed.
     DelegationUpdated(AutonomyEventEnvelope<CapabilitySummary>),
     /// Aggregate status view changed.
@@ -205,6 +255,8 @@ impl AutonomyEvent {
             AutonomyEvent::ProfileSnapshotRecorded(_) => AutonomyEventType::ProfileSnapshotRecorded,
             AutonomyEvent::GuardDecisionEvaluated(_) => AutonomyEventType::GuardDecisionEvaluated,
             AutonomyEvent::InterventionRecorded(_) => AutonomyEventType::InterventionRecorded,
+            AutonomyEvent::CheckpointRecorded(_) => AutonomyEventType::CheckpointRecorded,
+            AutonomyEvent::RoutingDecisionRecorded(_) => AutonomyEventType::RoutingDecisionRecorded,
             AutonomyEvent::DelegationUpdated(_) => AutonomyEventType::DelegationUpdated,
             AutonomyEvent::StatusUpdated(_) => AutonomyEventType::StatusUpdated,
         }

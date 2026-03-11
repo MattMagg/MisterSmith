@@ -16,6 +16,6 @@ pub use executor::ExecutorAgent;
 pub use memory::MemoryAgent;
 pub use monitor::MonitorAgent;
 pub use planner::PlannerAgent;
-pub use router::RouterAgent;
+pub use router::{BranchRoutingDecision, RouterAgent};
 pub use supervisor::SupervisorAgent;
 pub use worker::WorkerAgent;

@@ -30,12 +30,19 @@ pub use error::from_sqlx_error;
 // Core types
 pub use hybrid::manager::HybridStateManager;
 pub use hybrid::router::{DataRouter, DataType, StorageLayer};
-pub use kv::state::{ConflictStrategy, Operation, StateChange, StateManager};
+pub use kv::state::{
+    branch_checkpoint_state_key, branch_resume_state_key, ConflictStrategy, Operation, StateChange,
+    StateManager,
+};
 pub use memory::{
     AccessPolicy, FragmentClass, FragmentFreshness, FragmentProvenance, ManagedMemoryManager,
     MaterializedSnapshot, MemoryFragment, MemoryFragmentMetadata, MemoryMetadataPage,
     MemoryMetadataPageRequest, MemorySnapshot, MemorySnapshotMetadata, MemorySummary, ResumeSource,
     SnapshotScope,
+};
+pub use repository::task::{
+    branch_resume_history, latest_branch_checkpoint, merge_branch_checkpoint_metadata,
+    merge_branch_resume_metadata, BranchCheckpointRecord, BranchResumeRecord,
 };
 pub use repository::Repository;
 

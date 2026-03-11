@@ -29,6 +29,8 @@
 
 /// Agent runtime bridge between Actor trait and orchestration layer.
 pub mod agent;
+/// Branch-local checkpoint capture, resume, and reassignment helpers.
+pub mod branch_checkpoint;
 /// Configuration types: AgentConfig, HealthLevel, TeamPattern, TaskState.
 pub mod config;
 /// Role-aware context assembly over managed memory.
@@ -68,6 +70,10 @@ pub mod topology;
 
 // Re-exports
 pub use agent::AgentRuntime;
+pub use branch_checkpoint::{
+    BranchCheckpointCoordinator, BranchCheckpointStore, BranchRecoveryPlan, BranchResumeMetadata,
+    RepositoryBranchCheckpointStore,
+};
 pub use config::AgentConfig;
 pub use context_manager::{
     attach_managed_context, resolve_managed_context_input, ContextManager,

@@ -12,6 +12,9 @@ use async_nats::jetstream::kv;
 use bytes::Bytes;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::{debug, warn};
+use uuid::Uuid;
+
+use mister_smith_core::{ExecutionBranchId, TaskId};
 
 use crate::error::{from_kv_error, from_kv_version_error, PersistenceError};
 
@@ -54,6 +57,26 @@ pub struct StateChange {
     pub operation: Operation,
     /// The revision number assigned by the KV server after this operation.
     pub revision: u64,
+}
+
+/// Build the KV key used to store the latest checkpoint state for a workflow branch.
+pub fn branch_checkpoint_key(workflow_id: TaskId, branch_id: ExecutionBranchId) -> String {
+    format!("branch-checkpoint:{workflow_id}:{branch_id}")
+}
+
+/// Build the KV key used to store branch resume history for a workflow branch.
+pub fn branch_resume_history_key(workflow_id: TaskId, branch_id: ExecutionBranchId) -> String {
+    format!("branch-resume-history:{workflow_id}:{branch_id}")
+}
+
+/// Build the branch-checkpoint key suffix used inside workflow-scoped KV namespaces.
+pub fn branch_checkpoint_state_key(branch_id: Uuid) -> String {
+    format!("branch:{branch_id}:checkpoint")
+}
+
+/// Build the branch-resume-history key suffix used inside workflow-scoped KV namespaces.
+pub fn branch_resume_state_key(branch_id: Uuid) -> String {
+    format!("branch:{branch_id}:resumes")
 }
 
 /// Typed state operations backed by a JetStream KV bucket.
