@@ -197,9 +197,12 @@ Instructions:
 
 - Treat `.github/workflows/ci.yml` (`Check`) and the other required repository validation checks as the substantive merge gate.
 - Treat `.github/workflows/claude-code-review.yml` as advisory automation.
-  If it exhausts its retry path or reports an action/SDK infrastructure failure before producing a usable review, do not block merge on that signal alone.
+  Only treat a `claude-review` failure as advisory when the log
+  shows the known SDK crash signature (`SDK execution error:
+  Error: Claude Code process exited with code 1`) and the PR does
+  not change that workflow or its plugin configuration.
 - Merge may proceed only when required repository validation is green and there are no unresolved human review findings.
-- If a pull request changes the Claude review workflow or its plugin configuration, treat a `claude-review` failure as potentially repo-local until the workflow change itself is reviewed.
+- Otherwise, treat a `claude-review` failure as potentially repo-local until the workflow change or failure mode is reviewed.
 
 ## Step 3: Human review and merge handling
 

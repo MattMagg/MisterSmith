@@ -31,26 +31,8 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Run Claude Code Review (attempt 1)
-        id: claude-review-attempt-1
-        continue-on-error: true
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-
-      - name: Wait before retrying Claude review
-        if: steps.claude-review-attempt-1.outcome == 'failure'
-        shell: bash
-        run: sleep 15
-
-      - name: Run Claude Code Review (attempt 2)
-        id: claude-review-attempt-2
-        if: steps.claude-review-attempt-1.outcome == 'failure'
+      - name: Run Claude Code Review
+        id: claude-review
         continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
@@ -65,25 +47,19 @@ jobs:
         if: always()
         shell: bash
         env:
-          ATTEMPT_1_OUTCOME: ${{ steps.claude-review-attempt-1.outcome }}
-          ATTEMPT_2_OUTCOME: ${{ steps.claude-review-attempt-2.outcome }}
+          CLAUDE_REVIEW_OUTCOME: ${{ steps.claude-review.outcome }}
         run: |
           {
             echo "## Claude review status"
-            if [[ "$ATTEMPT_1_OUTCOME" == "success" ]]; then
-              echo "- Result: review completed on the first attempt."
-            elif [[ "$ATTEMPT_2_OUTCOME" == "success" ]]; then
-              echo "- Result: the first Claude review attempt exited before producing a usable review; the retry succeeded."
-              echo "- Classification: transient Claude action or SDK instability."
+            if [[ "$CLAUDE_REVIEW_OUTCOME" == "success" ]]; then
+              echo "- Result: review completed successfully."
             else
-              echo "- Result: both Claude review attempts exited before producing a usable review."
-              echo "- Classification: advisory Claude review infrastructure failure."
-              echo "- Merge posture: if \`Check\` and the other required repository validation checks pass, and there are no unresolved human review concerns, this advisory workflow should not block merge on its own."
+              echo "- Result: the Claude review step exited before producing a usable review."
+              echo "- Classification: inspect the action log before treating this as advisory infrastructure noise."
+              echo "- Merge posture: only treat this as advisory when the log shows the known SDK crash signature (\`SDK execution error: Error: Claude Code process exited with code 1\`), the PR does not change the Claude review workflow or plugin configuration, and required repository validation is green."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [[ "$ATTEMPT_1_OUTCOME" == "failure" && "$ATTEMPT_2_OUTCOME" == "success" ]]; then
-            echo "::warning title=Claude review retried successfully::The first Claude review attempt exited before producing a review; the second attempt completed successfully."
-          elif [[ "$ATTEMPT_1_OUTCOME" == "failure" && "$ATTEMPT_2_OUTCOME" == "failure" ]]; then
-            echo "::warning title=Claude review unavailable::Claude review failed twice before producing a usable review. Treat this as advisory review infrastructure noise unless the pull request changed the Claude review workflow or plugin configuration."
+          if [[ "$CLAUDE_REVIEW_OUTCOME" == "failure" ]]; then
+            echo "::warning title=Claude review requires log inspection::Check the workflow log for the known SDK crash signature before treating this failure as advisory infrastructure noise."
           fi
