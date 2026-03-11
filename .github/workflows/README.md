@@ -9,6 +9,9 @@ jobs.
 ### Core automation
 
 - `ci.yml`: Required Rust CI for pushes and pull requests targeting `main`.
+- `vet.yml`: Pull-request review workflow that runs `imbue-ai/vet` with the
+  repository's `.vet/configs.toml` CI profile and posts findings back to the
+  PR.
 - `claude.yml`: On-demand Claude assistant for `@claude` issue and pull request
   interactions using `anthropics/claude-code-action@v1`.
 - `claude-code-review.yml`: Automatic Claude review on pull request updates using
@@ -41,7 +44,8 @@ Configure only the secrets used by the workflows that remain active:
 - `ANTHROPIC_API_KEY`: Required by the documentation workflows that call
   Anthropic models directly.
 - `OPENAI_API_KEY`: Required by the documentation workflows that call OpenAI
-  models directly.
+  models directly and by `vet.yml`, which uses the repo-local `gpt-5.2`
+  profile from `.vet/configs.toml`.
 
 The legacy `grll/claude-code-action` OAuth bootstrap path has been removed, so
 the old `CLAUDE_ACCESS_TOKEN`, `CLAUDE_REFRESH_TOKEN`, `CLAUDE_EXPIRES_AT`, and
@@ -50,6 +54,8 @@ the old `CLAUDE_ACCESS_TOKEN`, `CLAUDE_REFRESH_TOKEN`, `CLAUDE_EXPIRES_AT`, and
 ## Notes
 
 - The Rust CI is the repository's primary enforcement workflow.
+- Vet adds LLM-based PR review on top of CI instead of replacing compile/test
+  validation.
 - The documentation workflows are still scoped to the `spec/` corpus.
 - Claude automation now uses a single authentication approach based on
   `CLAUDE_CODE_OAUTH_TOKEN` rather than maintaining two competing action
