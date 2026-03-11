@@ -1,6 +1,9 @@
 //! Supervisor agent role — manages child agent lifecycles.
 
-use mister_smith_core::{Actor, AgentId};
+use mister_smith_core::{
+    Actor, AgentId, ExecutionBranchId, GuardDecision, GuardTarget, InterventionRecord,
+    InterventionType,
+};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -16,6 +19,12 @@ pub enum SupervisorMessage {
     RemoveChild(AgentId),
     /// Query the list of currently supervised children.
     QueryChildren,
+    /// Record a Guard decision affecting supervised execution.
+    RecordGuardDecision(GuardDecision),
+    /// Record an intervention applied to supervised execution.
+    RecordIntervention(InterventionRecord),
+    /// Query stored intervention state.
+    QueryInterventions,
 }
 
 // ---------------------------------------------------------------------------
@@ -27,6 +36,60 @@ pub enum SupervisorMessage {
 pub struct SupervisorState {
     /// IDs of agents currently supervised.
     pub children: Vec<AgentId>,
+    /// Guard decisions recorded by this supervisor.
+    pub guard_decisions: Vec<GuardDecision>,
+    /// Intervention records recorded by this supervisor.
+    pub interventions: Vec<InterventionRecord>,
+    /// Branches currently isolated under supervision.
+    pub isolated_branches: Vec<ExecutionBranchId>,
+}
+
+impl SupervisorState {
+    /// Apply a supervisor message directly to state for in-process supervision sinks.
+    pub fn apply(&mut self, message: &SupervisorMessage) -> serde_json::Value {
+        match message {
+            SupervisorMessage::RegisterChild(child_id) => {
+                if !self.children.contains(child_id) {
+                    self.children.push(*child_id);
+                }
+                serde_json::json!({ "registered": child_id.to_string() })
+            }
+            SupervisorMessage::RemoveChild(child_id) => {
+                self.children.retain(|id| id != child_id);
+                serde_json::json!({ "removed": child_id.to_string() })
+            }
+            SupervisorMessage::QueryChildren => {
+                let ids: Vec<String> = self.children.iter().map(|id| id.to_string()).collect();
+                let count = ids.len();
+                serde_json::json!({ "children": ids, "count": count })
+            }
+            SupervisorMessage::RecordGuardDecision(decision) => {
+                if decision.intervention == InterventionType::BranchIsolation {
+                    if let GuardTarget::Branch(branch_id) = &decision.target_scope {
+                        if !self.isolated_branches.contains(branch_id) {
+                            self.isolated_branches.push(*branch_id);
+                        }
+                    }
+                }
+                self.guard_decisions.push(decision.clone());
+                serde_json::json!({
+                    "guard_decisions": self.guard_decisions.len(),
+                    "isolated_branches": self.isolated_branches.iter().map(|branch| branch.to_string()).collect::<Vec<_>>(),
+                })
+            }
+            SupervisorMessage::RecordIntervention(record) => {
+                self.interventions.push(record.clone());
+                serde_json::json!({
+                    "interventions": self.interventions.len(),
+                })
+            }
+            SupervisorMessage::QueryInterventions => serde_json::json!({
+                "guard_decisions": self.guard_decisions.len(),
+                "interventions": self.interventions.len(),
+                "isolated_branches": self.isolated_branches.iter().map(|branch| branch.to_string()).collect::<Vec<_>>(),
+            }),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -69,23 +132,7 @@ impl Actor for SupervisorAgent {
         message: Self::Message,
         state: &mut Self::State,
     ) -> Result<Self::Response, Self::Error> {
-        match message {
-            SupervisorMessage::RegisterChild(child_id) => {
-                if !state.children.contains(&child_id) {
-                    state.children.push(child_id);
-                }
-                Ok(serde_json::json!({ "registered": child_id.to_string() }))
-            }
-            SupervisorMessage::RemoveChild(child_id) => {
-                state.children.retain(|id| id != &child_id);
-                Ok(serde_json::json!({ "removed": child_id.to_string() }))
-            }
-            SupervisorMessage::QueryChildren => {
-                let ids: Vec<String> = state.children.iter().map(|id| id.to_string()).collect();
-                let count = ids.len();
-                Ok(serde_json::json!({ "children": ids, "count": count }))
-            }
-        }
+        Ok(state.apply(&message))
     }
 
     fn pre_start(&mut self) -> Result<(), Self::Error> {

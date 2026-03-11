@@ -125,6 +125,12 @@ pub struct AutonomyStatusView {
     pub interventions: Vec<InterventionRecord>,
     /// Delegation or provenance warnings.
     pub delegation_alerts: Vec<DelegationAlert>,
+    /// Supervisory profile snapshots retained for operator inspection.
+    pub profiles: Vec<ProfileSnapshot>,
+    /// Guard decisions that informed the current supervision posture.
+    pub guard_decisions: Vec<GuardDecision>,
+    /// Reasons the system narrowed autonomy conservatively.
+    pub conservative_reasons: Vec<String>,
 }
 
 /// Common envelope used by typed autonomy events.
@@ -185,7 +191,7 @@ pub enum AutonomyEvent {
     /// Delegation capability changed.
     DelegationUpdated(AutonomyEventEnvelope<CapabilitySummary>),
     /// Aggregate status view changed.
-    StatusUpdated(AutonomyEventEnvelope<AutonomyStatusView>),
+    StatusUpdated(Box<AutonomyEventEnvelope<AutonomyStatusView>>),
 }
 
 impl AutonomyEvent {

@@ -1,6 +1,6 @@
 //! Monitor agent role — observes and reports on system state.
 
-use mister_smith_core::{Actor, AgentId};
+use mister_smith_core::{Actor, AgentId, GuardDecision, InterventionRecord};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -26,6 +26,12 @@ pub enum MonitorMessage {
     },
     /// Query all active alerts.
     QueryAlerts,
+    /// Record a Guard decision for operator-visible supervision state.
+    GuardDecisionEvaluated(GuardDecision),
+    /// Record an applied intervention.
+    InterventionApplied(InterventionRecord),
+    /// Query Guard/intervention counts.
+    QuerySupervision,
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +43,57 @@ pub enum MonitorMessage {
 pub struct MonitorState {
     /// Number of alerts currently active.
     pub active_alerts: u64,
+    /// Guard decisions seen by this monitor.
+    pub guard_decisions: Vec<GuardDecision>,
+    /// Interventions seen by this monitor.
+    pub interventions: Vec<InterventionRecord>,
+}
+
+impl MonitorState {
+    /// Apply a monitor message directly to state for in-process supervision sinks.
+    pub fn apply(&mut self, message: &MonitorMessage) -> serde_json::Value {
+        match message {
+            MonitorMessage::HealthUpdate { agent_id, level } => {
+                if level == "critical" || level == "unhealthy" {
+                    self.active_alerts += 1;
+                }
+                serde_json::json!({
+                    "recorded": agent_id.to_string(),
+                    "level": level,
+                    "active_alerts": self.active_alerts,
+                })
+            }
+            MonitorMessage::SetThreshold { metric, value } => serde_json::json!({
+                "threshold_set": metric,
+                "value": value,
+            }),
+            MonitorMessage::QueryAlerts => serde_json::json!({
+                "active_alerts": self.active_alerts,
+            }),
+            MonitorMessage::GuardDecisionEvaluated(decision) => {
+                if decision.operator_visibility {
+                    self.active_alerts += 1;
+                }
+                self.guard_decisions.push(decision.clone());
+                serde_json::json!({
+                    "guard_decisions": self.guard_decisions.len(),
+                    "active_alerts": self.active_alerts,
+                })
+            }
+            MonitorMessage::InterventionApplied(record) => {
+                self.interventions.push(record.clone());
+                serde_json::json!({
+                    "interventions": self.interventions.len(),
+                    "active_alerts": self.active_alerts,
+                })
+            }
+            MonitorMessage::QuerySupervision => serde_json::json!({
+                "guard_decisions": self.guard_decisions.len(),
+                "interventions": self.interventions.len(),
+                "active_alerts": self.active_alerts,
+            }),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -80,25 +137,7 @@ impl Actor for MonitorAgent {
         message: Self::Message,
         state: &mut Self::State,
     ) -> Result<Self::Response, Self::Error> {
-        match message {
-            MonitorMessage::HealthUpdate { agent_id, level } => {
-                if level == "critical" || level == "unhealthy" {
-                    state.active_alerts += 1;
-                }
-                Ok(serde_json::json!({
-                    "recorded": agent_id.to_string(),
-                    "level": level,
-                    "active_alerts": state.active_alerts,
-                }))
-            }
-            MonitorMessage::SetThreshold { metric, value } => Ok(serde_json::json!({
-                "threshold_set": metric,
-                "value": value,
-            })),
-            MonitorMessage::QueryAlerts => Ok(serde_json::json!({
-                "active_alerts": state.active_alerts,
-            })),
-        }
+        Ok(state.apply(&message))
     }
 
     fn pre_start(&mut self) -> Result<(), Self::Error> {
@@ -165,7 +204,10 @@ mod tests {
     #[tokio::test]
     async fn query_alerts_returns_count() {
         let mut agent = MonitorAgent::new(AgentId::new());
-        let mut state = MonitorState { active_alerts: 5 };
+        let mut state = MonitorState {
+            active_alerts: 5,
+            ..MonitorState::default()
+        };
 
         let resp = agent
             .handle_message(MonitorMessage::QueryAlerts, &mut state)

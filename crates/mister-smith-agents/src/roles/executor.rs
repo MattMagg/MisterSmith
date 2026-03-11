@@ -1,5 +1,9 @@
 //! Executor agent role — carries out planned actions.
 
+#[cfg(feature = "llm")]
+use crate::orchestrator::LlmSupervision;
+#[cfg(feature = "llm")]
+use crate::roles::llm_bridge::complete_with_optional_supervision;
 use crate::context_manager::{
     resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
 };
@@ -68,6 +72,8 @@ pub struct ExecutorAgent {
     managed_context: Option<ManagedContextRuntime>,
     #[cfg(feature = "llm")]
     router: Option<std::sync::Arc<mister_smith_llm::ModelRouter>>,
+    #[cfg(feature = "llm")]
+    supervision: Option<LlmSupervision>,
 }
 
 impl ExecutorAgent {
@@ -78,6 +84,8 @@ impl ExecutorAgent {
             managed_context: None,
             #[cfg(feature = "llm")]
             router: None,
+            #[cfg(feature = "llm")]
+            supervision: None,
         }
     }
 
@@ -88,6 +96,8 @@ impl ExecutorAgent {
             managed_context: Some(managed_context),
             #[cfg(feature = "llm")]
             router: None,
+            #[cfg(feature = "llm")]
+            supervision: None,
         }
     }
 
@@ -98,6 +108,22 @@ impl ExecutorAgent {
             id,
             managed_context: None,
             router: Some(router),
+            supervision: None,
+        }
+    }
+
+    /// Create an executor with router-backed supervision for a specific workflow target.
+    #[cfg(feature = "llm")]
+    pub fn with_router_and_supervision(
+        id: AgentId,
+        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+        supervision: LlmSupervision,
+    ) -> Self {
+        Self {
+            id,
+            managed_context: None,
+            router: Some(router),
+            supervision: Some(supervision),
         }
     }
 
@@ -112,6 +138,7 @@ impl ExecutorAgent {
             id,
             managed_context: Some(managed_context),
             router: Some(router),
+            supervision: None,
         }
     }
 
@@ -185,23 +212,24 @@ impl Actor for ExecutorAgent {
                     let result: Result<serde_json::Value, ExecutorError> = async {
                         use mister_smith_llm::{ChatMessage, CompletionRequest, ContentBlock};
 
-                        let mut request = CompletionRequest::default();
-                        request.system = Some(
-                            "You are a task execution agent. Given a plan, analyze it and \
-                             suggest an execution strategy. Return a JSON object with 'status', \
-                             'strategy' (string), and 'estimated_steps' (number)."
-                                .to_string(),
-                        );
-                        request.messages = vec![ChatMessage::User {
-                            content: serde_json::json!({
-                                "plan": plan,
-                            }),
-                        }];
-
-                        let (response, _routing) = router
-                            .route_completion(request)
-                            .await
-                            .map_err(|e| ExecutorError::Internal(e.to_string()))?;
+                        let request = CompletionRequest {
+                            system: Some(
+                                "You are a task execution agent. Given a plan, analyze it and \
+                                 suggest an execution strategy. Return a JSON object with 'status', \
+                                 'strategy' (string), and 'estimated_steps' (number)."
+                                    .to_string(),
+                            ),
+                            messages: vec![ChatMessage::User {
+                                content: serde_json::json!({
+                                    "plan": plan,
+                                }),
+                            }],
+                            ..CompletionRequest::default()
+                        };
+                        let response =
+                            complete_with_optional_supervision(router, request, self.supervision.as_ref())
+                                .await
+                                .map_err(|error| ExecutorError::Internal(error.to_string()))?;
 
                         // Extract text from the first text content block.
                         let text = response

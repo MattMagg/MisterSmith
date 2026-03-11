@@ -17,6 +17,7 @@ pub mod model_event;
 mod provider;
 mod providers;
 pub mod router;
+pub mod stream_monitor;
 mod streaming;
 mod tool_schema;
 mod types;
@@ -30,7 +31,7 @@ pub use dual_stream::{DualStreamActor, DualStreamConfig, DualStreamHandle};
 pub use health::{CircuitBreaker, CircuitBreakerConfig, CircuitState, HealthStatus};
 pub use mister_smith_core::LlmError;
 pub use mock::MockProvider;
-pub use model_event::{BackpressurePolicy, ModelEvent};
+pub use model_event::{BackpressurePolicy, ModelEvent, StepBoundary};
 pub use provider::{CompletionStream, ModelProvider};
 #[cfg(any(
     feature = "anthropic",
@@ -42,6 +43,7 @@ pub use providers::*;
 pub use router::{
     CascadePolicy, CascadeTier, ConfidenceSignal, ModelRouter, RoutingDecision, RoutingPolicy,
 };
+pub use stream_monitor::{StreamMonitor, StreamMonitorConfig, StreamObservation};
 pub use streaming::{ChunkDelta, StreamChunk};
 pub use tool_schema::{ToolCall, ToolDefinition, ToolResult};
 pub use types::{

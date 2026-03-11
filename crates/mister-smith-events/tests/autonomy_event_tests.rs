@@ -1,8 +1,9 @@
 use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
-    ExecutionBranchId, ExecutionGraphId, GraphState, RevocationState, TaskId, TopologyKind,
-    TopologyRationale,
+    ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
+    GuardEvidence, HealthState, InterventionRecordId, InterventionType, ProfileSnapshot,
+    ProfileSnapshotId, ProfileTarget, RevocationState, TaskId, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
@@ -116,7 +117,14 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             reserved_units: 3072,
             policy: BudgetPolicy::Summarize,
         }],
-        interventions: vec![],
+        interventions: vec![mister_smith_core::InterventionRecord {
+            record_id: InterventionRecordId::new(),
+            decision_id: GuardDecisionId::new(),
+            before_state: serde_json::json!({"state": "running"}),
+            after_state: Some(serde_json::json!({"state": "isolated"})),
+            rationale: "branch isolation".to_string(),
+            emitted_at: chrono::Utc::now(),
+        }],
         delegation_alerts: vec![
             DelegationAlert {
                 capability_id: Some(CapabilityId::new()),
@@ -131,12 +139,91 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
                 message: "operator review required for widened authority".to_string(),
             },
         ],
+        profiles: vec![ProfileSnapshot {
+            profile_id: ProfileSnapshotId::new(),
+            target: ProfileTarget::Branch,
+            health_state: HealthState::Degraded,
+            latency_window: None,
+            error_window: None,
+            semantic_signals: vec![],
+            updated_at: chrono::Utc::now(),
+        }],
+        guard_decisions: vec![GuardDecision {
+            decision_id: GuardDecisionId::new(),
+            failure_class: FailureClass::Semantic,
+            intervention: InterventionType::ContextRefresh,
+            evidence: GuardEvidence {
+                profile_id: None,
+                signal_descriptions: vec!["loop detected".to_string()],
+                checkpoint_ids: vec![],
+                notes: vec!["operator review available".to_string()],
+            },
+            target_scope: mister_smith_core::GuardTarget::Branch(branch_id),
+            operator_visibility: true,
+        }],
+        conservative_reasons: vec!["control-plane state unavailable".to_string()],
     };
 
     let json = serde_json::to_string(&view).unwrap();
     let roundtrip: AutonomyStatusView = serde_json::from_str(&json).unwrap();
 
     assert_eq!(roundtrip, view);
+}
+
+#[test]
+fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch_id = ExecutionBranchId::new();
+    let view = AutonomyStatusView {
+        graph: ExecutionGraphSummary {
+            graph_id,
+            workflow_id,
+            state: GraphState::Running,
+            branch_count: 1,
+            node_count: 3,
+            active_topology: Some(TopologyKind::Sequential),
+        },
+        topology: TopologyPlanSummary {
+            graph_id,
+            topology_kind: TopologyKind::Sequential,
+            parallelism_width: 1,
+            coordination_policy: CoordinationPolicy::Barrier,
+            rationale: TopologyRationale {
+                dependency_shape: "single branch".to_string(),
+                operational_signals: vec!["degraded stream".to_string()],
+                selected_for: "minimize restart blast radius".to_string(),
+                fallback_reason: Some("stay sequential until supervision stabilizes".to_string()),
+            },
+            fallback_topology: Some(TopologyKind::Sequential),
+        },
+        branches: vec![BranchSummary {
+            branch_id,
+            graph_id,
+            state: BranchState::Isolated,
+            assigned_agents: vec![AgentId::new()],
+            checkpoint_id: Some(CheckpointId::new()),
+            recovery_strategy: BranchRecoveryStrategy::Resume,
+        }],
+        memory_pressure: vec![],
+        interventions: vec![],
+        delegation_alerts: vec![],
+        profiles: vec![],
+        guard_decisions: vec![],
+        conservative_reasons: vec!["control-plane freshness unavailable".to_string()],
+    };
+    let event = AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
+        workflow_id,
+        graph_id: Some(graph_id),
+        branch_id: Some(branch_id),
+        payload: view,
+        operator_visible: true,
+    }));
+
+    let json = serde_json::to_string(&event).unwrap();
+    let roundtrip: AutonomyEvent = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(roundtrip, event);
 }
 
 #[test]

@@ -1,4 +1,6 @@
 [ci]
+# The GitHub vet action for this repo currently provides OPENAI_API_KEY, so
+# avoid vet's Anthropic default model in CI.
 confidence_threshold = 0.9
 max_workers = 4
 model = "gpt-5.2"

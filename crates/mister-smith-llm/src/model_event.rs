@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use mister_smith_core::{SemanticSignal, SemanticSignalKind};
+
 use crate::types::{StopReason, Usage};
 
 /// Canonical internal event type emitted by stream actors after converting raw
@@ -168,6 +170,101 @@ pub enum StreamClassification {
     Ui,
 }
 
+/// Typed execution boundary surfaced from a streaming model event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StepBoundary {
+    /// A stream has started.
+    StreamStarted,
+    /// The stream resumed from a known checkpoint.
+    StreamResumed { checkpoint: String },
+    /// A tool call completed and can define a step boundary.
+    ToolCallCompleted { call_id: String, name: String },
+    /// A tool result completed and can define a step boundary.
+    ToolResult { call_id: String },
+    /// A latency marker exposed a named boundary.
+    LatencyCheckpoint { checkpoint: String },
+    /// A stream has completed.
+    StreamCompleted,
+}
+
+impl ModelEvent {
+    /// Return a typed step boundary when this event marks one.
+    pub fn step_boundary(&self) -> Option<StepBoundary> {
+        match self {
+            Self::StreamStarted { .. } => Some(StepBoundary::StreamStarted),
+            Self::StreamResumed { from_checkpoint } => Some(StepBoundary::StreamResumed {
+                checkpoint: from_checkpoint.clone(),
+            }),
+            Self::ToolCallCompleted { call_id, name, .. } => {
+                Some(StepBoundary::ToolCallCompleted {
+                    call_id: call_id.clone(),
+                    name: name.clone(),
+                })
+            }
+            Self::ToolResult { call_id, .. } => Some(StepBoundary::ToolResult {
+                call_id: call_id.clone(),
+            }),
+            Self::LatencyMarker { checkpoint, .. } => Some(StepBoundary::LatencyCheckpoint {
+                checkpoint: checkpoint.clone(),
+            }),
+            Self::StreamCompleted { .. } => Some(StepBoundary::StreamCompleted),
+            _ => None,
+        }
+    }
+
+    /// Convert directly observable event failures into coarse degradation signals.
+    pub fn degradation_signal(&self) -> Option<SemanticSignal> {
+        match self {
+            Self::StreamFailed { error, recoverable } => Some(SemanticSignal {
+                signal_kind: SemanticSignalKind::Stalled,
+                severity: if *recoverable { 80 } else { 95 },
+                detail: error.clone(),
+            }),
+            Self::StreamCancelled { reason } => Some(SemanticSignal {
+                signal_kind: SemanticSignalKind::Stalled,
+                severity: 70,
+                detail: reason.clone(),
+            }),
+            Self::Error {
+                code,
+                message,
+                recoverable,
+            } => {
+                let detail = format!("{code}: {message}");
+                let lowercase = detail.to_ascii_lowercase();
+                let signal_kind = if lowercase.contains("context") || lowercase.contains("memory") {
+                    SemanticSignalKind::MissingContext
+                } else if lowercase.contains("policy")
+                    || lowercase.contains("auth")
+                    || lowercase.contains("permission")
+                {
+                    SemanticSignalKind::PolicyConflict
+                } else if *recoverable {
+                    SemanticSignalKind::Stalled
+                } else {
+                    SemanticSignalKind::LowConfidence
+                };
+
+                Some(SemanticSignal {
+                    signal_kind,
+                    severity: if *recoverable { 72 } else { 82 },
+                    detail,
+                })
+            }
+            Self::TextAnnotation { annotation } => annotation
+                .get("confidence")
+                .and_then(serde_json::Value::as_f64)
+                .filter(|confidence| *confidence < 0.5)
+                .map(|confidence| SemanticSignal {
+                    signal_kind: SemanticSignalKind::LowConfidence,
+                    severity: ((1.0 - confidence) * 100.0).round() as u8,
+                    detail: format!("stream annotation confidence dropped to {confidence:.2}"),
+                }),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,6 +359,43 @@ mod tests {
             ModelEvent::Heartbeat { sequence: 1 }.stream_class(),
             StreamClassification::Ui
         );
+    }
+
+    #[test]
+    fn step_boundary_mapping() {
+        assert_eq!(
+            ModelEvent::StreamStarted {
+                model_id: "gpt-test".into(),
+                request_id: "req-1".into(),
+            }
+            .step_boundary(),
+            Some(StepBoundary::StreamStarted)
+        );
+        assert_eq!(
+            ModelEvent::ToolCallCompleted {
+                call_id: "call-1".into(),
+                name: "search".into(),
+                input: serde_json::json!({"q": "guard"}),
+            }
+            .step_boundary(),
+            Some(StepBoundary::ToolCallCompleted {
+                call_id: "call-1".into(),
+                name: "search".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn degradation_signal_mapping() {
+        let signal = ModelEvent::StreamFailed {
+            error: "stream stalled".into(),
+            recoverable: true,
+        }
+        .degradation_signal()
+        .expect("stream failure should produce a degradation signal");
+
+        assert_eq!(signal.signal_kind, SemanticSignalKind::Stalled);
+        assert_eq!(signal.severity, 80);
     }
 
     #[test]
