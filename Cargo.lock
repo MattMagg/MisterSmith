@@ -1943,6 +1943,7 @@ dependencies = [
  "async-trait",
  "axum",
  "bytes",
+ "dashmap",
  "futures",
  "mister-smith-core",
  "mister-smith-monitoring",
