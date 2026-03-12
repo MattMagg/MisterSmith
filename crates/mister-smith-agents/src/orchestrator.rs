@@ -445,8 +445,7 @@ impl Orchestrator {
 
     /// Check if all subtasks of a parent task are completed.
     pub fn all_subtasks_completed(&self, parent_task_id: &TaskId) -> bool {
-        let subtasks = self.scheduler.subtasks(parent_task_id);
-        !subtasks.is_empty() && subtasks.iter().all(|t| t.state == TaskState::Completed)
+        self.scheduler.all_subtasks_completed(parent_task_id)
     }
 
     /// Get subtasks that are pending and have all dependencies satisfied.
@@ -594,7 +593,7 @@ impl Orchestrator {
                 })
         });
 
-        let mut worker_loads = worker_loads(&self.scheduler, worker_ids);
+        let mut worker_loads = self.scheduler.worker_loads(worker_ids);
         let mut decisions = Vec::new();
         for mut candidate in candidates {
             let worker = select_worker(worker_ids, &worker_loads);
@@ -1056,26 +1055,6 @@ fn health_priority(health_state: HealthState) -> u8 {
         HealthState::Unhealthy => 2,
         HealthState::Unknown => 3,
     }
-}
-
-fn worker_loads(scheduler: &TaskScheduler, worker_ids: &[AgentId]) -> HashMap<AgentId, usize> {
-    let mut loads = worker_ids
-        .iter()
-        .copied()
-        .map(|worker_id| (worker_id, 0_usize))
-        .collect::<HashMap<_, _>>();
-
-    for task in scheduler.all_tasks() {
-        if let Some(agent_id) = task.assigned_to {
-            if matches!(task.state, TaskState::Assigned | TaskState::Running) {
-                if let Some(load) = loads.get_mut(&agent_id) {
-                    *load += 1;
-                }
-            }
-        }
-    }
-
-    loads
 }
 
 fn select_worker(worker_ids: &[AgentId], worker_loads: &HashMap<AgentId, usize>) -> AgentId {
