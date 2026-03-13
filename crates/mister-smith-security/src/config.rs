@@ -33,7 +33,8 @@ impl Default for JwtConfig {
         // This prevents attackers from forging JWTs if the default is inadvertently used in production.
         let mut secret = vec![0u8; 32];
         let rng = ring::rand::SystemRandom::new();
-        rng.fill(&mut secret).expect("Failed to generate secure random JWT secret");
+        rng.fill(&mut secret)
+            .expect("Failed to generate secure random JWT secret");
 
         Self {
             algorithm: "HS256".to_string(),
@@ -42,9 +43,7 @@ impl Default for JwtConfig {
             issuer: None,
             audience: Vec::new(),
             delegation_chain_max_depth: 5,
-            key_source: KeySource::Hmac {
-                secret,
-            },
+            key_source: KeySource::Hmac { secret },
         }
     }
 }
