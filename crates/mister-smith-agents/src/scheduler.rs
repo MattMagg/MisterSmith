@@ -279,6 +279,21 @@ impl TaskScheduler {
             .collect()
     }
 
+    /// Check if all subtasks of a parent task are completed without cloning.
+    pub fn all_subtasks_completed(&self, parent_id: &TaskId) -> bool {
+        let mut has_subtasks = false;
+        let all_completed = self.tasks.iter().all(|e| {
+            let task = e.value();
+            if task.parent_task_id.as_ref() == Some(parent_id) {
+                has_subtasks = true;
+                task.state == TaskState::Completed
+            } else {
+                true // Ignore tasks that aren't subtasks of this parent
+            }
+        });
+        has_subtasks && all_completed
+    }
+
     /// Get count of tracked tasks.
     pub fn count(&self) -> usize {
         self.tasks.len()
@@ -338,22 +353,24 @@ impl DeadlineMonitor {
                     _ = ticker.tick() => {
                         let now = Utc::now();
                         // Check running and assigned tasks for deadline expiry
-                        let active: Vec<TaskAssignment> = scheduler
+                        let expired_tasks: Vec<TaskId> = scheduler
                             .tasks
                             .iter()
-                            .filter(|e| {
-                                matches!(e.value().state, TaskState::Running | TaskState::Assigned)
-                                    && e.value().deadline.is_some()
+                            .filter_map(|e| {
+                                let task = e.value();
+                                if matches!(task.state, TaskState::Running | TaskState::Assigned) {
+                                    if let Some(deadline) = task.deadline {
+                                        if now > deadline {
+                                            return Some(task.task_id);
+                                        }
+                                    }
+                                }
+                                None
                             })
-                            .map(|e| e.value().clone())
                             .collect();
 
-                        for task in active {
-                            if let Some(deadline) = task.deadline {
-                                if now > deadline {
-                                    let _ = scheduler.timeout(&task.task_id);
-                                }
-                            }
+                        for task_id in expired_tasks {
+                            let _ = scheduler.timeout(&task_id);
                         }
                     }
                     _ = stop_rx.changed() => {

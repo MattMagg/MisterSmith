@@ -445,8 +445,7 @@ impl Orchestrator {
 
     /// Check if all subtasks of a parent task are completed.
     pub fn all_subtasks_completed(&self, parent_task_id: &TaskId) -> bool {
-        let subtasks = self.scheduler.subtasks(parent_task_id);
-        !subtasks.is_empty() && subtasks.iter().all(|t| t.state == TaskState::Completed)
+        self.scheduler.all_subtasks_completed(parent_task_id)
     }
 
     /// Get subtasks that are pending and have all dependencies satisfied.
