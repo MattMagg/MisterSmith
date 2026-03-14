@@ -4,9 +4,9 @@
 //! subsystem. They are constructed from the serde-parsed
 //! [`mister_smith_config::SecurityConfig`] at startup.
 
+use ring::rand::SecureRandom;
 use std::path::PathBuf;
 use std::time::Duration;
-use ring::rand::SecureRandom;
 
 /// JWT subsystem configuration.
 #[derive(Debug, Clone)]
