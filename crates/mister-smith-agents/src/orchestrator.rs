@@ -451,10 +451,7 @@ impl Orchestrator {
     /// Get subtasks that are pending and have all dependencies satisfied.
     pub fn ready_subtasks(&self, parent_task_id: &TaskId) -> Vec<TaskAssignment> {
         self.scheduler
-            .subtasks(parent_task_id)
-            .into_iter()
-            .filter(|t| t.state == TaskState::Pending)
-            .collect()
+            .subtasks_in_state(parent_task_id, TaskState::Pending)
     }
 
     /// Route ready branches using health, budget, dependency-depth, and profile signals.
@@ -734,10 +731,7 @@ impl Orchestrator {
     /// Get failed subtasks for a parent task.
     pub fn failed_subtasks(&self, parent_task_id: &TaskId) -> Vec<TaskAssignment> {
         self.scheduler
-            .subtasks(parent_task_id)
-            .into_iter()
-            .filter(|t| t.state == TaskState::Failed || t.state == TaskState::TimedOut)
-            .collect()
+            .subtasks_in_states(parent_task_id, &[TaskState::Failed, TaskState::TimedOut])
     }
 
     async fn recover_branch<S: BranchCheckpointStore + ?Sized>(
