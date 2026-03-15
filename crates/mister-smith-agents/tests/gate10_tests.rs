@@ -14,8 +14,9 @@ use mister_smith_core::{
     InterventionType, MemorySnapshotId, NodeState, ProfileSnapshot, ProfileSnapshotId,
     ProfileTarget, SemanticSignal, SemanticSignalKind, TaskId,
 };
-use mister_smith_events::AutonomyEvent;
+use mister_smith_events::{AutonomyEvent, EventBus};
 use serde_json::json;
+use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
 fn mixed_dependency_plan() -> serde_json::Value {
@@ -139,6 +140,7 @@ fn submit_task(
 struct MixedDependencyFixture {
     scheduler: Arc<TaskScheduler>,
     orchestrator: Orchestrator,
+    event_bus: Arc<EventBus>,
     workflow_id: TaskId,
     right_branch: ExecutionBranchId,
     checkpoint_id: CheckpointId,
@@ -146,11 +148,13 @@ struct MixedDependencyFixture {
 
 fn checkpointed_fixture() -> MixedDependencyFixture {
     let scheduler = Arc::new(TaskScheduler::new());
+    let event_bus = Arc::new(EventBus::default());
     let orchestrator = Orchestrator::new(
         Arc::new(IdentityDecomposer),
         Arc::new(ArrayAggregator),
         scheduler.clone(),
-    );
+    )
+    .with_event_bus(event_bus.clone());
     let mut graph = TopologyCompiler::default()
         .compile(
             TaskId::new(),
@@ -225,6 +229,7 @@ fn checkpointed_fixture() -> MixedDependencyFixture {
     MixedDependencyFixture {
         scheduler,
         orchestrator,
+        event_bus,
         workflow_id,
         right_branch,
         checkpoint_id,
@@ -250,6 +255,29 @@ fn assessed_profile(
         notes.into_iter().map(str::to_string).collect(),
     )
     .with_target(GuardTarget::Branch(branch_id))
+}
+
+async fn wait_for_event_bus_status(
+    event_bus: &EventBus,
+    workflow_id: &TaskId,
+    expected_checkpoints: usize,
+    expected_routing_history: usize,
+) -> mister_smith_events::AutonomyStatusView {
+    timeout(Duration::from_millis(500), async {
+        loop {
+            if let Some(status) = event_bus.autonomy_status(workflow_id).await {
+                if status.checkpoint_lineage.len() == expected_checkpoints
+                    && status.routing_history.len() == expected_routing_history
+                {
+                    return status;
+                }
+            }
+
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("shared event bus autonomy status should appear")
 }
 
 #[tokio::test]
@@ -319,6 +347,15 @@ async fn gate10_mixed_dependency_resume_preserves_completed_branches() {
         .autonomy_events(&fixture.workflow_id)
         .iter()
         .any(|event| matches!(event, AutonomyEvent::RoutingDecisionRecorded(_))));
+
+    let shared_status =
+        wait_for_event_bus_status(fixture.event_bus.as_ref(), &fixture.workflow_id, 1, 1).await;
+    assert_eq!(shared_status.checkpoint_lineage.len(), 1);
+    assert_eq!(shared_status.routing_history.len(), 1);
+    assert_eq!(
+        shared_status.checkpoint_lineage[0].checkpoint_id,
+        fixture.checkpoint_id
+    );
 }
 
 #[test]

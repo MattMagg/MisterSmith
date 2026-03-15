@@ -204,7 +204,7 @@ impl AutonomyStatusAccumulator {
     }
 
     fn update_delegation_alert(&mut self, capability: CapabilitySummary) {
-        let key = format!("{:?}:{}", capability.scope, capability.capability_id);
+        let key = delegation_capability_key(&capability);
         if capability.revocation_state == RevocationState::Active {
             self.delegation_alerts.remove(&key);
             return;
@@ -238,14 +238,17 @@ impl AutonomyStatusAccumulator {
 
 fn delegation_alert_key(alert: &DelegationAlert) -> String {
     format!(
-        "{:?}:{:?}:{}",
+        "{:?}:{}",
         alert.scope,
-        alert.revocation_state,
         alert
             .capability_id
             .map(|id| id.to_string())
             .unwrap_or_else(|| alert.message.clone())
     )
+}
+
+fn delegation_capability_key(capability: &CapabilitySummary) -> String {
+    format!("{:?}:{}", Some(capability.scope), capability.capability_id)
 }
 
 /// In-process event bus with handler dispatch, broadcast, and dead letter handling.

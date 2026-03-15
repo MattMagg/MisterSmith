@@ -501,3 +501,97 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         .iter()
         .any(|reason| reason.contains("control-plane state unavailable")));
 }
+
+#[tokio::test]
+async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch_id = ExecutionBranchId::new();
+    let capability_id = CapabilityId::new();
+
+    let status_view = AutonomyStatusView {
+        graph: ExecutionGraphSummary {
+            graph_id,
+            workflow_id,
+            state: GraphState::Running,
+            branch_count: 1,
+            node_count: 1,
+            active_topology: Some(TopologyKind::Sequential),
+        },
+        topology: TopologyPlanSummary {
+            graph_id,
+            topology_kind: TopologyKind::Sequential,
+            parallelism_width: 1,
+            coordination_policy: CoordinationPolicy::StrictSequence,
+            rationale: TopologyRationale {
+                dependency_shape: "single branch".to_string(),
+                operational_signals: vec!["delegation revoked".to_string()],
+                selected_for: "keep operator in the loop".to_string(),
+                fallback_reason: Some("delegation scope suspended".to_string()),
+            },
+            fallback_topology: Some(TopologyKind::Sequential),
+        },
+        branches: vec![BranchSummary {
+            branch_id,
+            graph_id,
+            state: BranchState::Pending,
+            assigned_agents: vec![AgentId::new()],
+            checkpoint_id: None,
+            recovery_strategy: BranchRecoveryStrategy::Resume,
+        }],
+        checkpoint_lineage: vec![],
+        memory_pressure: vec![],
+        routing_history: vec![],
+        interventions: vec![],
+        delegation_alerts: vec![DelegationAlert {
+            capability_id: Some(capability_id),
+            scope: Some(DelegationScope::ManageBranch),
+            revocation_state: Some(RevocationState::Revoked),
+            message: "delegation suspended pending operator review".to_string(),
+        }],
+        profiles: vec![],
+        guard_decisions: vec![],
+        conservative_reasons: vec!["delegation scope suspended".to_string()],
+    };
+
+    event_bus
+        .publish(
+            AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: status_view,
+                operator_visible: true,
+            }))
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::DelegationUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: CapabilitySummary {
+                    capability_id,
+                    issuer: AuthorityPrincipal::Policy("operator".to_string()),
+                    recipient: AgentId::new(),
+                    scope: DelegationScope::ManageBranch,
+                    revocation_state: RevocationState::Active,
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+
+    let view = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .expect("autonomy projection should remain visible after reactivation");
+
+    assert!(view.delegation_alerts.is_empty());
+}

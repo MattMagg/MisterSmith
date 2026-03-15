@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::sync::mpsc;
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -7,7 +8,7 @@ use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, ExecutionBranchId, ExecutionNodeId,
     GuardDecision, GuardTarget, HealthState, InterventionRecord, ProfileSnapshot, TaskId,
 };
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 use crate::branch_checkpoint::{
     BranchCheckpointCoordinator, BranchCheckpointStore, BranchRecoveryPlan,
@@ -26,8 +27,8 @@ use crate::scheduler::{ResultAggregator, TaskAssignment, TaskDecomposer, TaskSch
 use crate::topology::{TopologyCompiler, TopologySignals};
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary,
-    CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
-    RoutingDecisionSummary, TopologyPlanSummary,
+    CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, Event, EventBus,
+    ExecutionGraphSummary, RoutingDecisionSummary, TopologyPlanSummary,
 };
 
 #[cfg(feature = "llm")]
@@ -54,9 +55,12 @@ pub struct Orchestrator {
     profiles: DashMap<TaskId, Vec<ProfileAssessment>>,
     conservative_reasons: DashMap<TaskId, Vec<String>>,
     autonomy_events: DashMap<TaskId, Vec<AutonomyEvent>>,
+    autonomy_event_tx: Option<mpsc::Sender<Event>>,
     monitor_states: DashMap<TaskId, MonitorState>,
     supervisor_states: DashMap<TaskId, SupervisorState>,
 }
+
+const AUTONOMY_EVENT_SOURCE: &str = "mister-smith-agents::orchestrator";
 
 impl Orchestrator {
     pub fn new(
@@ -79,9 +83,38 @@ impl Orchestrator {
             profiles: DashMap::new(),
             conservative_reasons: DashMap::new(),
             autonomy_events: DashMap::new(),
+            autonomy_event_tx: None,
             monitor_states: DashMap::new(),
             supervisor_states: DashMap::new(),
         }
+    }
+
+    /// Forward typed autonomy events into the shared event bus projection.
+    pub fn with_event_bus(mut self, event_bus: Arc<EventBus>) -> Self {
+        let (tx, rx) = mpsc::channel::<Event>();
+        std::thread::Builder::new()
+            .name("mister-smith-autonomy-events".to_string())
+            .spawn(move || {
+                let runtime = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(runtime) => runtime,
+                    Err(error) => {
+                        warn!(%error, "Failed to build autonomy event publisher runtime");
+                        return;
+                    }
+                };
+
+                while let Ok(event) = rx.recv() {
+                    if let Err(error) = runtime.block_on(event_bus.publish(event)) {
+                        warn!(%error, "Failed to publish autonomy event to shared event bus");
+                    }
+                }
+            })
+            .expect("autonomy event publisher thread should spawn");
+        self.autonomy_event_tx = Some(tx);
+        self
     }
 
     /// Decompose a task into subtasks and register them with the scheduler.
@@ -993,7 +1026,13 @@ impl Orchestrator {
         self.autonomy_events
             .entry(*workflow_id)
             .or_default()
-            .push(event);
+            .push(event.clone());
+
+        if let Some(tx) = &self.autonomy_event_tx {
+            if let Err(error) = tx.send(event.into_event(AUTONOMY_EVENT_SOURCE)) {
+                warn!(%error, "Failed to queue autonomy event for shared event bus");
+            }
+        }
     }
 
     fn record_monitor_message(&self, workflow_id: &TaskId, message: &MonitorMessage) {

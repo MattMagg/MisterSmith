@@ -184,4 +184,24 @@ fn metric_operations_cover_checkpoint_pressure_and_intervention_visibility() {
                 .iter()
                 .any(|(key, value)| key == "intervention" && value == "retry")
     }));
+    assert!(operations.iter().any(|operation| {
+        operation.name == "mistersmith_autonomy_branches"
+            && operation.value == 1.0
+            && operation
+                .labels
+                .iter()
+                .any(|(key, value)| key == "state" && value == "checkpointed")
+    }));
+    assert!(operations.iter().any(|operation| {
+        operation.name == "mistersmith_autonomy_branches"
+            && operation.value == 0.0
+            && operation
+                .labels
+                .iter()
+                .any(|(key, value)| key == "state" && value == "running")
+            && operation
+                .labels
+                .iter()
+                .any(|(key, value)| key == "branch_id" && value == &branch_id.to_string())
+    }));
 }

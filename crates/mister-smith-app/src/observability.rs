@@ -11,6 +11,7 @@
 //! - Prometheus metrics recorder for `/metrics` scraping
 
 use mister_smith_config::ObservabilityConfig;
+use mister_smith_core::{BranchRecoveryStrategy, BranchState};
 use mister_smith_events::{AutonomyEvent, AutonomyStatusView, EventBus};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -46,6 +47,23 @@ pub struct MetricOperation {
     /// String labels attached to the metric.
     pub labels: Vec<(String, String)>,
 }
+
+const ALL_BRANCH_STATES: [BranchState; 7] = [
+    BranchState::Pending,
+    BranchState::Running,
+    BranchState::Checkpointed,
+    BranchState::Isolated,
+    BranchState::Completed,
+    BranchState::Failed,
+    BranchState::Reassigned,
+];
+
+const ALL_BRANCH_RECOVERY_STRATEGIES: [BranchRecoveryStrategy; 4] = [
+    BranchRecoveryStrategy::Resume,
+    BranchRecoveryStrategy::Reassign,
+    BranchRecoveryStrategy::Isolate,
+    BranchRecoveryStrategy::Escalate,
+];
 
 /// Initialize the full observability pipeline.
 ///
@@ -183,23 +201,29 @@ pub fn build_metric_operations(
     });
 
     for branch in &view.branches {
-        operations.push(MetricOperation {
-            name: "mistersmith_autonomy_branches",
-            kind: MetricOperationKind::Gauge,
-            value: 1.0,
-            labels: vec![
-                ("workflow_id".to_string(), workflow_id.clone()),
-                ("branch_id".to_string(), branch.branch_id.to_string()),
-                (
-                    "state".to_string(),
-                    format!("{:?}", branch.state).to_lowercase(),
-                ),
-                (
-                    "recovery_state".to_string(),
-                    format!("{:?}", branch.recovery_strategy).to_lowercase(),
-                ),
-            ],
-        });
+        for state in ALL_BRANCH_STATES {
+            for recovery_strategy in ALL_BRANCH_RECOVERY_STRATEGIES {
+                operations.push(MetricOperation {
+                    name: "mistersmith_autonomy_branches",
+                    kind: MetricOperationKind::Gauge,
+                    value: if branch.state == state && branch.recovery_strategy == recovery_strategy
+                    {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                    labels: vec![
+                        ("workflow_id".to_string(), workflow_id.clone()),
+                        ("branch_id".to_string(), branch.branch_id.to_string()),
+                        ("state".to_string(), format!("{:?}", state).to_lowercase()),
+                        (
+                            "recovery_state".to_string(),
+                            format!("{:?}", recovery_strategy).to_lowercase(),
+                        ),
+                    ],
+                });
+            }
+        }
     }
 
     for checkpoint in &view.checkpoint_lineage {
