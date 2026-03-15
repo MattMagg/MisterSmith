@@ -12,7 +12,7 @@ use mister_smith_core::{
     DelegationScope, ProvenanceChain, ProvenanceLink, RevocationState,
 };
 
-use crate::jwt::AgentClaims;
+use crate::jwt::{AgentClaims, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
 
 /// Validated delegation capability with reconstructable provenance.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,9 +26,16 @@ pub struct ValidatedDelegation {
 }
 
 /// In-memory capability service for Phase 10 bounded delegation enforcement.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DelegationService {
     revoked_capabilities: DashMap<CapabilityId, DateTime<Utc>>,
+    max_delegation_chain_depth: usize,
+}
+
+impl Default for DelegationService {
+    fn default() -> Self {
+        Self::new_with_delegation_chain_max_depth(DEFAULT_MAX_DELEGATION_CHAIN_DEPTH)
+    }
 }
 
 impl DelegationService {
@@ -36,6 +43,15 @@ impl DelegationService {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a new delegation service with an explicit claim-chain depth limit.
+    #[must_use]
+    pub fn new_with_delegation_chain_max_depth(max_delegation_chain_depth: usize) -> Self {
+        Self {
+            revoked_capabilities: DashMap::new(),
+            max_delegation_chain_depth,
+        }
     }
 
     /// Issue a bounded capability and its provenance chain.
@@ -147,7 +163,7 @@ impl DelegationService {
         required_scope: Option<DelegationScope>,
     ) -> Result<Option<ValidatedDelegation>, DelegationError> {
         claims
-            .validate_delegation_chain(claims.delegation_chain.len())
+            .validate_delegation_chain(self.max_delegation_chain_depth)
             .map_err(|error| DelegationError::InvalidChain(error.to_string()))?;
 
         match (&claims.delegation_capability, &claims.provenance_chain) {

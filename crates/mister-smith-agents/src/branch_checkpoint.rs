@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use tracing::warn;
 
 use mister_smith_core::{
@@ -616,13 +616,31 @@ pub fn attach_checkpoint_delegation(
     checkpoint: &mut BranchCheckpoint,
     capability: &CapabilitySummary,
 ) {
-    checkpoint.failure_context = Some(json!({
+    let delegation_context = json!({
         "delegation_capability_id": capability.capability_id,
         "delegation_scope": format!("{:?}", capability.scope),
         "delegation_chain_depth": capability.chain_depth(),
         "delegation_rejection_reason": capability.rejection_reason,
         "provenance": capability.provenance,
-    }));
+    });
+
+    checkpoint.failure_context = Some(match checkpoint.failure_context.take() {
+        Some(Value::Object(mut existing)) => {
+            let Value::Object(delegation_fields) = delegation_context else {
+                unreachable!("delegation context is always an object");
+            };
+            existing.extend(delegation_fields);
+            Value::Object(existing)
+        }
+        Some(existing) => {
+            let Value::Object(mut delegation_fields) = delegation_context else {
+                unreachable!("delegation context is always an object");
+            };
+            delegation_fields.insert("existing_failure_context".to_string(), existing);
+            Value::Object(delegation_fields)
+        }
+        None => delegation_context,
+    });
 }
 
 fn serialize_value<T: Serialize>(value: &T) -> Result<serde_json::Value, PersistenceError> {

@@ -143,6 +143,20 @@ fn delegation_cyclic_chain_is_rejected_during_validation() {
 }
 
 #[test]
+fn delegation_service_rejects_claims_that_exceed_configured_chain_depth() {
+    let service = DelegationService::new_with_delegation_chain_max_depth(1);
+    let claims = parent_claims()
+        .delegated_to("intermediate-agent".to_string(), "worker".to_string())
+        .delegated_to("executor-depth".to_string(), "worker".to_string());
+
+    assert!(matches!(
+        service.validate_claims(&claims, None),
+        Err(mister_smith_core::DelegationError::InvalidChain(message))
+            if message.contains("delegation_chain exceeds max depth")
+    ));
+}
+
+#[test]
 fn delegation_service_issues_provenance_and_validates_scope() {
     let service = DelegationService::new();
     let recipient = mister_smith_core::AgentId::from_uuid(uuid::Uuid::new_v4());

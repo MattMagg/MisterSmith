@@ -1018,25 +1018,33 @@ impl Orchestrator {
             ))
         })?;
 
-        let required_scope = graph
+        let mut required_scopes = graph
             .nodes
             .iter()
-            .find(|node| node.branch_id == branch_id)
-            .and_then(|node| node.delegation_requirement);
+            .filter(|node| node.branch_id == branch_id)
+            .filter_map(|node| node.delegation_requirement);
 
-        if let Some(required_scope) = required_scope {
-            if capability.scope != required_scope
-                || capability.rejection_reason.is_some()
-                || capability.revocation_state != mister_smith_core::RevocationState::Active
-            {
-                return Err(AgentSystemError::PermissionDenied(format!(
-                    "delegation rejected for branch {branch_id}: {}",
-                    capability
-                        .rejection_reason
-                        .clone()
-                        .unwrap_or_else(|| format!("{:?}", capability.revocation_state))
-                )));
-            }
+        let Some(required_scope) = required_scopes.next() else {
+            return Ok(());
+        };
+
+        if required_scopes.any(|scope| scope != required_scope) {
+            return Err(AgentSystemError::PermissionDenied(format!(
+                "delegation rejected for branch {branch_id}: branch contains multiple delegation scopes"
+            )));
+        }
+
+        if capability.scope != required_scope
+            || capability.rejection_reason.is_some()
+            || capability.revocation_state != mister_smith_core::RevocationState::Active
+        {
+            return Err(AgentSystemError::PermissionDenied(format!(
+                "delegation rejected for branch {branch_id}: {}",
+                capability
+                    .rejection_reason
+                    .clone()
+                    .unwrap_or_else(|| format!("{:?}", capability.revocation_state))
+            )));
         }
 
         Ok(())
