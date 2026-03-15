@@ -117,14 +117,18 @@ pub struct HealthMonitor {
     agents: Arc<RwLock<HashMap<AgentId, HealthStatus>>>,
     check_interval: Duration,
     supervisor_tx: mpsc::UnboundedSender<SupervisionEvent>,
+    message_bus: Arc<MessageBus>,
+    monitor_id: AgentId,
 }
 
 impl HealthMonitor {
-    pub fn new(check_interval: Duration, supervisor_tx: mpsc::UnboundedSender<SupervisionEvent>) -> Self {
+    pub fn new(check_interval: Duration, supervisor_tx: mpsc::UnboundedSender<SupervisionEvent>, message_bus: Arc<MessageBus>, monitor_id: AgentId) -> Self {
         Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
             check_interval,
             supervisor_tx,
+            message_bus,
+            monitor_id,
         }
     }
     
@@ -165,9 +169,19 @@ impl HealthMonitor {
     }
     
     async fn send_health_check(&self, agent_id: &AgentId) -> Result<(), HealthCheckError> {
-        // Implementation depends on transport layer
-        // See agent-orchestration.md for message passing patterns
-        todo!("Integrate with message transport from agent-orchestration.md")
+        let message = Message {
+            id: uuid::Uuid::new_v4(),
+            sender: self.monitor_id.clone(),
+            recipient: Some(agent_id.clone()),
+            payload: MessagePayload::Control(ControlMessage::HealthCheck),
+            timestamp: std::time::SystemTime::now(),
+        };
+
+        self.send_message(agent_id.clone(), message).await.map_err(|_| HealthCheckError::Timeout)
+    }
+
+    async fn send_message(&self, _dest: AgentId, msg: Message) -> Result<(), MessageBusError> {
+        self.message_bus.publish(msg).await
     }
 }
 ```
