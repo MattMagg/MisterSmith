@@ -13,7 +13,3 @@
 ## 2025-02-17 - Serialize Request Body Outside Loop
 **Learning:** Avoid `serde_json::to_vec` and JSON serialization on each retry loop iteration, since the request payload is static. Even though `reqwest` exposes `.json()`, passing `.body()` directly with a cloned `Vec<u8>` is considerably faster and avoids excessive object creation in high-latency network retries.
 **Action:** Identify serialization inside retry loops and move it outside to save CPU cycles and reduce overall latency.
-
-## 2026-03-24 - Avoid cloning heavy JSON structs in polling loops and iterations
-**Learning:** Extracting full structs containing `serde_json::Value` fields using `.map(|e| e.clone()).collect()` is extremely expensive when done iteratively or inside high-frequency background loops (like a deadline monitor). This triggers deep cloning of dynamic memory.
-**Action:** When filtering or counting over a shared map, instead of cloning the full struct payload, either project/map to only the lightweight IDs/timestamps needed, or encapsulate the aggregate query within the structure holding the map (e.g. `TaskScheduler`) so it can just borrow values to answer the query (like `worker_loads` or `all_subtasks_completed`) without allocating.
