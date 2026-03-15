@@ -2,14 +2,14 @@
   "annotations": {
     "list": []
   },
-  "description": "Mister Smith Framework — Phase 10 autonomy observability scaffold. All PromQL queries are placeholders that MS-33 must wire to typed AutonomyStatusView state.",
+  "description": "Mister Smith Framework — Phase 10 autonomy observability wired from typed AutonomyStatusView projections. Panels populate when runtime components publish typed autonomy events into the shared event bus.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "links": [],
   "panels": [
     {
-      "description": "Placeholder gauge for operator-visible workflow state derived from AutonomyStatusView.graph.",
+      "description": "Operator-visible workflow state derived from AutonomyStatusView.graph.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -31,7 +31,7 @@
       "type": "stat"
     },
     {
-      "description": "Placeholder branch-health summary from AutonomyStatusView.branches. Assumes one gauge per branch with a state label.",
+      "description": "Branch-health summary from AutonomyStatusView.branches with one gauge per branch/state.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -54,7 +54,7 @@
       "type": "stat"
     },
     {
-      "description": "Placeholder checkpoint freshness gauge from branch checkpoint lineage. MS-33 must emit seconds since the last durable checkpoint.",
+      "description": "Checkpoint freshness gauge from typed branch checkpoint lineage, measured as seconds since the latest durable checkpoint.",
       "fieldConfig": {
         "defaults": {
           "max": 1800,
@@ -79,7 +79,7 @@
       "type": "gauge"
     },
     {
-      "description": "Placeholder memory-pressure ratio from AutonomyStatusView.memory_pressure. Assumes a normalized 0..1 pressure ratio.",
+      "description": "Memory-pressure ratio from AutonomyStatusView.memory_pressure using a normalized 0..1 pressure contract.",
       "fieldConfig": {
         "defaults": {
           "max": 1,
@@ -105,7 +105,7 @@
       "type": "gauge"
     },
     {
-      "description": "Placeholder topology selection table from AutonomyStatusView.topology. Prefer stable rationale codes over free-form labels if label cardinality becomes unsafe.",
+      "description": "Topology selection table from AutonomyStatusView.topology. Prefer stable rationale codes over free-form labels if label cardinality becomes unsafe.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
       "targets": [
         {
@@ -119,7 +119,7 @@
       "type": "table"
     },
     {
-      "description": "Placeholder branch-state visibility for operator inspection. Assumes one active series per workflow and state.",
+      "description": "Branch-state visibility for operator inspection with one active series per workflow/state.",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
       "targets": [
         {
@@ -131,7 +131,7 @@
       "type": "timeseries"
     },
     {
-      "description": "Placeholder checkpoint lineage panel. MS-33 should back this with per-branch checkpoint age or freshness metrics derived from typed state.",
+      "description": "Checkpoint lineage panel backed by per-branch checkpoint age metrics derived from typed state.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
       "targets": [
         {
@@ -143,7 +143,7 @@
       "type": "timeseries"
     },
     {
-      "description": "Placeholder context-pressure panel. Assumes the runtime exports a normalized pressure ratio and a coarse pressure_level label.",
+      "description": "Context-pressure panel using normalized pressure ratios and a coarse pressure_level label.",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
       "targets": [
         {
@@ -155,7 +155,7 @@
       "type": "timeseries"
     },
     {
-      "description": "Placeholder intervention history from AutonomyStatusView.interventions. Assumes a counter labeled by intervention type and decision source.",
+      "description": "Intervention history from AutonomyStatusView.interventions using a counter labeled by intervention type and decision source.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
       "targets": [
         {
@@ -167,7 +167,7 @@
       "type": "timeseries"
     },
     {
-      "description": "Placeholder delegation and provenance visibility from AutonomyStatusView.delegation_alerts. Intended for invalid, expired, revoked, or otherwise rejected chains only.",
+      "description": "Delegation and provenance visibility from AutonomyStatusView.delegation_alerts for invalid, expired, revoked, or otherwise rejected chains only.",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
       "targets": [
         {

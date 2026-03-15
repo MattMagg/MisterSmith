@@ -35,22 +35,23 @@ The audit fails on wildcard `>` and `$JS.>` permissions. Documentation and spec
 Markdown are excluded on purpose so example snippets do not produce false
 positives.
 
-## Phase 10.5 autonomy observability scaffold
+## Phase 10.5 autonomy observability
 
-This prep slice adds deploy-only operator assets for the blocked Phase 10.5
-autonomy view work:
+Phase 10.5 now includes typed operator assets and app-side metric export for
+the autonomy control plane:
 
 - `deploy/dashboards/mister-smith-autonomy.json`
 - `deploy/alerts/mister-smith-autonomy-rules.yml`
 
-These assets are intentionally standalone. They do not implement
-`AutonomyStatusView`, event aggregation, or app wiring. `MS-33` remains the
-implementation issue that must emit the runtime signals and finalize the
-placeholder queries below.
+These assets depend on typed autonomy events being published into the shared
+event bus. The app now projects those events into `AutonomyStatusView` and
+exports the `mistersmith_autonomy_*` metrics described below. Runtime
+components still need to publish the typed autonomy events for live workflows
+to populate the operator view.
 
 ### Placeholder metric mapping
 
-The new dashboard and alert rules assume typed autonomy state is exported as
+The dashboard and alert rules consume typed autonomy state exported as
 Prometheus metrics with the existing `mistersmith_` prefix. The mapping target
 is the Phase 10 `AutonomyStatusView` contract, not raw logs.
 
@@ -63,29 +64,27 @@ is the Phase 10 `AutonomyStatusView` contract, not raw logs.
 | `interventions` | `mistersmith_autonomy_interventions_total` | `workflow_id`, `branch_id`, `intervention`, `decision_source` | Intervention history panel and spike alert |
 | `delegation_alerts` | `mistersmith_autonomy_delegation_rejections_total` | `workflow_id`, `reason`, `scope`, `issuer`, `recipient` | Provenance rejection panel and visibility alert |
 
-### Placeholder finalization notes for `MS-33`
+### Runtime publication notes
 
-The scaffold is intentionally opinionated but not final. `MS-33` must confirm
-or revise these assumptions when typed runtime state exists:
+The deploy mapping is intentionally opinionated around the typed autonomy view.
+The remaining runtime requirement is publication, not log scraping:
 
-- `mistersmith_autonomy_workflows_active` should represent operator-visible
-  active workflow count. If runtime state prefers a per-workflow info metric
-  instead, update the stat query but keep the panel.
-- `mistersmith_autonomy_topology_info` currently assumes topology rationale can
-  be emitted as a label. If the rationale text is too high-cardinality, replace
-  it with a stable rationale code and keep the human-readable text in the app
-  surface.
-- `mistersmith_autonomy_branches` assumes one gauge per branch/state. If the
-  runtime emits counters or separate health metrics instead, preserve the panel
-  intent and change only the PromQL.
-- `mistersmith_autonomy_branch_checkpoint_age_seconds` assumes "seconds since
-  last durable checkpoint" semantics. Use a freshness metric with the same
-  meaning if the implementation prefers a different name.
+- `mistersmith_autonomy_workflows_active` represents one active gauge per
+  workflow/state pair. If runtime state prefers a different info-metric shape,
+  keep the panel intent and update the query.
+- `mistersmith_autonomy_topology_info` currently emits topology rationale as a
+  label. If the rationale text is too high-cardinality, replace it with a
+  stable rationale code and keep the human-readable text in the app surface.
+- `mistersmith_autonomy_branches` assumes one gauge per branch/state and
+  recovery strategy. If runtime emits separate health metrics instead, preserve
+  the panel intent and adjust the PromQL only.
+- `mistersmith_autonomy_branch_checkpoint_age_seconds` uses "seconds since last
+  durable checkpoint" semantics derived from typed checkpoint lineage.
 - `mistersmith_autonomy_context_pressure_ratio` assumes normalized `0..1`
-  pressure semantics. The dashboard thresholds and critical alert depend on that
-  contract.
-- `mistersmith_autonomy_interventions_total` should count targeted Guard or
-  Advisor decisions only. Do not mix it with generic restart or failure metrics.
+  pressure semantics. The dashboard thresholds and critical alert depend on
+  that contract.
+- `mistersmith_autonomy_interventions_total` counts targeted Guard or Advisor
+  decisions only. Do not mix it with generic restart or failure metrics.
 - `mistersmith_autonomy_delegation_rejections_total` is reserved for
   operator-visible provenance or delegation chain failures. Do not point it at
   the existing `mistersmith_unauthorized_operations_total` counter, which is

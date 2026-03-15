@@ -4,6 +4,7 @@
 //! event layer stable, typed payloads for topology, memory pressure,
 //! supervision, and delegation visibility.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -72,8 +73,14 @@ pub struct BranchSummary {
 /// Summary of a durable branch checkpoint capture.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CheckpointRecordSummary {
+    /// Parent graph that owns the checkpoint lineage entry.
+    pub graph_id: ExecutionGraphId,
+    /// Branch that recorded the durable checkpoint.
+    pub branch_id: ExecutionBranchId,
     /// Stable checkpoint identifier.
     pub checkpoint_id: CheckpointId,
+    /// When the durable checkpoint was captured.
+    pub captured_at: DateTime<Utc>,
     /// Managed-memory snapshot used for branch resume.
     pub memory_snapshot_id: MemorySnapshotId,
     /// Nodes already completed safely at this checkpoint.
@@ -89,6 +96,10 @@ pub struct CheckpointRecordSummary {
 /// Summary of a routing decision emitted for a ready branch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RoutingDecisionSummary {
+    /// Parent graph that owns the routed branch.
+    pub graph_id: ExecutionGraphId,
+    /// Branch selected for routing.
+    pub branch_id: ExecutionBranchId,
     /// Agent selected to execute or resume the branch.
     pub selected_agent: AgentId,
     /// Task identifiers assigned by the routing decision.
@@ -114,6 +125,8 @@ pub struct RoutingDecisionSummary {
 pub struct ContextPressureSummary {
     /// Budget record being reported.
     pub budget_id: ContextBudgetId,
+    /// Branch the budget pressure applies to, when available.
+    pub branch_id: Option<ExecutionBranchId>,
     /// Scope the budget applies to.
     pub scope: BudgetScope,
     /// Maximum context units allowed.
@@ -161,8 +174,12 @@ pub struct AutonomyStatusView {
     pub topology: TopologyPlanSummary,
     /// Branch-level status summaries.
     pub branches: Vec<BranchSummary>,
+    /// Checkpoint lineage visible to operators for targeted recovery.
+    pub checkpoint_lineage: Vec<CheckpointRecordSummary>,
     /// Context-pressure summaries for active budgets.
     pub memory_pressure: Vec<ContextPressureSummary>,
+    /// Routing history visible to operators.
+    pub routing_history: Vec<RoutingDecisionSummary>,
     /// Applied intervention records visible to operators.
     pub interventions: Vec<InterventionRecord>,
     /// Delegation or provenance warnings.
@@ -267,5 +284,39 @@ impl AutonomyEvent {
         EventBuilder::new(source, EventType::Autonomy(self.kind()))
             .with_payload(&self)
             .build()
+    }
+
+    /// Return the workflow identifier carried by the autonomy event.
+    pub fn workflow_id(&self) -> TaskId {
+        match self {
+            AutonomyEvent::GraphUpdated(envelope) => envelope.workflow_id,
+            AutonomyEvent::TopologySelected(envelope) => envelope.workflow_id,
+            AutonomyEvent::BranchUpdated(envelope) => envelope.workflow_id,
+            AutonomyEvent::ContextPressureObserved(envelope) => envelope.workflow_id,
+            AutonomyEvent::ProfileSnapshotRecorded(envelope) => envelope.workflow_id,
+            AutonomyEvent::GuardDecisionEvaluated(envelope) => envelope.workflow_id,
+            AutonomyEvent::InterventionRecorded(envelope) => envelope.workflow_id,
+            AutonomyEvent::CheckpointRecorded(envelope) => envelope.workflow_id,
+            AutonomyEvent::RoutingDecisionRecorded(envelope) => envelope.workflow_id,
+            AutonomyEvent::DelegationUpdated(envelope) => envelope.workflow_id,
+            AutonomyEvent::StatusUpdated(envelope) => envelope.workflow_id,
+        }
+    }
+
+    /// Return the branch identifier carried by the autonomy event, when available.
+    pub fn branch_id(&self) -> Option<ExecutionBranchId> {
+        match self {
+            AutonomyEvent::GraphUpdated(envelope) => envelope.branch_id,
+            AutonomyEvent::TopologySelected(envelope) => envelope.branch_id,
+            AutonomyEvent::BranchUpdated(envelope) => envelope.branch_id,
+            AutonomyEvent::ContextPressureObserved(envelope) => envelope.branch_id,
+            AutonomyEvent::ProfileSnapshotRecorded(envelope) => envelope.branch_id,
+            AutonomyEvent::GuardDecisionEvaluated(envelope) => envelope.branch_id,
+            AutonomyEvent::InterventionRecorded(envelope) => envelope.branch_id,
+            AutonomyEvent::CheckpointRecorded(envelope) => envelope.branch_id,
+            AutonomyEvent::RoutingDecisionRecorded(envelope) => envelope.branch_id,
+            AutonomyEvent::DelegationUpdated(envelope) => envelope.branch_id,
+            AutonomyEvent::StatusUpdated(envelope) => envelope.branch_id,
+        }
     }
 }

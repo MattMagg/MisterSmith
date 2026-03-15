@@ -122,33 +122,78 @@ impl Orchestrator {
     pub fn register_execution_graph(&self, graph: ExecutionGraph) {
         let workflow_id = graph.workflow_id;
         let graph_id = graph.graph_id;
-        let checkpoint_events = graph
-            .branches
-            .iter()
-            .filter_map(|branch| {
-                graph
-                    .latest_checkpoint(&branch.branch_id)
-                    .map(|checkpoint| {
-                        AutonomyEvent::CheckpointRecorded(AutonomyEventEnvelope {
-                            workflow_id,
-                            graph_id: Some(graph_id),
-                            branch_id: Some(branch.branch_id),
-                            payload: CheckpointRecordSummary {
-                                checkpoint_id: checkpoint.checkpoint_id,
-                                memory_snapshot_id: checkpoint.memory_snapshot_id,
-                                completed_nodes: checkpoint.completed_nodes.clone(),
-                                pending_nodes: checkpoint.pending_nodes.clone(),
-                                recovery_strategy: branch.recovery_strategy,
-                                failure_context: checkpoint.failure_context.clone(),
-                            },
-                            operator_visible: true,
-                        })
-                    })
+        let mut initial_events = vec![
+            AutonomyEvent::GraphUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: ExecutionGraphSummary {
+                    graph_id,
+                    workflow_id,
+                    state: graph.state,
+                    branch_count: graph.branches.len(),
+                    node_count: graph.nodes.len(),
+                    active_topology: Some(graph.topology_plan.topology_kind),
+                },
+                operator_visible: true,
+            }),
+            AutonomyEvent::TopologySelected(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: TopologyPlanSummary {
+                    graph_id,
+                    topology_kind: graph.topology_plan.topology_kind,
+                    parallelism_width: graph.topology_plan.parallelism_width,
+                    coordination_policy: graph.topology_plan.coordination_policy,
+                    rationale: graph.topology_plan.rationale.clone(),
+                    fallback_topology: graph.topology_plan.fallback_topology,
+                },
+                operator_visible: true,
+            }),
+        ];
+        initial_events.extend(graph.branches.iter().map(|branch| {
+            AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch.branch_id),
+                payload: BranchSummary {
+                    branch_id: branch.branch_id,
+                    graph_id: branch.graph_id,
+                    state: branch.state,
+                    assigned_agents: branch.assigned_agents.clone(),
+                    checkpoint_id: graph
+                        .latest_checkpoint(&branch.branch_id)
+                        .map(|checkpoint| checkpoint.checkpoint_id),
+                    recovery_strategy: branch.recovery_strategy,
+                },
+                operator_visible: true,
             })
-            .collect::<Vec<_>>();
+        }));
+        initial_events.extend(graph.branches.iter().filter_map(|branch| {
+            graph.latest_checkpoint(&branch.branch_id).map(|checkpoint| {
+                AutonomyEvent::CheckpointRecorded(AutonomyEventEnvelope {
+                    workflow_id,
+                    graph_id: Some(graph_id),
+                    branch_id: Some(branch.branch_id),
+                    payload: CheckpointRecordSummary {
+                        graph_id,
+                        branch_id: branch.branch_id,
+                        checkpoint_id: checkpoint.checkpoint_id,
+                        captured_at: checkpoint.created_at,
+                        memory_snapshot_id: checkpoint.memory_snapshot_id,
+                        completed_nodes: checkpoint.completed_nodes.clone(),
+                        pending_nodes: checkpoint.pending_nodes.clone(),
+                        recovery_strategy: branch.recovery_strategy,
+                        failure_context: checkpoint.failure_context.clone(),
+                    },
+                    operator_visible: true,
+                })
+            })
+        }));
 
         self.execution_graphs.insert(workflow_id, graph);
-        for event in checkpoint_events {
+        for event in initial_events {
             self.record_autonomy_event(&workflow_id, event);
         }
     }
@@ -184,12 +229,32 @@ impl Orchestrator {
                 graph_id: Some(graph.graph_id),
                 branch_id: Some(checkpoint.branch_id),
                 payload: CheckpointRecordSummary {
+                    graph_id: graph.graph_id,
+                    branch_id: checkpoint.branch_id,
                     checkpoint_id: checkpoint.checkpoint_id,
+                    captured_at: checkpoint.created_at,
                     memory_snapshot_id: checkpoint.memory_snapshot_id,
                     completed_nodes: checkpoint.completed_nodes,
                     pending_nodes: checkpoint.pending_nodes,
                     recovery_strategy: branch.recovery_strategy,
                     failure_context: checkpoint.failure_context,
+                },
+                operator_visible: true,
+            }),
+        );
+        self.record_autonomy_event(
+            workflow_id,
+            AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                workflow_id: *workflow_id,
+                graph_id: Some(graph.graph_id),
+                branch_id: Some(branch.branch_id),
+                payload: BranchSummary {
+                    branch_id: branch.branch_id,
+                    graph_id: branch.graph_id,
+                    state: branch.state,
+                    assigned_agents: branch.assigned_agents.clone(),
+                    checkpoint_id: Some(checkpoint.checkpoint_id),
+                    recovery_strategy: branch.recovery_strategy,
                 },
                 operator_visible: true,
             }),
@@ -331,6 +396,53 @@ impl Orchestrator {
             workflow_id,
             &SupervisorMessage::RecordIntervention(record.clone()),
         );
+        let graph_id = self.execution_graph(workflow_id).map(|graph| graph.graph_id);
+        let branch_id = branch_id_for_target(self.execution_graph(workflow_id).as_ref(), &decision.target_scope);
+        self.record_autonomy_event(
+            workflow_id,
+            AutonomyEvent::GuardDecisionEvaluated(AutonomyEventEnvelope {
+                workflow_id: *workflow_id,
+                graph_id,
+                branch_id,
+                payload: decision.clone(),
+                operator_visible: true,
+            }),
+        );
+        self.record_autonomy_event(
+            workflow_id,
+            AutonomyEvent::InterventionRecorded(AutonomyEventEnvelope {
+                workflow_id: *workflow_id,
+                graph_id,
+                branch_id,
+                payload: record.clone(),
+                operator_visible: true,
+            }),
+        );
+        if let Some(branch_id) = branch_id {
+            if let Some(graph) = self.execution_graph(workflow_id) {
+                if let Some(branch) = graph.branch(&branch_id) {
+                    self.record_autonomy_event(
+                        workflow_id,
+                        AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                            workflow_id: *workflow_id,
+                            graph_id: Some(graph.graph_id),
+                            branch_id: Some(branch_id),
+                            payload: BranchSummary {
+                                branch_id,
+                                graph_id: branch.graph_id,
+                                state: branch.state,
+                                assigned_agents: branch.assigned_agents.clone(),
+                                checkpoint_id: graph
+                                    .latest_checkpoint(&branch_id)
+                                    .map(|checkpoint| checkpoint.checkpoint_id),
+                                recovery_strategy: branch.recovery_strategy,
+                            },
+                            operator_visible: true,
+                        }),
+                    );
+                }
+            }
+        }
 
         Ok((decision, record))
     }
@@ -372,6 +484,14 @@ impl Orchestrator {
             .get(workflow_id)
             .map(|notes| notes.value().clone())
             .unwrap_or_default();
+        let routing_history = self
+            .autonomy_events(workflow_id)
+            .into_iter()
+            .filter_map(|event| match event {
+                AutonomyEvent::RoutingDecisionRecorded(envelope) => Some(envelope.payload),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
 
         Some(AutonomyStatusView {
             graph: ExecutionGraphSummary {
@@ -404,7 +524,25 @@ impl Orchestrator {
                     recovery_strategy: branch.recovery_strategy,
                 })
                 .collect(),
+            checkpoint_lineage: graph
+                .checkpoint_lineage
+                .iter()
+                .filter_map(|checkpoint| {
+                    graph.branch(&checkpoint.branch_id).map(|branch| CheckpointRecordSummary {
+                        graph_id: graph.graph_id,
+                        branch_id: checkpoint.branch_id,
+                        checkpoint_id: checkpoint.checkpoint_id,
+                        captured_at: checkpoint.created_at,
+                        memory_snapshot_id: checkpoint.memory_snapshot_id,
+                        completed_nodes: checkpoint.completed_nodes.clone(),
+                        pending_nodes: checkpoint.pending_nodes.clone(),
+                        recovery_strategy: branch.recovery_strategy,
+                        failure_context: checkpoint.failure_context.clone(),
+                    })
+                })
+                .collect(),
             memory_pressure: Vec::<ContextPressureSummary>::new(),
+            routing_history,
             interventions,
             delegation_alerts: Vec::<DelegationAlert>::new(),
             profiles,
@@ -630,6 +768,8 @@ impl Orchestrator {
                     graph_id: Some(candidate.decision.graph_id),
                     branch_id: Some(candidate.decision.branch_id),
                     payload: RoutingDecisionSummary {
+                        graph_id: candidate.decision.graph_id,
+                        branch_id: candidate.decision.branch_id,
                         selected_agent: worker,
                         task_ids: assigned_task_ids,
                         recovery_strategy: candidate.recovery_strategy,
@@ -665,6 +805,30 @@ impl Orchestrator {
                     } else {
                         BranchState::Running
                     };
+                }
+            }
+
+            for decision in &decisions {
+                if let Some(branch) = graph.branch(&decision.branch_id) {
+                    self.record_autonomy_event(
+                        workflow_id,
+                        AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                            workflow_id: *workflow_id,
+                            graph_id: Some(graph.graph_id),
+                            branch_id: Some(decision.branch_id),
+                            payload: BranchSummary {
+                                branch_id: branch.branch_id,
+                                graph_id: branch.graph_id,
+                                state: branch.state,
+                                assigned_agents: branch.assigned_agents.clone(),
+                                checkpoint_id: graph
+                                    .latest_checkpoint(&branch.branch_id)
+                                    .map(|checkpoint| checkpoint.checkpoint_id),
+                                recovery_strategy: branch.recovery_strategy,
+                            },
+                            operator_visible: true,
+                        }),
+                    );
                 }
             }
         }
@@ -1057,6 +1221,22 @@ fn health_priority(health_state: HealthState) -> u8 {
     }
 }
 
+fn branch_id_for_target(
+    graph: Option<&ExecutionGraph>,
+    target: &GuardTarget,
+) -> Option<ExecutionBranchId> {
+    match target {
+        GuardTarget::Branch(branch_id) => Some(*branch_id),
+        GuardTarget::Node(node_id) => graph.and_then(|graph| {
+            graph.nodes
+                .iter()
+                .find(|node| node.node_id == *node_id)
+                .map(|node| node.branch_id)
+        }),
+        GuardTarget::Graph(_) | GuardTarget::Provider(_) => None,
+    }
+}
+
 fn select_worker(worker_ids: &[AgentId], worker_loads: &HashMap<AgentId, usize>) -> AgentId {
     worker_ids
         .iter()
@@ -1102,6 +1282,8 @@ fn recovery_routing_event(
         graph_id: Some(graph.graph_id),
         branch_id: Some(branch_id),
         payload: RoutingDecisionSummary {
+            graph_id: graph.graph_id,
+            branch_id,
             selected_agent,
             task_ids: recovery
                 .recovery_node_ids

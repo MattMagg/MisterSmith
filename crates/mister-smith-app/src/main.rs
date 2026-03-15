@@ -3,6 +3,7 @@
 //! Orchestrates process lifecycle: deterministic startup, graceful shutdown,
 //! signal handling, observability initialization, and cross-phase integration wiring.
 
+mod autonomy;
 mod auth;
 mod bootstrap;
 #[allow(dead_code)]
@@ -44,10 +45,34 @@ struct Cli {
 enum Command {
     /// Run the Mister Smith framework runtime.
     Run,
+    /// Inspect the operator-facing autonomy control plane.
+    Autonomy {
+        #[command(subcommand)]
+        command: AutonomyCommand,
+    },
     /// Authentication helpers for provider-backed integrations.
     Auth {
         #[command(subcommand)]
         command: AuthCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AutonomyCommand {
+    /// Show the typed autonomy status for one workflow from the running runtime.
+    Status {
+        /// Workflow UUID to inspect.
+        #[arg(long)]
+        workflow_id: String,
+        /// Base URL of the running local runtime. Defaults to the configured HTTP port.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// List workflow IDs that currently have typed autonomy status in the runtime.
+    List {
+        /// Base URL of the running local runtime. Defaults to the configured HTTP port.
+        #[arg(long)]
+        base_url: Option<String>,
     },
 }
 
@@ -133,6 +158,7 @@ async fn main() {
 
     let result = match &cli.command {
         None | Some(Command::Run) => run_runtime(cli).await,
+        Some(Command::Autonomy { command }) => execute_autonomy_command(command, &cli).await,
         Some(Command::Auth { command }) => execute_auth_command(command).await,
     };
 
@@ -242,6 +268,44 @@ async fn execute_openai_chatgpt_auth(
         OpenaiChatgptAuthCommand::Status => {
             let status = auth::openai_chatgpt_status().await?;
             println!("{}", auth::render_openai_chatgpt_status(&status));
+        }
+    }
+
+    Ok(())
+}
+
+async fn execute_autonomy_command(
+    command: &AutonomyCommand,
+    cli: &Cli,
+) -> Result<(), Box<dyn Error>> {
+    let overrides = config::CliOverrides {
+        config_path: cli.config.clone(),
+        log_level: cli.log_level.clone(),
+        log_format: cli.log_format.as_deref().and_then(parse_log_format),
+    };
+    let config = config::load_framework_config(&overrides)
+        .map_err(|error| format!("Failed to load configuration: {error}"))?;
+
+    match command {
+        AutonomyCommand::Status {
+            workflow_id,
+            base_url,
+        } => {
+            let workflow_id = autonomy::parse_workflow_id(workflow_id)?;
+            let base_url = base_url
+                .clone()
+                .unwrap_or_else(|| autonomy::default_base_url(&config));
+            let view = autonomy::fetch_status(&base_url, workflow_id).await?;
+            println!("{}", autonomy::render_status(&view));
+        }
+        AutonomyCommand::List { base_url } => {
+            let base_url = base_url
+                .clone()
+                .unwrap_or_else(|| autonomy::default_base_url(&config));
+            let workflows = autonomy::fetch_workflows(&base_url).await?;
+            for workflow_id in workflows.workflows {
+                println!("{workflow_id}");
+            }
         }
     }
 

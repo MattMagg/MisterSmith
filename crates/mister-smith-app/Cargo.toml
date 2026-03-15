@@ -51,10 +51,12 @@ metrics-exporter-prometheus = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
+serde_json = { workspace = true }
 
 # External service clients
 async-nats = { workspace = true }
 sqlx = { workspace = true }
+reqwest = { workspace = true }
 
 # Utilities
 chrono = { workspace = true }
