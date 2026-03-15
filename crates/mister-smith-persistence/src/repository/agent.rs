@@ -299,16 +299,22 @@ impl AgentRepository {
         let rows = queries::get_all_state(&self.pool, agent_id).await?;
         let mut hydrated = 0usize;
 
-        for row in &rows {
-            let state_key = &row.state_key;
-            let kv_key = format!("{agent_id}:{state_key}");
-            match self.hybrid.kv().save(&kv_key, &row.state_value).await {
+        let futures = rows.iter().map(|row| async {
+            let kv_key = format!("{agent_id}:{}", row.state_key);
+            let res = self.hybrid.kv().save(&kv_key, &row.state_value).await;
+            (&row.state_key, res)
+        });
+
+        let results = futures::future::join_all(futures).await;
+
+        for (state_key, res) in results {
+            match res {
                 Ok(_) => {
                     hydrated += 1;
                 }
                 Err(e) => {
                     warn!(
-                        agent_id = %agent_id, key = %row.state_key, error = %e,
+                        agent_id = %agent_id, key = %state_key, error = %e,
                         "Failed to hydrate state key into KV"
                     );
                 }

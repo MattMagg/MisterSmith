@@ -32,7 +32,7 @@ bytes = { workspace = true }
 # Async
 tokio = { workspace = true }
 async-trait = { workspace = true }
-futures = { workspace = true }
+futures.workspace = true
 
 # Logging
 tracing = { workspace = true }
@@ -52,3 +52,4 @@ security = ["dep:mister-smith-security"]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3"
 toml = { workspace = true }
+futures = { workspace = true }
