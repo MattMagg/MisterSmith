@@ -279,6 +279,25 @@ impl TaskScheduler {
             .collect()
     }
 
+    /// Check if all subtasks for a given parent task are complete without allocating a Vec.
+    pub fn all_subtasks_completed(&self, parent_id: &TaskId) -> bool {
+        let mut has_subtasks = false;
+        let mut all_completed = true;
+
+        for entry in self.tasks.iter() {
+            let task = entry.value();
+            if task.parent_task_id.as_ref() == Some(parent_id) {
+                has_subtasks = true;
+                if task.state != TaskState::Completed {
+                    all_completed = false;
+                    break;
+                }
+            }
+        }
+
+        has_subtasks && all_completed
+    }
+
     /// Get count of tracked tasks.
     pub fn count(&self) -> usize {
         self.tasks.len()
@@ -296,6 +315,31 @@ impl TaskScheduler {
     /// Get all tracked tasks.
     pub fn all_tasks(&self) -> Vec<TaskAssignment> {
         self.tasks.iter().map(|e| e.value().clone()).collect()
+    }
+
+    /// Calculate the number of assigned/running tasks per worker without cloning task payloads.
+    pub fn worker_loads(
+        &self,
+        worker_ids: &[AgentId],
+    ) -> std::collections::HashMap<AgentId, usize> {
+        let mut loads = worker_ids
+            .iter()
+            .copied()
+            .map(|worker_id| (worker_id, 0_usize))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        for entry in self.tasks.iter() {
+            let task = entry.value();
+            if let Some(agent_id) = task.assigned_to {
+                if matches!(task.state, TaskState::Assigned | TaskState::Running) {
+                    if let Some(load) = loads.get_mut(&agent_id) {
+                        *load += 1;
+                    }
+                }
+            }
+        }
+
+        loads
     }
 }
 
@@ -338,21 +382,22 @@ impl DeadlineMonitor {
                     _ = ticker.tick() => {
                         let now = Utc::now();
                         // Check running and assigned tasks for deadline expiry
-                        let active: Vec<TaskAssignment> = scheduler
+                        let active: Vec<(TaskId, chrono::DateTime<Utc>)> = scheduler
                             .tasks
                             .iter()
-                            .filter(|e| {
-                                matches!(e.value().state, TaskState::Running | TaskState::Assigned)
-                                    && e.value().deadline.is_some()
+                            .filter_map(|e| {
+                                let task = e.value();
+                                if matches!(task.state, TaskState::Running | TaskState::Assigned) {
+                                    task.deadline.map(|deadline| (task.task_id, deadline))
+                                } else {
+                                    None
+                                }
                             })
-                            .map(|e| e.value().clone())
                             .collect();
 
-                        for task in active {
-                            if let Some(deadline) = task.deadline {
-                                if now > deadline {
-                                    let _ = scheduler.timeout(&task.task_id);
-                                }
+                        for (task_id, deadline) in active {
+                            if now > deadline {
+                                let _ = scheduler.timeout(&task_id);
                             }
                         }
                     }
