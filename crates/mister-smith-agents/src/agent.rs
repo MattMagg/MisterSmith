@@ -65,6 +65,13 @@ impl AgentContext {
     }
 }
 
+#[derive(Debug, Default)]
+struct DelegationRuntimeContext {
+    delegation_chain: Vec<String>,
+    delegation_capability: Option<DelegationCapability>,
+    provenance_chain: Option<ProvenanceChain>,
+}
+
 /// Core agent runtime — bridges Actor (Phase 3) with Agent orchestration.
 ///
 /// Holds an ActorRef for message passing and shared AgentContext for
@@ -181,7 +188,14 @@ where
     A::Message: Send + 'static,
     A::State: Send + 'static,
 {
-    spawn_agent_with_chain(system, actor, initial_state, config, Vec::new(), None, None).await
+    spawn_agent_with_chain(
+        system,
+        actor,
+        initial_state,
+        config,
+        DelegationRuntimeContext::default(),
+    )
+    .await
 }
 
 /// Spawn a child agent and propagate the parent's delegation chain into the runtime context.
@@ -206,9 +220,11 @@ where
         actor,
         initial_state,
         config,
-        child_claims.delegation_chain,
-        child_claims.delegation_capability,
-        child_claims.provenance_chain,
+        DelegationRuntimeContext {
+            delegation_chain: child_claims.delegation_chain,
+            delegation_capability: child_claims.delegation_capability,
+            provenance_chain: child_claims.provenance_chain,
+        },
     )
     .await
 }
@@ -218,9 +234,7 @@ async fn spawn_agent_with_chain<A>(
     actor: A,
     initial_state: A::State,
     config: AgentConfig,
-    delegation_chain: Vec<String>,
-    delegation_capability: Option<DelegationCapability>,
-    provenance_chain: Option<ProvenanceChain>,
+    delegation_context: DelegationRuntimeContext,
 ) -> Result<AgentRuntime<A::Message, A::Response>, AgentSystemError>
 where
     A: Actor + 'static,
@@ -239,9 +253,9 @@ where
     let context = Arc::new(AgentContext::new_with_delegation(
         agent_id,
         config,
-        delegation_chain,
-        delegation_capability,
-        provenance_chain,
+        delegation_context.delegation_chain,
+        delegation_context.delegation_capability,
+        delegation_context.provenance_chain,
     ));
 
     let actor_ref = system
@@ -282,9 +296,7 @@ where
         agent_id,
         factory,
         config,
-        Vec::new(),
-        None,
-        None,
+        DelegationRuntimeContext::default(),
     )
     .await
 }
@@ -318,9 +330,11 @@ where
         agent_id,
         factory,
         config,
-        child_claims.delegation_chain,
-        child_claims.delegation_capability,
-        child_claims.provenance_chain,
+        DelegationRuntimeContext {
+            delegation_chain: child_claims.delegation_chain,
+            delegation_capability: child_claims.delegation_capability,
+            provenance_chain: child_claims.provenance_chain,
+        },
     )
     .await
 }
@@ -331,9 +345,7 @@ async fn spawn_supervised_with_chain<A, F>(
     agent_id: AgentId,
     factory: F,
     config: AgentConfig,
-    delegation_chain: Vec<String>,
-    delegation_capability: Option<DelegationCapability>,
-    provenance_chain: Option<ProvenanceChain>,
+    delegation_context: DelegationRuntimeContext,
 ) -> Result<AgentRuntime<A::Message, A::Response>, AgentSystemError>
 where
     A: Actor + 'static,
@@ -353,9 +365,9 @@ where
     let context = Arc::new(AgentContext::new_with_delegation(
         agent_id,
         config,
-        delegation_chain,
-        delegation_capability,
-        provenance_chain,
+        delegation_context.delegation_chain,
+        delegation_context.delegation_capability,
+        delegation_context.provenance_chain,
     ));
 
     let actor_ref = supervised
