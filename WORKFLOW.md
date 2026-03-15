@@ -2,7 +2,7 @@
 tracker:
   kind: linear
   api_key: $LINEAR_API_KEY
-  project_slug: "mistersmith-execution-queue-320a0741920c"
+  project_slug: "320a0741920c"
   active_states:
     - Todo
     - In Progress
@@ -15,7 +15,7 @@ tracker:
 polling:
   interval_ms: 5000
 workspace:
-  root: ~/code/mister-smith-symphony-workspaces
+  root: ~/.local/share/symphony-workspaces
 hooks:
   after_create: |
     export SOURCE_REPO_URL="${SOURCE_REPO_URL:-https://github.com/MattMagg/Mister-Smith.git}"
@@ -106,6 +106,7 @@ Instructions:
 - A Linear connection is available either through Symphony's tracker integration or the `linear_graphql` tool.
 - The Linear team workflow must define the non-standard states `Rework`, `Human Review`, and `Merging`.
 - GitHub CLI auth may be required for PR workflows.
+- The supported local launcher defaults to `SYMPHONY_ROOT=$HOME/symphony`, uses `SYMPHONY_ROOT/elixir` as the Elixir app path, and uses this workflow's workspace root at `~/.local/share/symphony-workspaces`.
 - If required non-GitHub auth or tooling is missing, record the blocker in the workpad and move the issue according to the workflow.
 
 ## External knowledge and integrations
@@ -138,7 +139,7 @@ Instructions:
   supervision, execution, memory, streaming, routing, reliability,
   observability, state, or distributed behavior.
 - When you discover meaningful out-of-scope work, create a follow-up issue instead of silently expanding scope.
-- This workflow is scoped to the single `tracker.project_slug` in this file; issues outside that watched project will not dispatch.
+- This workflow is scoped to the single `tracker.project_slug` in this file. Use the Linear `slugId` value for that field; issues outside that watched project will not dispatch.
 - An empty `Todo` queue means there is no runnable issue in the watched project right now; it does not mean the `Todo` state is missing.
 - Do not move blocked or future work into the watched project just to keep Symphony busy.
 

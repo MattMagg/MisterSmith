@@ -15,8 +15,15 @@ A multi-agent orchestration framework built in Rust with NATS messaging and Erla
 | 7. Agent System | Complete | `mister-smith-agents` | 951 |
 | 8. Operations | Complete | `mister-smith-app` | 983 |
 | 9. LLM Providers | Complete | `mister-smith-llm`, `mister-smith-agents` (llm feature) | 1115 |
+| 10. Frontier Autonomy & Control Plane | In Progress | repo workflow contract, Linear/Symphony control plane, smith MCP compatibility | live state tracked in `docs/plans/` and `WORKFLOW.md` |
 
-**20 crates** in the workspace (18 library + 1 binary + 1 integration test), **1,115 tests** passing, zero clippy warnings.
+**20 crates** in the workspace (18 library + 1 binary + 1 integration test). The table above reflects completed build phases through 9.1 plus the active Phase 10 control-plane lane; treat exact test totals and warning counts as CI-validated state, not a static README guarantee.
+
+## Current Control Plane
+
+- Live queue contract: [`WORKFLOW.md`](WORKFLOW.md) and [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md)
+- Active Phase 10 control-plane work: [`docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`](docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md)
+- smith MCP rebuild and workflow recovery plans: [`docs/plans/2026-03-14-smith-mcp-rebuild.md`](docs/plans/2026-03-14-smith-mcp-rebuild.md), [`docs/plans/2026-03-15-smith-mcp-workflow-forensics.md`](docs/plans/2026-03-15-smith-mcp-workflow-forensics.md), [`docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md`](docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md)
 
 ## Architecture
 

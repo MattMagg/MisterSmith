@@ -26,6 +26,13 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 | 8. Operations | Complete | `mister-smith-app` (binary entry point, bootstrap, shutdown, health probes, observability, cross-phase bridges) |
 | 9. LLM Providers | Complete | `mister-smith-llm` (ModelProvider trait, MockProvider, OpenAI/Anthropic/Claude providers, ModelRouter, circuit breaker, budget enforcement, dual-stream, ModelEvent, cascade routing); `mister-smith-agents` extended with `llm` feature (Planner/Critic/Executor LLM integration, ToolBus bridge) |
 | 9.1 Security Hardening | Complete | `mister-smith-transport`, `mister-smith-security`, `mister-smith-persistence`, `mister-smith-agents` |
+| 10. Frontier Autonomy & Control Plane | In Progress | `WORKFLOW.md`, `docs/linear/LINEAR.md`, smith MCP compatibility/recovery docs, queue governance work |
+
+## Current Control Plane Sources
+
+- Runtime contract: `WORKFLOW.md`
+- Linear operating model: `docs/linear/LINEAR.md`
+- Active Phase 10 recovery and control-plane plans: `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`, `docs/plans/2026-03-14-smith-mcp-rebuild.md`, `docs/plans/2026-03-15-smith-mcp-workflow-forensics.md`, `docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md`
 
 ## Workspace Crate Dependencies
 

@@ -397,8 +397,9 @@ When adding a new crate to the workspace:
 
 [OpenAI Symphony](https://github.com/openai/symphony) orchestrates Codex agents against Linear issues. It polls for `Todo` issues, spawns a Codex `app-server` per issue, and manages the full lifecycle through the status state machine.
 
-Important: Symphony is currently scoped to one watched `project_slug`. Issues outside that watched
-project do not dispatch, even if their status is `Todo`.
+Important: Symphony is currently scoped to one watched `project_slug`, and that value must be the
+Linear project `slugId`. Issues outside that watched project do not dispatch, even if their status
+is `Todo`.
 
 ### State Machine
 
@@ -426,7 +427,7 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 | Setting | Value |
 |---------|-------|
 | `tracker.api_key` | `$LINEAR_API_KEY` |
-| `project_slug` | `mistersmith-execution-queue-320a0741920c` |
+| `project_slug` | `320a0741920c` (`MisterSmith Execution Queue` Linear `slugId`) |
 | `active_states` | Todo, In Progress, Merging, Rework |
 | `terminal_states` | Done, Canceled, Duplicate |
 | `polling.interval_ms` | 5000 |
@@ -436,7 +437,7 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 ### Current Queue Contract
 
 - Current watched project: `MisterSmith Execution Queue`
-- Current watched slug: `mistersmith-execution-queue-320a0741920c`
+- Current watched slugId: `320a0741920c`
 - Validated future backlog: `MisterSmith Validated Backlog`
 - Workspace docs hub: `MisterSmith Workspace Docs`
 - Completed historical queue: `Phase 9.1: Security Hardening` (archived)
@@ -469,7 +470,10 @@ deliberately staged:
 ./scripts/run-symphony.sh
 ```
 
-`/Users/matthewmaggio/Mister-Smith/scripts/run-symphony.sh` is the supported launcher for this repo. It loads `/Users/matthewmaggio/Mister-Smith/.env`, verifies `LINEAR_API_KEY`, then starts the upstream Symphony checkout against this repo's `WORKFLOW.md`.
+`./scripts/run-symphony.sh` is the supported launcher for this repo. It loads this repository's `.env`,
+verifies `LINEAR_API_KEY`, defaults `SYMPHONY_ROOT` to `$HOME/symphony`, runs the Elixir app from
+`$SYMPHONY_ROOT/elixir`, and starts Symphony against this repo's `WORKFLOW.md`. The runtime workspace
+root is `~/.local/share/symphony-workspaces` unless explicitly overridden in `WORKFLOW.md`.
 
 Important: Symphony does not auto-read repo `.env` files. Keeping `LINEAR_API_KEY` in `.env` is not sufficient unless the launch path exports it into the Symphony process environment first.
 

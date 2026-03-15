@@ -4,6 +4,8 @@ Linear build order for the framework, end to end. Each phase depends on the phas
 
 This is not an implementation plan — it does not prescribe tasks, timelines, or code. It is a dependency-aware map of what to build and in what order, with references to the specifications that define each component.
 
+Current scope note: this roadmap remains the architectural build map through the completed framework phases. The active Phase 10 control-plane and workflow-recovery work now lives in [`WORKFLOW.md`](WORKFLOW.md), [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md), and the dated plans under [`docs/plans/`](docs/plans/).
+
 ## How to Read This
 
 - **Phases** are major architectural layers. They must be completed roughly in order.

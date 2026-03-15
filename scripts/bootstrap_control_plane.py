@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+import tomllib
 
 
 @dataclass(frozen=True)
@@ -180,13 +180,35 @@ def resolve_config_path(raw_path: str | None) -> Path:
     return env_path.expanduser()
 
 
-def detect_server_name(config_path: Path) -> tuple[bool, str | None]:
+def inspect_server_config(config_path: Path) -> dict[str, object]:
     if not config_path.exists():
-        return True, None
+        return {
+            "missing": True,
+            "server_name": None,
+            "command": None,
+            "cwd": None,
+            "args": [],
+        }
 
-    raw = config_path.read_text(encoding="utf-8")
-    match = re.search(r"\[mcp_servers\.(smith)\]", raw)
-    return False, match.group(1) if match else None
+    parsed = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    server = parsed.get("mcp_servers", {}).get("smith")
+    if not isinstance(server, dict):
+        return {
+            "missing": True,
+            "server_name": None,
+            "command": None,
+            "cwd": None,
+            "args": [],
+        }
+
+    args = server.get("args")
+    return {
+        "missing": False,
+        "server_name": "smith",
+        "command": server.get("command"),
+        "cwd": server.get("cwd"),
+        "args": args if isinstance(args, list) else [],
+    }
 
 
 def render_skill(template: SkillTemplate) -> str:
@@ -226,7 +248,7 @@ def main() -> int:
     config_path = resolve_config_path(args.config_path).resolve()
 
     created, existing = ensure_skill_pack(repo_root, rewrite=args.rewrite)
-    config_missing, server_name = detect_server_name(config_path)
+    config = inspect_server_config(config_path)
 
     payload = {
         "repo_root": str(repo_root),
@@ -237,8 +259,12 @@ def main() -> int:
         },
         "config": {
             "path": str(config_path),
-            "missing": config_missing or server_name is None,
-            "server_name": server_name,
+            "missing": config["missing"],
+            "server_name": config["server_name"],
+            "command": config["command"],
+            "cwd": config["cwd"],
+            "args": config["args"],
+            "launch_configured": bool(config["command"]),
         },
         "next_action": (
             "Run smith.audit_workflow_readiness, then smith.get_server_runtime_info, to verify bootstrap and live runtime readiness."
@@ -247,7 +273,7 @@ def main() -> int:
     json.dump(payload, sys.stdout, indent=2)
     sys.stdout.write("\n")
 
-    return 0 if server_name is not None else 1
+    return 0 if config["server_name"] is not None else 1
 
 
 if __name__ == "__main__":

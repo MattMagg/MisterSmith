@@ -1,12 +1,22 @@
 //! MCP server for exposing agent tools to external MCP clients.
 //!
 //! Implements `tools/list` and `tools/call` handlers with namespace
-//! filtering and permission checks. Actual rmcp server integration
-//! will be added when serving tools to real MCP clients.
+//! filtering and permission checks.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+use rmcp::{
+    model::{
+        CallToolRequestParams, CallToolResult, ListToolsResult, PaginatedRequestParams, ServerInfo,
+        Tool,
+    },
+    serve_server,
+    transport::io::stdio,
+    ServerHandler,
+};
 
 use crate::client::McpTool;
 use crate::config::McpServerConfig;
@@ -68,9 +78,7 @@ impl McpServer {
 
     /// Register a tool to be exposed via MCP.
     pub async fn register_tool(&self, tool: ExposedTool, handler: ToolHandler) {
-        let namespace = &tool.namespace;
-        let name = &tool.name;
-        let key = format!("{namespace}.{name}");
+        let key = tool.external_name();
         let mut tools = self.tools.write().await;
         tools.insert(key.clone(), tool);
         let mut handlers = self.handlers.write().await;
@@ -94,14 +102,10 @@ impl McpServer {
                     self.config.namespace_views.contains(&t.namespace)
                 }
             })
-            .map(|t| {
-                let namespace = &t.namespace;
-                let name = &t.name;
-                McpTool {
-                    name: format!("{namespace}.{name}"),
-                    description: t.description.clone(),
-                    input_schema: t.input_schema.clone(),
-                }
+            .map(|t| McpTool {
+                name: t.external_name(),
+                description: t.description.clone(),
+                input_schema: t.input_schema.clone(),
             })
             .collect();
         Ok(filtered)
@@ -125,8 +129,6 @@ impl McpServer {
     }
 
     /// Start the MCP server.
-    ///
-    /// Currently a placeholder — actual rmcp server binding will be added.
     pub async fn start(&self) -> Result<(), McpError> {
         let mut running = self.running.write().await;
         *running = true;
@@ -143,6 +145,118 @@ impl McpServer {
     /// Check if the server is running.
     pub async fn is_running(&self) -> bool {
         *self.running.read().await
+    }
+
+    /// Count registered tools.
+    pub async fn tool_count(&self) -> usize {
+        self.tools.read().await.len()
+    }
+
+    /// List registered external tool names.
+    pub async fn registered_tool_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .tools
+            .read()
+            .await
+            .values()
+            .map(ExposedTool::external_name)
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Serve the MCP server over stdio until the client disconnects.
+    pub async fn serve_stdio(self: Arc<Self>) -> Result<(), McpError> {
+        self.start().await?;
+
+        let adapter = McpServerAdapter {
+            server: self.clone(),
+        };
+
+        let running = serve_server(adapter, stdio())
+            .await
+            .map_err(|err| McpError::ConnectionFailed(err.to_string()))?;
+
+        let wait_result = running.waiting().await;
+        self.stop().await?;
+
+        wait_result
+            .map(|_| ())
+            .map_err(|err| McpError::SessionError(err.to_string()))
+    }
+}
+
+impl ExposedTool {
+    fn external_name(&self) -> String {
+        if self.namespace.trim().is_empty() {
+            self.name.clone()
+        } else {
+            format!("{}.{}", self.namespace, self.name)
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct McpServerAdapter {
+    pub(crate) server: Arc<McpServer>,
+}
+
+impl ServerHandler for McpServerAdapter {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo::default()
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> impl Future<Output = Result<ListToolsResult, rmcp::ErrorData>> + Send + '_ {
+        let server = self.server.clone();
+        async move {
+            let tools = server
+                .handle_tools_list(None)
+                .await
+                .map_err(|err| rmcp::ErrorData::internal_error(err.to_string(), None))?;
+
+            let rendered = tools
+                .into_iter()
+                .map(|tool| {
+                    let schema = match tool.input_schema {
+                        serde_json::Value::Object(map) => map,
+                        _ => serde_json::Map::new(),
+                    };
+                    Tool::new(tool.name, tool.description, schema)
+                })
+                .collect();
+
+            Ok(ListToolsResult {
+                next_cursor: None,
+                tools: rendered,
+                meta: None,
+            })
+        }
+    }
+
+    fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> impl Future<Output = Result<CallToolResult, rmcp::ErrorData>> + Send + '_ {
+        let server = self.server.clone();
+        async move {
+            let params = serde_json::Value::Object(request.arguments.unwrap_or_default());
+            match server
+                .handle_tools_call(request.name.as_ref(), params)
+                .await
+            {
+                Ok(value) => Ok(CallToolResult::structured(value)),
+                Err(err) => Ok(CallToolResult::structured_error(serde_json::json!({
+                    "status": "error",
+                    "summary": err.to_string(),
+                    "blocking_issues": [err.to_string()],
+                }))),
+            }
+        }
     }
 }
 

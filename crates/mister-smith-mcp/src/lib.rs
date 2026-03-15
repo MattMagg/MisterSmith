@@ -5,6 +5,7 @@
 
 pub mod bridge;
 pub mod client;
+pub mod compatibility;
 pub mod config;
 pub mod errors;
 pub mod resources;
@@ -13,6 +14,9 @@ pub mod session;
 
 pub use bridge::McpNatsBridge;
 pub use client::{McpClient, McpTool};
+pub use compatibility::{
+    build_smith_compatibility_server, CompatibilityStatus, SmithCompatibilityOptions, ToolResponse,
+};
 pub use config::{McpClientConfig, McpConfig, McpServerConfig, McpTransportType};
 pub use errors::McpError;
 pub use resources::{McpResource, ResourceRegistry};
