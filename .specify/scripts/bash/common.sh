@@ -196,7 +196,7 @@ resolve_template() {
         if [ -f "$registry_file" ] && command -v python3 >/dev/null 2>&1; then
             # Read preset IDs sorted by priority (lower number = higher precedence)
             local sorted_presets
-            sorted_presets=$(SPECKIT_REGISTRY="$registry_file" python3 -c "
+            if sorted_presets=$(SPECKIT_REGISTRY="$registry_file" python3 -c "
 import json, sys, os
 try:
     with open(os.environ['SPECKIT_REGISTRY']) as f:
@@ -206,14 +206,23 @@ try:
         print(pid)
 except Exception:
     sys.exit(1)
-" 2>/dev/null)
-            if [ $? -eq 0 ] && [ -n "$sorted_presets" ]; then
-                while IFS= read -r preset_id; do
-                    local candidate="$presets_dir/$preset_id/templates/${template_name}.md"
-                    [ -f "$candidate" ] && echo "$candidate" && return 0
-                done <<< "$sorted_presets"
+" 2>/dev/null); then
+                if [ -n "$sorted_presets" ]; then
+                    while IFS= read -r preset_id; do
+                        local candidate="$presets_dir/$preset_id/templates/${template_name}.md"
+                        [ -f "$candidate" ] && echo "$candidate" && return 0
+                    done <<< "$sorted_presets"
+                else
+                    # python3 returned an empty list — fall through to directory scan
+                    for preset in "$presets_dir"/*/; do
+                        [ -d "$preset" ] || continue
+                        local candidate="$preset/templates/${template_name}.md"
+                        [ -f "$candidate" ] && echo "$candidate" && return 0
+                    done
+                fi
             else
-                # python3 returned empty list — fall through to directory scan
+                # Malformed registry or python failure should not bypass the
+                # directory scan fallback under set -e.
                 for preset in "$presets_dir"/*/; do
                     [ -d "$preset" ] || continue
                     local candidate="$preset/templates/${template_name}.md"
@@ -250,4 +259,3 @@ except Exception:
     # callers check [ -n "$TEMPLATE" ] to detect "not found".
     return 0
 }
-
