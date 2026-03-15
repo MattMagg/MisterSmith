@@ -13,8 +13,6 @@ use serde_json::Value;
 
 use crate::LlmError;
 
-#[cfg(target_os = "macos")]
-const KEYCHAIN_SERVICE: &str = "Claude Code-credentials";
 const CREDENTIALS_FILE: &str = ".claude/.credentials.json";
 const OAUTH_TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
 const OAUTH_TOKEN_ENDPOINT: &str = "https://console.anthropic.com/api/oauth/token";
@@ -113,9 +111,18 @@ pub fn read_credentials() -> Result<ClaudeOAuthCredentials, LlmError> {
 }
 
 #[cfg(target_os = "macos")]
+fn keychain_service() -> String {
+    std::env::var("CLAUDE_KEYCHAIN_SERVICE")
+        .unwrap_or_else(|_| "Claude Code-credentials".to_string())
+}
+
+#[cfg(target_os = "macos")]
 fn read_keychain_credentials() -> Result<Option<ClaudeOAuthCredentials>, LlmError> {
     let output = std::process::Command::new("security")
-        .args(["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"])
+        .arg("find-generic-password")
+        .arg("-s")
+        .arg(&keychain_service())
+        .arg("-w")
         .output();
 
     match output {
