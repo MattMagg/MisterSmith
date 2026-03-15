@@ -334,6 +334,9 @@ fn trait_objects_are_object_safe() {
     // Verify Tool and EventPublisher can be used as trait objects
     fn _accepts_tool(_t: &dyn Tool) {}
     fn _accepts_publisher(_p: &dyn EventPublisher) {}
+
+    // Verify generic Resource can be instantiated as trait object
+    fn _accepts_resource(_r: Box<dyn Resource<Config = ResourceConfig, Error = ResourceError>>) {}
 }
 
 fn assert_autonomy_traits<T>()

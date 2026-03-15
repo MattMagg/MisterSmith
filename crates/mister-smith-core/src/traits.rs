@@ -55,6 +55,13 @@ pub struct TransportConfig {
     pub url: Option<String>,
 }
 
+/// Minimal resource configuration (placeholder — full definition in Phase 4).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ResourceConfig {
+    /// Connection or resource URI.
+    pub uri: Option<String>,
+}
+
 /// System event for the event publisher trait.
 ///
 /// Uses `serde_json::Value` as payload to avoid pulling full event type
