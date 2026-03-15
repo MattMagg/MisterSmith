@@ -6,12 +6,14 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::json;
 use tracing::warn;
 
 use mister_smith_core::{
-    AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, ExecutionBranchId, ExecutionNodeId,
-    PersistenceError, TaskId,
+    AgentId, BranchRecoveryStrategy, BranchState, CapabilityId, CheckpointId, DelegationScope,
+    ExecutionBranchId, ExecutionNodeId, PersistenceError, TaskId,
 };
+use mister_smith_events::CapabilitySummary;
 use mister_smith_persistence::repository::task::TaskRepository;
 use mister_smith_persistence::{BranchCheckpointRecord, BranchResumeRecord, HybridStateManager};
 
@@ -39,6 +41,14 @@ pub struct BranchResumeMetadata {
     pub previous_assigned_agents: Vec<AgentId>,
     /// Agent selected to resume the branch, when any.
     pub assigned_agent: Option<AgentId>,
+    /// Capability that authorized the recovery action, when any.
+    pub delegation_capability_id: Option<CapabilityId>,
+    /// Delegation scope that authorized the recovery action, when any.
+    pub delegation_scope: Option<DelegationScope>,
+    /// Depth of the delegation provenance chain, when any.
+    pub delegation_chain_depth: Option<usize>,
+    /// Operator-visible rejection reason for denied delegated recovery, when any.
+    pub delegation_rejection_reason: Option<String>,
     /// Operator-visible recovery notes.
     pub notes: Vec<String>,
     /// When the branch recovery plan was recorded.
@@ -294,6 +304,32 @@ impl BranchCheckpointCoordinator {
                 assigned_agent,
                 state_override: None,
             },
+            None,
+        )
+        .await
+    }
+
+    /// Plan a checkpoint-based branch resume with delegation provenance attached.
+    pub async fn resume_branch_with_delegation<S: BranchCheckpointStore + ?Sized>(
+        &self,
+        store: &S,
+        workflow_id: TaskId,
+        graph: &mut ExecutionGraph,
+        branch_id: ExecutionBranchId,
+        assigned_agent: Option<AgentId>,
+        capability: &CapabilitySummary,
+    ) -> Result<BranchRecoveryPlan, AgentSystemError> {
+        self.recovery_plan(
+            store,
+            workflow_id,
+            graph,
+            branch_id,
+            RecoveryPlanRequest {
+                strategy: BranchRecoveryStrategy::Resume,
+                assigned_agent,
+                state_override: None,
+            },
+            Some(capability),
         )
         .await
     }
@@ -317,6 +353,32 @@ impl BranchCheckpointCoordinator {
                 assigned_agent: Some(assigned_agent),
                 state_override: Some(BranchState::Reassigned),
             },
+            None,
+        )
+        .await
+    }
+
+    /// Plan a delegated reassignment from the latest durable checkpoint.
+    pub async fn reassign_branch_with_delegation<S: BranchCheckpointStore + ?Sized>(
+        &self,
+        store: &S,
+        workflow_id: TaskId,
+        graph: &mut ExecutionGraph,
+        branch_id: ExecutionBranchId,
+        assigned_agent: AgentId,
+        capability: &CapabilitySummary,
+    ) -> Result<BranchRecoveryPlan, AgentSystemError> {
+        self.recovery_plan(
+            store,
+            workflow_id,
+            graph,
+            branch_id,
+            RecoveryPlanRequest {
+                strategy: BranchRecoveryStrategy::Reassign,
+                assigned_agent: Some(assigned_agent),
+                state_override: Some(BranchState::Reassigned),
+            },
+            Some(capability),
         )
         .await
     }
@@ -328,8 +390,16 @@ impl BranchCheckpointCoordinator {
         graph: &mut ExecutionGraph,
         branch_id: ExecutionBranchId,
         request: RecoveryPlanRequest,
+        delegation: Option<&CapabilitySummary>,
     ) -> Result<BranchRecoveryPlan, AgentSystemError> {
-        let checkpoint = latest_checkpoint(store, workflow_id, graph, branch_id).await?;
+        let mut checkpoint = latest_checkpoint(store, workflow_id, graph, branch_id).await?;
+        if let Some(capability) = delegation {
+            attach_checkpoint_delegation(&mut checkpoint, capability);
+            store
+                .persist_branch_checkpoint(workflow_id, &checkpoint)
+                .await
+                .map_err(map_persistence_error)?;
+        }
         hydrate_checkpoint_lineage(graph, checkpoint.clone());
         let recovery_node_ids = recovery_node_ids_from_checkpoint(graph, branch_id, &checkpoint);
         let branch = graph.branch_mut(&branch_id).ok_or_else(|| {
@@ -344,7 +414,7 @@ impl BranchCheckpointCoordinator {
         branch.state = request.state_override.unwrap_or(BranchState::Checkpointed);
         branch.recovery_strategy = request.strategy;
 
-        let resume_metadata = BranchResumeMetadata {
+        let mut resume_metadata = BranchResumeMetadata {
             workflow_id,
             branch_id,
             checkpoint_id: checkpoint.checkpoint_id,
@@ -354,6 +424,10 @@ impl BranchCheckpointCoordinator {
             pending_nodes: checkpoint.pending_nodes.clone(),
             previous_assigned_agents,
             assigned_agent: request.assigned_agent,
+            delegation_capability_id: None,
+            delegation_scope: None,
+            delegation_chain_depth: None,
+            delegation_rejection_reason: None,
             notes: vec![match request.strategy {
                 BranchRecoveryStrategy::Resume => {
                     "resume planned from latest branch checkpoint".to_string()
@@ -370,6 +444,9 @@ impl BranchCheckpointCoordinator {
             }],
             resumed_at: Utc::now(),
         };
+        if let Some(capability) = delegation {
+            attach_delegation_summary(&mut resume_metadata, capability);
+        }
 
         store
             .persist_branch_resume(&resume_metadata)
@@ -488,6 +565,10 @@ fn resume_record(resume: &BranchResumeMetadata) -> BranchResumeRecord {
         pending_nodes: resume.pending_nodes.clone(),
         previous_assigned_agents: resume.previous_assigned_agents.clone(),
         assigned_agent: resume.assigned_agent,
+        delegation_capability_id: resume.delegation_capability_id,
+        delegation_scope: resume.delegation_scope,
+        delegation_chain_depth: resume.delegation_chain_depth,
+        delegation_rejection_reason: resume.delegation_rejection_reason.clone(),
         notes: resume.notes.clone(),
         resumed_at: resume.resumed_at,
     }
@@ -504,9 +585,44 @@ fn resume_from_record(record: BranchResumeRecord) -> BranchResumeMetadata {
         pending_nodes: record.pending_nodes,
         previous_assigned_agents: record.previous_assigned_agents,
         assigned_agent: record.assigned_agent,
+        delegation_capability_id: record.delegation_capability_id,
+        delegation_scope: record.delegation_scope,
+        delegation_chain_depth: record.delegation_chain_depth,
+        delegation_rejection_reason: record.delegation_rejection_reason,
         notes: record.notes,
         resumed_at: record.resumed_at,
     }
+}
+
+/// Attach delegation provenance to a durable resume record.
+pub fn attach_delegation_summary(
+    resume_metadata: &mut BranchResumeMetadata,
+    capability: &CapabilitySummary,
+) {
+    resume_metadata.delegation_capability_id = Some(capability.capability_id);
+    resume_metadata.delegation_scope = Some(capability.scope);
+    resume_metadata.delegation_chain_depth = Some(capability.chain_depth());
+    resume_metadata.delegation_rejection_reason = capability.rejection_reason.clone();
+    resume_metadata.notes.push(format!(
+        "delegation capability {} {:?} depth={}",
+        capability.capability_id,
+        capability.scope,
+        capability.chain_depth()
+    ));
+}
+
+/// Attach delegation provenance to a checkpoint failure context for operator replay.
+pub fn attach_checkpoint_delegation(
+    checkpoint: &mut BranchCheckpoint,
+    capability: &CapabilitySummary,
+) {
+    checkpoint.failure_context = Some(json!({
+        "delegation_capability_id": capability.capability_id,
+        "delegation_scope": format!("{:?}", capability.scope),
+        "delegation_chain_depth": capability.chain_depth(),
+        "delegation_rejection_reason": capability.rejection_reason,
+        "provenance": capability.provenance,
+    }));
 }
 
 fn serialize_value<T: Serialize>(value: &T) -> Result<serde_json::Value, PersistenceError> {

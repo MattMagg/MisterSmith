@@ -14,9 +14,11 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use mister_smith_core::SecurityError;
+use chrono::Utc;
+use mister_smith_core::{DelegationCapability, ProvenanceChain, SecurityError};
 use mister_smith_transport::SubjectTaxonomy;
 
+use crate::delegation::DelegationService;
 use crate::jwt::JwtManager;
 
 /// System subject used by the NATS server auth callout protocol.
@@ -219,6 +221,10 @@ pub struct AuthorizationResult {
     pub jwt_ttl_secs: u64,
     /// Whether the fallback path was used instead of a stored trust profile.
     pub fallback_applied: bool,
+    /// Valid delegated capability carried by the authenticated principal, when any.
+    pub delegation_capability: Option<DelegationCapability>,
+    /// Reconstructable authority lineage for the capability, when any.
+    pub provenance_chain: Option<ProvenanceChain>,
 }
 
 /// Stateful NATS auth callout handler backed by a trust store and account signer.
@@ -230,6 +236,7 @@ pub struct AuthCalloutHandler {
     default_permissions: Permissions,
     max_jwt_ttl_secs: u64,
     jwt_manager: Option<Arc<JwtManager>>,
+    delegation_service: Option<Arc<DelegationService>>,
 }
 
 impl AuthCalloutHandler {
@@ -246,6 +253,7 @@ impl AuthCalloutHandler {
             default_permissions: Permissions::quarantined(),
             max_jwt_ttl_secs: 300,
             jwt_manager: None,
+            delegation_service: None,
         }
     }
 
@@ -267,6 +275,13 @@ impl AuthCalloutHandler {
     #[must_use]
     pub fn with_jwt_manager(mut self, jwt_manager: Arc<JwtManager>) -> Self {
         self.jwt_manager = Some(jwt_manager);
+        self
+    }
+
+    /// Configure the bounded delegation service used for bearer-token validation.
+    #[must_use]
+    pub fn with_delegation_service(mut self, delegation_service: Arc<DelegationService>) -> Self {
+        self.delegation_service = Some(delegation_service);
         self
     }
 
@@ -335,7 +350,17 @@ impl AuthCalloutHandler {
     ///
     /// Missing trust store entries always fall back to quarantined permissions.
     pub fn authorize(&self, agent_id: &str) -> Result<AuthorizationResult, SecurityError> {
-        let agent_id = agent_id.trim();
+        self.authorize_authenticated(&AuthenticatedRequest {
+            agent_id: agent_id.to_string(),
+            claims: None,
+        })
+    }
+
+    fn authorize_authenticated(
+        &self,
+        authenticated: &AuthenticatedRequest,
+    ) -> Result<AuthorizationResult, SecurityError> {
+        let agent_id = authenticated.agent_id.trim();
         if agent_id.is_empty() {
             return Err(SecurityError::AuthenticationFailed(
                 "agent_id must not be empty".to_string(),
@@ -350,16 +375,44 @@ impl AuthCalloutHandler {
                     agent_id: agent_id.to_string(),
                     permission_tier,
                     permissions: permission_tier.permissions_for(agent_id),
-                    jwt_ttl_secs: permission_tier.jwt_ttl_secs(self.max_jwt_ttl_secs),
+                    jwt_ttl_secs: constrained_jwt_ttl_secs(
+                        permission_tier.jwt_ttl_secs(self.max_jwt_ttl_secs),
+                        authenticated
+                            .claims
+                            .as_ref()
+                            .and_then(|claims| claims.delegation_capability.as_ref()),
+                    ),
                     fallback_applied: false,
+                    delegation_capability: authenticated
+                        .claims
+                        .as_ref()
+                        .and_then(|claims| claims.delegation_capability.clone()),
+                    provenance_chain: authenticated
+                        .claims
+                        .as_ref()
+                        .and_then(|claims| claims.provenance_chain.clone()),
                 }
             }
             None => AuthorizationResult {
                 agent_id: agent_id.to_string(),
                 permission_tier: PermissionTier::Quarantined,
                 permissions: self.default_permissions.clone(),
-                jwt_ttl_secs: PermissionTier::Quarantined.jwt_ttl_secs(self.max_jwt_ttl_secs),
+                jwt_ttl_secs: constrained_jwt_ttl_secs(
+                    PermissionTier::Quarantined.jwt_ttl_secs(self.max_jwt_ttl_secs),
+                    authenticated
+                        .claims
+                        .as_ref()
+                        .and_then(|claims| claims.delegation_capability.as_ref()),
+                ),
                 fallback_applied: true,
+                delegation_capability: authenticated
+                    .claims
+                    .as_ref()
+                    .and_then(|claims| claims.delegation_capability.clone()),
+                provenance_chain: authenticated
+                    .claims
+                    .as_ref()
+                    .and_then(|claims| claims.provenance_chain.clone()),
             },
         };
 
@@ -399,11 +452,11 @@ impl AuthCalloutHandler {
             return self.build_error_response(&request, "unsupported auth callout request type");
         }
 
-        let agent_id = match self.authenticate_request(&request) {
-            Ok(agent_id) => agent_id,
+        let authenticated = match self.authenticate_request(&request) {
+            Ok(authenticated) => authenticated,
             Err(error) => return self.build_error_response(&request, &error.to_string()),
         };
-        let authorization = self.authorize(&agent_id)?;
+        let authorization = self.authorize_authenticated(&authenticated)?;
 
         let response = match self.generate_user_jwt(&request.nats.user_nkey, &authorization) {
             Ok(user_jwt) => self.build_success_response(&request, &user_jwt),
@@ -416,17 +469,21 @@ impl AuthCalloutHandler {
     fn authenticate_request(
         &self,
         request: &AuthorizationRequestClaims,
-    ) -> Result<String, SecurityError> {
+    ) -> Result<AuthenticatedRequest, SecurityError> {
         if let Some(auth_token) = request.nats.connect_opts.auth_token.as_deref() {
-            let agent_id = self.authenticate_bearer_token(auth_token)?;
+            let claims = self.authenticate_bearer_token(auth_token)?;
             if let Some(claimed_agent_id) = request.claimed_agent_id() {
-                if claimed_agent_id != agent_id {
+                if claimed_agent_id != claims.agent_id {
                     return Err(SecurityError::AuthenticationFailed(format!(
-                        "bearer token agent_id '{agent_id}' does not match claimed identity '{claimed_agent_id}'"
+                        "bearer token agent_id '{}' does not match claimed identity '{claimed_agent_id}'",
+                        claims.agent_id
                     )));
                 }
             }
-            return Ok(agent_id);
+            return Ok(AuthenticatedRequest {
+                agent_id: claims.agent_id.clone(),
+                claims: Some(claims),
+            });
         }
 
         let nkey = request.nats.connect_opts.nkey.as_deref().ok_or_else(|| {
@@ -460,10 +517,16 @@ impl AuthCalloutHandler {
             }
         }
 
-        Ok(nkey.to_string())
+        Ok(AuthenticatedRequest {
+            agent_id: nkey.to_string(),
+            claims: None,
+        })
     }
 
-    fn authenticate_bearer_token(&self, auth_token: &str) -> Result<String, SecurityError> {
+    fn authenticate_bearer_token(
+        &self,
+        auth_token: &str,
+    ) -> Result<crate::jwt::AgentClaims, SecurityError> {
         let jwt_manager = self.jwt_manager.as_ref().ok_or_else(|| {
             SecurityError::AuthenticationFailed(
                 "auth callout bearer token validation requires a configured JwtManager".to_string(),
@@ -471,7 +534,12 @@ impl AuthCalloutHandler {
         })?;
 
         let claims = jwt_manager.validate_token(auth_token)?;
-        Ok(claims.agent_id)
+        if let Some(delegation_service) = &self.delegation_service {
+            delegation_service
+                .validate_claims(&claims, None)
+                .map_err(|error| SecurityError::AuthenticationFailed(error.to_string()))?;
+        }
+        Ok(claims)
     }
 
     fn authenticate_nkey(
@@ -613,6 +681,12 @@ struct AuthorizationRequestClaims {
     nats: AuthorizationRequestNatsClaims,
 }
 
+#[derive(Debug, Clone)]
+struct AuthenticatedRequest {
+    agent_id: String,
+    claims: Option<crate::jwt::AgentClaims>,
+}
+
 impl AuthorizationRequestClaims {
     fn claimed_agent_id(&self) -> Option<&str> {
         [
@@ -689,6 +763,23 @@ struct AuthorizationResponseNatsClaims {
     #[serde(rename = "type")]
     claim_type: String,
     version: i32,
+}
+
+fn constrained_jwt_ttl_secs(
+    default_ttl_secs: u64,
+    capability: Option<&DelegationCapability>,
+) -> u64 {
+    let Some(capability) = capability else {
+        return default_ttl_secs;
+    };
+
+    let expires_in = capability
+        .expires_at
+        .signed_duration_since(Utc::now())
+        .num_seconds()
+        .max(0) as u64;
+
+    default_ttl_secs.min(expires_in)
 }
 
 fn decode_jwt_payload<T>(jwt: &str) -> Result<T, SecurityError>

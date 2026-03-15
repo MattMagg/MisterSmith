@@ -355,6 +355,7 @@ pub fn record_quarantine_audit_event(
         action: Some(action.to_string()),
         outcome,
         details,
+        delegation: None,
         source_ip: None,
         previous_hash: None,
     });

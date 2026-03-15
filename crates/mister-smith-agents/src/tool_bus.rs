@@ -3,12 +3,16 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
-use mister_smith_core::{AgentId, Tool, ToolError};
+use mister_smith_core::{AgentId, DelegationScope, ExecutionBranchId, TaskId, Tool, ToolError};
+use mister_smith_events::{AutonomyEvent, AutonomyEventEnvelope, CapabilitySummary, EventBus};
 use mister_smith_mcp::client::McpClient;
 use mister_smith_mcp::errors::McpError;
-use mister_smith_security::audit::{AuditEventType, AuditLogger, AuditOutcome, SecurityAuditEvent};
+use mister_smith_security::audit::{
+    AuditEventType, AuditLogger, AuditOutcome, DelegationAuditContext, SecurityAuditEvent,
+};
 use mister_smith_security::jwt::AgentClaims;
 use mister_smith_security::rbac::{AuthorizationRequest, PolicyDecision, PolicyEngine};
+use mister_smith_security::{DelegationService, ValidatedDelegation};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::AgentSystemError;
@@ -20,11 +24,35 @@ type ToolKey = (String, String);
 pub struct ToolPrincipal {
     pub agent_id: AgentId,
     pub claims: AgentClaims,
+    pub workflow_id: Option<TaskId>,
+    pub branch_id: Option<ExecutionBranchId>,
+    pub required_delegation_scope: Option<DelegationScope>,
 }
 
 impl ToolPrincipal {
     pub fn new(agent_id: AgentId, claims: AgentClaims) -> Self {
-        Self { agent_id, claims }
+        Self {
+            agent_id,
+            claims,
+            workflow_id: None,
+            branch_id: None,
+            required_delegation_scope: None,
+        }
+    }
+
+    pub fn with_workflow(mut self, workflow_id: TaskId) -> Self {
+        self.workflow_id = Some(workflow_id);
+        self
+    }
+
+    pub fn with_branch(mut self, branch_id: ExecutionBranchId) -> Self {
+        self.branch_id = Some(branch_id);
+        self
+    }
+
+    pub fn requiring_delegation(mut self, scope: DelegationScope) -> Self {
+        self.required_delegation_scope = Some(scope);
+        self
     }
 }
 
@@ -64,6 +92,8 @@ pub struct ToolBus {
     metrics: Arc<DashMap<ToolKey, ToolMetrics>>,
     policy_engine: Option<Arc<PolicyEngine>>,
     audit_logger: Option<Arc<AuditLogger>>,
+    delegation_service: Option<Arc<DelegationService>>,
+    event_bus: Option<Arc<EventBus>>,
 }
 
 impl ToolBus {
@@ -74,6 +104,8 @@ impl ToolBus {
             metrics: Arc::new(DashMap::new()),
             policy_engine: None,
             audit_logger: None,
+            delegation_service: None,
+            event_bus: None,
         }
     }
 
@@ -87,7 +119,19 @@ impl ToolBus {
             metrics: Arc::new(DashMap::new()),
             policy_engine,
             audit_logger,
+            delegation_service: None,
+            event_bus: None,
         }
+    }
+
+    pub fn with_delegation_service(mut self, delegation_service: Arc<DelegationService>) -> Self {
+        self.delegation_service = Some(delegation_service);
+        self
+    }
+
+    pub fn with_event_bus(mut self, event_bus: Arc<EventBus>) -> Self {
+        self.event_bus = Some(event_bus);
+        self
     }
 
     /// Register a native agent-backed tool entry without attaching an invocable backend.
@@ -294,9 +338,38 @@ impl ToolBus {
                     "execute_tool",
                     Some(&decision.reason),
                     None,
+                    None,
                 );
                 return Err(AgentSystemError::PermissionDenied(decision.reason));
             }
+        }
+
+        let delegation_validation = match self.validate_delegation(principal).await {
+            Ok(validation) => validation,
+            Err((error, summary)) => {
+                let delegation_context = summary.as_ref().map(delegation_audit_context);
+                self.record_audit_event(
+                    principal,
+                    namespace,
+                    name,
+                    AuditOutcome::Blocked,
+                    "validate_delegation",
+                    Some(&error.to_string()),
+                    None,
+                    delegation_context,
+                );
+                if let Some(summary) = summary {
+                    self.publish_delegation_update(principal, summary).await;
+                }
+                return Err(AgentSystemError::PermissionDenied(error.to_string()));
+            }
+        };
+
+        if let Some(summary) = delegation_validation
+            .as_ref()
+            .map(|validated| capability_summary(validated, None))
+        {
+            self.publish_delegation_update(principal, summary).await;
         }
 
         let backend = self
@@ -339,6 +412,9 @@ impl ToolBus {
                     "invoke_tool",
                     None,
                     Some(latency),
+                    delegation_validation.as_ref().map(|validated| {
+                        delegation_audit_context(&capability_summary(validated, None))
+                    }),
                 );
                 Ok(value)
             }
@@ -351,6 +427,9 @@ impl ToolBus {
                     "invoke_tool",
                     Some(&err.to_string()),
                     Some(latency),
+                    delegation_validation.as_ref().map(|validated| {
+                        delegation_audit_context(&capability_summary(validated, None))
+                    }),
                 );
                 Err(err)
             }
@@ -389,6 +468,78 @@ impl ToolBus {
         })))
     }
 
+    async fn validate_delegation(
+        &self,
+        principal: Option<&ToolPrincipal>,
+    ) -> Result<
+        Option<ValidatedDelegation>,
+        (
+            mister_smith_core::DelegationError,
+            Option<CapabilitySummary>,
+        ),
+    > {
+        let Some(principal) = principal else {
+            return Ok(None);
+        };
+        let Some(required_scope) = principal.required_delegation_scope else {
+            return Ok(None);
+        };
+        let Some(delegation_service) = &self.delegation_service else {
+            return Err((
+                mister_smith_core::DelegationError::InvalidChain(
+                    "delegation service is required for privileged tool execution".to_string(),
+                ),
+                None,
+            ));
+        };
+
+        match delegation_service.validate_claims(&principal.claims, Some(required_scope)) {
+            Ok(Some(validated)) => Ok(Some(validated)),
+            Ok(None) => Err((
+                mister_smith_core::DelegationError::InvalidChain(
+                    "privileged tool execution requires a bounded delegation capability"
+                        .to_string(),
+                ),
+                None,
+            )),
+            Err(error) => {
+                let summary = capability_summary_from_claims_error(&principal.claims, &error);
+                Err((error, summary))
+            }
+        }
+    }
+
+    async fn publish_delegation_update(
+        &self,
+        principal: Option<&ToolPrincipal>,
+        payload: CapabilitySummary,
+    ) {
+        let Some(event_bus) = &self.event_bus else {
+            return;
+        };
+        let Some(principal) = principal else {
+            return;
+        };
+        let Some(workflow_id) = principal.workflow_id else {
+            return;
+        };
+
+        let event = AutonomyEvent::DelegationUpdated(AutonomyEventEnvelope {
+            workflow_id,
+            graph_id: None,
+            branch_id: principal.branch_id,
+            payload,
+            operator_visible: true,
+        });
+
+        if let Err(error) = event_bus
+            .publish(event.into_event("mister-smith-agents::tool-bus"))
+            .await
+        {
+            tracing::warn!(%error, "failed to publish delegation update from tool bus");
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn record_audit_event(
         &self,
@@ -399,6 +550,7 @@ impl ToolBus {
         action: &str,
         error: Option<&str>,
         latency: Option<Duration>,
+        delegation: Option<DelegationAuditContext>,
     ) {
         let Some(audit_logger) = &self.audit_logger else {
             return;
@@ -417,12 +569,17 @@ impl ToolBus {
         audit_logger.record(SecurityAuditEvent {
             event_id: uuid::Uuid::new_v4().to_string(),
             timestamp: chrono::Utc::now(),
-            event_type: AuditEventType::Authorization,
+            event_type: if delegation.is_some() {
+                AuditEventType::Delegation
+            } else {
+                AuditEventType::Authorization
+            },
             principal: principal.map(|principal| principal.agent_id.to_string()),
             resource: Some(format!("tool:{namespace}.{name}")),
             action: Some(action.to_string()),
             outcome,
             details,
+            delegation,
             source_ip: None,
             previous_hash: None,
         });
@@ -528,6 +685,65 @@ impl ToolBus {
                 mister_smith_llm::ToolResult::failure(call.call_id.clone(), err.to_string())
             }
         }
+    }
+}
+
+fn capability_summary(
+    validated: &ValidatedDelegation,
+    rejection_reason: Option<String>,
+) -> CapabilitySummary {
+    CapabilitySummary {
+        capability_id: validated.capability.capability_id,
+        issuer: validated.capability.issuer.clone(),
+        recipient: validated.capability.recipient,
+        scope: validated.capability.scope,
+        parent_capability: validated.capability.parent_capability,
+        expires_at: validated.capability.expires_at,
+        provenance: validated.provenance.clone(),
+        revocation_state: validated.capability.revocation_state,
+        rejection_reason,
+    }
+}
+
+fn capability_summary_from_claims_error(
+    claims: &AgentClaims,
+    error: &mister_smith_core::DelegationError,
+) -> Option<CapabilitySummary> {
+    let capability = claims.delegation_capability.clone()?;
+    let provenance = claims.provenance_chain.clone()?;
+    let revocation_state = match error {
+        mister_smith_core::DelegationError::Revoked { .. } => {
+            mister_smith_core::RevocationState::Revoked
+        }
+        mister_smith_core::DelegationError::Expired { .. } => {
+            mister_smith_core::RevocationState::Expired
+        }
+        _ => capability.revocation_state,
+    };
+
+    Some(CapabilitySummary {
+        capability_id: capability.capability_id,
+        issuer: capability.issuer,
+        recipient: capability.recipient,
+        scope: capability.scope,
+        parent_capability: capability.parent_capability,
+        expires_at: capability.expires_at,
+        provenance,
+        revocation_state,
+        rejection_reason: Some(error.to_string()),
+    })
+}
+
+fn delegation_audit_context(summary: &CapabilitySummary) -> DelegationAuditContext {
+    DelegationAuditContext {
+        capability_id: Some(summary.capability_id),
+        parent_capability: summary.parent_capability,
+        issuer: Some(summary.issuer.clone()),
+        recipient: Some(summary.recipient.to_string()),
+        scope: Some(summary.scope),
+        revocation_state: Some(summary.revocation_state),
+        expires_at: Some(summary.expires_at),
+        rejection_reason: summary.rejection_reason.clone(),
     }
 }
 

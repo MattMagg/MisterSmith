@@ -8,6 +8,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use chrono::{DateTime, Utc};
+
+use mister_smith_core::{AuthorityPrincipal, CapabilityId, DelegationScope, RevocationState};
+
 /// A single security audit event.
 ///
 /// Events capture who (`principal`) did what (`action`) to which resource
@@ -33,6 +37,8 @@ pub struct SecurityAuditEvent {
     pub outcome: AuditOutcome,
     /// Arbitrary key-value metadata attached to the event.
     pub details: HashMap<String, String>,
+    /// Delegation-specific provenance and rejection context, when applicable.
+    pub delegation: Option<DelegationAuditContext>,
     /// Originating IP address, if available.
     pub source_ip: Option<String>,
     /// SHA-256 hex digest of the previous event's serialized form.
@@ -60,6 +66,8 @@ pub enum AuditEventType {
     SystemAccess,
     /// Changes to security configuration (roles, policies, keys).
     ConfigurationChange,
+    /// Delegation capability issuance, validation, rejection, or revocation.
+    Delegation,
 }
 
 /// Outcome of a security action.
@@ -73,4 +81,25 @@ pub enum AuditOutcome {
     Blocked,
     /// The action succeeded but triggered a security warning.
     Warning,
+}
+
+/// Typed delegation audit details for privileged capability decisions.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DelegationAuditContext {
+    /// Capability involved in the decision, when available.
+    pub capability_id: Option<CapabilityId>,
+    /// Parent capability in the delegation chain, when available.
+    pub parent_capability: Option<CapabilityId>,
+    /// Authority that issued the capability.
+    pub issuer: Option<AuthorityPrincipal>,
+    /// Recipient agent identifier.
+    pub recipient: Option<String>,
+    /// Scope granted or requested by the capability.
+    pub scope: Option<DelegationScope>,
+    /// Effective revocation state observed during the decision.
+    pub revocation_state: Option<RevocationState>,
+    /// Effective expiry time observed during the decision.
+    pub expires_at: Option<DateTime<Utc>>,
+    /// Human-readable rejection reason for invalid chains or denials.
+    pub rejection_reason: Option<String>,
 }

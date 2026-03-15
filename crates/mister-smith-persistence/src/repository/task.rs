@@ -10,8 +10,8 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use mister_smith_core::{
-    AgentId, BranchRecoveryStrategy, CheckpointId, ExecutionBranchId, ExecutionNodeId,
-    MemorySnapshotId, PersistenceError, TaskId,
+    AgentId, BranchRecoveryStrategy, CapabilityId, CheckpointId, DelegationScope,
+    ExecutionBranchId, ExecutionNodeId, MemorySnapshotId, PersistenceError, TaskId,
 };
 
 use crate::memory::{
@@ -68,6 +68,14 @@ pub struct BranchResumeRecord {
     pub previous_assigned_agents: Vec<AgentId>,
     /// Agent selected for the resumed branch, when any.
     pub assigned_agent: Option<AgentId>,
+    /// Capability that authorized the recovery action, when any.
+    pub delegation_capability_id: Option<CapabilityId>,
+    /// Delegation scope that authorized the recovery action, when any.
+    pub delegation_scope: Option<DelegationScope>,
+    /// Depth of the delegation provenance chain, when any.
+    pub delegation_chain_depth: Option<usize>,
+    /// Operator-visible rejection reason for denied delegated recovery, when any.
+    pub delegation_rejection_reason: Option<String>,
     /// Operator-visible notes captured at resume time.
     pub notes: Vec<String>,
     /// When the resume or reassignment was recorded.
@@ -710,6 +718,10 @@ mod tests {
             pending_nodes: vec![ExecutionNodeId::new()],
             previous_assigned_agents: vec![AgentId::new()],
             assigned_agent: Some(AgentId::new()),
+            delegation_capability_id: None,
+            delegation_scope: None,
+            delegation_chain_depth: None,
+            delegation_rejection_reason: None,
             notes: vec!["resume".to_string()],
             resumed_at: Utc::now() - chrono::Duration::seconds(10),
         };
@@ -723,6 +735,10 @@ mod tests {
             pending_nodes: vec![ExecutionNodeId::new()],
             previous_assigned_agents: vec![AgentId::new()],
             assigned_agent: Some(AgentId::new()),
+            delegation_capability_id: None,
+            delegation_scope: None,
+            delegation_chain_depth: None,
+            delegation_rejection_reason: None,
             notes: vec!["reassign".to_string()],
             resumed_at: Utc::now(),
         };
@@ -736,6 +752,10 @@ mod tests {
             pending_nodes: vec![ExecutionNodeId::new()],
             previous_assigned_agents: vec![],
             assigned_agent: None,
+            delegation_capability_id: None,
+            delegation_scope: None,
+            delegation_chain_depth: None,
+            delegation_rejection_reason: None,
             notes: vec!["other".to_string()],
             resumed_at: Utc::now(),
         };

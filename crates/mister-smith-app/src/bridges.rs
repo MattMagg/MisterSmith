@@ -143,6 +143,7 @@ impl SupervisionRecorder {
                 action: Some("agent_restart".to_string()),
                 outcome: AuditOutcome::Success,
                 details,
+                delegation: None,
                 source_ip: None,
                 previous_hash: None,
             };
@@ -174,6 +175,7 @@ impl SupervisionRecorder {
                 action: Some("agent_failure".to_string()),
                 outcome: AuditOutcome::Failure,
                 details,
+                delegation: None,
                 source_ip: None,
                 previous_hash: None,
             };
@@ -265,6 +267,7 @@ impl SecurityBridge {
                 action: Some(action.to_string()),
                 outcome: AuditOutcome::Blocked,
                 details,
+                delegation: None,
                 source_ip: None,
                 previous_hash: None,
             };

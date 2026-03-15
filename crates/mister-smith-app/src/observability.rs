@@ -263,6 +263,29 @@ pub fn build_metric_operations(
         });
     }
 
+    for capability in &view.delegation_capabilities {
+        operations.push(MetricOperation {
+            name: "mistersmith_autonomy_delegation_chain_depth",
+            kind: MetricOperationKind::Gauge,
+            value: capability.chain_depth() as f64,
+            labels: vec![
+                ("workflow_id".to_string(), workflow_id.clone()),
+                (
+                    "capability_id".to_string(),
+                    capability.capability_id.to_string(),
+                ),
+                (
+                    "scope".to_string(),
+                    format!("{:?}", capability.scope).to_lowercase(),
+                ),
+                (
+                    "state".to_string(),
+                    format!("{:?}", capability.revocation_state).to_lowercase(),
+                ),
+            ],
+        });
+    }
+
     if let AutonomyEvent::InterventionRecorded(envelope) = event {
         let intervention = view
             .guard_decisions
@@ -290,7 +313,9 @@ pub fn build_metric_operations(
     }
 
     if let AutonomyEvent::DelegationUpdated(envelope) = event {
-        if envelope.payload.revocation_state != mister_smith_core::RevocationState::Active {
+        if envelope.payload.revocation_state != mister_smith_core::RevocationState::Active
+            || envelope.payload.rejection_reason.is_some()
+        {
             operations.push(MetricOperation {
                 name: "mistersmith_autonomy_delegation_rejections_total",
                 kind: MetricOperationKind::Counter,
@@ -299,7 +324,13 @@ pub fn build_metric_operations(
                     ("workflow_id".to_string(), workflow_id),
                     (
                         "reason".to_string(),
-                        format!("{:?}", envelope.payload.revocation_state).to_lowercase(),
+                        envelope
+                            .payload
+                            .rejection_reason
+                            .clone()
+                            .unwrap_or_else(|| {
+                                format!("{:?}", envelope.payload.revocation_state).to_lowercase()
+                            }),
                     ),
                     (
                         "scope".to_string(),

@@ -8,7 +8,7 @@
 
 pub mod events;
 
-pub use events::{AuditEventType, AuditOutcome, SecurityAuditEvent};
+pub use events::{AuditEventType, AuditOutcome, DelegationAuditContext, SecurityAuditEvent};
 
 use crate::config::AuditConfig;
 use parking_lot::RwLock;
@@ -98,6 +98,7 @@ impl AuditLogger {
             action: Some("authenticate".to_string()),
             outcome,
             details,
+            delegation: None,
             source_ip: None,
             previous_hash: None, // Set by `record`.
         };
@@ -121,6 +122,7 @@ impl AuditLogger {
             action: Some(action.to_string()),
             outcome,
             details: HashMap::new(),
+            delegation: None,
             source_ip: None,
             previous_hash: None, // Set by `record`.
         };
@@ -227,6 +229,7 @@ impl AuditLogger {
                     action: Some("auth_failure_alert".to_string()),
                     outcome: AuditOutcome::Warning,
                     details,
+                    delegation: None,
                     source_ip: Some(source.clone()),
                     previous_hash: None,
                 });
@@ -255,6 +258,7 @@ mod tests {
             action: Some("test".to_string()),
             outcome,
             details: HashMap::new(),
+            delegation: None,
             source_ip: None,
             previous_hash: None,
         }

@@ -12,8 +12,8 @@ use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
-    InterventionRecord, MemorySnapshotId, ProfileSnapshot, ProfileSnapshotId, RevocationState,
-    TaskId, TopologyKind, TopologyRationale,
+    InterventionRecord, MemorySnapshotId, ProfileSnapshot, ProfileSnapshotId, ProvenanceChain,
+    RevocationState, TaskId, TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -148,8 +148,16 @@ pub struct CapabilitySummary {
     pub recipient: AgentId,
     /// Scope granted by the capability.
     pub scope: DelegationScope,
+    /// Parent capability in the delegation chain, when any.
+    pub parent_capability: Option<CapabilityId>,
+    /// When the capability expires.
+    pub expires_at: DateTime<Utc>,
+    /// Ordered provenance chain for the capability.
+    pub provenance: ProvenanceChain,
     /// Current revocation state.
     pub revocation_state: RevocationState,
+    /// Operator-visible rejection reason when the capability was denied.
+    pub rejection_reason: Option<String>,
 }
 
 /// Operator-visible delegation warning or provenance concern.
@@ -161,6 +169,14 @@ pub struct DelegationAlert {
     pub scope: Option<DelegationScope>,
     /// Revocation state relevant to the alert when available.
     pub revocation_state: Option<RevocationState>,
+    /// Parent capability in the chain, when available.
+    pub parent_capability: Option<CapabilityId>,
+    /// Effective expiry time for the capability, when available.
+    pub expires_at: Option<DateTime<Utc>>,
+    /// Depth of the provenance chain.
+    pub chain_depth: usize,
+    /// Human-readable rejection reason when the capability was denied.
+    pub rejection_reason: Option<String>,
     /// Human-readable explanation of the alert.
     pub message: String,
 }
@@ -182,6 +198,8 @@ pub struct AutonomyStatusView {
     pub routing_history: Vec<RoutingDecisionSummary>,
     /// Applied intervention records visible to operators.
     pub interventions: Vec<InterventionRecord>,
+    /// Active or recently rejected delegation capabilities.
+    pub delegation_capabilities: Vec<CapabilitySummary>,
     /// Delegation or provenance warnings.
     pub delegation_alerts: Vec<DelegationAlert>,
     /// Supervisory profile snapshots retained for operator inspection.
@@ -259,6 +277,40 @@ pub enum AutonomyEvent {
     DelegationUpdated(AutonomyEventEnvelope<CapabilitySummary>),
     /// Aggregate status view changed.
     StatusUpdated(Box<AutonomyEventEnvelope<AutonomyStatusView>>),
+}
+
+impl CapabilitySummary {
+    /// Return the depth of the provenance chain for this capability.
+    #[must_use]
+    pub fn chain_depth(&self) -> usize {
+        self.provenance.links.len()
+    }
+
+    /// Build an operator-visible alert when the capability is not currently usable.
+    #[must_use]
+    pub fn to_alert(&self) -> Option<DelegationAlert> {
+        if self.revocation_state == RevocationState::Active && self.rejection_reason.is_none() {
+            return None;
+        }
+
+        let message = self.rejection_reason.clone().unwrap_or_else(|| {
+            format!(
+                "delegation for agent {} in scope {:?} is {:?}",
+                self.recipient, self.scope, self.revocation_state
+            )
+        });
+
+        Some(DelegationAlert {
+            capability_id: Some(self.capability_id),
+            scope: Some(self.scope),
+            revocation_state: Some(self.revocation_state),
+            parent_capability: self.parent_capability,
+            expires_at: Some(self.expires_at),
+            chain_depth: self.chain_depth(),
+            rejection_reason: self.rejection_reason.clone(),
+            message,
+        })
+    }
 }
 
 impl AutonomyEvent {
