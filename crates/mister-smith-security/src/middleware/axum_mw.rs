@@ -34,13 +34,12 @@ pub async fn auth_middleware(
         return next.run(request).await;
     }
 
-    // Rate limiting — use peer address or fallback
+    // Rate limiting — use peer address to prevent X-Forwarded-For spoofing
     let source = request
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("unknown")
-        .to_string();
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|axum::extract::ConnectInfo(addr)| addr.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
 
     if let Err(retry_after) = security.rate_limiter.check(&source) {
         #[cfg(feature = "audit")]
