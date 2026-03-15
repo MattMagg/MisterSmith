@@ -4,6 +4,7 @@
 //! subsystem. They are constructed from the serde-parsed
 //! [`mister_smith_config::SecurityConfig`] at startup.
 
+use ring::rand::SecureRandom;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -28,6 +29,11 @@ pub struct JwtConfig {
 
 impl Default for JwtConfig {
     fn default() -> Self {
+        let mut secret = vec![0u8; 32];
+        let rng = ring::rand::SystemRandom::new();
+        rng.fill(&mut secret)
+            .expect("failed to generate secure random secret for default JwtConfig");
+
         Self {
             algorithm: "HS256".to_string(),
             access_token_ttl: Duration::from_secs(900),
@@ -35,9 +41,7 @@ impl Default for JwtConfig {
             issuer: None,
             audience: Vec::new(),
             delegation_chain_max_depth: 5,
-            key_source: KeySource::Hmac {
-                secret: b"insecure-default-secret-change-me".to_vec(),
-            },
+            key_source: KeySource::Hmac { secret },
         }
     }
 }
