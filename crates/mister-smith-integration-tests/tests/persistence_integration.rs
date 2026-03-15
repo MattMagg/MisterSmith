@@ -164,7 +164,7 @@ mod persistence_tests {
         #[test]
         fn security_audit_event_converts_to_audit_entry() {
             let event = sample_security_event();
-            let entry = AuditPersister::convert_event(&event);
+            let entry = AuditPersister::convert_event(event);
 
             // Verify field mapping
             assert_eq!(entry.event_type, "Authentication");
@@ -188,7 +188,7 @@ mod persistence_tests {
             let mut event = sample_security_event();
             event.principal = Some(agent_id.to_string());
 
-            let entry = AuditPersister::convert_event(&event);
+            let entry = AuditPersister::convert_event(event);
             assert_eq!(entry.agent_id, Some(agent_id));
         }
 
@@ -208,7 +208,7 @@ mod persistence_tests {
             for event_type in event_types {
                 let mut event = sample_security_event();
                 event.event_type = event_type;
-                let entry = AuditPersister::convert_event(&event);
+                let entry = AuditPersister::convert_event(event);
                 assert!(!entry.event_type.is_empty());
                 assert!(!entry.action.is_empty());
             }
@@ -258,7 +258,7 @@ mod persistence_tests {
 
             let entries: Vec<AuditEntry> = events
                 .iter()
-                .map(|e| AuditPersister::convert_event(e))
+                .map(|e| AuditPersister::convert_event(e.clone()))
                 .collect();
 
             assert_eq!(entries.len(), 3);
