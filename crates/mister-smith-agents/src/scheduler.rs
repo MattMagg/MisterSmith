@@ -274,8 +274,41 @@ impl TaskScheduler {
     pub fn subtasks(&self, parent_id: &TaskId) -> Vec<TaskAssignment> {
         self.tasks
             .iter()
-            .filter(|e| e.value().parent_task_id.as_ref() == Some(parent_id))
-            .map(|e| e.value().clone())
+            .filter_map(|e| {
+                if e.value().parent_task_id.as_ref() == Some(parent_id) {
+                    Some(e.value().clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get all subtasks for a parent task in a specific state without unnecessary allocations.
+    pub fn subtasks_in_state(&self, parent_id: &TaskId, state: TaskState) -> Vec<TaskAssignment> {
+        self.tasks
+            .iter()
+            .filter_map(|e| {
+                if e.value().parent_task_id.as_ref() == Some(parent_id) && e.value().state == state {
+                    Some(e.value().clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get all subtasks for a parent task in any of the specified states without unnecessary allocations.
+    pub fn subtasks_in_states(&self, parent_id: &TaskId, states: &[TaskState]) -> Vec<TaskAssignment> {
+        self.tasks
+            .iter()
+            .filter_map(|e| {
+                if e.value().parent_task_id.as_ref() == Some(parent_id) && states.contains(&e.value().state) {
+                    Some(e.value().clone())
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
@@ -307,8 +340,13 @@ impl TaskScheduler {
     pub fn tasks_in_state(&self, state: TaskState) -> Vec<TaskAssignment> {
         self.tasks
             .iter()
-            .filter(|e| e.value().state == state)
-            .map(|e| e.value().clone())
+            .filter_map(|e| {
+                if e.value().state == state {
+                    Some(e.value().clone())
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
