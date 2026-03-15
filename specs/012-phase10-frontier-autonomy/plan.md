@@ -20,6 +20,25 @@ LLM, persistence, security, and operations foundations:
   operators
 - Phase 9.1 delegation-chain work is completed into enforceable provenance and bounded delegation
 
+## Implementation Status Snapshot (2026-03-15)
+
+- **Implemented and validated in repo**: foundational autonomy contracts/events (10.0),
+  execution-graph/topology compilation (10.1), branch checkpointing and resilience-aware routing
+  (10.2), managed memory/context assembly (10.3), Guard/Advisor supervision plus stream monitors
+  (10.4), operator autonomy views plus deploy scaffolding (10.5), and bounded
+  delegation/provenance enforcement (10.6).
+- **Validation evidence captured in this gate pass**:
+  - `cargo test -p mister-smith-agents`
+  - `cargo test -p mister-smith-persistence`
+  - `cargo test -p mister-smith-security`
+  - `cargo test -p mister-smith-llm`
+  - `cargo test -p mister-smith-core`
+  - `cargo test -p mister-smith-app`
+  - `python3 scripts/validate_deploy_assets.py deploy/dashboards deploy/alerts`
+  - `cargo build --workspace`
+- **Operational follow-up stays separate**: current Symphony, Linear, and smith MCP queue
+  governance work remains active operational work, not incomplete Phase 10 framework scope.
+
 ## Technical Context
 
 - **Language/Version**: Rust, MSRV 1.88.0
@@ -32,7 +51,8 @@ LLM, persistence, security, and operations foundations:
   delegation-chain substrate
 - **Testing**: targeted crate tests for topology compilation, memory/context management, guard
   decisions, operator views, and delegation enforcement; `cargo build --workspace` as cross-crate
-  compatibility baseline
+  compatibility baseline. The 2026-03-15 gate pass validated all Phase 10 subphases with the
+  targeted crate suites plus deploy-asset checks.
 - **Target Platform**: Linux runtime, macOS development parity
 - **Performance Goals**: branch-local recovery without re-running completed work, at least 30%
   reduction in delivered role context versus full-history broadcast, operator-visible autonomy
@@ -125,8 +145,8 @@ crates/mister-smith-app/
 |   +-- main.rs                             # CLI or app wiring for autonomy views
 
 deploy/
-+-- dashboards/                            # Dashboards for topology, checkpoints, and interventions
-+-- alerts/                                # Alerts for autonomy degradation / checkpoint failures
++-- dashboards/mister-smith-autonomy.json  # Operator-facing topology/checkpoint/intervention dashboard
++-- alerts/mister-smith-autonomy-rules.yml # Autonomy-specific alert scaffolding
 ```
 
 ## Design Decisions

@@ -19,6 +19,18 @@ that intentionally combines:
 - operator-visible autonomy state
 - bounded delegation/provenance
 
+## Implementation Alignment Note (2026-03-15)
+
+The current repository state still matches the research ordering captured here:
+
+- the repo now has real topology, checkpoint, managed-memory, Guard, operator-view, and bounded
+  delegation surfaces, which is consistent with the research priority ordering behind R1-R5
+- the repo still keeps learned routing, speculative decoding, local inference, consensus, and ML
+  anomaly detection outside Phase 10, which preserves the design note's anti-drift boundary
+
+No new evidence in this review pass justified pulling deferred serving or model-selection work back
+into Phase 10 scope.
+
 ## Key Research Findings
 
 ### R1: Topology Dominates Static Team Structure
@@ -143,6 +155,7 @@ Token-format replacement or federation-specific capability systems can remain la
 | `docs/research-output/consolidated/04-security-and-trust.md` | Grounds bounded delegation/provenance as enabling substrate |
 | `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md` | Provides the phase's strategic framing and anti-drift guardrail |
 | `docs/2026-03-05-implementation-deviation-report.md` | Identifies "Phase 10: Advanced Agent Patterns" as the next roadmap extension |
+| `spec/core-architecture/supervision-and-events.md` | Grounds typed autonomy event propagation and operator-visible event assembly |
 | `spec/data-management/agent-orchestration.md` | Provides the existing planner/router/memory boundaries and context-management hook |
 | `spec/data-management/message-schemas.md` | Defines workflow coordination and hook-event boundaries that Phase 10 can extend |
 

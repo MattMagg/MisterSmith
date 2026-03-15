@@ -9,35 +9,22 @@
 - NATS + JetStream available for env-gated checkpoint, routing, and operator-state integration
 - PostgreSQL available for env-gated managed-memory integration tests
 
-## Planned Build Flow After Implementation
+## Gate Validation Flow (2026-03-15)
 
 ```bash
 # 1. Cross-crate compile safety
 cargo build --workspace
 
-# 2. Topology compiler and execution-graph tests
-cargo test -p mister-smith-agents -- topology
-cargo test -p mister-smith-agents -- execution_graph
+# 2. Targeted Phase 10 gate suites
+cargo test -p mister-smith-agents
+cargo test -p mister-smith-persistence
+cargo test -p mister-smith-security
+cargo test -p mister-smith-llm
+cargo test -p mister-smith-core
+cargo test -p mister-smith-app
 
-# 3. Branch checkpoint and resume tests (env-gated where needed)
-NATS_URL=nats://localhost:4222 cargo test -p mister-smith-agents -- checkpoint --ignored
-
-# 4. Managed memory / context manager tests
-cargo test -p mister-smith-persistence -- memory
-DATABASE_URL=postgres://localhost/mister_smith cargo test -p mister-smith-persistence -- snapshot --ignored
-
-# 5. Guard / Advisor and stream-monitor tests
-cargo test -p mister-smith-agents -- guard
-cargo test -p mister-smith-llm -- stream_monitor
-
-# 6. Delegation and provenance tests
-cargo test -p mister-smith-security -- delegation
-
-# 7. Operator autonomy view tests
-cargo test -p mister-smith-app -- autonomy
-
-# 8. Lint baseline
-cargo clippy --workspace -- -D warnings
+# 3. Deploy artifact syntax
+python3 scripts/validate_deploy_assets.py deploy/dashboards deploy/alerts
 ```
 
 ## Usage Sketch
@@ -110,3 +97,18 @@ audit.record_provenance(&capability, &action).await?;
 1. Issue a bounded delegation chain for a privileged action.
 2. Revoke or expire the chain before the downstream execution.
 3. Verify the action is blocked and the operator-visible provenance record explains why.
+
+## Scenario Mapping To Gate Evidence
+
+- **Scenario 1** maps to `cargo test -p mister-smith-agents`, especially the
+  `execution_graph_tests`, `topology_tests`, and `gate10_tests` suites.
+- **Scenario 2** maps to `cargo test -p mister-smith-agents`, especially the
+  `checkpoint_tests` and `gate10_tests` suites.
+- **Scenario 3** maps to `cargo test -p mister-smith-persistence` plus
+  `cargo test -p mister-smith-agents`, especially the memory manager, performance, and
+  context-manager suites.
+- **Scenario 4** maps to `cargo test -p mister-smith-app` and `cargo test -p mister-smith-agents`,
+  plus deploy asset validation for the autonomy dashboard and alert rules.
+- **Scenario 5** maps to `cargo test -p mister-smith-security`,
+  `cargo test -p mister-smith-agents`, and `cargo test -p mister-smith-app`, where revoked,
+  expired, or invalid delegation chains are rejected and surfaced to operators.

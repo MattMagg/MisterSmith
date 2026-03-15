@@ -2,7 +2,7 @@
 
 **Feature Branch**: `012-phase10-frontier-autonomy`
 **Created**: 2026-03-10
-**Status**: Draft
+**Status**: Validated (repo state reconciled 2026-03-15)
 **Input**: Linear issue `MS-26`, `ROADMAP.md`, `docs/2026-03-05-architectural-grounding-audit.md`,
 `docs/2026-03-05-implementation-deviation-report.md`,
 `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`, the consolidated research corpus in
@@ -12,10 +12,12 @@
 
 ### Phase Position
 
-`ROADMAP.md` currently defines phases through Phase 9 only, while the repository already contains
-completed implementation artifacts for Phase 9 and Phase 9.1. This specification defines **Phase 10
-as the next roadmap extension after Phase 9.1**, using the strongest repo-local evidence for what
-should come next:
+`ROADMAP.md` still carries the numbered architectural build map through the completed framework
+phases and now explicitly points Phase 10 readers at
+`specs/012-phase10-frontier-autonomy/`, `WORKFLOW.md`, `docs/linear/LINEAR.md`, and the dated
+control-plane plans under `docs/plans/`. This specification is the structured Phase 10 artifact
+set for that active frontier-autonomy lane, extending the roadmap after Phase 9.1 using the
+strongest repo-local evidence for what should come next:
 
 - `docs/2026-03-05-implementation-deviation-report.md` proposes **Phase 10: Advanced Agent
   Patterns**
@@ -28,23 +30,27 @@ should come next:
 
 This Phase 10 specification is constrained by the following precedence order:
 
-1. `ROADMAP.md` through completed Phase 9 and the repo's active Phase 9.1 follow-on work
-2. `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`
-3. `docs/2026-03-05-implementation-deviation-report.md`
-4. `docs/2026-03-05-architectural-grounding-audit.md`
-5. Consolidated research findings in `docs/research-output/consolidated/`
-6. Canonical architecture sources in `spec/`
-7. Supporting repo context in `README.md`, `CLAUDE.md`, and `.specify/memory/constitution.md`
+1. `ROADMAP.md` current scope note plus completed roadmap phases through Phase 9
+2. `WORKFLOW.md` and `docs/linear/LINEAR.md` for the live Phase 10 control-plane contract
+3. `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`
+4. `docs/2026-03-05-implementation-deviation-report.md`
+5. `docs/2026-03-05-architectural-grounding-audit.md`
+6. Consolidated research findings in `docs/research-output/consolidated/`
+7. Canonical architecture sources in `spec/`
+8. Supporting repo context in `README.md`, `CLAUDE.md`, and `.specify/memory/constitution.md`
 
 ### Canonical Architecture Citations
 
 Phase 10 artifacts MUST trace back to these framework sources:
 
 - `spec/core-architecture/system-architecture.md` for async-first, fault-tolerant system design
+- `spec/core-architecture/component-architecture.md` for cross-crate boundaries and subsystem seams
 - `spec/core-architecture/async-patterns.md` for stream processing, ToolBus, and bounded async
   execution patterns
 - `spec/core-architecture/supervision-trees.md` for restart policies, failure isolation, and
   supervisory boundaries
+- `spec/core-architecture/supervision-and-events.md` for typed event propagation, supervisory
+  signals, and operator-visible state assembly
 - `spec/data-management/agent-orchestration.md` for planner/executor/critic/router/memory roles,
   context-management patterns, and parallel coordination hooks
 - `spec/data-management/message-schemas.md` for workflow coordination, hook-event schemas, and
@@ -110,6 +116,32 @@ The following items are intentionally **not** Phase 10 acceptance scope:
   management layer, not a replacement storage system
 - Phase 8 operations remains the system entry point and observability substrate; Phase 10 extends
   it with topology- and autonomy-specific visibility
+
+### Current Implementation Alignment (2026-03-15)
+
+Repo reality now includes landed and validated Phase 10 surfaces across subphases 10.0 through
+10.6:
+
+- shared autonomy value objects and typed autonomy events
+- execution graph compilation, topology selection, branch checkpoints, and resilience-aware routing
+- managed memory, context budgeting, consolidation, and checkpoint-ready snapshots
+- Guard/Advisor supervision plus stream-monitor degradation signals
+- operator-facing autonomy status views, metrics wiring, and deploy scaffolding
+- bounded delegation, provenance enforcement, operator-visible rejection reasons, and auditability
+
+Evidence for that alignment in this gate pass:
+
+- `cargo test -p mister-smith-agents`
+- `cargo test -p mister-smith-persistence`
+- `cargo test -p mister-smith-security`
+- `cargo test -p mister-smith-llm`
+- `cargo test -p mister-smith-core`
+- `cargo test -p mister-smith-app`
+- `python3 scripts/validate_deploy_assets.py deploy/dashboards deploy/alerts`
+- `cargo build --workspace`
+
+The remaining active repo work around Symphony, Linear, and smith MCP queue governance is
+operational follow-up, not missing Phase 10 framework implementation.
 
 ## Clarifications
 
