@@ -8,7 +8,7 @@ groups:
           severity: warning
         annotations:
           summary: "Autonomy checkpoint age exceeds 15 minutes"
-          description: "Workflow {{ $labels.workflow_id }} branch {{ $labels.branch_id }} has not published a fresh checkpoint. MS-33 must wire this metric from typed checkpoint lineage."
+          description: "Workflow {{ $labels.workflow_id }} branch {{ $labels.branch_id }} has not published a fresh checkpoint. This alert is driven from typed checkpoint lineage projected into autonomy metrics."
 
       - alert: AutonomyInterventionSpike
         expr: sum(increase(mistersmith_autonomy_interventions_total[10m])) > 5
@@ -17,7 +17,7 @@ groups:
           severity: warning
         annotations:
           summary: "Autonomy interventions are spiking"
-          description: "{{ $value }} interventions were recorded in the last 10 minutes. MS-33 must finalize the intervention counter and label set from typed guard decisions."
+          description: "{{ $value }} interventions were recorded in the last 10 minutes from typed guard decisions and intervention history."
 
       - alert: AutonomyContextPressureCritical
         expr: max by (workflow_id, branch_id) (mistersmith_autonomy_context_pressure_ratio) > 0.9
@@ -26,7 +26,7 @@ groups:
           severity: critical
         annotations:
           summary: "Autonomy context pressure is above 90%"
-          description: "Workflow {{ $labels.workflow_id }} branch {{ $labels.branch_id }} is above the assumed normalized pressure threshold. MS-33 must confirm the ratio semantics stay in the 0..1 range."
+          description: "Workflow {{ $labels.workflow_id }} branch {{ $labels.branch_id }} is above the normalized autonomy context-pressure threshold."
 
       - alert: AutonomyProvenanceRejectionsDetected
         expr: sum by (workflow_id, reason) (increase(mistersmith_autonomy_delegation_rejections_total[15m])) > 0

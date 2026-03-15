@@ -28,6 +28,8 @@ use mister_smith_supervision::SupervisedSystem;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
+use crate::autonomy;
+use crate::observability;
 use crate::observability::ObservabilityGuard;
 use crate::ProcessStateTracker;
 
@@ -103,6 +105,7 @@ async fn bootstrap_inner(
 
     // Step 1: Initialize EventBus
     let event_bus = Arc::new(EventBus::new(1024));
+    observability::spawn_autonomy_metrics_observer(event_bus.clone(), shutdown_flag.clone());
     info!("EventBus initialized");
 
     // Step 2: Initialize monitoring infrastructure
@@ -148,7 +151,14 @@ async fn bootstrap_inner(
     info!("Background monitors started");
 
     // Step 7: Start HTTP server (with /metrics endpoint if prometheus enabled)
-    let http_handle = start_http_server(config, &shutdown_tx, otel_guard, state_tracker).await?;
+    let http_handle = start_http_server(
+        config,
+        &shutdown_tx,
+        otel_guard,
+        state_tracker,
+        event_bus.clone(),
+    )
+    .await?;
 
     // Step 8: Mark ready
     state_tracker.set(ProcessLifecycle::Ready);
@@ -218,6 +228,7 @@ async fn start_http_server(
     shutdown_tx: &broadcast::Sender<()>,
     otel_guard: &ObservabilityGuard,
     state_tracker: &ProcessStateTracker,
+    event_bus: Arc<EventBus>,
 ) -> Result<Option<tokio::task::JoinHandle<()>>, Box<dyn std::error::Error + Send + Sync>> {
     let port = config.transport.http_port.unwrap_or(8080);
     let bind_address = format!("0.0.0.0:{port}");
@@ -270,6 +281,31 @@ async fn start_http_server(
         }),
     );
     info!("Health probe endpoints registered (/health/live, /health/ready)");
+
+    let autonomy_bus = event_bus.clone();
+    app = app.route(
+        "/api/v1/autonomy/workflows",
+        axum::routing::get(move || {
+            let event_bus = autonomy_bus.clone();
+            async move { axum::Json(autonomy::workflows_from_bus(event_bus).await) }
+        }),
+    );
+
+    let autonomy_bus = event_bus.clone();
+    app = app.route(
+        "/api/v1/autonomy/status/{workflow_id}",
+        axum::routing::get(
+            move |axum::extract::Path(workflow_id): axum::extract::Path<String>| {
+                let event_bus = autonomy_bus.clone();
+                async move {
+                    autonomy::status_from_bus(event_bus, &workflow_id)
+                        .await
+                        .map(axum::Json)
+                }
+            },
+        ),
+    );
+    info!("Autonomy inspection endpoints registered (/api/v1/autonomy/...)");
 
     // Add /metrics endpoint if Prometheus is enabled
     if let Some(ref handle) = otel_guard.prometheus_handle {

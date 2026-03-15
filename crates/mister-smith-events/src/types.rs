@@ -6,6 +6,7 @@
 //! used by the `EventPublisher` trait in the core crate. The `EventBus` converts
 //! between the two when implementing `EventPublisher`.
 
+use crate::autonomy::AutonomyEvent;
 use crate::autonomy::AutonomyEventType;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
@@ -148,6 +149,14 @@ impl Event {
         mister_smith_core::SystemEvent {
             event_type: self.event_type.to_string(),
             payload: serde_json::to_value(self).unwrap_or(serde_json::Value::Null),
+        }
+    }
+
+    /// Decode the payload as a typed autonomy event when the discriminator matches.
+    pub fn autonomy_event(&self) -> Result<Option<AutonomyEvent>, serde_json::Error> {
+        match self.event_type {
+            EventType::Autonomy(_) => serde_json::from_value(self.payload.clone()).map(Some),
+            _ => Ok(None),
         }
     }
 }

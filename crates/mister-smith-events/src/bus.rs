@@ -5,6 +5,7 @@
 //! any component that depends on `mister-smith-core` to publish events without
 //! depending on this crate directly.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -12,8 +13,17 @@ use async_trait::async_trait;
 use tokio::sync::{broadcast, RwLock};
 use tracing;
 
-use mister_smith_core::{EventPublisher, SystemEvent};
+use mister_smith_core::{
+    CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, GuardDecision,
+    GuardDecisionId, InterventionRecord, InterventionRecordId, ProfileSnapshot, ProfileSnapshotId,
+    RevocationState, SystemEvent, TaskId,
+};
 
+use crate::autonomy::{
+    AutonomyEvent, AutonomyStatusView, BranchSummary, CapabilitySummary, CheckpointRecordSummary,
+    ContextPressureSummary, DelegationAlert, ExecutionGraphSummary, RoutingDecisionSummary,
+    TopologyPlanSummary,
+};
 use crate::dead_letter::DeadLetterQueue;
 use crate::error::EventBusError;
 use crate::handler::{EventFilter, EventHandler};
@@ -22,6 +32,224 @@ use crate::types::Event;
 
 /// Default broadcast channel capacity.
 const DEFAULT_BROADCAST_CAPACITY: usize = 10_000;
+
+#[derive(Debug, Clone, Default)]
+struct AutonomyStatusAccumulator {
+    graph: Option<ExecutionGraphSummary>,
+    topology: Option<TopologyPlanSummary>,
+    branches: HashMap<ExecutionBranchId, BranchSummary>,
+    checkpoint_lineage: HashMap<CheckpointId, CheckpointRecordSummary>,
+    memory_pressure: HashMap<ContextBudgetId, ContextPressureSummary>,
+    routing_history: Vec<RoutingDecisionSummary>,
+    interventions: HashMap<InterventionRecordId, InterventionRecord>,
+    delegation_alerts: HashMap<String, DelegationAlert>,
+    profiles: HashMap<ProfileSnapshotId, ProfileSnapshot>,
+    guard_decisions: HashMap<GuardDecisionId, GuardDecision>,
+    conservative_reasons: Vec<String>,
+}
+
+impl AutonomyStatusAccumulator {
+    fn apply(&mut self, event: AutonomyEvent) {
+        match event {
+            AutonomyEvent::GraphUpdated(envelope) => {
+                self.graph = Some(envelope.payload);
+            }
+            AutonomyEvent::TopologySelected(envelope) => {
+                if let Some(graph) = self.graph.as_mut() {
+                    graph.active_topology = Some(envelope.payload.topology_kind);
+                }
+                self.topology = Some(envelope.payload);
+            }
+            AutonomyEvent::BranchUpdated(envelope) => {
+                self.branches
+                    .insert(envelope.payload.branch_id, envelope.payload);
+            }
+            AutonomyEvent::ContextPressureObserved(envelope) => {
+                self.memory_pressure
+                    .insert(envelope.payload.budget_id, envelope.payload);
+            }
+            AutonomyEvent::ProfileSnapshotRecorded(envelope) => {
+                self.profiles
+                    .insert(envelope.payload.profile_id, envelope.payload);
+            }
+            AutonomyEvent::GuardDecisionEvaluated(envelope) => {
+                self.push_conservative_reasons(
+                    envelope
+                        .payload
+                        .evidence
+                        .notes
+                        .iter()
+                        .filter(|note| note.contains("conservative fallback"))
+                        .cloned(),
+                );
+                self.guard_decisions
+                    .insert(envelope.payload.decision_id, envelope.payload);
+            }
+            AutonomyEvent::InterventionRecorded(envelope) => {
+                self.interventions
+                    .insert(envelope.payload.record_id, envelope.payload);
+            }
+            AutonomyEvent::CheckpointRecorded(envelope) => {
+                if let Some(branch) = self.branches.get_mut(&envelope.payload.branch_id) {
+                    branch.checkpoint_id = Some(envelope.payload.checkpoint_id);
+                    branch.recovery_strategy = envelope.payload.recovery_strategy;
+                }
+                self.checkpoint_lineage
+                    .insert(envelope.payload.checkpoint_id, envelope.payload);
+            }
+            AutonomyEvent::RoutingDecisionRecorded(envelope) => {
+                if !self.routing_history.contains(&envelope.payload) {
+                    self.routing_history.push(envelope.payload);
+                }
+            }
+            AutonomyEvent::DelegationUpdated(envelope) => {
+                self.update_delegation_alert(envelope.payload);
+            }
+            AutonomyEvent::StatusUpdated(envelope) => {
+                *self = Self::from_view(envelope.payload.clone());
+            }
+        }
+    }
+
+    fn view(&self) -> Option<AutonomyStatusView> {
+        let graph = self.graph.clone()?;
+        let topology = self.topology.clone()?;
+
+        let mut branches = self.branches.values().cloned().collect::<Vec<_>>();
+        branches.sort_by_key(|branch| branch.branch_id.to_string());
+
+        let mut checkpoint_lineage = self
+            .checkpoint_lineage
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        checkpoint_lineage.sort_by(|left, right| {
+            left.captured_at.cmp(&right.captured_at).then_with(|| {
+                left.checkpoint_id
+                    .to_string()
+                    .cmp(&right.checkpoint_id.to_string())
+            })
+        });
+
+        let mut memory_pressure = self.memory_pressure.values().cloned().collect::<Vec<_>>();
+        memory_pressure.sort_by_key(|pressure| pressure.budget_id.to_string());
+
+        let mut interventions = self.interventions.values().cloned().collect::<Vec<_>>();
+        interventions.sort_by(|left, right| left.emitted_at.cmp(&right.emitted_at));
+
+        let mut delegation_alerts = self.delegation_alerts.values().cloned().collect::<Vec<_>>();
+        delegation_alerts.sort_by_key(|alert| alert.message.clone());
+
+        let mut profiles = self.profiles.values().cloned().collect::<Vec<_>>();
+        profiles.sort_by(|left, right| left.updated_at.cmp(&right.updated_at));
+
+        let mut guard_decisions = self.guard_decisions.values().cloned().collect::<Vec<_>>();
+        guard_decisions.sort_by_key(|decision| decision.decision_id.to_string());
+
+        Some(AutonomyStatusView {
+            graph,
+            topology,
+            branches,
+            checkpoint_lineage,
+            memory_pressure,
+            routing_history: self.routing_history.clone(),
+            interventions,
+            delegation_alerts,
+            profiles,
+            guard_decisions,
+            conservative_reasons: self.conservative_reasons.clone(),
+        })
+    }
+
+    fn from_view(view: AutonomyStatusView) -> Self {
+        let mut accumulator = Self {
+            graph: Some(view.graph),
+            topology: Some(view.topology),
+            ..Self::default()
+        };
+
+        for branch in view.branches {
+            accumulator.branches.insert(branch.branch_id, branch);
+        }
+        for checkpoint in view.checkpoint_lineage {
+            accumulator
+                .checkpoint_lineage
+                .insert(checkpoint.checkpoint_id, checkpoint);
+        }
+        for pressure in view.memory_pressure {
+            accumulator
+                .memory_pressure
+                .insert(pressure.budget_id, pressure);
+        }
+        accumulator.routing_history = view.routing_history;
+        for record in view.interventions {
+            accumulator.interventions.insert(record.record_id, record);
+        }
+        for alert in view.delegation_alerts {
+            accumulator
+                .delegation_alerts
+                .insert(delegation_alert_key(&alert), alert);
+        }
+        for profile in view.profiles {
+            accumulator.profiles.insert(profile.profile_id, profile);
+        }
+        for decision in view.guard_decisions {
+            accumulator
+                .guard_decisions
+                .insert(decision.decision_id, decision);
+        }
+        accumulator.push_conservative_reasons(view.conservative_reasons);
+
+        accumulator
+    }
+
+    fn update_delegation_alert(&mut self, capability: CapabilitySummary) {
+        let key = delegation_capability_key(&capability);
+        if capability.revocation_state == RevocationState::Active {
+            self.delegation_alerts.remove(&key);
+            return;
+        }
+
+        self.delegation_alerts.insert(
+            key,
+            DelegationAlert {
+                capability_id: Some(capability.capability_id),
+                scope: Some(capability.scope),
+                revocation_state: Some(capability.revocation_state),
+                message: format!(
+                    "delegation for agent {} in scope {:?} is {:?}",
+                    capability.recipient, capability.scope, capability.revocation_state
+                ),
+            },
+        );
+    }
+
+    fn push_conservative_reasons<I>(&mut self, reasons: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        for reason in reasons {
+            if !self.conservative_reasons.contains(&reason) {
+                self.conservative_reasons.push(reason);
+            }
+        }
+    }
+}
+
+fn delegation_alert_key(alert: &DelegationAlert) -> String {
+    format!(
+        "{:?}:{}",
+        alert.scope,
+        alert
+            .capability_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| alert.message.clone())
+    )
+}
+
+fn delegation_capability_key(capability: &CapabilitySummary) -> String {
+    format!("{:?}:{}", Some(capability.scope), capability.capability_id)
+}
 
 /// In-process event bus with handler dispatch, broadcast, and dead letter handling.
 ///
@@ -32,6 +260,7 @@ pub struct EventBus {
     handlers: RwLock<Vec<Arc<dyn EventHandler>>>,
     broadcast_tx: broadcast::Sender<Event>,
     event_store: Option<Arc<dyn EventStore>>,
+    autonomy_state: RwLock<HashMap<TaskId, AutonomyStatusAccumulator>>,
     dead_letter: Arc<DeadLetterQueue>,
 }
 
@@ -43,6 +272,7 @@ impl EventBus {
             handlers: RwLock::new(Vec::new()),
             broadcast_tx,
             event_store: None,
+            autonomy_state: RwLock::new(HashMap::new()),
             dead_letter: Arc::new(DeadLetterQueue::default()),
         }
     }
@@ -65,6 +295,8 @@ impl EventBus {
             })?;
         }
 
+        self.update_autonomy_projection(&event).await?;
+
         // Broadcast to subscribers (ignore send errors — no receivers is not an error).
         let _ = self.broadcast_tx.send(event.clone());
 
@@ -84,6 +316,28 @@ impl EventBus {
     /// The returned receiver will see every published event regardless of handler filters.
     pub fn subscribe_broadcast(&self) -> broadcast::Receiver<Event> {
         self.broadcast_tx.subscribe()
+    }
+
+    /// Return the latest assembled autonomy status for a workflow, when available.
+    pub async fn autonomy_status(&self, workflow_id: &TaskId) -> Option<AutonomyStatusView> {
+        self.autonomy_state
+            .read()
+            .await
+            .get(workflow_id)
+            .and_then(AutonomyStatusAccumulator::view)
+    }
+
+    /// List workflow IDs that currently have an assembled autonomy projection.
+    pub async fn autonomy_workflows(&self) -> Vec<TaskId> {
+        let mut workflows = self
+            .autonomy_state
+            .read()
+            .await
+            .iter()
+            .filter_map(|(workflow_id, state)| state.view().map(|_| *workflow_id))
+            .collect::<Vec<_>>();
+        workflows.sort_by_key(|workflow_id| workflow_id.to_string());
+        workflows
     }
 
     /// Replay events from the event store within a time range, optionally filtered.
@@ -160,6 +414,25 @@ impl EventBus {
             );
             self.dead_letter.enqueue(event);
         }
+    }
+
+    async fn update_autonomy_projection(&self, event: &Event) -> Result<(), EventBusError> {
+        let Some(autonomy_event) = event.autonomy_event().map_err(|error| {
+            EventBusError::HandlerFailed(format!(
+                "failed to decode autonomy event payload: {error}"
+            ))
+        })?
+        else {
+            return Ok(());
+        };
+
+        let workflow_id = autonomy_event.workflow_id();
+        let mut autonomy_state = self.autonomy_state.write().await;
+        autonomy_state
+            .entry(workflow_id)
+            .or_default()
+            .apply(autonomy_event);
+        Ok(())
     }
 }
 
