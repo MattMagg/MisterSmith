@@ -16,7 +16,7 @@ use tracing;
 use mister_smith_core::{
     CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, GuardDecision,
     GuardDecisionId, InterventionRecord, InterventionRecordId, ProfileSnapshot, ProfileSnapshotId,
-    RevocationState, SystemEvent, TaskId,
+    SystemEvent, TaskId,
 };
 
 use crate::autonomy::{
@@ -42,6 +42,7 @@ struct AutonomyStatusAccumulator {
     memory_pressure: HashMap<ContextBudgetId, ContextPressureSummary>,
     routing_history: Vec<RoutingDecisionSummary>,
     interventions: HashMap<InterventionRecordId, InterventionRecord>,
+    delegation_capabilities: HashMap<mister_smith_core::CapabilityId, CapabilitySummary>,
     delegation_alerts: HashMap<String, DelegationAlert>,
     profiles: HashMap<ProfileSnapshotId, ProfileSnapshot>,
     guard_decisions: HashMap<GuardDecisionId, GuardDecision>,
@@ -103,7 +104,7 @@ impl AutonomyStatusAccumulator {
                 }
             }
             AutonomyEvent::DelegationUpdated(envelope) => {
-                self.update_delegation_alert(envelope.payload);
+                self.update_delegation(envelope.payload);
             }
             AutonomyEvent::StatusUpdated(envelope) => {
                 *self = Self::from_view(envelope.payload.clone());
@@ -137,6 +138,19 @@ impl AutonomyStatusAccumulator {
         let mut interventions = self.interventions.values().cloned().collect::<Vec<_>>();
         interventions.sort_by(|left, right| left.emitted_at.cmp(&right.emitted_at));
 
+        let mut delegation_capabilities = self
+            .delegation_capabilities
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        delegation_capabilities.sort_by(|left, right| {
+            left.expires_at.cmp(&right.expires_at).then_with(|| {
+                left.capability_id
+                    .to_string()
+                    .cmp(&right.capability_id.to_string())
+            })
+        });
+
         let mut delegation_alerts = self.delegation_alerts.values().cloned().collect::<Vec<_>>();
         delegation_alerts.sort_by_key(|alert| alert.message.clone());
 
@@ -154,6 +168,7 @@ impl AutonomyStatusAccumulator {
             memory_pressure,
             routing_history: self.routing_history.clone(),
             interventions,
+            delegation_capabilities,
             delegation_alerts,
             profiles,
             guard_decisions,
@@ -185,6 +200,11 @@ impl AutonomyStatusAccumulator {
         for record in view.interventions {
             accumulator.interventions.insert(record.record_id, record);
         }
+        for capability in view.delegation_capabilities {
+            accumulator
+                .delegation_capabilities
+                .insert(capability.capability_id, capability);
+        }
         for alert in view.delegation_alerts {
             accumulator
                 .delegation_alerts
@@ -203,25 +223,15 @@ impl AutonomyStatusAccumulator {
         accumulator
     }
 
-    fn update_delegation_alert(&mut self, capability: CapabilitySummary) {
+    fn update_delegation(&mut self, capability: CapabilitySummary) {
+        self.delegation_capabilities
+            .insert(capability.capability_id, capability.clone());
         let key = delegation_capability_key(&capability);
-        if capability.revocation_state == RevocationState::Active {
+        if let Some(alert) = capability.to_alert() {
+            self.delegation_alerts.insert(key, alert);
+        } else {
             self.delegation_alerts.remove(&key);
-            return;
         }
-
-        self.delegation_alerts.insert(
-            key,
-            DelegationAlert {
-                capability_id: Some(capability.capability_id),
-                scope: Some(capability.scope),
-                revocation_state: Some(capability.revocation_state),
-                message: format!(
-                    "delegation for agent {} in scope {:?} is {:?}",
-                    capability.recipient, capability.scope, capability.revocation_state
-                ),
-            },
-        );
     }
 
     fn push_conservative_reasons<I>(&mut self, reasons: I)

@@ -121,7 +121,7 @@ fn read_keychain_credentials() -> Result<Option<ClaudeOAuthCredentials>, LlmErro
     let output = std::process::Command::new("security")
         .arg("find-generic-password")
         .arg("-s")
-        .arg(&keychain_service())
+        .arg(keychain_service())
         .arg("-w")
         .output();
 

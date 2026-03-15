@@ -10,10 +10,10 @@ use mister_smith_core::{
     CoordinationPolicy, ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState,
     GuardDecision, GuardDecisionId, GuardEvidence, HealthState, InterventionRecord,
     InterventionRecordId, InterventionType, MemorySnapshotId, ProfileSnapshotId, ProfileTarget,
-    TaskId, TopologyKind, TopologyRationale,
+    ProvenanceChain, ProvenanceLink, RevocationState, TaskId, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
-    AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary,
+    AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
     RoutingDecisionSummary, TopologyPlanSummary,
 };
@@ -24,6 +24,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
     let branch_id = ExecutionBranchId::new();
     let checkpoint_id = CheckpointId::new();
     let decision_id = GuardDecisionId::new();
+    let capability_id = mister_smith_core::CapabilityId::new();
     let view = AutonomyStatusView {
         graph: ExecutionGraphSummary {
             graph_id,
@@ -94,10 +95,35 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             rationale: "applied retry for targeted recovery".to_string(),
             emitted_at: chrono::Utc::now(),
         }],
+        delegation_capabilities: vec![CapabilitySummary {
+            capability_id,
+            issuer: mister_smith_core::AuthorityPrincipal::Policy("operator".to_string()),
+            recipient: AgentId::new(),
+            scope: mister_smith_core::DelegationScope::InvokeTool,
+            parent_capability: None,
+            expires_at: chrono::Utc::now(),
+            provenance: ProvenanceChain {
+                root_issuer: mister_smith_core::AuthorityPrincipal::Policy("operator".to_string()),
+                terminal_capability: capability_id,
+                links: vec![ProvenanceLink {
+                    issuer: mister_smith_core::AuthorityPrincipal::Policy("operator".to_string()),
+                    recipient: AgentId::new(),
+                    capability_id,
+                    scope: mister_smith_core::DelegationScope::InvokeTool,
+                    expires_at: chrono::Utc::now(),
+                }],
+            },
+            revocation_state: RevocationState::Active,
+            rejection_reason: None,
+        }],
         delegation_alerts: vec![DelegationAlert {
-            capability_id: None,
-            scope: None,
-            revocation_state: None,
+            capability_id: Some(capability_id),
+            scope: Some(mister_smith_core::DelegationScope::InvokeTool),
+            revocation_state: Some(RevocationState::Revoked),
+            parent_capability: None,
+            expires_at: Some(chrono::Utc::now()),
+            chain_depth: 1,
+            rejection_reason: Some("delegation revoked before tool execution".to_string()),
             message: "operator review required".to_string(),
         }],
         profiles: vec![mister_smith_core::ProfileSnapshot {
@@ -139,6 +165,9 @@ fn render_status_surfaces_operator_rationale_and_history() {
     assert!(rendered.contains(&branch_id.to_string()));
     assert!(rendered.contains("checkpoint scope narrowed resume"));
     assert!(rendered.contains("applied retry for targeted recovery"));
+    assert!(rendered.contains("delegation:"));
+    assert!(rendered.contains("lineage="));
+    assert!(rendered.contains("delegation revoked before tool execution"));
     assert!(rendered.contains("control-plane state unavailable"));
 }
 
@@ -177,6 +206,10 @@ fn metric_operations_cover_checkpoint_pressure_and_intervention_visibility() {
                 .any(|(key, value)| key == "pressure_level" && value == "elevated")
     }));
     assert!(operations.iter().any(|operation| {
+        operation.name == "mistersmith_autonomy_delegation_chain_depth"
+            && operation.kind == observability::MetricOperationKind::Gauge
+    }));
+    assert!(operations.iter().any(|operation| {
         operation.name == "mistersmith_autonomy_interventions_total"
             && operation.kind == observability::MetricOperationKind::Counter
             && operation
@@ -203,5 +236,30 @@ fn metric_operations_cover_checkpoint_pressure_and_intervention_visibility() {
                 .labels
                 .iter()
                 .any(|(key, value)| key == "branch_id" && value == &branch_id.to_string())
+    }));
+}
+
+#[test]
+fn delegation_rejection_metrics_use_operator_visible_reason() {
+    let (view, _, branch_id) = sample_view();
+    let mut rejected = view.delegation_capabilities[0].clone();
+    rejected.revocation_state = RevocationState::Revoked;
+    rejected.rejection_reason = Some("delegation revoked before tool execution".to_string());
+    let event = AutonomyEvent::DelegationUpdated(AutonomyEventEnvelope {
+        workflow_id: view.graph.workflow_id,
+        graph_id: Some(view.graph.graph_id),
+        branch_id: Some(branch_id),
+        payload: rejected,
+        operator_visible: true,
+    });
+
+    let operations = observability::build_metric_operations(&event, &view);
+
+    assert!(operations.iter().any(|operation| {
+        operation.name == "mistersmith_autonomy_delegation_rejections_total"
+            && operation.kind == observability::MetricOperationKind::Counter
+            && operation.labels.iter().any(|(key, value)| {
+                key == "reason" && value == "delegation revoked before tool execution"
+            })
     }));
 }

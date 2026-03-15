@@ -1,9 +1,10 @@
-//! Prep-only delegation test harness for Phase 10 bounded delegation scenarios.
+//! Delegation service and bounded capability tests for Phase 10.
 
 use std::time::Duration;
 
-use mister_smith_core::SecurityError;
+use mister_smith_core::{AuthorityPrincipal, DelegationScope, RevocationState, SecurityError};
 use mister_smith_security::config::{JwtConfig, KeySource};
+use mister_smith_security::delegation::DelegationService;
 use mister_smith_security::jwt::{AgentClaims, JwtManager, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
 
 struct DelegationHarness {
@@ -139,4 +140,72 @@ fn delegation_cyclic_chain_is_rejected_during_validation() {
         Err(SecurityError::InvalidToken(message))
             if message.contains("delegation_chain contains a circular reference")
     ));
+}
+
+#[test]
+fn delegation_service_rejects_claims_that_exceed_configured_chain_depth() {
+    let service = DelegationService::new_with_delegation_chain_max_depth(1);
+    let claims = parent_claims()
+        .delegated_to("intermediate-agent".to_string(), "worker".to_string())
+        .delegated_to("executor-depth".to_string(), "worker".to_string());
+
+    assert!(matches!(
+        service.validate_claims(&claims, None),
+        Err(mister_smith_core::DelegationError::InvalidChain(message))
+            if message.contains("delegation_chain exceeds max depth")
+    ));
+}
+
+#[test]
+fn delegation_service_issues_provenance_and_validates_scope() {
+    let service = DelegationService::new();
+    let recipient = mister_smith_core::AgentId::from_uuid(uuid::Uuid::new_v4());
+    let (capability, provenance) = service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            recipient,
+            DelegationScope::InvokeTool,
+            Duration::from_secs(300),
+            None,
+            None,
+        )
+        .expect("root capability should issue");
+
+    let validated = service
+        .validate_capability(&capability, &provenance, Some(DelegationScope::InvokeTool))
+        .expect("issued capability should validate");
+
+    assert_eq!(validated.capability.scope, DelegationScope::InvokeTool);
+    assert_eq!(validated.chain_depth, 1);
+    assert_eq!(
+        validated.provenance.terminal_capability,
+        capability.capability_id
+    );
+}
+
+#[test]
+fn delegation_service_rejects_revoked_capabilities() {
+    let service = DelegationService::new();
+    let recipient = mister_smith_core::AgentId::from_uuid(uuid::Uuid::new_v4());
+    let (capability, provenance) = service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            recipient,
+            DelegationScope::InvokeTool,
+            Duration::from_secs(300),
+            None,
+            None,
+        )
+        .expect("capability should issue");
+
+    service.revoke_capability(capability.capability_id);
+
+    assert!(matches!(
+        service.validate_capability(&capability, &provenance, Some(DelegationScope::InvokeTool)),
+        Err(mister_smith_core::DelegationError::Revoked { .. })
+    ));
+    assert_eq!(
+        service.revocation_state(&capability),
+        RevocationState::Revoked
+    );
 }

@@ -26,9 +26,9 @@ use crate::roles::supervisor::{SupervisorMessage, SupervisorState};
 use crate::scheduler::{ResultAggregator, TaskAssignment, TaskDecomposer, TaskScheduler};
 use crate::topology::{TopologyCompiler, TopologySignals};
 use mister_smith_events::{
-    AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary,
-    CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, Event, EventBus,
-    ExecutionGraphSummary, RoutingDecisionSummary, TopologyPlanSummary,
+    AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
+    CheckpointRecordSummary, ContextPressureSummary, Event, EventBus, ExecutionGraphSummary,
+    RoutingDecisionSummary, TopologyPlanSummary,
 };
 
 #[cfg(feature = "llm")]
@@ -344,6 +344,27 @@ impl Orchestrator {
             branch_id,
             assigned_agent,
             RecoveryAction::Resume,
+            None,
+        )
+        .await
+    }
+
+    /// Plan branch-local resume from the latest durable checkpoint using delegated authority.
+    pub async fn resume_branch_with_delegation<S: BranchCheckpointStore + ?Sized>(
+        &self,
+        workflow_id: &TaskId,
+        store: &S,
+        branch_id: ExecutionBranchId,
+        assigned_agent: Option<AgentId>,
+        capability: &CapabilitySummary,
+    ) -> Result<BranchRecoveryPlan, AgentSystemError> {
+        self.recover_branch(
+            workflow_id,
+            store,
+            branch_id,
+            assigned_agent,
+            RecoveryAction::Resume,
+            Some(capability),
         )
         .await
     }
@@ -362,6 +383,27 @@ impl Orchestrator {
             branch_id,
             Some(assigned_agent),
             RecoveryAction::Reassign,
+            None,
+        )
+        .await
+    }
+
+    /// Plan branch reassignment from the latest durable checkpoint using delegated authority.
+    pub async fn reassign_branch_with_delegation<S: BranchCheckpointStore + ?Sized>(
+        &self,
+        workflow_id: &TaskId,
+        store: &S,
+        branch_id: ExecutionBranchId,
+        assigned_agent: AgentId,
+        capability: &CapabilitySummary,
+    ) -> Result<BranchRecoveryPlan, AgentSystemError> {
+        self.recover_branch(
+            workflow_id,
+            store,
+            branch_id,
+            Some(assigned_agent),
+            RecoveryAction::Reassign,
+            Some(capability),
         )
         .await
     }
@@ -532,6 +574,29 @@ impl Orchestrator {
                 _ => None,
             })
             .collect::<Vec<_>>();
+        let mut delegation_capabilities = HashMap::new();
+        for capability in self
+            .autonomy_events(workflow_id)
+            .into_iter()
+            .filter_map(|event| match event {
+                AutonomyEvent::DelegationUpdated(envelope) => Some(envelope.payload),
+                _ => None,
+            })
+        {
+            delegation_capabilities.insert(capability.capability_id, capability);
+        }
+        let mut delegation_capabilities = delegation_capabilities.into_values().collect::<Vec<_>>();
+        delegation_capabilities.sort_by(|left, right| {
+            left.expires_at.cmp(&right.expires_at).then_with(|| {
+                left.capability_id
+                    .to_string()
+                    .cmp(&right.capability_id.to_string())
+            })
+        });
+        let delegation_alerts = delegation_capabilities
+            .iter()
+            .filter_map(CapabilitySummary::to_alert)
+            .collect::<Vec<_>>();
 
         Some(AutonomyStatusView {
             graph: ExecutionGraphSummary {
@@ -586,7 +651,8 @@ impl Orchestrator {
             memory_pressure: Vec::<ContextPressureSummary>::new(),
             routing_history,
             interventions,
-            delegation_alerts: Vec::<DelegationAlert>::new(),
+            delegation_capabilities,
+            delegation_alerts,
             profiles,
             guard_decisions,
             conservative_reasons,
@@ -940,6 +1006,71 @@ impl Orchestrator {
             .subtasks_in_states(parent_task_id, &[TaskState::Failed, TaskState::TimedOut])
     }
 
+    pub fn validate_branch_delegation(
+        &self,
+        workflow_id: &TaskId,
+        branch_id: ExecutionBranchId,
+        capability: &CapabilitySummary,
+    ) -> Result<(), AgentSystemError> {
+        let graph = self.execution_graph(workflow_id).ok_or_else(|| {
+            AgentSystemError::OrchestrationError(format!(
+                "No execution graph found for workflow {workflow_id}"
+            ))
+        })?;
+
+        let mut required_scopes = graph
+            .nodes
+            .iter()
+            .filter(|node| node.branch_id == branch_id)
+            .filter_map(|node| node.delegation_requirement);
+
+        let Some(required_scope) = required_scopes.next() else {
+            return Ok(());
+        };
+
+        if required_scopes.any(|scope| scope != required_scope) {
+            return Err(AgentSystemError::PermissionDenied(format!(
+                "delegation rejected for branch {branch_id}: branch contains multiple delegation scopes"
+            )));
+        }
+
+        if capability.scope != required_scope
+            || capability.rejection_reason.is_some()
+            || capability.revocation_state != mister_smith_core::RevocationState::Active
+        {
+            return Err(AgentSystemError::PermissionDenied(format!(
+                "delegation rejected for branch {branch_id}: {}",
+                capability
+                    .rejection_reason
+                    .clone()
+                    .unwrap_or_else(|| format!("{:?}", capability.revocation_state))
+            )));
+        }
+
+        Ok(())
+    }
+
+    pub fn record_delegation_update(
+        &self,
+        workflow_id: &TaskId,
+        branch_id: Option<ExecutionBranchId>,
+        payload: CapabilitySummary,
+    ) {
+        let graph_id = self
+            .execution_graph(workflow_id)
+            .map(|graph| graph.graph_id);
+        self.record_autonomy_event(
+            workflow_id,
+            AutonomyEvent::DelegationUpdated(AutonomyEventEnvelope {
+                workflow_id: *workflow_id,
+                graph_id,
+                branch_id,
+                payload,
+                operator_visible: true,
+            }),
+        );
+    }
+
     async fn recover_branch<S: BranchCheckpointStore + ?Sized>(
         &self,
         workflow_id: &TaskId,
@@ -947,7 +1078,16 @@ impl Orchestrator {
         branch_id: ExecutionBranchId,
         assigned_agent: Option<AgentId>,
         action: RecoveryAction,
+        delegation: Option<&CapabilitySummary>,
     ) -> Result<BranchRecoveryPlan, AgentSystemError> {
+        if let Some(capability) = delegation {
+            if let Err(error) = self.validate_branch_delegation(workflow_id, branch_id, capability)
+            {
+                self.record_delegation_update(workflow_id, Some(branch_id), capability.clone());
+                return Err(error);
+            }
+        }
+
         let profiles = self
             .profiles
             .get(workflow_id)
@@ -961,32 +1101,62 @@ impl Orchestrator {
             })?;
 
             let recovery = match action {
-                RecoveryAction::Resume => {
-                    self.branch_checkpoint_coordinator
-                        .resume_branch(
-                            store,
-                            *workflow_id,
-                            graph.value_mut(),
-                            branch_id,
-                            assigned_agent,
-                        )
-                        .await?
-                }
+                RecoveryAction::Resume => match delegation {
+                    Some(capability) => {
+                        self.branch_checkpoint_coordinator
+                            .resume_branch_with_delegation(
+                                store,
+                                *workflow_id,
+                                graph.value_mut(),
+                                branch_id,
+                                assigned_agent,
+                                capability,
+                            )
+                            .await?
+                    }
+                    None => {
+                        self.branch_checkpoint_coordinator
+                            .resume_branch(
+                                store,
+                                *workflow_id,
+                                graph.value_mut(),
+                                branch_id,
+                                assigned_agent,
+                            )
+                            .await?
+                    }
+                },
                 RecoveryAction::Reassign => {
                     let assigned_agent = assigned_agent.ok_or_else(|| {
                         AgentSystemError::OrchestrationError(
                             "branch reassignment requires a target agent".to_string(),
                         )
                     })?;
-                    self.branch_checkpoint_coordinator
-                        .reassign_branch(
-                            store,
-                            *workflow_id,
-                            graph.value_mut(),
-                            branch_id,
-                            assigned_agent,
-                        )
-                        .await?
+                    match delegation {
+                        Some(capability) => {
+                            self.branch_checkpoint_coordinator
+                                .reassign_branch_with_delegation(
+                                    store,
+                                    *workflow_id,
+                                    graph.value_mut(),
+                                    branch_id,
+                                    assigned_agent,
+                                    capability,
+                                )
+                                .await?
+                        }
+                        None => {
+                            self.branch_checkpoint_coordinator
+                                .reassign_branch(
+                                    store,
+                                    *workflow_id,
+                                    graph.value_mut(),
+                                    branch_id,
+                                    assigned_agent,
+                                )
+                                .await?
+                        }
+                    }
                 }
             };
 
@@ -1011,6 +1181,9 @@ impl Orchestrator {
 
         if let Some(event) = routing_event {
             self.record_autonomy_event(workflow_id, event);
+        }
+        if let Some(capability) = delegation {
+            self.record_delegation_update(workflow_id, Some(branch_id), capability.clone());
         }
 
         Ok(recovery)

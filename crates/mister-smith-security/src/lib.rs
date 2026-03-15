@@ -21,6 +21,7 @@
 
 pub mod auth_callout;
 pub mod config;
+pub mod delegation;
 mod error;
 pub mod message_signer;
 pub mod quarantine;
@@ -46,6 +47,7 @@ pub use auth_callout::{
     AuthCalloutHandler, AuthorizationResult, PermissionTier, Permissions, TrustProfile,
     AUTH_CALLOUT_SUBJECT,
 };
+pub use delegation::{DelegationService, ValidatedDelegation};
 pub use message_signer::{HmacKey, HmacMessageSigner, MessageSigner, MessageSigningConfig};
 pub use mister_smith_core::SecurityError;
 pub use quarantine::{inspect_quarantine_payload, QuarantineAction, QuarantineAuditContext};

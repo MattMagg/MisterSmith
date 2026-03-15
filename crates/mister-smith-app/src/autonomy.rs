@@ -227,6 +227,49 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         .map(|record| record.rationale.clone())
         .collect::<Vec<_>>()
         .join("\n");
+    let delegation_summary = view
+        .delegation_capabilities
+        .iter()
+        .map(|capability| {
+            let lineage = capability
+                .provenance
+                .links
+                .iter()
+                .map(|link| {
+                    format!(
+                        "{:?}->{}/{}",
+                        link.issuer, link.recipient, link.capability_id
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" | ");
+            format!(
+                "{} {:?} state={:?} depth={} expires={} lineage={}",
+                capability.capability_id,
+                capability.scope,
+                capability.revocation_state,
+                capability.chain_depth(),
+                capability.expires_at,
+                lineage
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let delegation_alerts = view
+        .delegation_alerts
+        .iter()
+        .map(|alert| {
+            let reason = alert
+                .rejection_reason
+                .clone()
+                .unwrap_or_else(|| "none".to_string());
+            format!(
+                "{} depth={} reason={}",
+                alert.message, alert.chain_depth, reason
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     let conservative_summary = if view.conservative_reasons.is_empty() {
         "none".to_string()
     } else {
@@ -234,7 +277,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\ntopology: {:?} width={} rationale={}\nfallback: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\ntopology: {:?} width={} rationale={}\nfallback: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -249,6 +292,16 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
             "none".to_string()
         } else {
             intervention_summary
+        },
+        if delegation_summary.is_empty() {
+            "none".to_string()
+        } else {
+            delegation_summary
+        },
+        if delegation_alerts.is_empty() {
+            "none".to_string()
+        } else {
+            delegation_alerts
         },
         conservative_summary
     )

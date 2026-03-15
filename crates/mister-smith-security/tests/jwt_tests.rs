@@ -1,6 +1,7 @@
 //! Integration tests for the JWT authentication subsystem.
 
 use mister_smith_security::config::{JwtConfig, KeySource};
+use mister_smith_security::delegation::DelegationService;
 use mister_smith_security::jwt::{AgentClaims, JwtManager, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
 use std::time::Duration;
 
@@ -401,4 +402,53 @@ fn delegation_circular_reference_rejected_on_validation() {
         Err(mister_smith_core::SecurityError::InvalidToken(message))
             if message.contains("delegation_chain contains a circular reference")
     ));
+}
+
+#[test]
+fn delegated_claims_carry_capability_and_provenance_when_agent_ids_are_uuid_backed() {
+    let service = DelegationService::new();
+    let parent_agent = uuid::Uuid::new_v4();
+    let child_agent = uuid::Uuid::new_v4();
+    let (capability, provenance) = service
+        .issue_capability(
+            mister_smith_core::AuthorityPrincipal::Policy("operator".to_string()),
+            mister_smith_core::AgentId::from_uuid(parent_agent),
+            mister_smith_core::DelegationScope::InvokeTool,
+            Duration::from_secs(300),
+            None,
+            None,
+        )
+        .unwrap();
+
+    let parent = AgentClaims {
+        sub: parent_agent.to_string(),
+        agent_id: parent_agent.to_string(),
+        agent_type: "coordinator".to_string(),
+        delegation_capability: Some(capability.clone()),
+        provenance_chain: Some(provenance.clone()),
+        ..test_claims()
+    };
+
+    let child = parent.delegated_to(child_agent.to_string(), "worker");
+
+    let child_capability = child
+        .delegation_capability
+        .expect("child should derive a bounded capability");
+    let child_provenance = child
+        .provenance_chain
+        .expect("child should derive a provenance chain");
+
+    assert_eq!(
+        child_capability.parent_capability,
+        Some(capability.capability_id)
+    );
+    assert_eq!(
+        child_capability.recipient.to_string(),
+        child_agent.to_string()
+    );
+    assert_eq!(
+        child_provenance.terminal_capability,
+        child_capability.capability_id
+    );
+    assert_eq!(child_provenance.links.len(), provenance.links.len() + 1);
 }

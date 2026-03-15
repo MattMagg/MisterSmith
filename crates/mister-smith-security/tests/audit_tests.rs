@@ -97,6 +97,7 @@ fn us5_as3_auth_failure_alert_threshold() {
             action: Some("authenticate".to_string()),
             outcome: AuditOutcome::Failure,
             details: HashMap::new(),
+            delegation: None,
             source_ip: Some("10.1.2.3".to_string()),
             previous_hash: None,
         });

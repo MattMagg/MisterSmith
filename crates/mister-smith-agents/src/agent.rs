@@ -7,6 +7,7 @@ use mister_smith_actor::mailbox::{MailboxConfig, SpawnConfig};
 use mister_smith_actor::system::ActorSystem;
 use mister_smith_actor::ActorRef;
 use mister_smith_core::{Actor, ActorError, AgentId, AgentState, AgentType, RestartScope};
+use mister_smith_core::{DelegationCapability, ProvenanceChain};
 use mister_smith_security::jwt::AgentClaims;
 use mister_smith_supervision::SupervisedSystem;
 use tokio::sync::RwLock;
@@ -23,6 +24,8 @@ pub struct AgentContext {
     pub agent_type: AgentType,
     pub config: AgentConfig,
     pub delegation_chain: Vec<String>,
+    pub delegation_capability: Option<DelegationCapability>,
+    pub provenance_chain: Option<ProvenanceChain>,
     pub started_at: RwLock<Option<DateTime<Utc>>>,
     pub restart_count: AtomicU32,
     pub health: RwLock<HealthLevel>,
@@ -38,16 +41,35 @@ impl AgentContext {
         config: AgentConfig,
         delegation_chain: Vec<String>,
     ) -> Self {
+        Self::new_with_delegation(agent_id, config, delegation_chain, None, None)
+    }
+
+    pub fn new_with_delegation(
+        agent_id: AgentId,
+        config: AgentConfig,
+        delegation_chain: Vec<String>,
+        delegation_capability: Option<DelegationCapability>,
+        provenance_chain: Option<ProvenanceChain>,
+    ) -> Self {
         Self {
             agent_type: config.agent_type,
             agent_id,
             config,
             delegation_chain,
+            delegation_capability,
+            provenance_chain,
             started_at: RwLock::new(None),
             restart_count: AtomicU32::new(0),
             health: RwLock::new(HealthLevel::Healthy),
         }
     }
+}
+
+#[derive(Debug, Default)]
+struct DelegationRuntimeContext {
+    delegation_chain: Vec<String>,
+    delegation_capability: Option<DelegationCapability>,
+    provenance_chain: Option<ProvenanceChain>,
 }
 
 /// Core agent runtime — bridges Actor (Phase 3) with Agent orchestration.
@@ -140,6 +162,14 @@ impl<M: Send + Clone + 'static, R: Send + Clone + 'static> AgentRuntime<M, R> {
         &self.context.delegation_chain
     }
 
+    pub fn delegation_capability(&self) -> Option<&DelegationCapability> {
+        self.context.delegation_capability.as_ref()
+    }
+
+    pub fn provenance_chain(&self) -> Option<&ProvenanceChain> {
+        self.context.provenance_chain.as_ref()
+    }
+
     /// Get a reference to the actor system.
     pub fn system(&self) -> &Arc<ActorSystem> {
         &self.system
@@ -158,7 +188,14 @@ where
     A::Message: Send + 'static,
     A::State: Send + 'static,
 {
-    spawn_agent_with_chain(system, actor, initial_state, config, Vec::new()).await
+    spawn_agent_with_chain(
+        system,
+        actor,
+        initial_state,
+        config,
+        DelegationRuntimeContext::default(),
+    )
+    .await
 }
 
 /// Spawn a child agent and propagate the parent's delegation chain into the runtime context.
@@ -183,7 +220,11 @@ where
         actor,
         initial_state,
         config,
-        child_claims.delegation_chain,
+        DelegationRuntimeContext {
+            delegation_chain: child_claims.delegation_chain,
+            delegation_capability: child_claims.delegation_capability,
+            provenance_chain: child_claims.provenance_chain,
+        },
     )
     .await
 }
@@ -193,7 +234,7 @@ async fn spawn_agent_with_chain<A>(
     actor: A,
     initial_state: A::State,
     config: AgentConfig,
-    delegation_chain: Vec<String>,
+    delegation_context: DelegationRuntimeContext,
 ) -> Result<AgentRuntime<A::Message, A::Response>, AgentSystemError>
 where
     A: Actor + 'static,
@@ -209,10 +250,12 @@ where
         shutdown_timeout: Duration::from_secs(5),
     };
 
-    let context = Arc::new(AgentContext::new_with_delegation_chain(
+    let context = Arc::new(AgentContext::new_with_delegation(
         agent_id,
         config,
-        delegation_chain,
+        delegation_context.delegation_chain,
+        delegation_context.delegation_capability,
+        delegation_context.provenance_chain,
     ));
 
     let actor_ref = system
@@ -253,7 +296,7 @@ where
         agent_id,
         factory,
         config,
-        Vec::new(),
+        DelegationRuntimeContext::default(),
     )
     .await
 }
@@ -287,7 +330,11 @@ where
         agent_id,
         factory,
         config,
-        child_claims.delegation_chain,
+        DelegationRuntimeContext {
+            delegation_chain: child_claims.delegation_chain,
+            delegation_capability: child_claims.delegation_capability,
+            provenance_chain: child_claims.provenance_chain,
+        },
     )
     .await
 }
@@ -298,7 +345,7 @@ async fn spawn_supervised_with_chain<A, F>(
     agent_id: AgentId,
     factory: F,
     config: AgentConfig,
-    delegation_chain: Vec<String>,
+    delegation_context: DelegationRuntimeContext,
 ) -> Result<AgentRuntime<A::Message, A::Response>, AgentSystemError>
 where
     A: Actor + 'static,
@@ -315,10 +362,12 @@ where
         shutdown_timeout: Duration::from_secs(5),
     };
 
-    let context = Arc::new(AgentContext::new_with_delegation_chain(
+    let context = Arc::new(AgentContext::new_with_delegation(
         agent_id,
         config,
-        delegation_chain,
+        delegation_context.delegation_chain,
+        delegation_context.delegation_capability,
+        delegation_context.provenance_chain,
     ));
 
     let actor_ref = supervised
@@ -356,9 +405,20 @@ pub async fn register_agent<M: Send + Clone + 'static, R: Send + Clone + 'static
         started_at: *runtime.context.started_at.read().await,
         restart_count: runtime.restart_count(),
         metadata: if runtime.delegation_chain().is_empty() {
-            serde_json::Value::Null
+            if runtime.delegation_capability().is_none() {
+                serde_json::Value::Null
+            } else {
+                serde_json::json!({
+                    "delegation_capability": runtime.delegation_capability(),
+                    "provenance_chain": runtime.provenance_chain(),
+                })
+            }
         } else {
-            serde_json::json!({ "delegation_chain": runtime.delegation_chain() })
+            serde_json::json!({
+                "delegation_chain": runtime.delegation_chain(),
+                "delegation_capability": runtime.delegation_capability(),
+                "provenance_chain": runtime.provenance_chain(),
+            })
         },
         supervisor_id: None,
     };

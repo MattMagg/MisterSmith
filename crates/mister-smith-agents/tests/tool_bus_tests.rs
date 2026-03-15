@@ -3,11 +3,18 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use mister_smith_agents::{AgentSystemError, ToolBus};
-use mister_smith_core::{AgentId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema};
-use mister_smith_security::audit::{events::AuditOutcome, AuditLogger};
+use mister_smith_core::{
+    AgentId, AuthorityPrincipal, DelegationScope, Tool, ToolCapabilities, ToolError, ToolId,
+    ToolSchema,
+};
+use mister_smith_security::audit::{
+    events::{AuditEventType, AuditOutcome},
+    AuditLogger,
+};
 use mister_smith_security::config::{AuditConfig, RbacConfig};
 use mister_smith_security::jwt::AgentClaims;
 use mister_smith_security::rbac::PolicyEngine;
+use mister_smith_security::{DelegationService, ValidatedDelegation};
 use serde_json::json;
 
 #[derive(Clone)]
@@ -84,6 +91,17 @@ fn claims(agent_id: AgentId, permissions: &[&str]) -> AgentClaims {
         token_use: "access".to_string(),
         ..Default::default()
     }
+}
+
+fn delegated_claims(
+    agent_id: AgentId,
+    permissions: &[&str],
+    validated: &ValidatedDelegation,
+) -> AgentClaims {
+    let mut claims = claims(agent_id, permissions);
+    claims.delegation_capability = Some(validated.capability.clone());
+    claims.provenance_chain = Some(validated.provenance.clone());
+    claims
 }
 
 #[tokio::test]
@@ -242,4 +260,145 @@ async fn invoke_times_out_when_tool_exceeds_deadline() {
         .unwrap_err();
 
     assert!(matches!(err, AgentSystemError::Timeout(_)));
+}
+
+#[tokio::test]
+async fn invoke_requires_valid_delegation_for_privileged_tools() {
+    let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
+    let delegation_service = Arc::new(DelegationService::new());
+    let bus = ToolBus::with_security(
+        Some(Arc::new(PolicyEngine::new(&RbacConfig::default()))),
+        Some(audit.clone()),
+    )
+    .with_delegation_service(delegation_service.clone());
+    let agent_id = AgentId::new();
+    let (capability, provenance) = delegation_service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            agent_id,
+            DelegationScope::InvokeTool,
+            Duration::from_secs(60),
+            None,
+            None,
+        )
+        .expect("capability should issue");
+    let principal = mister_smith_agents::tool_bus::ToolPrincipal::new(
+        agent_id,
+        delegated_claims(
+            agent_id,
+            &["execute:tool:data"],
+            &ValidatedDelegation {
+                capability: capability.clone(),
+                provenance: provenance.clone(),
+                chain_depth: provenance.links.len(),
+            },
+        ),
+    )
+    .requiring_delegation(DelegationScope::InvokeTool);
+
+    bus.register_native_tool(
+        "echo",
+        "data",
+        agent_id,
+        "Echoes the payload",
+        json!({ "type": "object" }),
+        json!({ "type": "object" }),
+        Arc::new(EchoTool { id: ToolId::new() }),
+    );
+
+    let result = bus
+        .invoke(
+            Some(&principal),
+            "data",
+            "echo",
+            json!({ "value": "delegated" }),
+            Some(Duration::from_millis(50)),
+        )
+        .await
+        .expect("delegated privileged invocation should succeed");
+
+    assert_eq!(result, json!({ "echo": { "value": "delegated" } }));
+
+    let events = audit.recent_events(10);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, AuditEventType::Delegation);
+    assert_eq!(events[0].outcome, AuditOutcome::Success);
+    assert_eq!(events[0].action.as_deref(), Some("invoke_tool"));
+    assert_eq!(
+        events[0]
+            .delegation
+            .as_ref()
+            .and_then(|delegation| delegation.capability_id),
+        Some(capability.capability_id)
+    );
+}
+
+#[tokio::test]
+async fn invoke_rejects_revoked_delegation_for_privileged_tools() {
+    let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
+    let delegation_service = Arc::new(DelegationService::new());
+    let bus = ToolBus::with_security(
+        Some(Arc::new(PolicyEngine::new(&RbacConfig::default()))),
+        Some(audit.clone()),
+    )
+    .with_delegation_service(delegation_service.clone());
+    let agent_id = AgentId::new();
+    let (capability, provenance) = delegation_service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            agent_id,
+            DelegationScope::InvokeTool,
+            Duration::from_secs(60),
+            None,
+            None,
+        )
+        .expect("capability should issue");
+    delegation_service.revoke_capability(capability.capability_id);
+    let principal = mister_smith_agents::tool_bus::ToolPrincipal::new(
+        agent_id,
+        delegated_claims(
+            agent_id,
+            &["execute:tool:data"],
+            &ValidatedDelegation {
+                capability: capability.clone(),
+                provenance: provenance.clone(),
+                chain_depth: provenance.links.len(),
+            },
+        ),
+    )
+    .requiring_delegation(DelegationScope::InvokeTool);
+
+    bus.register_native_tool(
+        "echo",
+        "data",
+        agent_id,
+        "Echoes the payload",
+        json!({ "type": "object" }),
+        json!({ "type": "object" }),
+        Arc::new(EchoTool { id: ToolId::new() }),
+    );
+
+    let err = bus
+        .invoke(
+            Some(&principal),
+            "data",
+            "echo",
+            json!({ "value": "blocked" }),
+            Some(Duration::from_millis(50)),
+        )
+        .await
+        .expect_err("revoked delegation should be rejected");
+
+    assert!(matches!(err, AgentSystemError::PermissionDenied(_)));
+
+    let events = audit.recent_events(10);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, AuditEventType::Delegation);
+    assert_eq!(events[0].outcome, AuditOutcome::Blocked);
+    assert_eq!(events[0].action.as_deref(), Some("validate_delegation"));
+    assert!(events[0]
+        .delegation
+        .as_ref()
+        .and_then(|delegation| delegation.rejection_reason.as_ref())
+        .is_some_and(|reason| reason.contains("revoked")));
 }

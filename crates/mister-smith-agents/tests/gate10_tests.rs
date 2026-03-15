@@ -1,5 +1,7 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
+use async_trait::async_trait;
 use chrono::Utc;
 use mister_smith_agents::config::TaskState;
 use mister_smith_agents::orchestrator::Orchestrator;
@@ -7,14 +9,16 @@ use mister_smith_agents::scheduler::{
     ArrayAggregator, IdentityDecomposer, TaskAssignment, TaskScheduler,
 };
 use mister_smith_agents::{
-    BranchCheckpoint, GuardContext, ProfileAssessment, TopologyCompiler, TopologySignals,
+    BranchCheckpoint, BranchCheckpointStore, BranchResumeMetadata, GuardContext, ProfileAssessment,
+    TopologyCompiler, TopologySignals,
 };
 use mister_smith_core::{
-    AgentId, BranchState, CheckpointId, ExecutionBranchId, FailureClass, GuardTarget, HealthState,
-    InterventionType, MemorySnapshotId, NodeState, ProfileSnapshot, ProfileSnapshotId,
-    ProfileTarget, SemanticSignal, SemanticSignalKind, TaskId,
+    AgentId, AuthorityPrincipal, BranchState, CheckpointId, DelegationScope, ExecutionBranchId,
+    FailureClass, GuardTarget, HealthState, InterventionType, MemorySnapshotId, NodeState,
+    PersistenceError, ProfileSnapshot, ProfileSnapshotId, ProfileTarget, ProvenanceChain,
+    ProvenanceLink, RevocationState, SemanticSignal, SemanticSignalKind, TaskId,
 };
-use mister_smith_events::{AutonomyEvent, EventBus};
+use mister_smith_events::{AutonomyEvent, CapabilitySummary, EventBus};
 use serde_json::json;
 use tokio::time::{timeout, Duration};
 use uuid::Uuid;
@@ -236,6 +240,132 @@ fn checkpointed_fixture() -> MixedDependencyFixture {
     }
 }
 
+#[derive(Default)]
+struct InMemoryBranchCheckpointStore {
+    checkpoints: Mutex<HashMap<(TaskId, ExecutionBranchId), Vec<BranchCheckpoint>>>,
+    resumes: Mutex<HashMap<(TaskId, ExecutionBranchId), Vec<BranchResumeMetadata>>>,
+}
+
+impl InMemoryBranchCheckpointStore {
+    fn latest_resume(
+        &self,
+        workflow_id: TaskId,
+        branch_id: ExecutionBranchId,
+    ) -> Option<BranchResumeMetadata> {
+        self.resumes
+            .lock()
+            .unwrap()
+            .get(&(workflow_id, branch_id))
+            .and_then(|entries| entries.last().cloned())
+    }
+}
+
+#[async_trait]
+impl BranchCheckpointStore for InMemoryBranchCheckpointStore {
+    async fn persist_branch_checkpoint(
+        &self,
+        workflow_id: TaskId,
+        checkpoint: &BranchCheckpoint,
+    ) -> Result<(), PersistenceError> {
+        self.checkpoints
+            .lock()
+            .unwrap()
+            .entry((workflow_id, checkpoint.branch_id))
+            .or_default()
+            .push(checkpoint.clone());
+        Ok(())
+    }
+
+    async fn persist_branch_resume(
+        &self,
+        resume: &BranchResumeMetadata,
+    ) -> Result<(), PersistenceError> {
+        self.resumes
+            .lock()
+            .unwrap()
+            .entry((resume.workflow_id, resume.branch_id))
+            .or_default()
+            .push(resume.clone());
+        Ok(())
+    }
+
+    async fn latest_branch_checkpoint(
+        &self,
+        workflow_id: TaskId,
+        branch_id: ExecutionBranchId,
+    ) -> Result<Option<BranchCheckpoint>, PersistenceError> {
+        Ok(self
+            .checkpoints
+            .lock()
+            .unwrap()
+            .get(&(workflow_id, branch_id))
+            .and_then(|entries| entries.last().cloned()))
+    }
+
+    async fn branch_resume_history(
+        &self,
+        workflow_id: TaskId,
+        branch_id: ExecutionBranchId,
+    ) -> Result<Vec<BranchResumeMetadata>, PersistenceError> {
+        Ok(self
+            .resumes
+            .lock()
+            .unwrap()
+            .get(&(workflow_id, branch_id))
+            .cloned()
+            .unwrap_or_default())
+    }
+}
+
+fn delegated_fixture(required_scope: DelegationScope) -> MixedDependencyFixture {
+    let fixture = checkpointed_fixture();
+    let mut graph = fixture
+        .orchestrator
+        .execution_graph(&fixture.workflow_id)
+        .expect("execution graph should exist");
+    for node in graph
+        .nodes
+        .iter_mut()
+        .filter(|node| node.branch_id == fixture.right_branch)
+    {
+        node.delegation_requirement = Some(required_scope);
+    }
+    fixture.orchestrator.register_execution_graph(graph);
+    fixture
+}
+
+fn capability_summary(
+    scope: DelegationScope,
+    revocation_state: RevocationState,
+    rejection_reason: Option<&str>,
+) -> CapabilitySummary {
+    let capability_id = mister_smith_core::CapabilityId::new();
+    let recipient = AgentId::new();
+    let expires_at = Utc::now() + chrono::Duration::minutes(30);
+    let issuer = AuthorityPrincipal::Policy("operator".to_string());
+    CapabilitySummary {
+        capability_id,
+        issuer: issuer.clone(),
+        recipient,
+        scope,
+        parent_capability: None,
+        expires_at,
+        provenance: ProvenanceChain {
+            root_issuer: issuer.clone(),
+            terminal_capability: capability_id,
+            links: vec![ProvenanceLink {
+                issuer,
+                recipient,
+                capability_id,
+                scope,
+                expires_at,
+            }],
+        },
+        revocation_state,
+        rejection_reason: rejection_reason.map(str::to_string),
+    }
+}
+
 fn assessed_profile(
     branch_id: ExecutionBranchId,
     health_state: HealthState,
@@ -278,6 +408,29 @@ async fn wait_for_event_bus_status(
     })
     .await
     .expect("shared event bus autonomy status should appear")
+}
+
+async fn wait_for_delegation_status(
+    event_bus: &EventBus,
+    workflow_id: &TaskId,
+    expected_capabilities: usize,
+    expected_alerts: usize,
+) -> mister_smith_events::AutonomyStatusView {
+    timeout(Duration::from_millis(500), async {
+        loop {
+            if let Some(status) = event_bus.autonomy_status(workflow_id).await {
+                if status.delegation_capabilities.len() == expected_capabilities
+                    && status.delegation_alerts.len() == expected_alerts
+                {
+                    return status;
+                }
+            }
+
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("delegation status should become visible on the shared event bus")
 }
 
 #[tokio::test]
@@ -532,4 +685,224 @@ async fn gate10_missing_input_fallback_remains_operator_visible() {
         .conservative_reasons
         .iter()
         .any(|reason| reason.contains("memory metadata unavailable")));
+}
+
+#[tokio::test]
+async fn gate10_delegated_resume_checks_all_branch_node_requirements() {
+    let fixture = checkpointed_fixture();
+    let store = InMemoryBranchCheckpointStore::default();
+    let mut graph = fixture
+        .orchestrator
+        .execution_graph(&fixture.workflow_id)
+        .expect("execution graph should exist");
+    let right_two = node_id_for(&graph, "right-2");
+    graph
+        .nodes
+        .iter_mut()
+        .find(|node| node.node_id == right_two)
+        .expect("right-2 node should exist")
+        .delegation_requirement = Some(DelegationScope::ManageBranch);
+    fixture.orchestrator.register_execution_graph(graph);
+
+    let err = fixture
+        .orchestrator
+        .resume_branch_with_delegation(
+            &fixture.workflow_id,
+            &store,
+            fixture.right_branch,
+            Some(AgentId::new()),
+            &capability_summary(
+                DelegationScope::ExecuteWorkflow,
+                RevocationState::Active,
+                None,
+            ),
+        )
+        .await
+        .expect_err("mixed branch requirements should reject the wrong delegated scope");
+
+    assert!(matches!(
+        err,
+        mister_smith_agents::AgentSystemError::PermissionDenied(message)
+            if message.contains("delegation rejected")
+    ));
+}
+
+#[tokio::test]
+async fn gate10_delegated_resume_reconstructs_checkpoint_provenance() {
+    let fixture = delegated_fixture(DelegationScope::ManageBranch);
+    let store = InMemoryBranchCheckpointStore::default();
+    let assigned_agent = AgentId::new();
+    let capability =
+        capability_summary(DelegationScope::ManageBranch, RevocationState::Active, None);
+
+    let recovery = fixture
+        .orchestrator
+        .resume_branch_with_delegation(
+            &fixture.workflow_id,
+            &store,
+            fixture.right_branch,
+            Some(assigned_agent),
+            &capability,
+        )
+        .await
+        .expect("delegated branch resume should succeed");
+
+    assert_eq!(
+        recovery.resume_metadata.delegation_capability_id,
+        Some(capability.capability_id)
+    );
+    assert_eq!(
+        recovery.resume_metadata.delegation_scope,
+        Some(DelegationScope::ManageBranch)
+    );
+    assert_eq!(
+        recovery.resume_metadata.delegation_chain_depth,
+        Some(capability.provenance.links.len())
+    );
+    assert_eq!(
+        store
+            .latest_resume(fixture.workflow_id, fixture.right_branch)
+            .expect("resume metadata should persist")
+            .delegation_capability_id,
+        Some(capability.capability_id)
+    );
+    assert_eq!(
+        recovery
+            .checkpoint
+            .failure_context
+            .as_ref()
+            .and_then(|context| context.get("delegation_capability_id"))
+            .cloned(),
+        Some(json!(capability.capability_id))
+    );
+    assert_eq!(
+        recovery
+            .checkpoint
+            .failure_context
+            .as_ref()
+            .and_then(|context| context.get("delegation_chain_depth"))
+            .cloned(),
+        Some(json!(capability.provenance.links.len()))
+    );
+
+    let status = fixture
+        .orchestrator
+        .autonomy_status(&fixture.workflow_id)
+        .expect("delegated resume should remain operator-visible");
+    assert_eq!(status.delegation_capabilities.len(), 1);
+    assert!(status.delegation_alerts.is_empty());
+    assert_eq!(
+        status.delegation_capabilities[0]
+            .provenance
+            .terminal_capability,
+        capability.capability_id
+    );
+
+    let shared_status =
+        wait_for_delegation_status(fixture.event_bus.as_ref(), &fixture.workflow_id, 1, 0).await;
+    assert_eq!(shared_status.delegation_capabilities.len(), 1);
+    assert_eq!(
+        shared_status.delegation_capabilities[0].provenance.links[0].scope,
+        DelegationScope::ManageBranch
+    );
+
+    let routing_status =
+        wait_for_event_bus_status(fixture.event_bus.as_ref(), &fixture.workflow_id, 1, 1).await;
+    assert_eq!(routing_status.routing_history.len(), 1);
+}
+
+#[tokio::test]
+async fn gate10_delegated_resume_preserves_existing_failure_context() {
+    let fixture = delegated_fixture(DelegationScope::ManageBranch);
+    let store = InMemoryBranchCheckpointStore::default();
+    let capability =
+        capability_summary(DelegationScope::ManageBranch, RevocationState::Active, None);
+    let mut graph = fixture
+        .orchestrator
+        .execution_graph(&fixture.workflow_id)
+        .expect("execution graph should exist");
+    graph
+        .checkpoint_lineage
+        .last_mut()
+        .expect("checkpoint lineage should exist")
+        .failure_context = Some(json!({
+        "failure_class": "transient",
+        "details": "provider timeout",
+    }));
+    fixture.orchestrator.register_execution_graph(graph);
+
+    let recovery = fixture
+        .orchestrator
+        .resume_branch_with_delegation(
+            &fixture.workflow_id,
+            &store,
+            fixture.right_branch,
+            Some(AgentId::new()),
+            &capability,
+        )
+        .await
+        .expect("delegated branch resume should succeed");
+
+    let context = recovery
+        .checkpoint
+        .failure_context
+        .as_ref()
+        .expect("delegated resume should preserve checkpoint context");
+    assert_eq!(context.get("failure_class"), Some(&json!("transient")));
+    assert_eq!(context.get("details"), Some(&json!("provider timeout")));
+    assert_eq!(
+        context.get("delegation_capability_id"),
+        Some(&json!(capability.capability_id))
+    );
+}
+
+#[tokio::test]
+async fn gate10_rejected_delegated_resume_surfaces_operator_reason() {
+    let fixture = delegated_fixture(DelegationScope::ManageBranch);
+    let store = InMemoryBranchCheckpointStore::default();
+    let capability = capability_summary(
+        DelegationScope::ManageBranch,
+        RevocationState::Revoked,
+        Some("delegation revoked before branch resume"),
+    );
+
+    let error = fixture
+        .orchestrator
+        .resume_branch_with_delegation(
+            &fixture.workflow_id,
+            &store,
+            fixture.right_branch,
+            Some(AgentId::new()),
+            &capability,
+        )
+        .await
+        .expect_err("revoked delegation should be rejected");
+
+    assert!(matches!(
+        error,
+        mister_smith_agents::AgentSystemError::PermissionDenied(_)
+    ));
+
+    let status = fixture
+        .orchestrator
+        .autonomy_status(&fixture.workflow_id)
+        .expect("rejected delegation should still be visible to operators");
+    let alert = status
+        .delegation_alerts
+        .iter()
+        .find(|alert| alert.capability_id == Some(capability.capability_id))
+        .expect("rejected delegation should produce an alert");
+    assert_eq!(alert.chain_depth, capability.provenance.links.len());
+    assert_eq!(
+        alert.rejection_reason.as_deref(),
+        Some("delegation revoked before branch resume")
+    );
+
+    let shared_status =
+        wait_for_delegation_status(fixture.event_bus.as_ref(), &fixture.workflow_id, 1, 1).await;
+    assert!(shared_status
+        .delegation_alerts
+        .iter()
+        .any(|alert| alert.rejection_reason.as_deref()
+            == Some("delegation revoked before branch resume")));
 }

@@ -227,6 +227,7 @@ fn record_validation_failure(
         action: Some("message_validation".to_string()),
         outcome: AuditOutcome::Blocked,
         details,
+        delegation: None,
         source_ip: None,
         previous_hash: None,
     });

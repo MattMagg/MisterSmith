@@ -3,7 +3,8 @@ use mister_smith_core::{
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
     GuardEvidence, HealthState, InterventionRecordId, InterventionType, ProfileSnapshot,
-    ProfileSnapshotId, ProfileTarget, RevocationState, TaskId, TopologyKind, TopologyRationale,
+    ProfileSnapshotId, ProfileTarget, ProvenanceChain, ProvenanceLink, RevocationState, TaskId,
+    TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
@@ -16,6 +17,26 @@ fn assert_event_traits<T>()
 where
     T: Clone + Send + Sync + std::fmt::Debug + serde::Serialize + DeserializeOwned + 'static,
 {
+}
+
+fn sample_provenance(
+    issuer: AuthorityPrincipal,
+    recipient: AgentId,
+    capability_id: CapabilityId,
+    scope: DelegationScope,
+    expires_at: chrono::DateTime<chrono::Utc>,
+) -> ProvenanceChain {
+    ProvenanceChain {
+        root_issuer: issuer.clone(),
+        links: vec![ProvenanceLink {
+            issuer,
+            recipient,
+            capability_id,
+            scope,
+            expires_at,
+        }],
+        terminal_capability: capability_id,
+    }
 }
 
 #[test]
@@ -150,17 +171,28 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             rationale: "branch isolation".to_string(),
             emitted_at: chrono::Utc::now(),
         }],
+        delegation_capabilities: vec![],
         delegation_alerts: vec![
             DelegationAlert {
                 capability_id: Some(CapabilityId::new()),
                 scope: Some(DelegationScope::ManageBranch),
                 revocation_state: Some(RevocationState::Revoked),
+                parent_capability: None,
+                expires_at: None,
+                chain_depth: 1,
+                rejection_reason: Some("Delegation capability revoked".to_string()),
                 message: "delegation revoked before branch resume".to_string(),
             },
             DelegationAlert {
                 capability_id: None,
                 scope: None,
                 revocation_state: None,
+                parent_capability: None,
+                expires_at: None,
+                chain_depth: 0,
+                rejection_reason: Some(
+                    "operator review required for widened authority".to_string(),
+                ),
                 message: "operator review required for widened authority".to_string(),
             },
         ],
@@ -256,6 +288,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
             rationale: vec!["sequential routing avoided restart blast radius".to_string()],
         }],
         interventions: vec![],
+        delegation_capabilities: vec![],
         delegation_alerts: vec![],
         profiles: vec![],
         guard_decisions: vec![],
@@ -277,12 +310,26 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
 
 #[test]
 fn capability_summary_preserves_policy_issuers() {
+    let capability_id = CapabilityId::new();
+    let recipient = AgentId::new();
+    let expires_at = chrono::Utc::now();
+    let issuer = AuthorityPrincipal::Policy("bootstrap-policy".to_string());
     let summary = CapabilitySummary {
-        capability_id: CapabilityId::new(),
-        issuer: AuthorityPrincipal::Policy("bootstrap-policy".to_string()),
-        recipient: AgentId::new(),
+        capability_id,
+        issuer: issuer.clone(),
+        recipient,
         scope: DelegationScope::ApplyIntervention,
+        parent_capability: None,
+        expires_at,
+        provenance: sample_provenance(
+            issuer,
+            recipient,
+            capability_id,
+            DelegationScope::ApplyIntervention,
+            expires_at,
+        ),
         revocation_state: RevocationState::Active,
+        rejection_reason: None,
     };
 
     let json = serde_json::to_string(&summary).unwrap();
@@ -544,10 +591,15 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         memory_pressure: vec![],
         routing_history: vec![],
         interventions: vec![],
+        delegation_capabilities: vec![],
         delegation_alerts: vec![DelegationAlert {
             capability_id: Some(capability_id),
             scope: Some(DelegationScope::ManageBranch),
             revocation_state: Some(RevocationState::Revoked),
+            parent_capability: None,
+            expires_at: None,
+            chain_depth: 1,
+            rejection_reason: Some("Delegation capability revoked".to_string()),
             message: "delegation suspended pending operator review".to_string(),
         }],
         profiles: vec![],
@@ -574,12 +626,27 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
                 workflow_id,
                 graph_id: Some(graph_id),
                 branch_id: Some(branch_id),
-                payload: CapabilitySummary {
-                    capability_id,
-                    issuer: AuthorityPrincipal::Policy("operator".to_string()),
-                    recipient: AgentId::new(),
-                    scope: DelegationScope::ManageBranch,
-                    revocation_state: RevocationState::Active,
+                payload: {
+                    let issuer = AuthorityPrincipal::Policy("operator".to_string());
+                    let recipient = AgentId::new();
+                    let expires_at = chrono::Utc::now();
+                    CapabilitySummary {
+                        capability_id,
+                        issuer: issuer.clone(),
+                        recipient,
+                        scope: DelegationScope::ManageBranch,
+                        parent_capability: None,
+                        expires_at,
+                        provenance: sample_provenance(
+                            issuer,
+                            recipient,
+                            capability_id,
+                            DelegationScope::ManageBranch,
+                            expires_at,
+                        ),
+                        revocation_state: RevocationState::Active,
+                        rejection_reason: None,
+                    }
                 },
                 operator_visible: true,
             })
