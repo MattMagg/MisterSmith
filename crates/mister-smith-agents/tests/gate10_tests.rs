@@ -10,9 +10,9 @@ use mister_smith_agents::{
     BranchCheckpoint, GuardContext, ProfileAssessment, TopologyCompiler, TopologySignals,
 };
 use mister_smith_core::{
-    AgentId, BranchState, CheckpointId, ExecutionBranchId, FailureClass, GuardTarget,
-    HealthState, InterventionType, MemorySnapshotId, NodeState, ProfileSnapshot,
-    ProfileSnapshotId, ProfileTarget, SemanticSignal, SemanticSignalKind, TaskId,
+    AgentId, BranchState, CheckpointId, ExecutionBranchId, FailureClass, GuardTarget, HealthState,
+    InterventionType, MemorySnapshotId, NodeState, ProfileSnapshot, ProfileSnapshotId,
+    ProfileTarget, SemanticSignal, SemanticSignalKind, TaskId,
 };
 use mister_smith_events::AutonomyEvent;
 use serde_json::json;
@@ -306,7 +306,10 @@ async fn gate10_mixed_dependency_resume_preserves_completed_branches() {
         .expect("operator-visible autonomy status should exist");
     assert_eq!(status.checkpoint_lineage.len(), 1);
     assert_eq!(status.routing_history.len(), 1);
-    assert_eq!(status.checkpoint_lineage[0].checkpoint_id, fixture.checkpoint_id);
+    assert_eq!(
+        status.checkpoint_lineage[0].checkpoint_id,
+        fixture.checkpoint_id
+    );
     assert!(status.routing_history[0]
         .rationale
         .iter()
@@ -363,7 +366,10 @@ async fn gate10_transient_retry_remains_operator_visible() {
         .expect("operator status should exist after transient retry");
     assert_eq!(status.guard_decisions.len(), 1);
     assert_eq!(status.interventions.len(), 1);
-    assert_eq!(status.checkpoint_lineage[0].checkpoint_id, fixture.checkpoint_id);
+    assert_eq!(
+        status.checkpoint_lineage[0].checkpoint_id,
+        fixture.checkpoint_id
+    );
 }
 
 #[tokio::test]

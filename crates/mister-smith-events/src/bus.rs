@@ -15,8 +15,8 @@ use tracing;
 
 use mister_smith_core::{
     CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, GuardDecision,
-    GuardDecisionId, InterventionRecord, InterventionRecordId, ProfileSnapshot,
-    ProfileSnapshotId, RevocationState, SystemEvent, TaskId,
+    GuardDecisionId, InterventionRecord, InterventionRecordId, ProfileSnapshot, ProfileSnapshotId,
+    RevocationState, SystemEvent, TaskId,
 };
 
 use crate::autonomy::{
@@ -124,9 +124,11 @@ impl AutonomyStatusAccumulator {
             .cloned()
             .collect::<Vec<_>>();
         checkpoint_lineage.sort_by(|left, right| {
-            left.captured_at
-                .cmp(&right.captured_at)
-                .then_with(|| left.checkpoint_id.to_string().cmp(&right.checkpoint_id.to_string()))
+            left.captured_at.cmp(&right.captured_at).then_with(|| {
+                left.checkpoint_id
+                    .to_string()
+                    .cmp(&right.checkpoint_id.to_string())
+            })
         });
 
         let mut memory_pressure = self.memory_pressure.values().cloned().collect::<Vec<_>>();
@@ -135,11 +137,7 @@ impl AutonomyStatusAccumulator {
         let mut interventions = self.interventions.values().cloned().collect::<Vec<_>>();
         interventions.sort_by(|left, right| left.emitted_at.cmp(&right.emitted_at));
 
-        let mut delegation_alerts = self
-            .delegation_alerts
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
+        let mut delegation_alerts = self.delegation_alerts.values().cloned().collect::<Vec<_>>();
         delegation_alerts.sort_by_key(|alert| alert.message.clone());
 
         let mut profiles = self.profiles.values().cloned().collect::<Vec<_>>();
@@ -179,7 +177,9 @@ impl AutonomyStatusAccumulator {
                 .insert(checkpoint.checkpoint_id, checkpoint);
         }
         for pressure in view.memory_pressure {
-            accumulator.memory_pressure.insert(pressure.budget_id, pressure);
+            accumulator
+                .memory_pressure
+                .insert(pressure.budget_id, pressure);
         }
         accumulator.routing_history = view.routing_history;
         for record in view.interventions {
@@ -415,8 +415,11 @@ impl EventBus {
 
     async fn update_autonomy_projection(&self, event: &Event) -> Result<(), EventBusError> {
         let Some(autonomy_event) = event.autonomy_event().map_err(|error| {
-            EventBusError::HandlerFailed(format!("failed to decode autonomy event payload: {error}"))
-        })? else {
+            EventBusError::HandlerFailed(format!(
+                "failed to decode autonomy event payload: {error}"
+            ))
+        })?
+        else {
             return Ok(());
         };
 

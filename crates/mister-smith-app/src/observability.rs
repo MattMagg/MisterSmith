@@ -158,7 +158,10 @@ pub fn build_metric_operations(
         value: 1.0,
         labels: vec![
             ("workflow_id".to_string(), workflow_id.clone()),
-            ("status".to_string(), format!("{:?}", view.graph.state).to_lowercase()),
+            (
+                "status".to_string(),
+                format!("{:?}", view.graph.state).to_lowercase(),
+            ),
         ],
     });
 
@@ -187,7 +190,10 @@ pub fn build_metric_operations(
             labels: vec![
                 ("workflow_id".to_string(), workflow_id.clone()),
                 ("branch_id".to_string(), branch.branch_id.to_string()),
-                ("state".to_string(), format!("{:?}", branch.state).to_lowercase()),
+                (
+                    "state".to_string(),
+                    format!("{:?}", branch.state).to_lowercase(),
+                ),
                 (
                     "recovery_state".to_string(),
                     format!("{:?}", branch.recovery_strategy).to_lowercase(),
@@ -200,7 +206,9 @@ pub fn build_metric_operations(
         operations.push(MetricOperation {
             name: "mistersmith_autonomy_branch_checkpoint_age_seconds",
             kind: MetricOperationKind::Gauge,
-            value: (chrono::Utc::now() - checkpoint.captured_at).num_seconds().max(0) as f64,
+            value: (chrono::Utc::now() - checkpoint.captured_at)
+                .num_seconds()
+                .max(0) as f64,
             labels: vec![
                 ("workflow_id".to_string(), workflow_id.clone()),
                 ("branch_id".to_string(), checkpoint.branch_id.to_string()),
@@ -223,7 +231,10 @@ pub fn build_metric_operations(
                         .map(|branch_id| branch_id.to_string())
                         .unwrap_or_else(|| pressure.budget_id.to_string()),
                 ),
-                ("pressure_level".to_string(), pressure_level(ratio).to_string()),
+                (
+                    "pressure_level".to_string(),
+                    pressure_level(ratio).to_string(),
+                ),
             ],
         });
     }
@@ -243,7 +254,8 @@ pub fn build_metric_operations(
                 ("workflow_id".to_string(), workflow_id.clone()),
                 (
                     "branch_id".to_string(),
-                    event.branch_id()
+                    event
+                        .branch_id()
                         .map(|branch_id| branch_id.to_string())
                         .unwrap_or_else(|| "graph".to_string()),
                 ),
@@ -269,8 +281,14 @@ pub fn build_metric_operations(
                         "scope".to_string(),
                         format!("{:?}", envelope.payload.scope).to_lowercase(),
                     ),
-                    ("issuer".to_string(), format!("{:?}", envelope.payload.issuer)),
-                    ("recipient".to_string(), envelope.payload.recipient.to_string()),
+                    (
+                        "issuer".to_string(),
+                        format!("{:?}", envelope.payload.issuer),
+                    ),
+                    (
+                        "recipient".to_string(),
+                        envelope.payload.recipient.to_string(),
+                    ),
                 ],
             });
         }
@@ -282,8 +300,9 @@ pub fn build_metric_operations(
 fn apply_metric_operations(operations: Vec<MetricOperation>) {
     for operation in operations {
         match operation.kind {
-            MetricOperationKind::Gauge => metrics::gauge!(operation.name, &operation.labels)
-                .set(operation.value),
+            MetricOperationKind::Gauge => {
+                metrics::gauge!(operation.name, &operation.labels).set(operation.value)
+            }
             MetricOperationKind::Counter => metrics::counter!(operation.name, &operation.labels)
                 .increment(operation.value as u64),
         }

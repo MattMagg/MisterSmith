@@ -3,8 +3,8 @@
 //! Orchestrates process lifecycle: deterministic startup, graceful shutdown,
 //! signal handling, observability initialization, and cross-phase integration wiring.
 
-mod autonomy;
 mod auth;
+mod autonomy;
 mod bootstrap;
 #[allow(dead_code)]
 mod bridges;

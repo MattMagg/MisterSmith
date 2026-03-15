@@ -171,25 +171,27 @@ impl Orchestrator {
             })
         }));
         initial_events.extend(graph.branches.iter().filter_map(|branch| {
-            graph.latest_checkpoint(&branch.branch_id).map(|checkpoint| {
-                AutonomyEvent::CheckpointRecorded(AutonomyEventEnvelope {
-                    workflow_id,
-                    graph_id: Some(graph_id),
-                    branch_id: Some(branch.branch_id),
-                    payload: CheckpointRecordSummary {
-                        graph_id,
-                        branch_id: branch.branch_id,
-                        checkpoint_id: checkpoint.checkpoint_id,
-                        captured_at: checkpoint.created_at,
-                        memory_snapshot_id: checkpoint.memory_snapshot_id,
-                        completed_nodes: checkpoint.completed_nodes.clone(),
-                        pending_nodes: checkpoint.pending_nodes.clone(),
-                        recovery_strategy: branch.recovery_strategy,
-                        failure_context: checkpoint.failure_context.clone(),
-                    },
-                    operator_visible: true,
+            graph
+                .latest_checkpoint(&branch.branch_id)
+                .map(|checkpoint| {
+                    AutonomyEvent::CheckpointRecorded(AutonomyEventEnvelope {
+                        workflow_id,
+                        graph_id: Some(graph_id),
+                        branch_id: Some(branch.branch_id),
+                        payload: CheckpointRecordSummary {
+                            graph_id,
+                            branch_id: branch.branch_id,
+                            checkpoint_id: checkpoint.checkpoint_id,
+                            captured_at: checkpoint.created_at,
+                            memory_snapshot_id: checkpoint.memory_snapshot_id,
+                            completed_nodes: checkpoint.completed_nodes.clone(),
+                            pending_nodes: checkpoint.pending_nodes.clone(),
+                            recovery_strategy: branch.recovery_strategy,
+                            failure_context: checkpoint.failure_context.clone(),
+                        },
+                        operator_visible: true,
+                    })
                 })
-            })
         }));
 
         self.execution_graphs.insert(workflow_id, graph);
@@ -396,8 +398,13 @@ impl Orchestrator {
             workflow_id,
             &SupervisorMessage::RecordIntervention(record.clone()),
         );
-        let graph_id = self.execution_graph(workflow_id).map(|graph| graph.graph_id);
-        let branch_id = branch_id_for_target(self.execution_graph(workflow_id).as_ref(), &decision.target_scope);
+        let graph_id = self
+            .execution_graph(workflow_id)
+            .map(|graph| graph.graph_id);
+        let branch_id = branch_id_for_target(
+            self.execution_graph(workflow_id).as_ref(),
+            &decision.target_scope,
+        );
         self.record_autonomy_event(
             workflow_id,
             AutonomyEvent::GuardDecisionEvaluated(AutonomyEventEnvelope {
@@ -528,17 +535,19 @@ impl Orchestrator {
                 .checkpoint_lineage
                 .iter()
                 .filter_map(|checkpoint| {
-                    graph.branch(&checkpoint.branch_id).map(|branch| CheckpointRecordSummary {
-                        graph_id: graph.graph_id,
-                        branch_id: checkpoint.branch_id,
-                        checkpoint_id: checkpoint.checkpoint_id,
-                        captured_at: checkpoint.created_at,
-                        memory_snapshot_id: checkpoint.memory_snapshot_id,
-                        completed_nodes: checkpoint.completed_nodes.clone(),
-                        pending_nodes: checkpoint.pending_nodes.clone(),
-                        recovery_strategy: branch.recovery_strategy,
-                        failure_context: checkpoint.failure_context.clone(),
-                    })
+                    graph
+                        .branch(&checkpoint.branch_id)
+                        .map(|branch| CheckpointRecordSummary {
+                            graph_id: graph.graph_id,
+                            branch_id: checkpoint.branch_id,
+                            checkpoint_id: checkpoint.checkpoint_id,
+                            captured_at: checkpoint.created_at,
+                            memory_snapshot_id: checkpoint.memory_snapshot_id,
+                            completed_nodes: checkpoint.completed_nodes.clone(),
+                            pending_nodes: checkpoint.pending_nodes.clone(),
+                            recovery_strategy: branch.recovery_strategy,
+                            failure_context: checkpoint.failure_context.clone(),
+                        })
                 })
                 .collect(),
             memory_pressure: Vec::<ContextPressureSummary>::new(),
@@ -1228,7 +1237,8 @@ fn branch_id_for_target(
     match target {
         GuardTarget::Branch(branch_id) => Some(*branch_id),
         GuardTarget::Node(node_id) => graph.and_then(|graph| {
-            graph.nodes
+            graph
+                .nodes
                 .iter()
                 .find(|node| node.node_id == *node_id)
                 .map(|node| node.branch_id)

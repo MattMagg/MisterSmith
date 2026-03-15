@@ -151,9 +151,14 @@ async fn bootstrap_inner(
     info!("Background monitors started");
 
     // Step 7: Start HTTP server (with /metrics endpoint if prometheus enabled)
-    let http_handle =
-        start_http_server(config, &shutdown_tx, otel_guard, state_tracker, event_bus.clone())
-            .await?;
+    let http_handle = start_http_server(
+        config,
+        &shutdown_tx,
+        otel_guard,
+        state_tracker,
+        event_bus.clone(),
+    )
+    .await?;
 
     // Step 8: Mark ready
     state_tracker.set(ProcessLifecycle::Ready);

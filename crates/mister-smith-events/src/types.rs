@@ -6,8 +6,8 @@
 //! used by the `EventPublisher` trait in the core crate. The `EventBus` converts
 //! between the two when implementing `EventPublisher`.
 
-use crate::autonomy::AutonomyEventType;
 use crate::autonomy::AutonomyEvent;
+use crate::autonomy::AutonomyEventType;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 use uuid::Uuid;

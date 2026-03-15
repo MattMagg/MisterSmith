@@ -447,7 +447,9 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
                         profile_id: None,
                         signal_descriptions: vec!["missing profile".to_string()],
                         checkpoint_ids: vec![checkpoint_id],
-                        notes: vec!["conservative fallback: control-plane state unavailable".to_string()],
+                        notes: vec![
+                            "conservative fallback: control-plane state unavailable".to_string()
+                        ],
                     },
                     target_scope: mister_smith_core::GuardTarget::Branch(branch_id),
                     operator_visibility: true,
@@ -484,10 +486,16 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         .await
         .expect("autonomy projection should assemble from typed events");
 
-    assert_eq!(view.topology.rationale.selected_for, "minimize restart blast radius");
+    assert_eq!(
+        view.topology.rationale.selected_for,
+        "minimize restart blast radius"
+    );
     assert_eq!(view.checkpoint_lineage.len(), 1);
     assert_eq!(view.routing_history.len(), 1);
-    assert_eq!(view.interventions[0].rationale, "operator escalation remained visible");
+    assert_eq!(
+        view.interventions[0].rationale,
+        "operator escalation remained visible"
+    );
     assert!(view
         .conservative_reasons
         .iter()

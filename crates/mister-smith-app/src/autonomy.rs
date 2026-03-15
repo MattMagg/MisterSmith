@@ -100,7 +100,11 @@ pub async fn fetch_status(
         base_url.trim_end_matches('/'),
         workflow_id
     );
-    let response = client.get(url).send().await.map_err(AutonomyStatusError::Http)?;
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(AutonomyStatusError::Http)?;
 
     if response.status().is_success() {
         return response
@@ -121,7 +125,11 @@ pub async fn fetch_workflows(base_url: &str) -> Result<AutonomyWorkflowList, Aut
         "{}/api/v1/autonomy/workflows",
         base_url.trim_end_matches('/')
     );
-    let response = client.get(url).send().await.map_err(AutonomyStatusError::Http)?;
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(AutonomyStatusError::Http)?;
 
     if response.status().is_success() {
         return response

@@ -122,7 +122,9 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             target_scope: mister_smith_core::GuardTarget::Branch(branch_id),
             operator_visibility: true,
         }],
-        conservative_reasons: vec!["conservative fallback: control-plane state unavailable".to_string()],
+        conservative_reasons: vec![
+            "conservative fallback: control-plane state unavailable".to_string()
+        ],
     };
 
     (view, decision_id, branch_id)
@@ -162,9 +164,10 @@ fn metric_operations_cover_checkpoint_pressure_and_intervention_visibility() {
 
     assert!(operations.iter().any(|operation| {
         operation.name == "mistersmith_autonomy_branch_checkpoint_age_seconds"
-            && operation.labels.iter().any(|(key, value)| {
-                key == "branch_id" && value == &branch_id.to_string()
-            })
+            && operation
+                .labels
+                .iter()
+                .any(|(key, value)| key == "branch_id" && value == &branch_id.to_string())
     }));
     assert!(operations.iter().any(|operation| {
         operation.name == "mistersmith_autonomy_context_pressure_ratio"
