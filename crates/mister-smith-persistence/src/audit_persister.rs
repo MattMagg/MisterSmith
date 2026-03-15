@@ -212,6 +212,7 @@ mod tests {
                 m.insert("method".to_string(), "jwt".to_string());
                 m
             },
+            delegation: None,
             source_ip: Some("192.168.1.1".to_string()),
             previous_hash: None,
         }

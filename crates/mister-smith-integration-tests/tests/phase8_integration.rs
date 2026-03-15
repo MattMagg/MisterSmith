@@ -32,6 +32,7 @@ async fn audit_logger_drain_events_returns_recorded_events() {
         action: Some("login".to_string()),
         outcome: AuditOutcome::Success,
         details: Default::default(),
+        delegation: None,
         source_ip: None,
         previous_hash: None,
     };
@@ -176,6 +177,7 @@ async fn supervision_event_audit_trail() {
             m.insert("reason".to_string(), "heartbeat_timeout".to_string());
             m
         },
+        delegation: None,
         source_ip: None,
         previous_hash: None,
     };
