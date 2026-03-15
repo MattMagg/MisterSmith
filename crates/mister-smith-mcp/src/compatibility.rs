@@ -57,6 +57,18 @@ query SmithControlPlaneWorkspace {
           name
         }
       }
+      inverseRelations(first: 20) {
+        nodes {
+          type
+          issue {
+            id
+            identifier
+            state {
+              name
+            }
+          }
+        }
+      }
     }
   }
   teams(first: 20) {
@@ -227,12 +239,21 @@ pub struct LinearIssueSnapshot {
     pub team_key: Option<String>,
     pub team_name: Option<String>,
     pub labels: Vec<String>,
+    pub blocked_by: Vec<LinearIssueBlockerSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LinearIssueBlockerSnapshot {
+    pub id: Option<String>,
+    pub identifier: String,
+    pub state: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LinearRuntimeSync {
     pub configured_project_slug: Option<String>,
     pub queue_issue_count: usize,
+    pub active_issue_count: usize,
     pub issues_by_state: BTreeMap<String, usize>,
     pub discrepancies: Vec<String>,
     pub suggested_actions: Vec<String>,
@@ -1486,6 +1507,7 @@ impl SmithCompatibilityServer {
                     LinearRuntimeSync {
                         configured_project_slug: workflow.project_slug,
                         queue_issue_count: 0,
+                        active_issue_count: 0,
                         issues_by_state: BTreeMap::new(),
                         discrepancies: Vec::new(),
                         suggested_actions: vec!["restore LINEAR_API_KEY and rerun".to_string()],
@@ -1499,14 +1521,13 @@ impl SmithCompatibilityServer {
         let queue_issues: Vec<&LinearIssueSnapshot> = workspace
             .issues
             .iter()
-            .filter(|issue| {
-                issue
-                    .project
-                    .as_ref()
-                    .map(|project| project_slug_matches(configured_slug.as_deref(), &project.slug))
-                    .unwrap_or(false)
-            })
+            .filter(|issue| issue_in_watched_project(issue, configured_slug.as_deref()))
             .collect();
+        let active_issue_count = queue_issues
+            .iter()
+            .filter_map(|issue| state_name(issue))
+            .filter(|state| is_active_state(state, &workflow))
+            .count();
 
         for issue in &queue_issues {
             let key = issue
@@ -1525,6 +1546,14 @@ impl SmithCompatibilityServer {
             suggested_actions.push(
                 "Use plan_phase_execution and apply_phase_execution_plan to stage the next runnable slice".to_string(),
             );
+        } else if active_issue_count == 0 {
+            discrepancies.push(
+                "Watched project has historical issues but no active issues in active workflow states"
+                    .to_string(),
+            );
+            suggested_actions.push(
+                "Stage the next runnable slice instead of relying on historical issues in the watched project".to_string(),
+            );
         }
 
         let active_state_set: BTreeSet<_> = workflow.active_states.iter().cloned().collect();
@@ -1538,6 +1567,13 @@ impl SmithCompatibilityServer {
                         issue.identifier, state.name
                     ));
                 }
+            }
+            if let Some(detail) = blocked_todo_detail(issue, &workflow) {
+                discrepancies.push(detail);
+                suggested_actions.push(format!(
+                    "Remove {} from Todo or resolve its blockers before treating it as runnable capacity",
+                    issue.identifier
+                ));
             }
         }
 
@@ -1568,6 +1604,7 @@ impl SmithCompatibilityServer {
             data: LinearRuntimeSync {
                 configured_project_slug: configured_slug,
                 queue_issue_count: queue_issues.len(),
+                active_issue_count,
                 issues_by_state,
                 discrepancies,
                 suggested_actions,
@@ -1670,8 +1707,10 @@ impl SmithCompatibilityServer {
         _params: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
         let linear = self.linear_runtime_sync().await?;
+        let workflow = self.workflow_summary().await;
         let workspace = self.linear_workspace().await.ok();
         let github = self.github_snapshot().await;
+        let configured_slug = workflow.project_slug.clone();
 
         let human_review_count = workspace
             .as_ref()
@@ -1680,8 +1719,8 @@ impl SmithCompatibilityServer {
                     .issues
                     .iter()
                     .filter(|issue| {
-                        issue.state.as_ref().map(|state| state.name.as_str())
-                            == Some("Human Review")
+                        issue_in_watched_project(issue, configured_slug.as_deref())
+                            && state_name(issue) == Some("Human Review")
                     })
                     .count()
             })
@@ -1693,11 +1732,23 @@ impl SmithCompatibilityServer {
                     .issues
                     .iter()
                     .filter(|issue| {
-                        issue.state.as_ref().map(|state| state.name.as_str()) == Some("Merging")
+                        issue_in_watched_project(issue, configured_slug.as_deref())
+                            && state_name(issue) == Some("Merging")
                     })
                     .count()
             })
             .unwrap_or(0);
+        let blocked_todo_issues = workspace
+            .as_ref()
+            .map(|workspace| {
+                workspace
+                    .issues
+                    .iter()
+                    .filter(|issue| issue_in_watched_project(issue, configured_slug.as_deref()))
+                    .filter_map(|issue| blocked_todo_detail(issue, &workflow))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
 
         let refill_candidates = workspace
             .as_ref()
@@ -1705,20 +1756,13 @@ impl SmithCompatibilityServer {
                 workspace
                     .issues
                     .iter()
-                    .filter(|issue| {
-                        issue.state.as_ref().map(|state| state.name.as_str()) == Some("Backlog")
-                    })
-                    .filter(|issue| {
-                        issue.title.contains("Phase 10.5")
-                            || issue.title.contains("Phase 10.6")
-                            || issue.title.contains("Phase 10 gate")
-                    })
+                    .filter(|issue| issue_is_honest_refill_candidate(issue))
                     .map(|issue| issue.identifier.clone())
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
 
-        let stale_pull_requests = if linear.data.queue_issue_count == 0 {
+        let stale_pull_requests = if linear.data.active_issue_count == 0 {
             github
                 .open_pull_requests
                 .iter()
@@ -1737,11 +1781,21 @@ impl SmithCompatibilityServer {
             recommended_actions
                 .push("prioritize Merging issues before refilling the queue".to_string());
         }
-        if linear.data.queue_issue_count == 0 && !refill_candidates.is_empty() {
+        recommended_actions.extend(
+            blocked_todo_issues.iter().map(|detail| {
+                format!("remove blocked Todo noise from the watched queue: {detail}")
+            }),
+        );
+        if linear.data.active_issue_count < 2 && !refill_candidates.is_empty() {
             recommended_actions.push(format!(
                 "stage the next validated backlog issue: {}",
                 refill_candidates[0]
             ));
+        }
+        if linear.data.active_issue_count < 2 && refill_candidates.is_empty() {
+            recommended_actions.push(
+                "validated backlog has no honest refill candidates; slice or validate more independent work to increase Symphony concurrency".to_string(),
+            );
         }
 
         json_response(ToolResponse {
@@ -1762,7 +1816,7 @@ impl SmithCompatibilityServer {
             ],
             blocking_issues: Vec::new(),
             data: ReviewDispatchCycle {
-                active_issue_count: linear.data.queue_issue_count,
+                active_issue_count: linear.data.active_issue_count,
                 human_review_count,
                 merging_count,
                 open_pull_request_count: github.open_pull_requests.len(),
@@ -1785,13 +1839,14 @@ impl SmithCompatibilityServer {
         let normalized = phase.to_lowercase();
         if normalized.contains("10") || normalized.contains("frontier") {
             let workspace = self.linear_workspace().await.ok();
-            let issue_exists = |needle: &str| {
+            let workflow = self.workflow_summary().await;
+            let issue_by_title = |needle: &str| {
                 workspace.as_ref().and_then(|workspace| {
                     workspace
                         .issues
                         .iter()
                         .find(|issue| issue.title.contains(needle))
-                        .map(|issue| issue.identifier.clone())
+                        .cloned()
                 })
             };
 
@@ -1868,41 +1923,117 @@ impl SmithCompatibilityServer {
             }
             outstanding_work.push("Phase 10 final verification/docs gate remains open".to_string());
 
-            let ms33 = issue_exists("Phase 10.5").or_else(|| issue_exists("operator autonomy"));
-            let ms34 = issue_exists("Phase 10.6").or_else(|| issue_exists("bounded delegation"));
+            let ms33 = issue_by_title("Phase 10.5").or_else(|| issue_by_title("operator autonomy"));
+            let ms34 =
+                issue_by_title("Phase 10.6").or_else(|| issue_by_title("bounded delegation"));
             let ms35 =
-                issue_exists("Phase 10 gate").or_else(|| issue_exists("verification and docs"));
+                issue_by_title("Phase 10 gate").or_else(|| issue_by_title("verification and docs"));
 
-            let runnable_slices = vec![PhaseSlice {
-                name: ms33.clone().unwrap_or_else(|| "MS-33".to_string()),
-                description:
-                    "Finish the operator autonomy view and alerts before later Phase 10 work"
-                        .to_string(),
-                status: "runnable".to_string(),
-            }];
-            let blocked_slices = vec![
-                PhaseSlice {
-                    name: ms34.clone().unwrap_or_else(|| "MS-34".to_string()),
+            let mut runnable_slices = Vec::new();
+            let mut blocked_slices = Vec::new();
+            let mut recommended_linear_actions = Vec::new();
+
+            if let Some(issue) = &ms33 {
+                if !state_name(issue)
+                    .map(|state| is_terminal_state(state, &workflow))
+                    .unwrap_or(false)
+                {
+                    let slice = PhaseSlice {
+                        name: issue.identifier.clone(),
+                        description:
+                            "Finish the operator autonomy view and alerts before later Phase 10 work"
+                                .to_string(),
+                        status: phase_slice_status(issue, &workflow),
+                    };
+                    if todo_issue_blocked_by_non_terminal(issue, &workflow) {
+                        blocked_slices.push(PhaseSlice {
+                            status: "blocked_by_non_terminal_dependencies".to_string(),
+                            ..slice
+                        });
+                    } else {
+                        if state_name(issue) == Some("Backlog") {
+                            recommended_linear_actions.push(PlannedLinearAction {
+                                action: "stage_issue".to_string(),
+                                issue_identifier: Some(issue.identifier.clone()),
+                                target_project_slug: workflow.project_slug.clone(),
+                                target_state: Some("Todo".to_string()),
+                                reason: "Phase 10.5 is the next unblocked slice".to_string(),
+                            });
+                        }
+                        runnable_slices.push(slice);
+                    }
+                }
+            }
+
+            if let Some(issue) = &ms34 {
+                let slice = PhaseSlice {
+                    name: issue.identifier.clone(),
                     description:
                         "Bounded delegation and provenance should follow the autonomy view"
                             .to_string(),
-                    status: "blocked_by_ms33".to_string(),
-                },
-                PhaseSlice {
-                    name: ms35.clone().unwrap_or_else(|| "MS-35".to_string()),
-                    description: "Final Phase 10 gate should run only after 10.5 and 10.6 land"
-                        .to_string(),
-                    status: "blocked_by_ms33_ms34".to_string(),
-                },
-            ];
-            let recommended_linear_actions = vec![PlannedLinearAction {
-                action: "stage_issue".to_string(),
-                issue_identifier: ms33.clone().or_else(|| Some("MS-33".to_string())),
-                target_project_slug: self.workflow_summary().await.project_slug,
-                target_state: Some("Todo".to_string()),
-                reason: "Execution queue is empty and Phase 10.5 is the next unblocked slice"
-                    .to_string(),
-            }];
+                    status: phase_slice_status(issue, &workflow),
+                };
+                let blocked = todo_issue_blocked_by_non_terminal(issue, &workflow)
+                    || ms33
+                        .as_ref()
+                        .and_then(state_name)
+                        .map(|state| !is_terminal_state(state, &workflow))
+                        .unwrap_or(false);
+                if blocked {
+                    blocked_slices.push(PhaseSlice {
+                        status: "blocked_by_ms33".to_string(),
+                        ..slice
+                    });
+                } else if !state_name(issue)
+                    .map(|state| is_terminal_state(state, &workflow))
+                    .unwrap_or(false)
+                {
+                    if state_name(issue) == Some("Backlog") {
+                        recommended_linear_actions.push(PlannedLinearAction {
+                            action: "stage_issue".to_string(),
+                            issue_identifier: Some(issue.identifier.clone()),
+                            target_project_slug: workflow.project_slug.clone(),
+                            target_state: Some("Todo".to_string()),
+                            reason: "Phase 10.6 is the next unblocked slice".to_string(),
+                        });
+                    }
+                    runnable_slices.push(slice);
+                }
+            }
+
+            if let Some(issue) = &ms35 {
+                let slice = PhaseSlice {
+                    name: issue.identifier.clone(),
+                    description: "Final Phase 10 gate should run only after 10.6 lands".to_string(),
+                    status: phase_slice_status(issue, &workflow),
+                };
+                let blocked = todo_issue_blocked_by_non_terminal(issue, &workflow)
+                    || ms34
+                        .as_ref()
+                        .and_then(state_name)
+                        .map(|state| !is_terminal_state(state, &workflow))
+                        .unwrap_or(false);
+                if blocked {
+                    blocked_slices.push(PhaseSlice {
+                        status: "blocked_by_ms34".to_string(),
+                        ..slice
+                    });
+                } else if !state_name(issue)
+                    .map(|state| is_terminal_state(state, &workflow))
+                    .unwrap_or(false)
+                {
+                    if state_name(issue) == Some("Backlog") {
+                        recommended_linear_actions.push(PlannedLinearAction {
+                            action: "stage_issue".to_string(),
+                            issue_identifier: Some(issue.identifier.clone()),
+                            target_project_slug: workflow.project_slug.clone(),
+                            target_state: Some("Todo".to_string()),
+                            reason: "Phase 10 final gate is now unblocked".to_string(),
+                        });
+                    }
+                    runnable_slices.push(slice);
+                }
+            }
 
             return ToolResponse {
                 status: CompatibilityStatus::Ok,
@@ -3344,6 +3475,135 @@ fn parse_linear_issue(value: &serde_json::Value) -> LinearIssueSnapshot {
                     .collect()
             })
             .unwrap_or_default(),
+        blocked_by: value
+            .pointer("/inverseRelations/nodes")
+            .and_then(serde_json::Value::as_array)
+            .map(|nodes| {
+                nodes
+                    .iter()
+                    .filter_map(parse_linear_blocker)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+    }
+}
+
+fn parse_linear_blocker(value: &serde_json::Value) -> Option<LinearIssueBlockerSnapshot> {
+    let relation_type = value.get("type")?.as_str()?.trim().to_ascii_lowercase();
+    if relation_type != "blocks" {
+        return None;
+    }
+
+    let blocker_issue = value.get("issue")?;
+    Some(LinearIssueBlockerSnapshot {
+        id: blocker_issue
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        identifier: blocker_issue
+            .get("identifier")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        state: blocker_issue
+            .pointer("/state/name")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+    })
+}
+
+fn state_name(issue: &LinearIssueSnapshot) -> Option<&str> {
+    issue.state.as_ref().map(|state| state.name.as_str())
+}
+
+fn issue_in_watched_project(issue: &LinearIssueSnapshot, configured_slug: Option<&str>) -> bool {
+    issue
+        .project
+        .as_ref()
+        .map(|project| project_slug_matches(configured_slug, &project.slug))
+        .unwrap_or(false)
+}
+
+fn is_active_state(state_name: &str, workflow: &WorkflowSummary) -> bool {
+    workflow
+        .active_states
+        .iter()
+        .any(|state| state == state_name)
+}
+
+fn is_terminal_state(state_name: &str, workflow: &WorkflowSummary) -> bool {
+    workflow
+        .terminal_states
+        .iter()
+        .any(|state| state == state_name)
+}
+
+fn todo_issue_blocked_by_non_terminal(
+    issue: &LinearIssueSnapshot,
+    workflow: &WorkflowSummary,
+) -> bool {
+    state_name(issue) == Some("Todo")
+        && issue.blocked_by.iter().any(|blocker| {
+            blocker
+                .state
+                .as_deref()
+                .map(|state| !is_terminal_state(state, workflow))
+                .unwrap_or(false)
+        })
+}
+
+fn blocked_todo_detail(issue: &LinearIssueSnapshot, workflow: &WorkflowSummary) -> Option<String> {
+    if !todo_issue_blocked_by_non_terminal(issue, workflow) {
+        return None;
+    }
+
+    let blockers = issue
+        .blocked_by
+        .iter()
+        .filter(|blocker| {
+            blocker
+                .state
+                .as_deref()
+                .map(|state| !is_terminal_state(state, workflow))
+                .unwrap_or(false)
+        })
+        .map(|blocker| match blocker.state.as_deref() {
+            Some(state) if !state.is_empty() => format!("{} ({state})", blocker.identifier),
+            _ => blocker.identifier.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    Some(format!(
+        "{} is in Todo but blocked by non-terminal issues: {}",
+        issue.identifier,
+        blockers.join(", ")
+    ))
+}
+
+fn issue_is_honest_refill_candidate(issue: &LinearIssueSnapshot) -> bool {
+    state_name(issue) == Some("Backlog")
+        && issue.labels.iter().any(|label| label == "Validated")
+        && issue
+            .labels
+            .iter()
+            .any(|label| label == "Symphony Candidate")
+        && issue
+            .project
+            .as_ref()
+            .map(|project| project.name == "MisterSmith Validated Backlog")
+            .unwrap_or(false)
+}
+
+fn phase_slice_status(issue: &LinearIssueSnapshot, workflow: &WorkflowSummary) -> String {
+    match state_name(issue) {
+        Some(state) if is_terminal_state(state, workflow) => "done".to_string(),
+        Some("In Progress") => "in_progress".to_string(),
+        Some("Todo") => "todo".to_string(),
+        Some("Human Review") => "human_review".to_string(),
+        Some("Merging") => "merging".to_string(),
+        Some("Rework") => "rework".to_string(),
+        Some(state) => state.to_ascii_lowercase().replace(' ', "_"),
+        None => "unknown".to_string(),
     }
 }
 
@@ -3547,6 +3807,113 @@ apps = true
         assert_eq!(pull_request.head_ref_name, "codex/example");
         assert_eq!(pull_request.review_decision, None);
         assert!(!pull_request.is_draft);
+    }
+
+    #[test]
+    fn parse_linear_issue_extracts_blockers_and_labels() {
+        let issue = parse_linear_issue(&serde_json::json!({
+            "id": "issue-1",
+            "identifier": "MS-35",
+            "title": "Phase 10 gate",
+            "priority": 3,
+            "state": {"name": "Todo", "type": "unstarted"},
+            "project": {"id": "project-1", "name": "MisterSmith Execution Queue", "slugId": "320a0741920c"},
+            "team": {"key": "MS", "name": "MisterSmith"},
+            "labels": {"nodes": [{"name": "Validated"}, {"name": "Symphony Candidate"}]},
+            "inverseRelations": {"nodes": [
+                {
+                    "type": "blocks",
+                    "issue": {
+                        "id": "issue-2",
+                        "identifier": "MS-34",
+                        "state": {"name": "In Progress"}
+                    }
+                },
+                {
+                    "type": "relates_to",
+                    "issue": {
+                        "id": "issue-3",
+                        "identifier": "MS-99",
+                        "state": {"name": "Todo"}
+                    }
+                }
+            ]}
+        }));
+
+        assert_eq!(issue.labels, vec!["Validated", "Symphony Candidate"]);
+        assert_eq!(issue.blocked_by.len(), 1);
+        assert_eq!(issue.blocked_by[0].identifier, "MS-34");
+        assert_eq!(issue.blocked_by[0].state.as_deref(), Some("In Progress"));
+    }
+
+    #[test]
+    fn helper_logic_distinguishes_blocked_todo_and_refill_candidates() {
+        let workflow = WorkflowSummary {
+            project_slug: Some("320a0741920c".to_string()),
+            active_states: vec!["Todo".to_string(), "In Progress".to_string()],
+            terminal_states: vec![
+                "Done".to_string(),
+                "Canceled".to_string(),
+                "Duplicate".to_string(),
+            ],
+            workspace_root: None,
+            codex_command: None,
+        };
+        let blocked_todo = LinearIssueSnapshot {
+            identifier: "MS-35".to_string(),
+            title: "Phase 10 gate".to_string(),
+            state: Some(LinearStateSnapshot {
+                name: "Todo".to_string(),
+                ..LinearStateSnapshot::default()
+            }),
+            project: Some(LinearProjectSnapshot {
+                name: "MisterSmith Execution Queue".to_string(),
+                slug: "320a0741920c".to_string(),
+                ..LinearProjectSnapshot::default()
+            }),
+            blocked_by: vec![LinearIssueBlockerSnapshot {
+                identifier: "MS-34".to_string(),
+                state: Some("In Progress".to_string()),
+                ..LinearIssueBlockerSnapshot::default()
+            }],
+            ..LinearIssueSnapshot::default()
+        };
+        let refill_candidate = LinearIssueSnapshot {
+            identifier: "MS-90".to_string(),
+            title: "Validated candidate".to_string(),
+            state: Some(LinearStateSnapshot {
+                name: "Backlog".to_string(),
+                ..LinearStateSnapshot::default()
+            }),
+            project: Some(LinearProjectSnapshot {
+                name: "MisterSmith Validated Backlog".to_string(),
+                slug: "validated-backlog".to_string(),
+                ..LinearProjectSnapshot::default()
+            }),
+            labels: vec!["Validated".to_string(), "Symphony Candidate".to_string()],
+            ..LinearIssueSnapshot::default()
+        };
+        let questionable_backlog = LinearIssueSnapshot {
+            identifier: "MS-37".to_string(),
+            title: "Questionable backlog item".to_string(),
+            state: Some(LinearStateSnapshot {
+                name: "Backlog".to_string(),
+                ..LinearStateSnapshot::default()
+            }),
+            project: Some(LinearProjectSnapshot {
+                name: "MisterSmith Validated Backlog".to_string(),
+                slug: "validated-backlog".to_string(),
+                ..LinearProjectSnapshot::default()
+            }),
+            ..LinearIssueSnapshot::default()
+        };
+
+        assert!(todo_issue_blocked_by_non_terminal(&blocked_todo, &workflow));
+        assert!(blocked_todo_detail(&blocked_todo, &workflow)
+            .unwrap()
+            .contains("MS-34 (In Progress)"));
+        assert!(issue_is_honest_refill_candidate(&refill_candidate));
+        assert!(!issue_is_honest_refill_candidate(&questionable_backlog));
     }
 
     #[tokio::test]
