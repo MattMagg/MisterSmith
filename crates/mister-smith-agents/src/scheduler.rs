@@ -289,7 +289,8 @@ impl TaskScheduler {
         self.tasks
             .iter()
             .filter_map(|e| {
-                if e.value().parent_task_id.as_ref() == Some(parent_id) && e.value().state == state {
+                if e.value().parent_task_id.as_ref() == Some(parent_id) && e.value().state == state
+                {
                     Some(e.value().clone())
                 } else {
                     None
@@ -299,11 +300,17 @@ impl TaskScheduler {
     }
 
     /// Get all subtasks for a parent task in any of the specified states without unnecessary allocations.
-    pub fn subtasks_in_states(&self, parent_id: &TaskId, states: &[TaskState]) -> Vec<TaskAssignment> {
+    pub fn subtasks_in_states(
+        &self,
+        parent_id: &TaskId,
+        states: &[TaskState],
+    ) -> Vec<TaskAssignment> {
         self.tasks
             .iter()
             .filter_map(|e| {
-                if e.value().parent_task_id.as_ref() == Some(parent_id) && states.contains(&e.value().state) {
+                if e.value().parent_task_id.as_ref() == Some(parent_id)
+                    && states.contains(&e.value().state)
+                {
                     Some(e.value().clone())
                 } else {
                     None

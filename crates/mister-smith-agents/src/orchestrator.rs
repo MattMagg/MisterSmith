@@ -450,7 +450,8 @@ impl Orchestrator {
 
     /// Get subtasks that are pending and have all dependencies satisfied.
     pub fn ready_subtasks(&self, parent_task_id: &TaskId) -> Vec<TaskAssignment> {
-        self.scheduler.subtasks_in_state(parent_task_id, TaskState::Pending)
+        self.scheduler
+            .subtasks_in_state(parent_task_id, TaskState::Pending)
     }
 
     /// Route ready branches using health, budget, dependency-depth, and profile signals.
