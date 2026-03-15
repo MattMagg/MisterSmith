@@ -10,7 +10,7 @@ use axum::extract::ConnectInfo;
 use axum::http::{HeaderValue, Request};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use std::collections::HashMap;
+use dashmap::DashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -46,20 +46,14 @@ struct RateLimitEntry {
     request_times: Vec<Instant>,
 }
 
-/// Shared state guarded by the rate limiter mutex.
-struct RateLimiterState {
-    /// Per-IP request tracking.
-    entries: HashMap<String, RateLimitEntry>,
-    /// Last time the limiter swept expired buckets across all IPs.
-    last_cleanup: Instant,
-}
-
 /// Shared rate limiter state.
 pub struct RateLimiter {
     /// Maximum requests per second per IP.
     max_rps: u32,
-    /// Rate limiter state.
-    state: Mutex<RateLimiterState>,
+    /// Per-IP request tracking.
+    entries: DashMap<String, RateLimitEntry>,
+    /// Last time the limiter swept expired buckets across all IPs.
+    last_cleanup: Mutex<Instant>,
 }
 
 impl RateLimiter {
@@ -67,10 +61,8 @@ impl RateLimiter {
     pub fn new(max_rps: u32) -> Self {
         Self {
             max_rps,
-            state: Mutex::new(RateLimiterState {
-                entries: HashMap::new(),
-                last_cleanup: Instant::now(),
-            }),
+            entries: DashMap::new(),
+            last_cleanup: Mutex::new(Instant::now()),
         }
     }
 
@@ -79,23 +71,25 @@ impl RateLimiter {
     /// Returns `true` if the request is allowed, `false` if rate limited.
     pub async fn check(&self, ip: &str) -> bool {
         let window = std::time::Duration::from_secs(1);
-        let mut state = self.state.lock().await;
         let now = Instant::now();
 
-        if now.duration_since(state.last_cleanup) >= window {
-            state.entries.retain(|_, entry| {
-                entry
-                    .request_times
-                    .last()
-                    .is_some_and(|last_request| now.duration_since(*last_request) < window)
-            });
-            state.last_cleanup = now;
+        // Perform cleanup opportunistically without blocking the main check path
+        if let Ok(mut last_cleanup) = self.last_cleanup.try_lock() {
+            if now.duration_since(*last_cleanup) >= window {
+                self.entries.retain(|_, entry| {
+                    entry
+                        .request_times
+                        .last()
+                        .is_some_and(|last_request| now.duration_since(*last_request) < window)
+                });
+                *last_cleanup = now;
+            }
         }
 
         let ip = ip.to_string();
         let mut remove_current_entry = false;
         let allowed = {
-            let entry = state.entries.entry(ip.clone()).or_insert(RateLimitEntry {
+            let mut entry = self.entries.entry(ip.clone()).or_insert(RateLimitEntry {
                 request_times: Vec::new(),
             });
 
@@ -114,7 +108,7 @@ impl RateLimiter {
         };
 
         if remove_current_entry {
-            state.entries.remove(&ip);
+            self.entries.remove(&ip);
         }
 
         allowed
@@ -226,12 +220,12 @@ mod tests {
             assert!(limiter.check(&ip).await);
         }
 
-        assert_eq!(limiter.state.lock().await.entries.len(), 128);
+        assert_eq!(limiter.entries.len(), 128);
 
         tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
 
         assert!(limiter.check("192.168.0.1").await);
-        assert_eq!(limiter.state.lock().await.entries.len(), 1);
+        assert_eq!(limiter.entries.len(), 1);
     }
 
     #[tokio::test]
@@ -244,7 +238,7 @@ mod tests {
 
         tokio::time::sleep(std::time::Duration::from_millis(400)).await;
         assert!(limiter.check("10.0.0.2").await);
-        assert_eq!(limiter.state.lock().await.entries.len(), 2);
+        assert_eq!(limiter.entries.len(), 2);
 
         assert!(limiter.check("10.0.0.1").await);
         assert!(!limiter.check("10.0.0.1").await);
