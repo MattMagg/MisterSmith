@@ -16,9 +16,7 @@ use mister_smith_agents::roles::planner::{
 use mister_smith_agents::scheduler::{
     ArrayAggregator, IdentityDecomposer, TaskAssignment, TaskScheduler,
 };
-use mister_smith_agents::{
-    ExecutionGraph, ExecutionNode, Orchestrator, TopologyCompiler, TopologySignals,
-};
+use mister_smith_agents::{Orchestrator, TopologyCompiler, TopologySignals};
 use mister_smith_core::{Actor, AgentId, BranchState, GraphState, NodeState, TaskId};
 use mister_smith_events::{AutonomyStatusView, EventBus};
 use mister_smith_http::server::{
@@ -178,8 +176,16 @@ impl RuntimeTaskService {
         }))
     }
 
+    pub(crate) fn pool(&self) -> PgPool {
+        self.pool.clone()
+    }
+
     pub(crate) async fn autonomy_status(&self, workflow_id: TaskId) -> Option<AutonomyStatusView> {
-        self.orchestrator.autonomy_status(&workflow_id)
+        let mut view = self.orchestrator.autonomy_status(&workflow_id)?;
+        if let Ok(Some(record)) = queries::find_task(&self.pool, *workflow_id.as_ref()).await {
+            crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
+        }
+        Some(view)
     }
 
     pub(crate) fn autonomy_workflows(&self) -> Vec<TaskId> {
@@ -191,7 +197,7 @@ impl RuntimeTaskService {
         workflow_id: TaskId,
         request: TaskSubmissionRequest,
     ) -> Result<(), String> {
-        let coordinator_id = self.default_coordinator_id;
+        let coordinator_id = coordinator_id_for_request(&request, self.default_coordinator_id);
         let mut metadata = initial_metadata(&request, coordinator_id, &self.worker_ids, "running");
         self.update_root_record(
             workflow_id,
@@ -217,9 +223,17 @@ impl RuntimeTaskService {
         .await?;
 
         let planning_context = json!({
-            "submission_path": "http",
+            "submission_path": if request.conversation.is_some() { "session" } else { "http" },
             "provider_kind": PROVIDER_KIND_NAME,
             "model_id": MODEL_ID,
+            "conversation": request.conversation.as_ref().map(|conversation| {
+                json!({
+                    "session_id": conversation.session_id,
+                    "turn_index": conversation.turn_index,
+                    "coordinator_agent_id": conversation.coordinator_agent_id,
+                    "retained_context": conversation.retained_context,
+                })
+            }).unwrap_or(Value::Null),
             "execution_contract": {
                 "require_real_multi_agent_workflow": true,
                 "require_parallel_workers": 2,
@@ -502,6 +516,7 @@ impl RuntimeTaskService {
         &self,
         request: &TaskSubmissionRequest,
         workflow_id: TaskId,
+        coordinator_id: AgentId,
     ) -> Result<(), String> {
         let record = TaskRecord {
             task_id: *workflow_id.as_ref(),
@@ -515,12 +530,7 @@ impl RuntimeTaskService {
                 "model_id": MODEL_ID,
             }),
             result: None,
-            metadata: initial_metadata(
-                request,
-                self.default_coordinator_id,
-                &self.worker_ids,
-                "queued",
-            ),
+            metadata: initial_metadata(request, coordinator_id, &self.worker_ids, "queued"),
             status: "queued".to_string(),
             priority: priority_rank(request.priority.as_deref()),
             correlation_id: Some(*workflow_id.as_ref()),
@@ -546,7 +556,9 @@ impl RuntimeTaskService {
             return Err("task description must not be empty".to_string());
         }
 
-        self.save_root_record(request, workflow_id).await
+        let coordinator_id = coordinator_id_for_request(request, self.default_coordinator_id);
+        self.save_root_record(request, workflow_id, coordinator_id)
+            .await
     }
 
     pub(crate) fn launch_workflow(
@@ -555,6 +567,20 @@ impl RuntimeTaskService {
         request: TaskSubmissionRequest,
     ) -> Result<(), String> {
         self.spawn_workflow_runner(workflow_id, request)
+    }
+
+    pub(crate) async fn delete_workflow_record(&self, workflow_id: TaskId) -> Result<(), String> {
+        sqlx::query(
+            r#"
+            DELETE FROM tasks.records
+            WHERE task_id = $1
+            "#,
+        )
+        .bind(*workflow_id.as_ref())
+        .execute(&self.pool)
+        .await
+        .map_err(|error| format!("failed to delete workflow record {workflow_id}: {error}"))?;
+        Ok(())
     }
 
     async fn find_task_record(&self, task_id: TaskId) -> Result<Option<TaskRecord>, String> {
@@ -891,11 +917,13 @@ impl TaskExecutionService for RuntimeTaskService {
     ) -> Result<TaskSubmissionResponse, String> {
         let workflow_id = TaskId::new();
         self.prepare_workflow(workflow_id, &request).await?;
-        self.launch_workflow(workflow_id, request)?;
+        self.launch_workflow(workflow_id, request.clone())?;
+
+        let coordinator_id = coordinator_id_for_request(&request, self.default_coordinator_id);
 
         Ok(TaskSubmissionResponse {
             task_id: workflow_id,
-            assigned_agent_id: self.default_coordinator_id,
+            assigned_agent_id: coordinator_id,
             status: "queued".to_string(),
         })
     }
@@ -916,10 +944,10 @@ fn initial_metadata(
     worker_ids: &[AgentId],
     status: &str,
 ) -> Value {
-    json!({
+    let mut metadata = json!({
         "provider_kind": PROVIDER_KIND_NAME,
         "model_id": MODEL_ID,
-        "submission_path": "http",
+        "submission_path": if request.conversation.is_some() { "session" } else { "http" },
         "status": status,
         "description": request.description,
         "requested_agent_type": request.agent_type,
@@ -930,7 +958,19 @@ fn initial_metadata(
         "execution_plan": Value::Null,
         "routing_history": [],
         "step_results": [],
-    })
+    });
+
+    if let Some(conversation) = &request.conversation {
+        put_metadata(&mut metadata, "session_id", json!(conversation.session_id));
+        put_metadata(&mut metadata, "turn_index", json!(conversation.turn_index));
+        put_metadata(
+            &mut metadata,
+            "retained_context",
+            conversation.retained_context.clone(),
+        );
+    }
+
+    metadata
 }
 
 fn put_metadata(metadata: &mut Value, key: &str, value: Value) {
@@ -953,6 +993,14 @@ fn priority_rank(priority: Option<&str>) -> i32 {
         "4" | "background" => 4,
         _ => 2,
     }
+}
+
+fn coordinator_id_for_request(request: &TaskSubmissionRequest, fallback: AgentId) -> AgentId {
+    request
+        .conversation
+        .as_ref()
+        .map(|conversation| conversation.coordinator_agent_id)
+        .unwrap_or(fallback)
 }
 
 fn coordinator_id_from_metadata(metadata: &Value) -> Option<AgentId> {
@@ -1052,7 +1100,7 @@ fn normalize_runtime_plan(goal: &str, context: &Value, raw_plan: Value) -> Value
 
 fn task_assignment_for_node(
     workflow_id: TaskId,
-    node: &ExecutionNode,
+    node: &mister_smith_agents::ExecutionNode,
     goal: &str,
 ) -> TaskAssignment {
     TaskAssignment {
@@ -1084,7 +1132,7 @@ fn task_assignment_for_node(
 }
 
 fn execution_input_for_task(
-    graph: &ExecutionGraph,
+    graph: &mister_smith_agents::ExecutionGraph,
     task: &TaskAssignment,
     goal: &str,
     worker_id: AgentId,

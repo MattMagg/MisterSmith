@@ -7,6 +7,7 @@
 pub mod agent;
 pub mod audit;
 pub mod message;
+pub mod session;
 pub mod task;
 
 use async_trait::async_trait;

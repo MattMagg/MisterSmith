@@ -7,9 +7,11 @@
 use async_trait::async_trait;
 use axum::middleware as axum_mw;
 use axum::Router;
-use mister_smith_core::{AgentId, AgentType, TaskId};
+use chrono::{DateTime, Utc};
+use mister_smith_core::{AgentId, AgentType, SessionId, SessionStatus, TaskId};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::broadcast;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::info;
@@ -39,6 +41,8 @@ pub struct TaskSubmissionRequest {
     pub agent_type: Option<AgentType>,
     /// Optional priority label.
     pub priority: Option<String>,
+    /// Optional retained same-agent conversation context.
+    pub conversation: Option<ConversationTurnContext>,
 }
 
 /// Submission response returned by the runtime task service.
@@ -76,6 +80,162 @@ pub trait TaskExecutionService: Send + Sync {
     async fn get_task(&self, task_id: TaskId) -> Result<Option<TaskStatusView>, String>;
 }
 
+/// Session context attached to a workflow submission.
+#[derive(Debug, Clone)]
+pub struct ConversationTurnContext {
+    /// Stable conversation identifier.
+    pub session_id: SessionId,
+    /// Accepted turn index within the session.
+    pub turn_index: u32,
+    /// Stable coordinator reused across accepted turns in the session.
+    pub coordinator_agent_id: AgentId,
+    /// Persisted retained context assembled from prior turns.
+    pub retained_context: serde_json::Value,
+}
+
+/// Create-session request passed from HTTP handlers into the runtime session service.
+#[derive(Debug, Clone)]
+pub struct ConversationCreateRequest {
+    /// Operator message for the first turn.
+    pub message: String,
+    /// Optional priority label for the turn workflow.
+    pub priority: Option<String>,
+}
+
+/// Continue-session request passed from HTTP handlers into the runtime session service.
+#[derive(Debug, Clone)]
+pub struct ConversationContinueRequest {
+    /// Session being continued.
+    pub session_id: SessionId,
+    /// Operator message for the next accepted turn.
+    pub message: String,
+    /// Optional priority label for the new turn workflow.
+    pub priority: Option<String>,
+}
+
+/// Accepted conversation turn returned by create and continue operations.
+#[derive(Debug, Clone)]
+pub struct ConversationTurnAccepted {
+    /// Stable session identifier.
+    pub session_id: SessionId,
+    /// Root workflow created for the accepted turn.
+    pub workflow_id: TaskId,
+    /// Stable coordinator identity reused across the session.
+    pub coordinator_agent_id: AgentId,
+    /// 1-based accepted turn order.
+    pub turn_index: u32,
+    /// Current root workflow status.
+    pub status: String,
+}
+
+/// Ordered summary of one persisted turn in a session.
+#[derive(Debug, Clone)]
+pub struct ConversationTurnSummaryView {
+    /// 1-based accepted turn order.
+    pub turn_index: u32,
+    /// Root workflow for the turn.
+    pub workflow_id: TaskId,
+    /// Current turn status mirrored from the root workflow.
+    pub status: String,
+    /// Original operator message for the turn.
+    pub user_message: String,
+}
+
+/// Operator-facing inspect view for a conversation session.
+#[derive(Debug, Clone)]
+pub struct ConversationSessionView {
+    /// Stable session identifier.
+    pub session_id: SessionId,
+    /// Session lifecycle state.
+    pub status: SessionStatus,
+    /// Stable coordinator identity.
+    pub coordinator_agent_id: AgentId,
+    /// Provider currently attributed to the session.
+    pub provider_kind: String,
+    /// Model currently attributed to the session.
+    pub model_id: String,
+    /// Active root workflow when the session is busy.
+    pub active_workflow_id: Option<TaskId>,
+    /// Most recent completed or failed root workflow.
+    pub last_completed_workflow_id: Option<TaskId>,
+    /// Number of accepted turns.
+    pub turn_count: u32,
+    /// Ordered turn summaries.
+    pub turns: Vec<ConversationTurnSummaryView>,
+    /// Logical close time when ended.
+    pub ended_at: Option<DateTime<Utc>>,
+}
+
+/// Operator-facing response after logically ending a session.
+#[derive(Debug, Clone)]
+pub struct ConversationEndView {
+    /// Stable session identifier.
+    pub session_id: SessionId,
+    /// Updated lifecycle state.
+    pub status: SessionStatus,
+    /// Time the session was ended.
+    pub ended_at: DateTime<Utc>,
+}
+
+/// Typed errors for the conversation session surface.
+#[derive(Debug, Clone, Error)]
+pub enum ConversationServiceError {
+    /// The request was syntactically or semantically invalid.
+    #[error("{0}")]
+    BadRequest(String),
+    /// The requested session does not exist.
+    #[error("session {session_id} not found")]
+    NotFound {
+        /// Missing session identifier.
+        session_id: SessionId,
+    },
+    /// The session is already handling another active turn.
+    #[error("session {session_id} is busy with workflow {active_workflow_id}")]
+    SessionBusy {
+        /// Busy session identifier.
+        session_id: SessionId,
+        /// Workflow currently occupying the session.
+        active_workflow_id: TaskId,
+    },
+    /// The session has already been logically ended.
+    #[error("session {session_id} has ended")]
+    SessionEnded {
+        /// Ended session identifier.
+        session_id: SessionId,
+    },
+    /// An internal runtime or persistence error occurred.
+    #[error("{0}")]
+    Internal(String),
+}
+
+/// Runtime execution contract for durable conversation sessions.
+#[async_trait]
+pub trait ConversationSessionService: Send + Sync {
+    /// Create a new session and accept its first turn.
+    async fn create_session(
+        &self,
+        request: ConversationCreateRequest,
+    ) -> Result<ConversationTurnAccepted, ConversationServiceError>;
+
+    /// Accept a new turn in an existing session.
+    async fn continue_session(
+        &self,
+        request: ConversationContinueRequest,
+    ) -> Result<ConversationTurnAccepted, ConversationServiceError>;
+
+    /// Inspect the durable state and ordered lineage of a session.
+    async fn get_session(
+        &self,
+        session_id: SessionId,
+    ) -> Result<Option<ConversationSessionView>, ConversationServiceError>;
+
+    /// Logically end an idle session.
+    async fn end_session(
+        &self,
+        session_id: SessionId,
+    ) -> Result<ConversationEndView, ConversationServiceError>;
+}
+
 /// NATS transport health check implementation backed by an atomic connection flag.
 #[derive(Debug, Default)]
 pub struct NatsHealthCheck {
@@ -111,6 +271,8 @@ pub struct AppState {
     pub transport_health: Arc<dyn TransportHealth>,
     /// Optional runtime-backed task submission service.
     pub task_service: Option<Arc<dyn TaskExecutionService>>,
+    /// Optional runtime-backed conversation session service.
+    pub conversation_service: Option<Arc<dyn ConversationSessionService>>,
     /// Optional security layer for JWT authentication.
     #[cfg(feature = "security")]
     pub security: Option<Arc<mister_smith_security::middleware::SecurityLayer>>,
@@ -124,6 +286,7 @@ impl AppState {
             event_tx,
             transport_health: Arc::new(NatsHealthCheck::new(true)),
             task_service: None,
+            conversation_service: None,
             #[cfg(feature = "security")]
             security: None,
         }
@@ -136,6 +299,7 @@ impl AppState {
             event_tx,
             transport_health: Arc::new(NatsHealthCheck::new(true)),
             task_service: None,
+            conversation_service: None,
             #[cfg(feature = "security")]
             security: None,
         }
@@ -150,6 +314,15 @@ impl AppState {
     /// Set the runtime-backed task execution service.
     pub fn with_task_service(mut self, task_service: Arc<dyn TaskExecutionService>) -> Self {
         self.task_service = Some(task_service);
+        self
+    }
+
+    /// Set the runtime-backed conversation session service.
+    pub fn with_conversation_service(
+        mut self,
+        conversation_service: Arc<dyn ConversationSessionService>,
+    ) -> Self {
+        self.conversation_service = Some(conversation_service);
         self
     }
 

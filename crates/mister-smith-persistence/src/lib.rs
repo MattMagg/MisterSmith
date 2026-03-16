@@ -40,6 +40,7 @@ pub use memory::{
     MemoryMetadataPageRequest, MemorySnapshot, MemorySnapshotMetadata, MemorySummary, ResumeSource,
     SnapshotScope,
 };
+pub use repository::session::SessionRepository;
 pub use repository::task::{
     branch_resume_history, latest_branch_checkpoint, merge_branch_checkpoint_metadata,
     merge_branch_resume_metadata, BranchCheckpointRecord, BranchResumeRecord,
@@ -49,7 +50,10 @@ pub use repository::Repository;
 #[cfg(feature = "sqlx")]
 pub use postgres::pool::PostgresConnection;
 #[cfg(feature = "sqlx")]
-pub use postgres::queries::{AgentRecord, AuditEntry, CheckpointRow, ConfigRecord, StateRow};
+pub use postgres::queries::{
+    AgentRecord, AuditEntry, CheckpointRow, ConfigRecord, SessionRecord, SessionTurnRecord,
+    StateRow,
+};
 
 // Audit persistence (security + sqlx feature gates)
 #[cfg(all(feature = "security", feature = "sqlx"))]

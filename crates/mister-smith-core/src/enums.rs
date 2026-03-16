@@ -99,6 +99,16 @@ pub enum ProcessLifecycle {
     Failed = 4,
 }
 
+/// Lifecycle state for a retained conversation session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionStatus {
+    /// The session is open and may accept another turn when idle.
+    Active,
+    /// The session has been logically closed and may only be inspected.
+    Ended,
+}
+
 /// Reason for process shutdown.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ShutdownReason {

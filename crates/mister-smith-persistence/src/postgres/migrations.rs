@@ -28,6 +28,9 @@ const DOWN_00004: &str = include_str!("../../migrations/00004_audit_schema.down.
 /// Down-migration for 00005_message_idempotency: remove dedup column and indexes.
 const DOWN_00005: &str = include_str!("../../migrations/00005_message_idempotency.down.sql");
 
+/// Down-migration for 00006_conversation_sessions: remove session tables and enum.
+const DOWN_00006: &str = include_str!("../../migrations/00006_conversation_sessions.down.sql");
+
 /// Look up the embedded down-migration SQL for a given version.
 ///
 /// Returns `None` if no down-migration exists for the version.
@@ -38,6 +41,7 @@ fn down_migration_sql(version: i64) -> Option<&'static str> {
         3 => Some(DOWN_00003),
         4 => Some(DOWN_00004),
         5 => Some(DOWN_00005),
+        6 => Some(DOWN_00006),
         _ => None,
     }
 }

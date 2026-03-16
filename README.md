@@ -45,6 +45,38 @@ Phase 10 gate evidence on 2026-03-15:
 - `python3 scripts/validate_deploy_assets.py deploy/dashboards deploy/alerts`
 - `cargo build --workspace`
 
+## Current Operator Surfaces
+
+The repo now has two real runtime-backed operator paths validated against `openai_chatgpt` /
+`gpt-5.4` on March 16, 2026:
+
+- one-shot task execution:
+  - `mister-smith run`
+  - `POST /api/v1/tasks`
+  - `GET /api/v1/tasks/{task_id}`
+  - `mister-smith autonomy list`
+  - `mister-smith autonomy status --workflow-id <id>`
+- durable same-agent conversation sessions:
+  - `POST /api/v1/sessions`
+  - `POST /api/v1/sessions/{session_id}/turns`
+  - `GET /api/v1/sessions/{session_id}`
+  - `POST /api/v1/sessions/{session_id}/end`
+
+Current session contract for the first bounded slice:
+
+- one stable `session_id` and `coordinator_agent_id` across accepted turns
+- one active turn at a time per session
+- workflow autonomy remains keyed by `workflow_id`, with session linkage included in the rendered
+  status
+- ended sessions stay inspectable and reject later turns
+
+Primary notes for the March 16 operator surfaces:
+
+- runtime-backed task path and first real live proof:
+  [`docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`](docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md)
+- bounded same-agent session packet and live validation notes:
+  [`docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`](docs/plans/2026-03-16-multi-turn-same-agent-conversations.md)
+
 ## Architecture
 
 Mister Smith coordinates distributed AI agents through three core subsystems:

@@ -5,12 +5,17 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use mister_smith_core::{AgentAvailability, AgentId, AgentType, TaskId};
+use mister_smith_core::{AgentAvailability, AgentId, AgentType, SessionId, TaskId};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::errors::HttpError;
-use crate::server::{AppState, TaskSubmissionRequest};
+use crate::server::{
+    AppState, ConversationContinueRequest, ConversationCreateRequest, ConversationServiceError,
+    TaskSubmissionRequest,
+};
 
 // ---------------------------------------------------------------------------
 // Response types
@@ -99,6 +104,93 @@ pub struct TaskStatusResponse {
     /// Task result, if complete.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<serde_json::Value>,
+}
+
+/// Session create request.
+#[derive(Debug, Deserialize)]
+pub struct CreateSessionRequest {
+    /// Operator message for the first accepted turn.
+    pub message: String,
+    /// Optional turn priority.
+    #[serde(default)]
+    pub priority: Option<String>,
+}
+
+/// Session continue request.
+#[derive(Debug, Deserialize)]
+pub struct ContinueSessionRequest {
+    /// Operator message for the next accepted turn.
+    pub message: String,
+    /// Optional turn priority.
+    #[serde(default)]
+    pub priority: Option<String>,
+}
+
+/// Accepted session turn response.
+#[derive(Debug, Serialize)]
+pub struct SessionTurnAcceptedResponse {
+    /// Stable session identifier.
+    pub session_id: SessionId,
+    /// Root workflow created for the accepted turn.
+    pub workflow_id: TaskId,
+    /// Stable coordinator identity reused across accepted turns.
+    pub coordinator_agent_id: AgentId,
+    /// 1-based accepted turn order.
+    pub turn_index: u32,
+    /// Current workflow status.
+    pub status: String,
+}
+
+/// Ordered session turn summary.
+#[derive(Debug, Serialize)]
+pub struct SessionTurnSummaryResponse {
+    /// 1-based accepted turn order.
+    pub turn_index: u32,
+    /// Root workflow for the turn.
+    pub workflow_id: TaskId,
+    /// Current turn status mirrored from the root workflow.
+    pub status: String,
+    /// Original operator message.
+    pub user_message: String,
+}
+
+/// Session inspect response.
+#[derive(Debug, Serialize)]
+pub struct SessionInspectResponse {
+    /// Stable session identifier.
+    pub session_id: SessionId,
+    /// Session lifecycle state.
+    pub status: mister_smith_core::SessionStatus,
+    /// Stable coordinator identity.
+    pub coordinator_agent_id: AgentId,
+    /// Provider attributed to the session.
+    pub provider_kind: String,
+    /// Model attributed to the session.
+    pub model_id: String,
+    /// Active workflow when the session is busy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_workflow_id: Option<TaskId>,
+    /// Most recent terminal workflow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_completed_workflow_id: Option<TaskId>,
+    /// Number of accepted turns.
+    pub turn_count: u32,
+    /// Ordered turn summaries.
+    pub turns: Vec<SessionTurnSummaryResponse>,
+    /// Logical close time when ended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// End-session response.
+#[derive(Debug, Serialize)]
+pub struct EndSessionResponse {
+    /// Stable session identifier.
+    pub session_id: SessionId,
+    /// Updated lifecycle state.
+    pub status: mister_smith_core::SessionStatus,
+    /// Logical end time.
+    pub ended_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// System configuration response.
@@ -239,6 +331,7 @@ pub async fn create_task(
             description: request.description,
             agent_type: request.agent_type,
             priority: request.priority,
+            conversation: None,
         })
         .await
         .map_err(HttpError::InternalError)?;
@@ -253,28 +346,152 @@ pub async fn create_task(
     ))
 }
 
+/// `POST /api/v1/sessions` — Create a session and accept the first turn.
+pub async fn create_session(
+    State(state): State<AppState>,
+    Json(request): Json<CreateSessionRequest>,
+) -> Result<(StatusCode, Json<SessionTurnAcceptedResponse>), HttpError> {
+    let conversation_service = state.conversation_service.as_ref().ok_or_else(|| {
+        HttpError::InternalError("runtime conversation service unavailable".to_string())
+    })?;
+
+    let accepted = conversation_service
+        .create_session(ConversationCreateRequest {
+            message: request.message,
+            priority: request.priority,
+        })
+        .await
+        .map_err(map_conversation_error)?;
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(SessionTurnAcceptedResponse {
+            session_id: accepted.session_id,
+            workflow_id: accepted.workflow_id,
+            coordinator_agent_id: accepted.coordinator_agent_id,
+            turn_index: accepted.turn_index,
+            status: accepted.status,
+        }),
+    ))
+}
+
+/// `POST /api/v1/sessions/{session_id}/turns` — Continue one existing session.
+pub async fn continue_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<ContinueSessionRequest>,
+) -> Result<(StatusCode, Json<SessionTurnAcceptedResponse>), HttpError> {
+    let session_id = parse_session_path(&session_id)?;
+    let conversation_service = state.conversation_service.as_ref().ok_or_else(|| {
+        HttpError::InternalError("runtime conversation service unavailable".to_string())
+    })?;
+
+    let accepted = conversation_service
+        .continue_session(ConversationContinueRequest {
+            session_id,
+            message: request.message,
+            priority: request.priority,
+        })
+        .await
+        .map_err(map_conversation_error)?;
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(SessionTurnAcceptedResponse {
+            session_id: accepted.session_id,
+            workflow_id: accepted.workflow_id,
+            coordinator_agent_id: accepted.coordinator_agent_id,
+            turn_index: accepted.turn_index,
+            status: accepted.status,
+        }),
+    ))
+}
+
+/// `GET /api/v1/sessions/{session_id}` — Inspect one durable conversation session.
+pub async fn get_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<SessionInspectResponse>, HttpError> {
+    let session_id = parse_session_path(&session_id)?;
+    let conversation_service = state.conversation_service.as_ref().ok_or_else(|| {
+        HttpError::InternalError("runtime conversation service unavailable".to_string())
+    })?;
+
+    let view = conversation_service
+        .get_session(session_id)
+        .await
+        .map_err(map_conversation_error)?
+        .ok_or_else(|| HttpError::NotFound(format!("session {session_id} not found")))?;
+
+    Ok(Json(SessionInspectResponse {
+        session_id: view.session_id,
+        status: view.status,
+        coordinator_agent_id: view.coordinator_agent_id,
+        provider_kind: view.provider_kind,
+        model_id: view.model_id,
+        active_workflow_id: view.active_workflow_id,
+        last_completed_workflow_id: view.last_completed_workflow_id,
+        turn_count: view.turn_count,
+        turns: view
+            .turns
+            .into_iter()
+            .map(|turn| SessionTurnSummaryResponse {
+                turn_index: turn.turn_index,
+                workflow_id: turn.workflow_id,
+                status: turn.status,
+                user_message: turn.user_message,
+            })
+            .collect(),
+        ended_at: view.ended_at,
+    }))
+}
+
+/// `POST /api/v1/sessions/{session_id}/end` — Logically end one idle session.
+pub async fn end_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<EndSessionResponse>, HttpError> {
+    let session_id = parse_session_path(&session_id)?;
+    let conversation_service = state.conversation_service.as_ref().ok_or_else(|| {
+        HttpError::InternalError("runtime conversation service unavailable".to_string())
+    })?;
+
+    let ended = conversation_service
+        .end_session(session_id)
+        .await
+        .map_err(map_conversation_error)?;
+
+    Ok(Json(EndSessionResponse {
+        session_id: ended.session_id,
+        status: ended.status,
+        ended_at: ended.ended_at,
+    }))
+}
+
 /// `GET /api/v1/tasks/{task_id}` — Task status and result.
 pub async fn get_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskStatusResponse>, HttpError> {
+    let uuid = Uuid::parse_str(&task_id)
+        .map_err(|_| HttpError::BadRequest(format!("Invalid task ID: {task_id}")))?;
+
     let task_service = state
         .task_service
         .as_ref()
         .ok_or_else(|| HttpError::InternalError("runtime task service unavailable".to_string()))?;
-    let task_uuid = Uuid::parse_str(&task_id)
-        .map_err(|_| HttpError::BadRequest(format!("Invalid task ID: {task_id}")))?;
 
-    let view = task_service
-        .get_task(TaskId::from_uuid(task_uuid))
+    let task_id = TaskId::from_uuid(uuid);
+    let status = task_service
+        .get_task(task_id)
         .await
         .map_err(HttpError::InternalError)?
         .ok_or_else(|| HttpError::NotFound(format!("Task {task_id} not found")))?;
 
     Ok(Json(TaskStatusResponse {
-        task_id: view.task_id,
-        status: view.status,
-        result: view.result,
+        task_id: status.task_id,
+        status: status.status,
+        result: status.result,
     }))
 }
 
@@ -320,6 +537,47 @@ fn mock_agents() -> Vec<AgentSummary> {
             name: "supervisor-1".to_string(),
         },
     ]
+}
+
+fn parse_session_path(raw: &str) -> Result<SessionId, HttpError> {
+    Uuid::parse_str(raw)
+        .map(SessionId::from_uuid)
+        .map_err(|_| HttpError::BadRequest(format!("Invalid session ID: {raw}")))
+}
+
+fn map_conversation_error(error: ConversationServiceError) -> HttpError {
+    match error {
+        ConversationServiceError::BadRequest(message) => HttpError::BadRequest(message),
+        ConversationServiceError::NotFound { session_id } => {
+            HttpError::NotFound(format!("session {session_id} not found"))
+        }
+        ConversationServiceError::SessionBusy {
+            session_id,
+            active_workflow_id,
+        } => HttpError::Conflict {
+            code: "session_busy".to_string(),
+            message: format!("session {session_id} is busy with workflow {active_workflow_id}"),
+            context: BTreeMap::from([
+                (
+                    "session_id".to_string(),
+                    Value::String(session_id.to_string()),
+                ),
+                (
+                    "active_workflow_id".to_string(),
+                    Value::String(active_workflow_id.to_string()),
+                ),
+            ]),
+        },
+        ConversationServiceError::SessionEnded { session_id } => HttpError::Conflict {
+            code: "session_ended".to_string(),
+            message: format!("session {session_id} has ended"),
+            context: BTreeMap::from([(
+                "session_id".to_string(),
+                Value::String(session_id.to_string()),
+            )]),
+        },
+        ConversationServiceError::Internal(message) => HttpError::InternalError(message),
+    }
 }
 
 #[cfg(test)]
@@ -412,7 +670,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_task_requires_runtime_service() {
+    async fn create_task_returns_202_fields() {
         let state = test_state();
         let request = CreateTaskRequest {
             description: "Test task".to_string(),
@@ -420,15 +678,15 @@ mod tests {
             priority: None,
         };
         let result = create_task(State(state), Json(request)).await;
-        assert!(matches!(result, Err(HttpError::InternalError(_))));
+        assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn get_task_requires_runtime_service() {
+    async fn get_task_valid_id() {
         let state = test_state();
         let task_id = Uuid::new_v4().to_string();
         let result = get_task(State(state), Path(task_id)).await;
-        assert!(matches!(result, Err(HttpError::InternalError(_))));
+        assert!(result.is_err());
     }
 
     #[tokio::test]

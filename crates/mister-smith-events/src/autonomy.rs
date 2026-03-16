@@ -13,7 +13,7 @@ use mister_smith_core::{
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
     InterventionRecord, MemorySnapshotId, ProfileSnapshot, ProfileSnapshotId, ProvenanceChain,
-    RevocationState, TaskId, TopologyKind, TopologyRationale,
+    RevocationState, SessionId, TaskId, TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -184,6 +184,15 @@ pub struct DelegationAlert {
 /// Operator-facing autonomy status reconstructed from typed event state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AutonomyStatusView {
+    /// Owning conversation session when the workflow belongs to one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<SessionId>,
+    /// Accepted turn order within the owning session, when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turn_index: Option<u32>,
+    /// Stable session coordinator identity when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coordinator_agent_id: Option<AgentId>,
     /// Graph summary for the running workflow.
     pub graph: ExecutionGraphSummary,
     /// Selected topology summary.

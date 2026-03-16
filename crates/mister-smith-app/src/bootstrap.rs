@@ -29,6 +29,7 @@ use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 use crate::autonomy;
+use crate::conversation::ConversationRuntimeService;
 use crate::execution::RuntimeTaskService;
 use crate::observability;
 use crate::observability::ObservabilityGuard;
@@ -125,6 +126,7 @@ async fn bootstrap_inner(
     let task_service = RuntimeTaskService::bootstrap(event_bus.clone(), nats_transport.clone())
         .await
         .map_err(|error| format!("runtime task service bootstrap failed: {error}"))?;
+    let conversation_service = ConversationRuntimeService::new(task_service.clone());
     info!("Runtime task service initialized");
 
     // Step 5: Initialize supervision tree
@@ -166,6 +168,7 @@ async fn bootstrap_inner(
         event_bus.clone(),
         nats_transport.clone(),
         task_service,
+        conversation_service,
     )
     .await?;
 
@@ -240,6 +243,7 @@ async fn start_http_server(
     event_bus: Arc<EventBus>,
     nats_transport: Option<Arc<NatsTransport>>,
     task_service: Arc<RuntimeTaskService>,
+    conversation_service: Arc<ConversationRuntimeService>,
 ) -> Result<Option<tokio::task::JoinHandle<()>>, Box<dyn std::error::Error + Send + Sync>> {
     let port = config.transport.http_port.unwrap_or(8080);
     let bind_address = format!("0.0.0.0:{port}");
@@ -248,11 +252,14 @@ async fn start_http_server(
         bind_address: bind_address.clone(),
         ..Default::default()
     };
+    let autonomy_pool = task_service.pool();
+    let autonomy_task_service = task_service.clone();
     let app_state = mister_smith_http::AppState::new()
         .with_transport_health(Arc::new(mister_smith_http::server::NatsHealthCheck::new(
             nats_transport.is_some(),
         )))
-        .with_task_service(task_service.clone());
+        .with_task_service(task_service)
+        .with_conversation_service(conversation_service);
     let mut app = mister_smith_http::server::build_router(&http_config, app_state);
 
     // Add Kubernetes health probe endpoints
@@ -298,7 +305,7 @@ async fn start_http_server(
     info!("Health probe endpoints registered (/health/live, /health/ready)");
 
     let autonomy_bus = event_bus.clone();
-    let autonomy_task_service_for_workflows = task_service.clone();
+    let autonomy_task_service_for_workflows = autonomy_task_service.clone();
     app = app.route(
         "/api/v1/autonomy/workflows",
         axum::routing::get(move || {
@@ -320,15 +327,22 @@ async fn start_http_server(
     );
 
     let autonomy_bus = event_bus.clone();
-    let autonomy_task_service_for_status = task_service.clone();
+    let autonomy_task_service_for_status = autonomy_task_service.clone();
     app = app.route(
         "/api/v1/autonomy/status/{workflow_id}",
         axum::routing::get(
             move |axum::extract::Path(workflow_id): axum::extract::Path<String>| {
                 let event_bus = autonomy_bus.clone();
+                let pool = autonomy_pool.clone();
                 let task_service = autonomy_task_service_for_status.clone();
                 async move {
-                    match autonomy::status_from_bus(event_bus, &workflow_id).await {
+                    match autonomy::status_from_bus_with_session_linkage(
+                        event_bus,
+                        pool,
+                        &workflow_id,
+                    )
+                    .await
+                    {
                         Ok(view) => Ok(axum::Json(view)),
                         Err(autonomy::AutonomyStatusError::NotFound(workflow_id)) => task_service
                             .autonomy_status(workflow_id)

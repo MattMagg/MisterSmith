@@ -344,6 +344,45 @@ pub struct TaskRecord {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+/// Row type for conversation session queries.
+///
+/// Maps 1:1 to the `tasks.sessions` table. The `status` field is read as
+/// `TEXT` (cast from the `session_status_type` enum) so no custom sqlx type is
+/// needed.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct SessionRecord {
+    pub session_id: Uuid,
+    pub coordinator_agent_id: Uuid,
+    pub status: String,
+    pub provider_kind: String,
+    pub model_id: String,
+    pub active_workflow_id: Option<Uuid>,
+    pub last_completed_workflow_id: Option<Uuid>,
+    pub turn_count: i32,
+    pub retained_context: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+}
+
+/// Row type for ordered session turn queries.
+///
+/// Maps 1:1 to the `tasks.session_turns` table. The `status` field is read as
+/// `TEXT` (cast from the `task_status_type` enum) so no custom sqlx type is
+/// needed.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct SessionTurnRecord {
+    pub turn_id: Uuid,
+    pub session_id: Uuid,
+    pub turn_index: i32,
+    pub workflow_id: Uuid,
+    pub user_message: String,
+    pub result_summary: Option<serde_json::Value>,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
 // ---------------------------------------------------------------------------
 // Message row type
 // ---------------------------------------------------------------------------
@@ -630,6 +669,265 @@ pub async fn find_tasks_by_correlation(
         "#,
     )
     .bind(correlation_id)
+    .fetch_all(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
+// ---------------------------------------------------------------------------
+// Conversation session CRUD
+// ---------------------------------------------------------------------------
+
+/// Insert a new conversation session into `tasks.sessions`.
+pub async fn insert_session(
+    pool: &PgPool,
+    record: &SessionRecord,
+) -> Result<SessionRecord, PersistenceError> {
+    sqlx::query_as::<_, SessionRecord>(
+        r#"
+        INSERT INTO tasks.sessions (
+            session_id, coordinator_agent_id, status, provider_kind, model_id,
+            active_workflow_id, last_completed_workflow_id, turn_count,
+            retained_context, created_at, updated_at, ended_at
+        )
+        VALUES (
+            $1, $2, $3::session_status_type, $4, $5,
+            $6, $7, $8,
+            $9, $10, $11, $12
+        )
+        RETURNING
+            session_id, coordinator_agent_id, status::TEXT AS status,
+            provider_kind, model_id, active_workflow_id,
+            last_completed_workflow_id, turn_count, retained_context,
+            created_at, updated_at, ended_at
+        "#,
+    )
+    .bind(record.session_id)
+    .bind(record.coordinator_agent_id)
+    .bind(&record.status)
+    .bind(&record.provider_kind)
+    .bind(&record.model_id)
+    .bind(record.active_workflow_id)
+    .bind(record.last_completed_workflow_id)
+    .bind(record.turn_count)
+    .bind(&record.retained_context)
+    .bind(record.created_at)
+    .bind(record.updated_at)
+    .bind(record.ended_at)
+    .fetch_one(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
+/// Find a conversation session by primary key.
+pub async fn find_session(
+    pool: &PgPool,
+    session_id: Uuid,
+) -> Result<Option<SessionRecord>, PersistenceError> {
+    sqlx::query_as::<_, SessionRecord>(
+        r#"
+        SELECT
+            session_id, coordinator_agent_id, status::TEXT AS status,
+            provider_kind, model_id, active_workflow_id,
+            last_completed_workflow_id, turn_count, retained_context,
+            created_at, updated_at, ended_at
+        FROM tasks.sessions
+        WHERE session_id = $1
+        "#,
+    )
+    .bind(session_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
+/// Update the mutable fields on a conversation session.
+pub async fn update_session(
+    pool: &PgPool,
+    record: &SessionRecord,
+) -> Result<SessionRecord, PersistenceError> {
+    sqlx::query_as::<_, SessionRecord>(
+        r#"
+        UPDATE tasks.sessions
+        SET coordinator_agent_id = $2,
+            status = $3::session_status_type,
+            provider_kind = $4,
+            model_id = $5,
+            active_workflow_id = $6,
+            last_completed_workflow_id = $7,
+            turn_count = $8,
+            retained_context = $9,
+            updated_at = $10,
+            ended_at = $11
+        WHERE session_id = $1
+        RETURNING
+            session_id, coordinator_agent_id, status::TEXT AS status,
+            provider_kind, model_id, active_workflow_id,
+            last_completed_workflow_id, turn_count, retained_context,
+            created_at, updated_at, ended_at
+        "#,
+    )
+    .bind(record.session_id)
+    .bind(record.coordinator_agent_id)
+    .bind(&record.status)
+    .bind(&record.provider_kind)
+    .bind(&record.model_id)
+    .bind(record.active_workflow_id)
+    .bind(record.last_completed_workflow_id)
+    .bind(record.turn_count)
+    .bind(&record.retained_context)
+    .bind(record.updated_at)
+    .bind(record.ended_at)
+    .fetch_one(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
+/// Delete a conversation session by primary key.
+pub async fn delete_session(pool: &PgPool, session_id: Uuid) -> Result<bool, PersistenceError> {
+    let result = sqlx::query(
+        r#"
+        DELETE FROM tasks.sessions
+        WHERE session_id = $1
+        "#,
+    )
+    .bind(session_id)
+    .execute(pool)
+    .await
+    .map_err(from_sqlx_error)?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+/// Insert a new ordered turn into `tasks.session_turns`.
+pub async fn insert_session_turn(
+    pool: &PgPool,
+    record: &SessionTurnRecord,
+) -> Result<SessionTurnRecord, PersistenceError> {
+    sqlx::query_as::<_, SessionTurnRecord>(
+        r#"
+        INSERT INTO tasks.session_turns (
+            turn_id, session_id, turn_index, workflow_id,
+            user_message, result_summary, status, created_at, completed_at
+        )
+        VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7::task_status_type, $8, $9
+        )
+        RETURNING
+            turn_id, session_id, turn_index, workflow_id,
+            user_message, result_summary, status::TEXT AS status,
+            created_at, completed_at
+        "#,
+    )
+    .bind(record.turn_id)
+    .bind(record.session_id)
+    .bind(record.turn_index)
+    .bind(record.workflow_id)
+    .bind(&record.user_message)
+    .bind(&record.result_summary)
+    .bind(&record.status)
+    .bind(record.created_at)
+    .bind(record.completed_at)
+    .fetch_one(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
+/// Find a session turn by its workflow identifier.
+pub async fn find_session_turn_by_workflow(
+    pool: &PgPool,
+    workflow_id: Uuid,
+) -> Result<Option<SessionTurnRecord>, PersistenceError> {
+    sqlx::query_as::<_, SessionTurnRecord>(
+        r#"
+        SELECT
+            turn_id, session_id, turn_index, workflow_id,
+            user_message, result_summary, status::TEXT AS status,
+            created_at, completed_at
+        FROM tasks.session_turns
+        WHERE workflow_id = $1
+        "#,
+    )
+    .bind(workflow_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
+/// Update the persisted state for one session turn.
+pub async fn update_session_turn(
+    pool: &PgPool,
+    record: &SessionTurnRecord,
+) -> Result<SessionTurnRecord, PersistenceError> {
+    sqlx::query_as::<_, SessionTurnRecord>(
+        r#"
+        UPDATE tasks.session_turns
+        SET session_id = $2,
+            turn_index = $3,
+            workflow_id = $4,
+            user_message = $5,
+            result_summary = $6,
+            status = $7::task_status_type,
+            created_at = $8,
+            completed_at = $9
+        WHERE turn_id = $1
+        RETURNING
+            turn_id, session_id, turn_index, workflow_id,
+            user_message, result_summary, status::TEXT AS status,
+            created_at, completed_at
+        "#,
+    )
+    .bind(record.turn_id)
+    .bind(record.session_id)
+    .bind(record.turn_index)
+    .bind(record.workflow_id)
+    .bind(&record.user_message)
+    .bind(&record.result_summary)
+    .bind(&record.status)
+    .bind(record.created_at)
+    .bind(record.completed_at)
+    .fetch_one(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
+/// Delete a session turn by its workflow identifier.
+pub async fn delete_session_turn_by_workflow(
+    pool: &PgPool,
+    workflow_id: Uuid,
+) -> Result<bool, PersistenceError> {
+    let result = sqlx::query(
+        r#"
+        DELETE FROM tasks.session_turns
+        WHERE workflow_id = $1
+        "#,
+    )
+    .bind(workflow_id)
+    .execute(pool)
+    .await
+    .map_err(from_sqlx_error)?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+/// List ordered turns for one session.
+pub async fn list_session_turns(
+    pool: &PgPool,
+    session_id: Uuid,
+) -> Result<Vec<SessionTurnRecord>, PersistenceError> {
+    sqlx::query_as::<_, SessionTurnRecord>(
+        r#"
+        SELECT
+            turn_id, session_id, turn_index, workflow_id,
+            user_message, result_summary, status::TEXT AS status,
+            created_at, completed_at
+        FROM tasks.session_turns
+        WHERE session_id = $1
+        ORDER BY turn_index ASC, created_at ASC
+        "#,
+    )
+    .bind(session_id)
     .fetch_all(pool)
     .await
     .map_err(from_sqlx_error)

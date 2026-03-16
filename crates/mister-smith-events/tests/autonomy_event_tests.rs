@@ -102,6 +102,9 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
     let graph_id = ExecutionGraphId::new();
     let branch_id = ExecutionBranchId::new();
     let view = AutonomyStatusView {
+        session_id: None,
+        turn_index: None,
+        coordinator_agent_id: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id: TaskId::new(),
@@ -233,6 +236,9 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
     let graph_id = ExecutionGraphId::new();
     let branch_id = ExecutionBranchId::new();
     let view = AutonomyStatusView {
+        session_id: None,
+        turn_index: None,
+        coordinator_agent_id: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -558,6 +564,9 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
     let capability_id = CapabilityId::new();
 
     let status_view = AutonomyStatusView {
+        session_id: None,
+        turn_index: None,
+        coordinator_agent_id: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,

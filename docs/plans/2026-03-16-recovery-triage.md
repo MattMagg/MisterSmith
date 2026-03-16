@@ -208,7 +208,7 @@ Remaining recovery scope after this slice:
 
 ### Slice 3: Spec 013 Docs And Packet
 
-Status: ready to land on `main`
+Status: landed on `main`
 
 Scope:
 
@@ -229,6 +229,70 @@ Next action after this slice:
 
 - port the bounded session code path from `codex/recovery-20260316` onto `main`, then validate the
   session crate/test bundle before attempting any live two-turn proof
+
+### Slice 4: Bounded Session Implementation
+
+Status: ready to land on `main`
+
+Scope:
+
+- add `SessionId` and `SessionStatus` to `mister-smith-core`
+- add migration `00006_conversation_sessions.sql`, session queries, and a session repository in
+  `mister-smith-persistence`
+- add `ConversationRuntimeService`, session-aware runtime submission metadata, and CLI session
+  commands in `mister-smith-app`
+- add HTTP session contracts plus create, continue, inspect, and end routes in
+  `mister-smith-http`
+- enrich autonomy status with optional `session_id`, `turn_index`, and
+  `coordinator_agent_id`
+
+Validation:
+
+- `cargo fmt --all`
+- `cargo test -p mister-smith-persistence -p mister-smith-events -p mister-smith-http -p mister-smith-app`
+- `cargo build --workspace`
+- `env DATABASE_URL='postgres://mistersmith:mistersmith_dev@127.0.0.1:5433/mistersmith_session_slice1' MISTER_SMITH_TRANSPORT__NATS_URL='nats://127.0.0.1:4223' cargo run -q -p mister-smith-app -- run`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/sessions -H 'content-type: application/json'`
+  `-d '{"message":"Summarize the runtime session slice in three bullets and keep enough retained`
+  `context to turn it into a checklist on the next turn.","priority":"high"}'`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/sessions/ffe062e9-81ca-44b0-937e-12ea855d7a66/turns`
+  `-H 'content-type: application/json'`
+  `-d '{"message":"Turn the summary into a checklist.","priority":"high"}'`
+- `curl -sS -w '\n%{http_code}\n' -X POST`
+  `http://127.0.0.1:8080/api/v1/sessions/ffe062e9-81ca-44b0-937e-12ea855d7a66/turns`
+  `-H 'content-type: application/json'`
+  `-d '{"message":"A third turn should be rejected while turn two is still active."}'`
+- `curl -sS http://127.0.0.1:8080/api/v1/sessions/ffe062e9-81ca-44b0-937e-12ea855d7a66`
+- `cargo run -q -p mister-smith-app -- autonomy status --workflow-id 2f424586-88eb-4e0d-96c5-19e6186b3bed --base-url http://127.0.0.1:8080`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/sessions -H 'content-type: application/json'`
+  `-d '{"message":"Reply with exactly READY.","priority":"high"}'`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/sessions/e5edd025-b59d-4b2d-9c26-21c938290917/end`
+- `curl -sS -w '\n%{http_code}\n' -X POST`
+  `http://127.0.0.1:8080/api/v1/sessions/e5edd025-b59d-4b2d-9c26-21c938290917/turns`
+  `-H 'content-type: application/json'`
+  `-d '{"message":"This should be rejected because the session already ended."}'`
+
+Validation result:
+
+- targeted crate tests passed and `cargo build --workspace` passed
+- live provider-backed proof on `openai_chatgpt` / `gpt-5.4` accepted two turns on session
+  `ffe062e9-81ca-44b0-937e-12ea855d7a66` with stable coordinator
+  `4938b447-bee1-4888-92c9-c5e162a1f5f7`
+- the two accepted turns used distinct root workflows
+  `8340e91f-dcf6-4f22-9e82-83fd174b5619` and `2f424586-88eb-4e0d-96c5-19e6186b3bed`
+- autonomy status for the second workflow rendered session linkage with session ID, turn index,
+  and coordinator ID
+- a third turn against the active session returned HTTP `409` with `session_busy`
+- a separate idle session ended cleanly and a later continue returned HTTP `409` with
+  `session_ended`
+
+Remaining recovery scope after this slice:
+
+- overlap documentation review only: `README.md`,
+  `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`,
+  `docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`, and
+  `docs/plans/2026-03-16-recovery-triage.md`
+- no unreconciled session code or migration files remain after this slice
 
 ## Stop Condition
 

@@ -76,6 +76,40 @@ impl AsRef<Uuid> for TaskId {
     }
 }
 
+/// Unique identifier for a conversation session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SessionId(pub Uuid);
+
+impl SessionId {
+    /// Create a new random session ID.
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    /// Create a session ID from an existing UUID.
+    pub fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+impl Default for SessionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Display for SessionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<Uuid> for SessionId {
+    fn as_ref(&self) -> &Uuid {
+        &self.0
+    }
+}
+
 /// Unique identifier for a message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MessageId(pub Uuid);

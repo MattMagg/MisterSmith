@@ -35,6 +35,9 @@ const DEFAULT_BROADCAST_CAPACITY: usize = 10_000;
 
 #[derive(Debug, Clone, Default)]
 struct AutonomyStatusAccumulator {
+    session_id: Option<mister_smith_core::SessionId>,
+    turn_index: Option<u32>,
+    coordinator_agent_id: Option<mister_smith_core::AgentId>,
     graph: Option<ExecutionGraphSummary>,
     topology: Option<TopologyPlanSummary>,
     branches: HashMap<ExecutionBranchId, BranchSummary>,
@@ -161,6 +164,9 @@ impl AutonomyStatusAccumulator {
         guard_decisions.sort_by_key(|decision| decision.decision_id.to_string());
 
         Some(AutonomyStatusView {
+            session_id: self.session_id,
+            turn_index: self.turn_index,
+            coordinator_agent_id: self.coordinator_agent_id,
             graph,
             topology,
             branches,
@@ -178,6 +184,9 @@ impl AutonomyStatusAccumulator {
 
     fn from_view(view: AutonomyStatusView) -> Self {
         let mut accumulator = Self {
+            session_id: view.session_id,
+            turn_index: view.turn_index,
+            coordinator_agent_id: view.coordinator_agent_id,
             graph: Some(view.graph),
             topology: Some(view.topology),
             ..Self::default()

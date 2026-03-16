@@ -8,10 +8,12 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use mister_smith_config::FrameworkConfig;
-use mister_smith_core::TaskId;
+use mister_smith_core::{AgentId, SessionId, TaskId};
 use mister_smith_events::{AutonomyStatusView, EventBus};
+use mister_smith_persistence::postgres::queries;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 /// Serializable list of workflow IDs with autonomy status projections.
@@ -155,6 +157,28 @@ pub async fn status_from_bus(
         .ok_or(AutonomyStatusError::NotFound(workflow_id))
 }
 
+/// Resolve autonomy status directly from the in-process event bus and enrich
+/// it with persisted session linkage when available.
+pub async fn status_from_bus_with_session_linkage(
+    event_bus: Arc<EventBus>,
+    pool: PgPool,
+    workflow_id: &str,
+) -> Result<AutonomyStatusView, AutonomyStatusError> {
+    let mut view = status_from_bus(event_bus, workflow_id).await?;
+    if let Some(record) = queries::find_task(&pool, *view.graph.workflow_id.as_ref())
+        .await
+        .map_err(|error| {
+            AutonomyStatusError::HttpStatus(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to load workflow metadata: {error}"),
+            )
+        })?
+    {
+        enrich_session_linkage(&mut view, &record.metadata);
+    }
+    Ok(view)
+}
+
 /// Resolve workflow IDs that currently have an autonomy status projection.
 pub async fn workflows_from_bus(event_bus: Arc<EventBus>) -> AutonomyWorkflowList {
     let workflows = event_bus
@@ -168,6 +192,13 @@ pub async fn workflows_from_bus(event_bus: Arc<EventBus>) -> AutonomyWorkflowLis
 
 /// Render the typed autonomy view for human operators.
 pub fn render_status(view: &AutonomyStatusView) -> String {
+    let session_summary = match (view.session_id, view.turn_index, view.coordinator_agent_id) {
+        (Some(session_id), Some(turn_index), Some(coordinator_agent_id)) => format!(
+            "{} turn={} coordinator={}",
+            session_id, turn_index, coordinator_agent_id
+        ),
+        _ => "none".to_string(),
+    };
     let topology_reason = &view.topology.rationale.selected_for;
     let fallback_reason = view
         .topology
@@ -277,10 +308,11 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\ntopology: {:?} width={} rationale={}\nfallback: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\ntopology: {:?} width={} rationale={}\nfallback: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
+        session_summary,
         view.topology.topology_kind,
         view.topology.parallelism_width,
         topology_reason,
@@ -305,4 +337,27 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         },
         conservative_summary
     )
+}
+
+pub(crate) fn enrich_session_linkage(view: &mut AutonomyStatusView, metadata: &serde_json::Value) {
+    if view.session_id.is_none() {
+        view.session_id = metadata
+            .get("session_id")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|raw| Uuid::parse_str(raw).ok())
+            .map(SessionId::from_uuid);
+    }
+    if view.turn_index.is_none() {
+        view.turn_index = metadata
+            .get("turn_index")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok());
+    }
+    if view.coordinator_agent_id.is_none() {
+        view.coordinator_agent_id = metadata
+            .get("coordinator_agent_id")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|raw| Uuid::parse_str(raw).ok())
+            .map(AgentId::from_uuid);
+    }
 }

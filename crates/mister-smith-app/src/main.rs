@@ -9,6 +9,7 @@ mod bootstrap;
 #[allow(dead_code)]
 mod bridges;
 mod config;
+mod conversation;
 mod execution;
 mod observability;
 mod shutdown;
@@ -46,6 +47,11 @@ struct Cli {
 enum Command {
     /// Run the Mister Smith framework runtime.
     Run,
+    /// Create, continue, inspect, and end durable conversations.
+    Conversation {
+        #[command(subcommand)]
+        command: ConversationCommand,
+    },
     /// Inspect the operator-facing autonomy control plane.
     Autonomy {
         #[command(subcommand)]
@@ -71,6 +77,55 @@ enum AutonomyCommand {
     },
     /// List workflow IDs that currently have typed autonomy status in the runtime.
     List {
+        /// Base URL of the running local runtime. Defaults to the configured HTTP port.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum ConversationCommand {
+    /// Create a durable session and accept the first turn.
+    Start {
+        /// Operator message for the first turn.
+        #[arg(long)]
+        message: String,
+        /// Optional priority label for the first turn.
+        #[arg(long)]
+        priority: Option<String>,
+        /// Base URL of the running local runtime. Defaults to the configured HTTP port.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Continue an existing session with one more turn.
+    Continue {
+        /// Session UUID to continue.
+        #[arg(long)]
+        session_id: String,
+        /// Operator message for the next turn.
+        #[arg(long)]
+        message: String,
+        /// Optional priority label for the turn workflow.
+        #[arg(long)]
+        priority: Option<String>,
+        /// Base URL of the running local runtime. Defaults to the configured HTTP port.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Inspect one durable session.
+    Inspect {
+        /// Session UUID to inspect.
+        #[arg(long)]
+        session_id: String,
+        /// Base URL of the running local runtime. Defaults to the configured HTTP port.
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Logically end one idle session.
+    End {
+        /// Session UUID to end.
+        #[arg(long)]
+        session_id: String,
         /// Base URL of the running local runtime. Defaults to the configured HTTP port.
         #[arg(long)]
         base_url: Option<String>,
@@ -159,6 +214,9 @@ async fn main() {
 
     let result = match &cli.command {
         None | Some(Command::Run) => run_runtime(cli).await,
+        Some(Command::Conversation { command }) => {
+            execute_conversation_command(command, &cli).await
+        }
         Some(Command::Autonomy { command }) => execute_autonomy_command(command, &cli).await,
         Some(Command::Auth { command }) => execute_auth_command(command).await,
     };
@@ -307,6 +365,77 @@ async fn execute_autonomy_command(
             for workflow_id in workflows.workflows {
                 println!("{workflow_id}");
             }
+        }
+    }
+
+    Ok(())
+}
+
+async fn execute_conversation_command(
+    command: &ConversationCommand,
+    cli: &Cli,
+) -> Result<(), Box<dyn Error>> {
+    let overrides = config::CliOverrides {
+        config_path: cli.config.clone(),
+        log_level: cli.log_level.clone(),
+        log_format: cli.log_format.as_deref().and_then(parse_log_format),
+    };
+    let config = config::load_framework_config(&overrides)
+        .map_err(|error| format!("Failed to load configuration: {error}"))?;
+
+    match command {
+        ConversationCommand::Start {
+            message,
+            priority,
+            base_url,
+        } => {
+            let base_url = base_url
+                .clone()
+                .unwrap_or_else(|| conversation::default_base_url(&config));
+            let view =
+                conversation::start_session_http(&base_url, message, priority.clone()).await?;
+            println!("{}", conversation::render_turn_accepted(&view));
+        }
+        ConversationCommand::Continue {
+            session_id,
+            message,
+            priority,
+            base_url,
+        } => {
+            let base_url = base_url
+                .clone()
+                .unwrap_or_else(|| conversation::default_base_url(&config));
+            let session_id = conversation::parse_session_id(session_id)?;
+            let view = conversation::continue_session_http(
+                &base_url,
+                session_id,
+                message,
+                priority.clone(),
+            )
+            .await?;
+            println!("{}", conversation::render_turn_accepted(&view));
+        }
+        ConversationCommand::Inspect {
+            session_id,
+            base_url,
+        } => {
+            let base_url = base_url
+                .clone()
+                .unwrap_or_else(|| conversation::default_base_url(&config));
+            let session_id = conversation::parse_session_id(session_id)?;
+            let view = conversation::inspect_session_http(&base_url, session_id).await?;
+            println!("{}", conversation::render_session(&view));
+        }
+        ConversationCommand::End {
+            session_id,
+            base_url,
+        } => {
+            let base_url = base_url
+                .clone()
+                .unwrap_or_else(|| conversation::default_base_url(&config));
+            let session_id = conversation::parse_session_id(session_id)?;
+            let view = conversation::end_session_http(&base_url, session_id).await?;
+            println!("{}", conversation::render_end_view(&view));
         }
     }
 

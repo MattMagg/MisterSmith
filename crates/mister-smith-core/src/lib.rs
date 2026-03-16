@@ -13,7 +13,7 @@ mod traits;
 pub use ids::{
     AgentId, CapabilityId, CheckpointId, ContextBudgetId, ExecutionBranchId, ExecutionGraphId,
     ExecutionNodeId, GuardDecisionId, InterventionRecordId, MemoryFragmentId, MemorySnapshotId,
-    MessageId, ProfileSnapshotId, ResourceId, TaskId, ToolId,
+    MessageId, ProfileSnapshotId, ResourceId, SessionId, TaskId, ToolId,
 };
 
 // Shared autonomy value objects
@@ -28,8 +28,8 @@ pub use enums::{
     AgentAvailability, AgentState, AgentType, BranchRecoveryStrategy, BranchState, BudgetPolicy,
     BudgetScope, CheckpointPolicy, CoordinationPolicy, DelegationScope, DependencyType,
     FailureClass, GraphState, HealthState, InterventionType, MessagePriority, NodeState,
-    ProcessLifecycle, ProfileTarget, RevocationState, SemanticSignalKind, ShutdownReason,
-    TopologyKind,
+    ProcessLifecycle, ProfileTarget, RevocationState, SemanticSignalKind, SessionStatus,
+    ShutdownReason, TopologyKind,
 };
 
 // Supervision types

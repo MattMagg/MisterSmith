@@ -155,13 +155,13 @@ Reason for backlog posture:
 
 ## Recommended Next Step
 
-Land this docs/spec packet on `main`, then port the bounded session implementation from
-`codex/recovery-20260316` onto `main` only after the remaining mixed runtime files are validated
-as a safe session slice.
+Treat this packet as the current session surface contract on `main`, then add focused runtime and
+HTTP integration coverage for restart/resume and richer inspect output without widening the
+bounded slice.
 
 ## Implementation Snapshot
 
-Recovered implementation snapshot on `codex/recovery-20260316` included the bounded slice:
+Current `main` now includes the bounded slice:
 
 - `mister-smith-core`: added `SessionId` and `SessionStatus`
 - `mister-smith-persistence`: added migration `00006_conversation_sessions.sql`, durable
@@ -174,18 +174,46 @@ Recovered implementation snapshot on `codex/recovery-20260316` included the boun
 - `mister-smith-events`: extended `AutonomyStatusView` with optional `session_id`, `turn_index`,
   and `coordinator_agent_id`
 
-Validation recorded on the recovered snapshot:
+Validation recorded on `main`:
 
+- `cargo fmt --all`
+- `cargo test -p mister-smith-persistence -p mister-smith-events -p mister-smith-http -p mister-smith-app`
 - `cargo build --workspace`
-- `cargo test -p mister-smith-persistence`
-- `cargo test -p mister-smith-events`
-- `cargo test -p mister-smith-http`
-- `cargo test -p mister-smith-app`
+- `env DATABASE_URL='postgres://mistersmith:mistersmith_dev@127.0.0.1:5433/mistersmith_session_slice1' MISTER_SMITH_TRANSPORT__NATS_URL='nats://127.0.0.1:4223' cargo run -q -p mister-smith-app -- run`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/sessions -H 'content-type: application/json'`
+  `-d '{"message":"Summarize the runtime session slice in three bullets and keep enough retained`
+  `context to turn it into a checklist on the next turn.","priority":"high"}'`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/sessions/ffe062e9-81ca-44b0-937e-12ea855d7a66/turns`
+  `-H 'content-type: application/json'`
+  `-d '{"message":"Turn the summary into a checklist.","priority":"high"}'`
+- `curl -sS -w '\n%{http_code}\n' -X POST`
+  `http://127.0.0.1:8080/api/v1/sessions/ffe062e9-81ca-44b0-937e-12ea855d7a66/turns`
+  `-H 'content-type: application/json'`
+  `-d '{"message":"A third turn should be rejected while turn two is still active."}'`
+- `curl -sS http://127.0.0.1:8080/api/v1/sessions/ffe062e9-81ca-44b0-937e-12ea855d7a66`
+- `cargo run -q -p mister-smith-app -- autonomy status --workflow-id 2f424586-88eb-4e0d-96c5-19e6186b3bed --base-url http://127.0.0.1:8080`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/sessions -H 'content-type: application/json'`
+  `-d '{"message":"Reply with exactly READY.","priority":"high"}'`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/sessions/e5edd025-b59d-4b2d-9c26-21c938290917/end`
+- `curl -sS -w '\n%{http_code}\n' -X POST`
+  `http://127.0.0.1:8080/api/v1/sessions/e5edd025-b59d-4b2d-9c26-21c938290917/turns`
+  `-H 'content-type: application/json'`
+  `-d '{"message":"This should be rejected because the session already ended."}'`
+
+Observed live results:
+
+- session `ffe062e9-81ca-44b0-937e-12ea855d7a66` accepted two turns with the same
+  `coordinator_agent_id` `4938b447-bee1-4888-92c9-c5e162a1f5f7` and distinct root workflows
+  `8340e91f-dcf6-4f22-9e82-83fd174b5619` and `2f424586-88eb-4e0d-96c5-19e6186b3bed`
+- workflow autonomy for turn two rendered session linkage as
+  `session: ffe062e9-81ca-44b0-937e-12ea855d7a66 turn=2 coordinator=4938b447-bee1-4888-92c9-c5e162a1f5f7`
+- a third turn against the active session returned HTTP `409` with `error: session_busy`
+- session `e5edd025-b59d-4b2d-9c26-21c938290917` ended cleanly after one completed turn and a
+  later continue returned HTTP `409` with `error: session_ended`
 
 Still pending:
 
-- port the bounded session implementation onto `main` in a clean recovery slice
-- a real runtime smoke proof that creates one session, completes two turns, inspects the session,
-  and verifies autonomy linkage on a live provider-backed run
 - feature-specific HTTP and runtime integration tests for the new session endpoints beyond the
   current unit coverage
+- a restart-resume proof that stops and restarts the runtime between accepted turns and then
+  continues the same idle session without manual repair

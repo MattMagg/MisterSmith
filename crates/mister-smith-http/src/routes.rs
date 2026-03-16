@@ -21,6 +21,16 @@ pub fn protected_api_router() -> Router<AppState> {
         .route("/api/v1/agents/{agent_id}", get(handlers::get_agent))
         .route("/api/v1/tasks", post(handlers::create_task))
         .route("/api/v1/tasks/{task_id}", get(handlers::get_task))
+        .route("/api/v1/sessions", post(handlers::create_session))
+        .route("/api/v1/sessions/{session_id}", get(handlers::get_session))
+        .route(
+            "/api/v1/sessions/{session_id}/turns",
+            post(handlers::continue_session),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/end",
+            post(handlers::end_session),
+        )
         .route("/api/v1/config", get(handlers::get_config))
         .route("/api/v1/events/ws", any(websocket::ws_handler))
 }

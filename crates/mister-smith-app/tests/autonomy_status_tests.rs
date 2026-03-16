@@ -26,6 +26,9 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
     let decision_id = GuardDecisionId::new();
     let capability_id = mister_smith_core::CapabilityId::new();
     let view = AutonomyStatusView {
+        session_id: None,
+        turn_index: None,
+        coordinator_agent_id: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
