@@ -10,13 +10,30 @@ use mister_smith_core::{
     CoordinationPolicy, ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState,
     GuardDecision, GuardDecisionId, GuardEvidence, HealthState, InterventionRecord,
     InterventionRecordId, InterventionType, MemorySnapshotId, ProfileSnapshotId, ProfileTarget,
-    ProvenanceChain, ProvenanceLink, RevocationState, TaskId, TopologyKind, TopologyRationale,
+    ProvenanceChain, ProvenanceLink, RevocationState, TaskId, TaskShapeClassification,
+    TaskShapeKind, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
     RoutingDecisionSummary, TopologyPlanSummary,
 };
+
+fn sample_task_shape(kind: TaskShapeKind) -> TaskShapeClassification {
+    TaskShapeClassification {
+        kind,
+        root_count: 1,
+        max_parallel_width: 1,
+        max_depth: 2,
+        has_join: false,
+        has_fanout: false,
+        structural_signals: vec![
+            "roots:1".to_string(),
+            "max_parallel_width:1".to_string(),
+            "max_depth:2".to_string(),
+        ],
+    }
+}
 
 fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
     let workflow_id = TaskId::new();
@@ -41,6 +58,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             graph_id,
             topology_kind: TopologyKind::Sequential,
             parallelism_width: 1,
+            task_shape: sample_task_shape(TaskShapeKind::StrictChain),
             coordination_policy: CoordinationPolicy::Barrier,
             rationale: TopologyRationale {
                 dependency_shape: "single branch".to_string(),
@@ -165,6 +183,7 @@ fn render_status_surfaces_operator_rationale_and_history() {
     let rendered = autonomy::render_status(&view);
 
     assert!(rendered.contains("minimize restart blast radius"));
+    assert!(rendered.contains("shape=strict-chain"));
     assert!(rendered.contains(&branch_id.to_string()));
     assert!(rendered.contains("checkpoint scope narrowed resume"));
     assert!(rendered.contains("applied retry for targeted recovery"));
@@ -207,6 +226,13 @@ fn metric_operations_cover_checkpoint_pressure_and_intervention_visibility() {
                 .labels
                 .iter()
                 .any(|(key, value)| key == "pressure_level" && value == "elevated")
+    }));
+    assert!(operations.iter().any(|operation| {
+        operation.name == "mistersmith_autonomy_topology_info"
+            && operation
+                .labels
+                .iter()
+                .any(|(key, value)| key == "task_shape" && value == "strict-chain")
     }));
     assert!(operations.iter().any(|operation| {
         operation.name == "mistersmith_autonomy_delegation_chain_depth"

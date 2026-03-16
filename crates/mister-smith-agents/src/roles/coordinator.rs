@@ -126,6 +126,9 @@ impl Actor for CoordinatorAgent {
                     "status": "submitted",
                     "graph_id": graph.graph_id.to_string(),
                     "topology_kind": format!("{:?}", graph.topology_plan.topology_kind),
+                    "task_shape_kind": graph.topology_plan.task_shape.kind.as_str(),
+                    "task_shape": graph.topology_plan.task_shape.clone(),
+                    "topology_rationale": graph.topology_plan.rationale.clone(),
                 }))
             }
             CoordinatorMessage::SubtaskResult { task_id, result: _ } => {
@@ -191,6 +194,9 @@ mod tests {
         assert_eq!(resp["task_type"], "analysis");
         assert_eq!(resp["status"], "submitted");
         assert!(resp["task_id"].is_string());
+        assert_eq!(resp["task_shape_kind"], "strict-chain");
+        assert!(resp["task_shape"].is_object());
+        assert!(resp["topology_rationale"].is_object());
         assert_eq!(state.active_tasks.len(), 1);
     }
 
