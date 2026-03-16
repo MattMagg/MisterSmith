@@ -69,9 +69,30 @@ Symphony currently watches one `project_slug` from `WORKFLOW.md`. Only issues in
 project and in active workflow states can dispatch. Project placement is therefore operational, not
 decorative.
 
+`Human Review` is a real workflow state, but it is intentionally not part of Symphony's
+`active_states` because review handoff is not dispatch-active work.
+
 Do not collapse all planning into a single giant `MisterSmith` project just to satisfy that current
 runtime limitation. If project switching becomes the real bottleneck, prefer a dedicated execution
 project such as `MisterSmith Queue` over flattening the entire workspace taxonomy.
+
+## Smith MCP Control-Plane Mapping
+
+Use Smith as the default workflow layer over this Linear model.
+
+- route and state discovery:
+  `route_workflow_request`, `get_control_plane_snapshot`, `get_issue_execution_snapshot`,
+  `resolve_issue_lifecycle`
+- issue and workpad mutation:
+  `save_linear_issue`, `save_issue_workpad`
+- backlog and queue operations:
+  `materialize_backlog_slices`, `plan_queue_stage`, `apply_queue_stage`
+- Ralph and SpecKit glue:
+  `prepare_ralph_packet`, `record_ralph_outcome`, `prepare_speckit_context`,
+  `translate_speckit_tasks`
+
+Use raw Linear fallback only for workspace administration or metadata operations that Smith does not
+yet model.
 
 ### Cycles
 
@@ -275,6 +296,8 @@ Linear documents are used for reference material linked to projects:
 | Symphony Intake Template | MisterSmith Workspace Docs | Canonical issue intake and readiness template |
 | Symphony Linear Feature Matrix | MisterSmith Workspace Docs | Business vs Enterprise feature decisions and adoption stance |
 | Symphony Linear Operating Model | MisterSmith Workspace Docs | Current-state audit, target model, and manual follow-up checklist |
+| Smith-First Development System | MisterSmith Workspace Docs | Canonical Smith-first development workflow model |
+| Smith MCP MS-51 Through MS-59 Execution | MisterSmith Workspace Docs | Current Smith workflow-family implementation status and remaining proof work |
 | Execution Queue Operating Rules | MisterSmith Execution Queue | Project-specific routing and dispatch rules for the live Symphony queue |
 | Validated Backlog Admission Rules | MisterSmith Validated Backlog | Project-specific gating rules for what belongs in curated backlog |
 | Phase 9.1 Security Hardening Spec | Phase 9.1 | Security hardening specification |

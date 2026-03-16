@@ -75,6 +75,19 @@ Instructions:
 ## Mister Smith repository notes
 
 - Read `AGENTS.md` first and follow it. It governs the whole repo.
+- For the broader Smith-first development-system model that connects this issue flow to Ralph,
+  SpecKit, planning, validation, and review work, read
+  `docs/plans/2026-03-16-smith-first-development-system.md`.
+- When the Smith MCP is available in the session, route broad workflow requests through
+  `route_workflow_request` first, then use `get_control_plane_snapshot` or
+  `get_issue_execution_snapshot` before mutating issue state.
+- Use `save_linear_issue` and `save_issue_workpad` as the only Smith-owned write path for Linear
+  issue and workpad updates.
+- Use `materialize_backlog_slices`, `plan_queue_stage`, `apply_queue_stage`, and
+  `resolve_issue_lifecycle` for backlog, watched-queue, and execution-state control.
+- Use `prepare_ralph_packet` and `record_ralph_outcome` for Ralph-assisted flows.
+- Use `prepare_speckit_context` and `translate_speckit_tasks` for SpecKit routing and task-pack
+  translation.
 - For frontier-autonomy work, treat
   `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md` as the
   canonical frontier mandate. If a workspace-local

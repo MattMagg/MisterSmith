@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::process::Command;
 use tokio::sync::RwLock;
 
@@ -34,6 +34,7 @@ query SmithControlPlaneWorkspace {
       id
       identifier
       title
+      description
       priority
       url
       state {
@@ -46,6 +47,10 @@ query SmithControlPlaneWorkspace {
         name
         slugId
         state
+      }
+      parent {
+        id
+        identifier
       }
       team {
         id
@@ -76,6 +81,12 @@ query SmithControlPlaneWorkspace {
       id
       key
       name
+      labels(first: 100) {
+        nodes {
+          id
+          name
+        }
+      }
       states(first: 30) {
         nodes {
           id
@@ -83,6 +94,20 @@ query SmithControlPlaneWorkspace {
           type
         }
       }
+    }
+  }
+}
+"#;
+
+const LINEAR_ISSUE_CREATE_MUTATION: &str = r#"
+mutation SmithCreateIssue($input: IssueCreateInput!) {
+  issueCreate(input: $input) {
+    success
+    issue {
+      id
+      identifier
+      title
+      url
     }
   }
 }
@@ -96,10 +121,153 @@ mutation SmithUpdateIssue($id: String!, $input: IssueUpdateInput!) {
       id
       identifier
       title
+      url
     }
   }
 }
 "#;
+
+const LINEAR_ISSUE_RELATION_CREATE_MUTATION: &str = r#"
+mutation SmithCreateIssueRelation($input: IssueRelationCreateInput!) {
+  issueRelationCreate(input: $input) {
+    success
+    issueRelation {
+      id
+    }
+  }
+}
+"#;
+
+const LINEAR_COMMENT_CREATE_MUTATION: &str = r#"
+mutation SmithCreateComment($input: CommentCreateInput!) {
+  commentCreate(input: $input) {
+    success
+    comment {
+      id
+      body
+      updatedAt
+      parent {
+        id
+      }
+    }
+  }
+}
+"#;
+
+const LINEAR_ISSUE_QUERY: &str = r#"
+query SmithIssueSnapshot($id: String!) {
+  issue(id: $id) {
+    id
+    identifier
+    title
+    description
+    priority
+    url
+    state {
+      id
+      name
+      type
+    }
+    project {
+      id
+      name
+      slugId
+      state
+    }
+    parent {
+      id
+      identifier
+    }
+    team {
+      id
+      key
+      name
+    }
+    labels(first: 20) {
+      nodes {
+        name
+      }
+    }
+    inverseRelations(first: 20) {
+      nodes {
+        type
+        issue {
+          id
+          identifier
+          state {
+            name
+          }
+        }
+      }
+    }
+  }
+}
+"#;
+
+const LINEAR_COMMENT_UPDATE_MUTATION: &str = r#"
+mutation SmithUpdateComment($id: String!, $input: CommentUpdateInput!) {
+  commentUpdate(id: $id, input: $input) {
+    success
+    comment {
+      id
+      body
+      updatedAt
+      parent {
+        id
+      }
+    }
+  }
+}
+"#;
+
+const LINEAR_ISSUE_COMMENTS_QUERY: &str = r#"
+query SmithIssueComments($id: String!) {
+  issue(id: $id) {
+    id
+    identifier
+    comments(first: 100) {
+      nodes {
+        id
+        body
+        updatedAt
+        parent {
+          id
+        }
+      }
+    }
+  }
+}
+"#;
+
+const LINEAR_PROJECT_MILESTONES_QUERY: &str = r#"
+query SmithProjectMilestones {
+  projectMilestones(first: 100) {
+    nodes {
+      id
+      name
+      project {
+        id
+      }
+    }
+  }
+}
+"#;
+
+const CODEX_WORKPAD_HEADER: &str = "## Codex Workpad";
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LinearLabelSnapshot {
+    pub id: Option<String>,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LinearTeamSnapshot {
+    pub id: Option<String>,
+    pub key: String,
+    pub name: String,
+    pub labels: Vec<LinearLabelSnapshot>,
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -228,14 +396,22 @@ pub struct LinearStateSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LinearIssueParentSnapshot {
+    pub id: Option<String>,
+    pub identifier: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LinearIssueSnapshot {
     pub id: Option<String>,
     pub identifier: String,
     pub title: String,
+    pub description: Option<String>,
     pub priority: Option<i64>,
     pub url: Option<String>,
     pub state: Option<LinearStateSnapshot>,
     pub project: Option<LinearProjectSnapshot>,
+    pub parent: Option<LinearIssueParentSnapshot>,
     pub team_key: Option<String>,
     pub team_name: Option<String>,
     pub labels: Vec<String>,
@@ -247,6 +423,22 @@ pub struct LinearIssueBlockerSnapshot {
     pub id: Option<String>,
     pub identifier: String,
     pub state: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LinearCommentSnapshot {
+    pub id: String,
+    pub body: String,
+    pub updated_at: Option<String>,
+    pub parent_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LinearWorkpadSnapshot {
+    pub comment_id: String,
+    pub updated_at: Option<String>,
+    pub body: String,
+    pub duplicate_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -344,9 +536,141 @@ pub struct PhaseExecutionPlan {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IssueExecutionSnapshot {
     pub issue: Option<LinearIssueSnapshot>,
+    pub workpad: Option<LinearWorkpadSnapshot>,
     pub matching_pull_requests: Vec<GitHubPullRequest>,
     pub execution_state: String,
+    pub blocker_summaries: Vec<String>,
+    pub workpad_status: String,
+    pub queue_project_role: String,
+    pub next_step_hint: String,
     pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinearIssueSaveResult {
+    pub action: String,
+    pub issue: LinearIssueSnapshot,
+    pub applied_fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinearWorkpadSaveResult {
+    pub action: String,
+    pub issue_identifier: String,
+    pub comment_id: String,
+    pub duplicate_count: usize,
+    pub workpad: LinearWorkpadSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MaterializedBacklogSlice {
+    pub title: String,
+    pub issue_identifier: String,
+    pub action: String,
+    pub blocker_identifiers: Vec<String>,
+    pub symphony_candidate: bool,
+    pub workpad_action: Option<String>,
+    pub issue: LinearIssueSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BacklogSliceMaterialization {
+    pub parent_issue_identifier: String,
+    pub milestone: Option<String>,
+    pub results: Vec<MaterializedBacklogSlice>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueueStagePlan {
+    pub issue_identifier: Option<String>,
+    pub recommended_issue_identifier: Option<String>,
+    pub stageable: bool,
+    pub blocked: bool,
+    pub queue_conflicts: Vec<String>,
+    pub required_fixes: Vec<String>,
+    pub queue_project_role: Option<String>,
+    pub target_project: Option<String>,
+    pub target_state: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueueStageApplyResult {
+    pub action: String,
+    pub issue_identifier: Option<String>,
+    pub planned: QueueStagePlan,
+    pub issue: Option<LinearIssueSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IssueLifecycleResolution {
+    pub issue: Option<LinearIssueSnapshot>,
+    pub issue_identifier: String,
+    pub next_recommended_action: String,
+    pub required_mutations: Vec<String>,
+    pub blocking_reasons: Vec<String>,
+    pub review_state: String,
+    pub queue_role: String,
+    pub pr_correlation: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RalphPacket {
+    pub issue_identifier: String,
+    pub plan_path: Option<String>,
+    pub mode: String,
+    pub goal: String,
+    pub current_context: String,
+    pub source_docs: Vec<String>,
+    pub workflow_requirements: Vec<String>,
+    pub validation_requirements: Vec<String>,
+    pub stop_conditions: Vec<String>,
+    pub definition_of_done: Vec<String>,
+    pub rendered_prompt: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RalphOutcomeRecord {
+    pub issue_identifier: String,
+    pub outcome_status: String,
+    pub workpad_action: String,
+    pub target_state: Option<String>,
+    pub comment_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpecKitContext {
+    pub issue_identifier: Option<String>,
+    pub should_use_speckit: bool,
+    pub feature_dir: Option<String>,
+    pub source_docs: Vec<String>,
+    pub packet_summary: String,
+    pub next_command_hint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranslatedSpecKitSlice {
+    pub title: String,
+    pub description: String,
+    pub blocked_by: Vec<String>,
+    pub workpad_body: Option<String>,
+    pub symphony_candidate: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpecKitTranslation {
+    pub feature_dir: Option<String>,
+    pub tasks_path: String,
+    pub apply_requested: bool,
+    pub packet_summary: String,
+    pub translated_slices: Vec<TranslatedSpecKitSlice>,
+    pub materialization: Option<BacklogSliceMaterialization>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct LinearProjectMilestoneSnapshot {
+    id: Option<String>,
+    name: String,
+    project_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -441,7 +765,16 @@ struct CompatibilityCaches {
 struct LinearWorkspaceData {
     projects: Vec<LinearProjectSnapshot>,
     issues: Vec<LinearIssueSnapshot>,
+    teams: Vec<LinearTeamSnapshot>,
     states_by_team: BTreeMap<String, Vec<LinearStateSnapshot>>,
+}
+
+#[derive(Debug, Clone)]
+struct IssueExecutionContext {
+    issue: Option<LinearIssueSnapshot>,
+    workpad: Option<LinearWorkpadSnapshot>,
+    matching_pull_requests: Vec<GitHubPullRequest>,
+    workflow: WorkflowSummary,
 }
 
 #[derive(Debug)]
@@ -499,6 +832,19 @@ impl SmithCompatibilityServer {
             return Ok(workspace);
         }
 
+        let data = self
+            .linear_graphql(LINEAR_WORKSPACE_QUERY, serde_json::json!({}))
+            .await?;
+        let workspace = parse_linear_workspace(&data);
+        self.caches.write().await.linear_workspace = Some(workspace.clone());
+        Ok(workspace)
+    }
+
+    async fn linear_graphql(
+        &self,
+        query: &str,
+        variables: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let api_key = self.linear_api_key().ok_or_else(|| {
             "LINEAR_API_KEY is not available from the environment or repo .env".to_string()
         })?;
@@ -506,12 +852,12 @@ impl SmithCompatibilityServer {
             .post(&self.options.linear_endpoint)
             .header(reqwest::header::AUTHORIZATION, api_key)
             .json(&serde_json::json!({
-                "query": LINEAR_WORKSPACE_QUERY,
-                "variables": {}
+                "query": query,
+                "variables": variables,
             }))
             .send()
             .await
-            .map_err(|err| format!("failed to query Linear workspace: {err}"))?;
+            .map_err(|err| format!("failed to query Linear: {err}"))?;
 
         let status = response.status();
         let body: serde_json::Value = response
@@ -526,19 +872,286 @@ impl SmithCompatibilityServer {
             return Err(format!("Linear GraphQL errors: {errors}"));
         }
 
-        let data = body
-            .get("data")
+        body.get("data")
             .cloned()
-            .ok_or_else(|| "Linear response missing data".to_string())?;
-        let workspace = parse_linear_workspace(&data);
-        self.caches.write().await.linear_workspace = Some(workspace.clone());
-        Ok(workspace)
+            .ok_or_else(|| "Linear response missing data".to_string())
     }
 
     fn linear_api_key(&self) -> Option<String> {
         env::var("LINEAR_API_KEY")
             .ok()
             .or_else(|| read_env_value(&self.options.env_file_path, "LINEAR_API_KEY"))
+    }
+
+    async fn linear_issue_create(
+        &self,
+        input: serde_json::Value,
+    ) -> Result<LinearIssueSnapshot, String> {
+        let data = self
+            .linear_graphql(
+                LINEAR_ISSUE_CREATE_MUTATION,
+                serde_json::json!({ "input": input }),
+            )
+            .await?;
+        let success = data
+            .pointer("/issueCreate/success")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        if !success {
+            return Err(format!("Linear issueCreate did not report success: {data}"));
+        }
+        let issue = data
+            .pointer("/issueCreate/issue")
+            .ok_or_else(|| "Linear issueCreate response missing issue".to_string())?;
+        Ok(parse_linear_issue(issue))
+    }
+
+    async fn linear_issue_update(
+        &self,
+        issue_id: Option<String>,
+        input: serde_json::Value,
+    ) -> Result<LinearIssueSnapshot, String> {
+        let issue_id = issue_id.ok_or_else(|| "issue id is missing".to_string())?;
+        let data = self
+            .linear_graphql(
+                LINEAR_ISSUE_UPDATE_MUTATION,
+                serde_json::json!({
+                    "id": issue_id,
+                    "input": input,
+                }),
+            )
+            .await?;
+        let success = data
+            .pointer("/issueUpdate/success")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        if !success {
+            return Err(format!("Linear issueUpdate did not report success: {data}"));
+        }
+        let issue = data
+            .pointer("/issueUpdate/issue")
+            .ok_or_else(|| "Linear issueUpdate response missing issue".to_string())?;
+        Ok(parse_linear_issue(issue))
+    }
+
+    async fn linear_issue_relation_create(
+        &self,
+        input: serde_json::Value,
+    ) -> Result<(), String> {
+        let data = self
+            .linear_graphql(
+                LINEAR_ISSUE_RELATION_CREATE_MUTATION,
+                serde_json::json!({ "input": input }),
+            )
+            .await?;
+        let success = data
+            .pointer("/issueRelationCreate/success")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        if !success {
+            return Err(format!(
+                "Linear issueRelationCreate did not report success: {data}"
+            ));
+        }
+        Ok(())
+    }
+
+    async fn linear_comment_create(
+        &self,
+        input: serde_json::Value,
+    ) -> Result<LinearCommentSnapshot, String> {
+        let data = self
+            .linear_graphql(
+                LINEAR_COMMENT_CREATE_MUTATION,
+                serde_json::json!({ "input": input }),
+            )
+            .await?;
+        let success = data
+            .pointer("/commentCreate/success")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        if !success {
+            return Err(format!(
+                "Linear commentCreate did not report success: {data}"
+            ));
+        }
+        let comment = data
+            .pointer("/commentCreate/comment")
+            .ok_or_else(|| "Linear commentCreate response missing comment".to_string())?;
+        Ok(parse_linear_comment(comment))
+    }
+
+    async fn linear_comment_update(
+        &self,
+        comment_id: &str,
+        input: serde_json::Value,
+    ) -> Result<LinearCommentSnapshot, String> {
+        let data = self
+            .linear_graphql(
+                LINEAR_COMMENT_UPDATE_MUTATION,
+                serde_json::json!({
+                    "id": comment_id,
+                    "input": input,
+                }),
+            )
+            .await?;
+        let success = data
+            .pointer("/commentUpdate/success")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        if !success {
+            return Err(format!(
+                "Linear commentUpdate did not report success: {data}"
+            ));
+        }
+        let comment = data
+            .pointer("/commentUpdate/comment")
+            .ok_or_else(|| "Linear commentUpdate response missing comment".to_string())?;
+        Ok(parse_linear_comment(comment))
+    }
+
+    async fn linear_issue_comments(
+        &self,
+        issue_id: &str,
+    ) -> Result<Vec<LinearCommentSnapshot>, String> {
+        let data = self
+            .linear_graphql(
+                LINEAR_ISSUE_COMMENTS_QUERY,
+                serde_json::json!({ "id": issue_id }),
+            )
+            .await?;
+        Ok(data
+            .pointer("/issue/comments/nodes")
+            .and_then(serde_json::Value::as_array)
+            .map(|nodes| nodes.iter().map(parse_linear_comment).collect())
+            .unwrap_or_default())
+    }
+
+    async fn linear_project_milestones(
+        &self,
+    ) -> Result<Vec<LinearProjectMilestoneSnapshot>, String> {
+        let data = self
+            .linear_graphql(LINEAR_PROJECT_MILESTONES_QUERY, serde_json::json!({}))
+            .await?;
+        Ok(data
+            .pointer("/projectMilestones/nodes")
+            .and_then(serde_json::Value::as_array)
+            .map(|nodes| {
+                nodes
+                    .iter()
+                    .map(parse_linear_project_milestone)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default())
+    }
+
+    async fn linear_issue_snapshot(
+        &self,
+        issue_identifier: &str,
+    ) -> Result<Option<LinearIssueSnapshot>, String> {
+        let data = self
+            .linear_graphql(
+                LINEAR_ISSUE_QUERY,
+                serde_json::json!({ "id": issue_identifier }),
+            )
+            .await?;
+        Ok(data.get("issue").map(parse_linear_issue))
+    }
+
+    async fn load_issue_execution_context(
+        &self,
+        issue_identifier: &str,
+    ) -> Result<IssueExecutionContext, McpError> {
+        let workflow = self.workflow_summary().await;
+        let issue = self
+            .linear_issue_snapshot(issue_identifier)
+            .await
+            .map_err(McpError::ToolCallFailed)?;
+        let workpad = if let Some(issue) = issue.as_ref() {
+            if let Some(issue_id) = issue.id.as_deref() {
+                self.linear_issue_comments(issue_id)
+                    .await
+                    .ok()
+                    .and_then(|comments| select_current_workpad(&comments))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let github = self.github_snapshot().await;
+        let matching_pull_requests = github
+            .open_pull_requests
+            .into_iter()
+            .filter(|pr| {
+                pr.title.contains(issue_identifier)
+                    || pr
+                        .head_ref_name
+                        .to_lowercase()
+                        .contains(&issue_identifier.to_lowercase())
+            })
+            .collect::<Vec<_>>();
+
+        Ok(IssueExecutionContext {
+            issue,
+            workpad,
+            matching_pull_requests,
+            workflow,
+        })
+    }
+
+    async fn attach_blockers_to_issue(
+        &self,
+        issue: &LinearIssueSnapshot,
+        blocker_identifiers: &[String],
+    ) -> Result<Vec<String>, String> {
+        let Some(issue_id) = issue.id.as_deref() else {
+            return Err(format!(
+                "issue {} is missing a Linear id for blocker mutation",
+                issue.identifier
+            ));
+        };
+        let workspace = self.linear_workspace().await?;
+        let mut attached = Vec::new();
+
+        for blocker_identifier in blocker_identifiers {
+            if issue
+                .blocked_by
+                .iter()
+                .any(|blocker| blocker.identifier.eq_ignore_ascii_case(blocker_identifier))
+            {
+                attached.push(blocker_identifier.clone());
+                continue;
+            }
+            let Some(blocker_issue) =
+                find_linear_issue(&workspace, None, Some(blocker_identifier.as_str()))
+            else {
+                return Err(format!(
+                    "could not resolve blocker issue {}",
+                    blocker_identifier
+                ));
+            };
+            let Some(blocker_id) = blocker_issue.id.as_deref() else {
+                return Err(format!(
+                    "blocker issue {} is missing a Linear id",
+                    blocker_identifier
+                ));
+            };
+
+            self.linear_issue_relation_create(serde_json::json!({
+                "type": "blocks",
+                "issueId": blocker_id,
+                "relatedIssueId": issue_id,
+            }))
+            .await?;
+            attached.push(blocker_identifier.clone());
+        }
+
+        if !attached.is_empty() {
+            self.clear_caches().await;
+        }
+
+        Ok(attached)
     }
 
     async fn audit_workflow_readiness(
@@ -900,6 +1513,98 @@ impl SmithCompatibilityServer {
                     "refresh_symphony".to_string(),
                 ],
             )
+        } else if contains_any(
+            &normalized,
+            &[
+                "codex workpad",
+                "workpad comment",
+                "update workpad",
+                "save workpad",
+                "create child issue",
+                "child issue",
+                "create issue",
+                "update issue",
+                "linear comment",
+                "issue comment",
+            ],
+        ) {
+            let preferred_tool = if contains_any(
+                &normalized,
+                &[
+                    "codex workpad",
+                    "workpad comment",
+                    "update workpad",
+                    "save workpad",
+                    "linear comment",
+                    "issue comment",
+                ],
+            ) {
+                "save_issue_workpad"
+            } else {
+                "save_linear_issue"
+            };
+            (
+                "linear_workflow".to_string(),
+                "request targets Smith-managed Linear issue or workpad mutation".to_string(),
+                preferred_tool.to_string(),
+                vec![
+                    "save_linear_issue".to_string(),
+                    "save_issue_workpad".to_string(),
+                    "get_issue_execution_snapshot".to_string(),
+                ],
+            )
+        } else if contains_any(
+            &normalized,
+            &[
+                "backlog slice",
+                "backlog slicing",
+                "child issue creation",
+                "materialize slices",
+                "translate speckit tasks",
+                "task-pack translation",
+                "sub-issue creation",
+            ],
+        ) {
+            let preferred_tool = if contains_any(
+                &normalized,
+                &["speckit", "task-pack", "tasks.md", "translate"],
+            ) {
+                "translate_speckit_tasks"
+            } else {
+                "materialize_backlog_slices"
+            };
+            (
+                "backlog_slicing".to_string(),
+                "request targets Smith-managed backlog slicing or SpecKit task translation"
+                    .to_string(),
+                preferred_tool.to_string(),
+                vec![
+                    "materialize_backlog_slices".to_string(),
+                    "translate_speckit_tasks".to_string(),
+                    "plan_queue_stage".to_string(),
+                ],
+            )
+        } else if contains_any(
+            &normalized,
+            &[
+                "issue lifecycle",
+                "next action for issue",
+                "execution recovery",
+                "queue role",
+                "review state",
+                "merge dispatch control",
+            ],
+        ) {
+            (
+                "issue_lifecycle".to_string(),
+                "request targets issue lifecycle resolution or recovery routing".to_string(),
+                "resolve_issue_lifecycle".to_string(),
+                vec![
+                    "resolve_issue_lifecycle".to_string(),
+                    "get_issue_execution_snapshot".to_string(),
+                    "plan_queue_stage".to_string(),
+                ],
+            )
         } else if contains_any(&normalized, &["phase", "slice", "stage", "milestone"]) {
             (
                 "phase_execution".to_string(),
@@ -910,7 +1615,39 @@ impl SmithCompatibilityServer {
                     "apply_phase_execution_plan".to_string(),
                 ],
             )
-        } else if contains_any(&normalized, &["review", "merge", "queue", "pr"]) {
+        } else if contains_any(
+            &normalized,
+            &[
+                "workflow system",
+                "development workflow",
+                "development system",
+                "workflow architecture",
+                "operating model",
+                "smith-first",
+                "ralph",
+                "speckit",
+                "prompt",
+                "workpad",
+                "handoff",
+                "skills",
+                "repo context",
+                "context gathering",
+            ],
+        ) {
+            (
+                "development_workflow".to_string(),
+                "request targets Smith-first development workflow design or chaining".to_string(),
+                "get_control_plane_snapshot".to_string(),
+                vec![
+                    "get_control_plane_snapshot".to_string(),
+                    "sync_linear_with_runtime".to_string(),
+                    "evaluate_issue_legitimacy".to_string(),
+                ],
+            )
+        } else if contains_any(
+            &normalized,
+            &["review", "merge", "queue", "pull request", "github pr"],
+        ) {
             (
                 "review_dispatch".to_string(),
                 "request targets review/merge/dispatch reconciliation".to_string(),
@@ -1544,7 +2281,8 @@ impl SmithCompatibilityServer {
             discrepancies
                 .push("Execution queue has no issues in the configured project".to_string());
             suggested_actions.push(
-                "Use plan_phase_execution and apply_phase_execution_plan to stage the next runnable slice".to_string(),
+                "Use plan_queue_stage and apply_queue_stage to stage the next runnable slice"
+                    .to_string(),
             );
         } else if active_issue_count == 0 {
             discrepancies.push(
@@ -1577,6 +2315,32 @@ impl SmithCompatibilityServer {
             }
         }
 
+        if let Some(candidate) = workspace
+            .issues
+            .iter()
+            .find(|issue| issue_is_honest_refill_candidate(issue))
+        {
+            let candidate_context = self.load_issue_execution_context(&candidate.identifier).await?;
+            let candidate_plan = build_queue_stage_plan(
+                candidate_context.issue.as_ref(),
+                candidate_context.workpad.as_ref(),
+                &workspace,
+                &workflow,
+                configured_slug.as_deref(),
+                Some(&candidate.identifier),
+            );
+            if candidate_plan.stageable {
+                suggested_actions.push(format!(
+                    "Smith can honestly stage {} through apply_queue_stage",
+                    candidate.identifier
+                ));
+            } else {
+                suggested_actions.extend(candidate_plan.required_fixes.iter().map(|fix| {
+                    format!("{} must be fixed before honest staging: {fix}", candidate.identifier)
+                }));
+            }
+        }
+
         let status = if discrepancies.is_empty() {
             CompatibilityStatus::Ok
         } else {
@@ -1594,7 +2358,7 @@ impl SmithCompatibilityServer {
             recommended_next_tools: vec![
                 "get_issue_execution_snapshot".to_string(),
                 "review_merge_dispatch_cycle".to_string(),
-                "plan_phase_execution".to_string(),
+                "plan_queue_stage".to_string(),
             ],
             blocking_issues: if matches!(status, CompatibilityStatus::Blocked) {
                 discrepancies.clone()
@@ -1612,6 +2376,1763 @@ impl SmithCompatibilityServer {
         })
     }
 
+    async fn save_linear_issue(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let workspace = match self.linear_workspace().await {
+            Ok(workspace) => workspace,
+            Err(err) => {
+                return json_response(blocked_response(
+                    format!("cannot save a Linear issue without Linear workspace access: {err}"),
+                    vec!["audit_workflow_readiness".to_string()],
+                    vec![err.clone()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: LinearIssueSnapshot::default(),
+                        applied_fields: Vec::new(),
+                    },
+                ))
+            }
+        };
+
+        let issue_identifier = string_param(&params, "issue_identifier")
+            .or_else(|| string_param(&params, "identifier"));
+        let issue_id = string_param(&params, "issue_id");
+        let existing_issue =
+            find_linear_issue(&workspace, issue_id.as_deref(), issue_identifier.as_deref())
+                .cloned();
+        let creating = existing_issue.is_none();
+
+        let title = string_param(&params, "title");
+        if creating
+            && title
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+                .is_empty()
+        {
+            return json_response(blocked_response(
+                "save_linear_issue requires title when creating a new issue",
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["title parameter is required for issue creation".to_string()],
+                LinearIssueSaveResult {
+                    action: "blocked".to_string(),
+                    issue: LinearIssueSnapshot::default(),
+                    applied_fields: Vec::new(),
+                },
+            ));
+        }
+
+        let requested_team_key = string_param(&params, "team_key");
+        let team_key = requested_team_key
+            .clone()
+            .or_else(|| {
+                existing_issue
+                    .as_ref()
+                    .and_then(|issue| issue.team_key.clone())
+            })
+            .unwrap_or_else(|| "MS".to_string());
+        let team = find_linear_team(&workspace, &team_key).cloned();
+
+        let project_name = string_param(&params, "project").or_else(|| {
+            if creating {
+                Some("MisterSmith Validated Backlog".to_string())
+            } else {
+                None
+            }
+        });
+        let project = project_name
+            .as_deref()
+            .and_then(|name| find_linear_project(&workspace, name).cloned());
+        if project_name.is_some() && project.is_none() {
+            return json_response(blocked_response(
+                format!(
+                    "could not resolve Linear project {}",
+                    project_name.unwrap_or_default()
+                ),
+                vec!["sync_linear_with_runtime".to_string()],
+                vec!["project parameter did not match a cached Linear project".to_string()],
+                LinearIssueSaveResult {
+                    action: "blocked".to_string(),
+                    issue: existing_issue.unwrap_or_default(),
+                    applied_fields: Vec::new(),
+                },
+            ));
+        }
+
+        let state_name = string_param(&params, "state").or_else(|| {
+            if creating {
+                Some("Backlog".to_string())
+            } else {
+                None
+            }
+        });
+        let state = state_name.as_deref().and_then(|name| {
+            team.as_ref()
+                .and_then(|team| find_linear_state(&workspace, &team.key, name).cloned())
+        });
+        if state_name.is_some() && state.is_none() {
+            return json_response(blocked_response(
+                format!(
+                    "could not resolve state {} for team {}",
+                    state_name.unwrap_or_default(),
+                    team_key
+                ),
+                vec!["sync_linear_with_runtime".to_string()],
+                vec!["state parameter did not match a cached Linear team state".to_string()],
+                LinearIssueSaveResult {
+                    action: "blocked".to_string(),
+                    issue: existing_issue.unwrap_or_default(),
+                    applied_fields: Vec::new(),
+                },
+            ));
+        }
+
+        let parent_identifier = string_param(&params, "parent_identifier");
+        let parent_issue = parent_identifier
+            .as_deref()
+            .and_then(|identifier| find_linear_issue(&workspace, None, Some(identifier)).cloned());
+        if parent_identifier.is_some() && parent_issue.is_none() {
+            return json_response(blocked_response(
+                format!(
+                    "could not resolve parent issue {}",
+                    parent_identifier.unwrap_or_default()
+                ),
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["parent_identifier did not match a cached Linear issue".to_string()],
+                LinearIssueSaveResult {
+                    action: "blocked".to_string(),
+                    issue: existing_issue.unwrap_or_default(),
+                    applied_fields: Vec::new(),
+                },
+            ));
+        }
+
+        let labels = string_array_param(&params, "labels");
+        let label_ids = if let Some(label_names) = labels.as_ref() {
+            let Some(team) = team.as_ref() else {
+                return json_response(blocked_response(
+                    format!("could not resolve team {} for label mutation", team_key),
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["team resolution is required before mutating labels".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            let (resolved_ids, missing_labels) = resolve_linear_label_ids(team, label_names);
+            if !missing_labels.is_empty() {
+                return json_response(blocked_response(
+                    format!("could not resolve label(s): {}", missing_labels.join(", ")),
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["labels parameter included unknown Linear labels".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            }
+            Some(resolved_ids)
+        } else {
+            None
+        };
+
+        let priority = i64_param(&params, "priority");
+        let milestone_name = string_param(&params, "milestone");
+        let blocked_by = string_array_param(&params, "blocked_by").unwrap_or_default();
+        let milestone_project = project.clone().or_else(|| {
+            existing_issue
+                .as_ref()
+                .and_then(|issue| issue.project.clone())
+        });
+        let milestone = if let Some(name) = milestone_name.as_deref() {
+            let Some(project) = milestone_project.as_ref() else {
+                return json_response(blocked_response(
+                    "milestone resolution requires a project",
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["provide project when setting milestone".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            let Some(project_id) = project.id.as_deref() else {
+                return json_response(blocked_response(
+                    "resolved project is missing an id",
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["project id is required to resolve a milestone".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            let milestones = match self.linear_project_milestones().await {
+                Ok(milestones) => milestones,
+                Err(err) => {
+                    return json_response(blocked_response(
+                        format!("failed to load project milestones: {err}"),
+                        vec!["audit_workflow_readiness".to_string()],
+                        vec![err],
+                        LinearIssueSaveResult {
+                            action: "blocked".to_string(),
+                            issue: existing_issue.unwrap_or_default(),
+                            applied_fields: Vec::new(),
+                        },
+                    ))
+                }
+            };
+            let resolved = milestones.into_iter().find(|milestone| {
+                milestone
+                    .project_id
+                    .as_deref()
+                    .map(|candidate| candidate == project_id)
+                    .unwrap_or(false)
+                    && milestone.name.eq_ignore_ascii_case(name)
+            });
+            let Some(resolved) = resolved else {
+                return json_response(blocked_response(
+                    format!("could not resolve milestone {}", name),
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["milestone parameter did not match a project milestone".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            Some(resolved)
+        } else {
+            None
+        };
+
+        let mut input = serde_json::Map::new();
+        let mut applied_fields = Vec::new();
+
+        if let Some(title) = title {
+            input.insert("title".to_string(), serde_json::json!(title));
+            applied_fields.push("title".to_string());
+        }
+        if let Some(description) = string_param(&params, "description") {
+            input.insert("description".to_string(), serde_json::json!(description));
+            applied_fields.push("description".to_string());
+        }
+        if creating || requested_team_key.is_some() {
+            let Some(team) = team.as_ref() else {
+                return json_response(blocked_response(
+                    format!("could not resolve team {}", team_key),
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["team_key did not match a cached Linear team".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            let Some(team_id) = team.id.clone() else {
+                return json_response(blocked_response(
+                    "resolved team is missing an id",
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["team id is required for Linear issue mutation".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            input.insert("teamId".to_string(), serde_json::json!(team_id));
+            applied_fields.push("team".to_string());
+        }
+        if let Some(project) = project.as_ref() {
+            let Some(project_id) = project.id.clone() else {
+                return json_response(blocked_response(
+                    "resolved project is missing an id",
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["project id is required for Linear issue mutation".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            input.insert("projectId".to_string(), serde_json::json!(project_id));
+            applied_fields.push("project".to_string());
+        }
+        if let Some(state) = state.as_ref() {
+            let Some(state_id) = state.id.clone() else {
+                return json_response(blocked_response(
+                    "resolved state is missing an id",
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["state id is required for Linear issue mutation".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            input.insert("stateId".to_string(), serde_json::json!(state_id));
+            applied_fields.push("state".to_string());
+        }
+        if let Some(parent_issue) = parent_issue.as_ref() {
+            let Some(parent_id) = parent_issue.id.clone() else {
+                return json_response(blocked_response(
+                    "resolved parent issue is missing an id",
+                    vec!["get_issue_execution_snapshot".to_string()],
+                    vec!["parent issue id is required for Linear issue mutation".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            input.insert("parentId".to_string(), serde_json::json!(parent_id));
+            applied_fields.push("parent".to_string());
+        }
+        if let Some(priority) = priority {
+            input.insert("priority".to_string(), serde_json::json!(priority));
+            applied_fields.push("priority".to_string());
+        }
+        if let Some(label_ids) = label_ids {
+            input.insert("labelIds".to_string(), serde_json::json!(label_ids));
+            applied_fields.push("labels".to_string());
+        }
+        if let Some(milestone) = milestone.as_ref() {
+            let Some(milestone_id) = milestone.id.clone() else {
+                return json_response(blocked_response(
+                    "resolved milestone is missing an id",
+                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["milestone id is required for Linear issue mutation".to_string()],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields: Vec::new(),
+                    },
+                ));
+            };
+            input.insert(
+                "projectMilestoneId".to_string(),
+                serde_json::json!(milestone_id),
+            );
+            applied_fields.push("milestone".to_string());
+        }
+
+        if !creating && input.is_empty() && blocked_by.is_empty() {
+            return json_response(blocked_response(
+                "save_linear_issue received no fields to update",
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["provide at least one mutable field".to_string()],
+                LinearIssueSaveResult {
+                    action: "blocked".to_string(),
+                    issue: existing_issue.unwrap_or_default(),
+                    applied_fields,
+                },
+            ));
+        }
+
+        let action = if creating { "created" } else { "updated" };
+        let saved_issue = if creating {
+            self.linear_issue_create(serde_json::Value::Object(input))
+                .await
+        } else {
+            self.linear_issue_update(
+                existing_issue.as_ref().and_then(|issue| issue.id.clone()),
+                serde_json::Value::Object(input),
+            )
+            .await
+        };
+
+        let saved_issue = match saved_issue {
+            Ok(issue) => issue,
+            Err(err) => {
+                return json_response(blocked_response(
+                    format!("failed to {action} Linear issue: {err}"),
+                    vec!["audit_workflow_readiness".to_string()],
+                    vec![err],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: existing_issue.unwrap_or_default(),
+                        applied_fields,
+                    },
+                ))
+            }
+        };
+
+        self.clear_caches().await;
+        let mut refreshed_issue = self
+            .linear_workspace()
+            .await
+            .ok()
+            .and_then(|workspace| {
+                find_linear_issue(
+                    &workspace,
+                    saved_issue.id.as_deref(),
+                    Some(saved_issue.identifier.as_str()),
+                )
+                .cloned()
+            })
+            .unwrap_or(saved_issue);
+
+        if !blocked_by.is_empty() {
+            let attached = self
+                .attach_blockers_to_issue(&refreshed_issue, &blocked_by)
+                .await;
+            if let Err(err) = attached {
+                return json_response(blocked_response(
+                    format!(
+                        "issue {} was saved but blocker attachment failed: {err}",
+                        refreshed_issue.identifier
+                    ),
+                    vec!["get_issue_execution_snapshot".to_string()],
+                    vec![err],
+                    LinearIssueSaveResult {
+                        action: "blocked".to_string(),
+                        issue: refreshed_issue,
+                        applied_fields,
+                    },
+                ));
+            }
+            refreshed_issue = self
+                .linear_issue_snapshot(&refreshed_issue.identifier)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(refreshed_issue);
+            applied_fields.push("blocked_by".to_string());
+        }
+
+        json_response(ToolResponse {
+            status: CompatibilityStatus::Applied,
+            summary: format!("Smith {action} Linear issue {}", refreshed_issue.identifier),
+            evidence: vec![
+                EvidenceItem {
+                    label: "issue_identifier".to_string(),
+                    detail: refreshed_issue.identifier.clone(),
+                },
+                EvidenceItem {
+                    label: "issue_action".to_string(),
+                    detail: action.to_string(),
+                },
+            ],
+            warnings: Vec::new(),
+            recommended_next_tools: vec![
+                "save_issue_workpad".to_string(),
+                "get_issue_execution_snapshot".to_string(),
+            ],
+            blocking_issues: Vec::new(),
+            data: LinearIssueSaveResult {
+                action: action.to_string(),
+                issue: refreshed_issue,
+                applied_fields,
+            },
+        })
+    }
+
+    async fn save_issue_workpad(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let issue_identifier = string_param(&params, "issue_identifier")
+            .or_else(|| string_param(&params, "identifier"));
+        let issue_id = string_param(&params, "issue_id");
+        let body = string_param(&params, "body");
+
+        if body
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .is_empty()
+        {
+            return json_response(blocked_response(
+                "save_issue_workpad requires a non-empty body",
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["body parameter is required".to_string()],
+                LinearWorkpadSaveResult {
+                    action: "blocked".to_string(),
+                    issue_identifier: issue_identifier.unwrap_or_default(),
+                    comment_id: String::new(),
+                    duplicate_count: 0,
+                    workpad: LinearWorkpadSnapshot::default(),
+                },
+            ));
+        }
+
+        let workspace = match self.linear_workspace().await {
+            Ok(workspace) => workspace,
+            Err(err) => {
+                return json_response(blocked_response(
+                    format!("cannot save a workpad without Linear workspace access: {err}"),
+                    vec!["audit_workflow_readiness".to_string()],
+                    vec![err.clone()],
+                    LinearWorkpadSaveResult {
+                        action: "blocked".to_string(),
+                        issue_identifier: issue_identifier.unwrap_or_default(),
+                        comment_id: String::new(),
+                        duplicate_count: 0,
+                        workpad: LinearWorkpadSnapshot::default(),
+                    },
+                ))
+            }
+        };
+
+        let issue = find_linear_issue(&workspace, issue_id.as_deref(), issue_identifier.as_deref())
+            .cloned();
+        let Some(issue) = issue else {
+            return json_response(blocked_response(
+                "save_issue_workpad could not resolve the issue",
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["issue_identifier or issue_id must resolve to a Linear issue".to_string()],
+                LinearWorkpadSaveResult {
+                    action: "blocked".to_string(),
+                    issue_identifier: issue_identifier.unwrap_or_default(),
+                    comment_id: String::new(),
+                    duplicate_count: 0,
+                    workpad: LinearWorkpadSnapshot::default(),
+                },
+            ));
+        };
+        let Some(resolved_issue_id) = issue.id.clone() else {
+            return json_response(blocked_response(
+                format!("issue {} is missing a Linear id", issue.identifier),
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["issue id is required to mutate the workpad comment".to_string()],
+                LinearWorkpadSaveResult {
+                    action: "blocked".to_string(),
+                    issue_identifier: issue.identifier,
+                    comment_id: String::new(),
+                    duplicate_count: 0,
+                    workpad: LinearWorkpadSnapshot::default(),
+                },
+            ));
+        };
+
+        let comments = match self.linear_issue_comments(&resolved_issue_id).await {
+            Ok(comments) => comments,
+            Err(err) => {
+                return json_response(blocked_response(
+                    format!("failed to load comments for {}: {err}", issue.identifier),
+                    vec!["audit_workflow_readiness".to_string()],
+                    vec![err],
+                    LinearWorkpadSaveResult {
+                        action: "blocked".to_string(),
+                        issue_identifier: issue.identifier,
+                        comment_id: String::new(),
+                        duplicate_count: 0,
+                        workpad: LinearWorkpadSnapshot::default(),
+                    },
+                ))
+            }
+        };
+
+        let normalized_body = normalize_workpad_body(body.as_deref().unwrap_or_default());
+        let existing_workpad = select_current_workpad(&comments);
+        let duplicate_count = existing_workpad
+            .as_ref()
+            .map(|workpad| workpad.duplicate_count)
+            .unwrap_or(0);
+        let (action_name, comment) = if let Some(workpad) = existing_workpad.as_ref() {
+            let updated = self
+                .linear_comment_update(
+                    &workpad.comment_id,
+                    serde_json::json!({ "body": normalized_body }),
+                )
+                .await;
+            match updated {
+                Ok(comment) => ("updated", comment),
+                Err(err) => {
+                    return json_response(blocked_response(
+                        format!("failed to update workpad for {}: {err}", issue.identifier),
+                        vec!["audit_workflow_readiness".to_string()],
+                        vec![err],
+                        LinearWorkpadSaveResult {
+                            action: "blocked".to_string(),
+                            issue_identifier: issue.identifier,
+                            comment_id: workpad.comment_id.clone(),
+                            duplicate_count,
+                            workpad: workpad.clone(),
+                        },
+                    ))
+                }
+            }
+        } else {
+            let created = self
+                .linear_comment_create(serde_json::json!({
+                    "issueId": resolved_issue_id,
+                    "body": normalized_body,
+                }))
+                .await;
+            match created {
+                Ok(comment) => ("created", comment),
+                Err(err) => {
+                    return json_response(blocked_response(
+                        format!("failed to create workpad for {}: {err}", issue.identifier),
+                        vec!["audit_workflow_readiness".to_string()],
+                        vec![err],
+                        LinearWorkpadSaveResult {
+                            action: "blocked".to_string(),
+                            issue_identifier: issue.identifier,
+                            comment_id: String::new(),
+                            duplicate_count,
+                            workpad: LinearWorkpadSnapshot::default(),
+                        },
+                    ))
+                }
+            }
+        };
+
+        let workpad = LinearWorkpadSnapshot {
+            comment_id: comment.id.clone(),
+            updated_at: comment.updated_at.clone(),
+            body: comment.body.clone(),
+            duplicate_count,
+        };
+
+        json_response(ToolResponse {
+            status: CompatibilityStatus::Applied,
+            summary: format!(
+                "Smith {} the Codex workpad for {}",
+                action_name, issue.identifier
+            ),
+            evidence: vec![
+                EvidenceItem {
+                    label: "issue_identifier".to_string(),
+                    detail: issue.identifier.clone(),
+                },
+                EvidenceItem {
+                    label: "comment_id".to_string(),
+                    detail: workpad.comment_id.clone(),
+                },
+            ],
+            warnings: if duplicate_count > 0 {
+                vec![format!(
+                    "{} additional top-level Codex workpad comment(s) remain on {}",
+                    duplicate_count, issue.identifier
+                )]
+            } else {
+                Vec::new()
+            },
+            recommended_next_tools: vec!["get_issue_execution_snapshot".to_string()],
+            blocking_issues: Vec::new(),
+            data: LinearWorkpadSaveResult {
+                action: action_name.to_string(),
+                issue_identifier: issue.identifier,
+                comment_id: workpad.comment_id.clone(),
+                duplicate_count,
+                workpad,
+            },
+        })
+    }
+
+    async fn materialize_backlog_slices(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let parent_issue_identifier = string_param(&params, "parent_issue_identifier")
+            .or_else(|| string_param(&params, "parent_identifier"));
+        let Some(parent_issue_identifier) = parent_issue_identifier else {
+            return json_response(blocked_response(
+                "parent_issue_identifier is required",
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["provide the parent issue identifier such as MS-49".to_string()],
+                BacklogSliceMaterialization {
+                    parent_issue_identifier: String::new(),
+                    milestone: string_param(&params, "milestone"),
+                    results: Vec::new(),
+                },
+            ));
+        };
+
+        let slice_specs = object_array_param(&params, "slices").unwrap_or_default();
+        if slice_specs.is_empty() {
+            return json_response(blocked_response(
+                "materialize_backlog_slices requires at least one slice object",
+                vec!["save_linear_issue".to_string()],
+                vec!["slices must be a non-empty array".to_string()],
+                BacklogSliceMaterialization {
+                    parent_issue_identifier,
+                    milestone: string_param(&params, "milestone"),
+                    results: Vec::new(),
+                },
+            ));
+        }
+
+        let workspace = match self.linear_workspace().await {
+            Ok(workspace) => workspace,
+            Err(err) => {
+                return json_response(blocked_response(
+                    format!("cannot materialize backlog slices without Linear access: {err}"),
+                    vec!["audit_workflow_readiness".to_string()],
+                    vec![err],
+                    BacklogSliceMaterialization {
+                        parent_issue_identifier,
+                        milestone: string_param(&params, "milestone"),
+                        results: Vec::new(),
+                    },
+                ))
+            }
+        };
+        if find_linear_issue(&workspace, None, Some(parent_issue_identifier.as_str())).is_none() {
+            return json_response(blocked_response(
+                format!("could not resolve parent issue {}", parent_issue_identifier),
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["parent issue must exist before child slices can be materialized".to_string()],
+                BacklogSliceMaterialization {
+                    parent_issue_identifier,
+                    milestone: string_param(&params, "milestone"),
+                    results: Vec::new(),
+                },
+            ));
+        }
+
+        let default_labels = string_array_param(&params, "default_labels").unwrap_or_default();
+        let default_priority = i64_param(&params, "default_priority");
+        let milestone = string_param(&params, "milestone");
+        let mut results = Vec::new();
+
+        for slice in slice_specs {
+            let title = slice
+                .get("title")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_string();
+            let description = slice
+                .get("description")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default()
+                .to_string();
+            if title.is_empty() || description.is_empty() {
+                return json_response(blocked_response(
+                    "each slice requires a non-empty title and description",
+                    vec!["save_linear_issue".to_string()],
+                    vec!["slice validation failed before any new backlog mutation".to_string()],
+                    BacklogSliceMaterialization {
+                        parent_issue_identifier,
+                        milestone,
+                        results,
+                    },
+                ));
+            }
+
+            let issue_identifier = slice
+                .get("issue_identifier")
+                .and_then(serde_json::Value::as_str)
+                .map(ToOwned::to_owned)
+                .or_else(|| {
+                    find_linear_child_issue_by_parent_and_title(
+                        &workspace,
+                        &parent_issue_identifier,
+                        &title,
+                    )
+                    .map(|issue| issue.identifier.clone())
+                });
+
+            let slice_labels = slice
+                .get("labels")
+                .and_then(serde_json::Value::as_array)
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let mut labels = default_labels.clone();
+            labels.extend(slice_labels);
+            if slice
+                .get("symphony_candidate")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+                && !labels.iter().any(|label| label == "Symphony Candidate")
+            {
+                labels.push("Symphony Candidate".to_string());
+            }
+            labels.sort();
+            labels.dedup();
+
+            let blocked_by = slice
+                .get("blocked_by")
+                .and_then(serde_json::Value::as_array)
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            let mut issue_params = serde_json::Map::new();
+            if let Some(identifier) = issue_identifier.clone() {
+                issue_params.insert("issue_identifier".to_string(), serde_json::json!(identifier));
+            }
+            issue_params.insert("title".to_string(), serde_json::json!(title));
+            issue_params.insert("description".to_string(), serde_json::json!(description));
+            issue_params.insert("project".to_string(), serde_json::json!("MisterSmith Validated Backlog"));
+            issue_params.insert("state".to_string(), serde_json::json!("Backlog"));
+            issue_params.insert(
+                "parent_identifier".to_string(),
+                serde_json::json!(parent_issue_identifier),
+            );
+            if !labels.is_empty() {
+                issue_params.insert("labels".to_string(), serde_json::json!(labels));
+            }
+            if let Some(priority) = slice
+                .get("priority")
+                .and_then(serde_json::Value::as_i64)
+                .or(default_priority)
+            {
+                issue_params.insert("priority".to_string(), serde_json::json!(priority));
+            }
+            if let Some(milestone_name) = milestone.clone() {
+                issue_params.insert("milestone".to_string(), serde_json::json!(milestone_name));
+            }
+            if !blocked_by.is_empty() {
+                issue_params.insert("blocked_by".to_string(), serde_json::json!(blocked_by));
+            }
+
+            let issue_response = parse_tool_response::<LinearIssueSaveResult>(
+                self.save_linear_issue(serde_json::Value::Object(issue_params))
+                    .await?,
+            )?;
+            if !matches!(issue_response.status, CompatibilityStatus::Applied) {
+                return json_response(ToolResponse {
+                    status: issue_response.status,
+                    summary: issue_response.summary,
+                    evidence: issue_response.evidence,
+                    warnings: issue_response.warnings,
+                    recommended_next_tools: issue_response.recommended_next_tools,
+                    blocking_issues: issue_response.blocking_issues,
+                    data: BacklogSliceMaterialization {
+                        parent_issue_identifier,
+                        milestone,
+                        results,
+                    },
+                });
+            }
+
+            let workpad_action = if let Some(workpad_body) = slice
+                .get("workpad_body")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|body| !body.is_empty())
+            {
+                let workpad_response = parse_tool_response::<LinearWorkpadSaveResult>(
+                    self.save_issue_workpad(serde_json::json!({
+                        "issue_identifier": issue_response.data.issue.identifier,
+                        "body": workpad_body,
+                    }))
+                    .await?,
+                )?;
+                if !matches!(workpad_response.status, CompatibilityStatus::Applied) {
+                    return json_response(ToolResponse {
+                        status: workpad_response.status,
+                        summary: workpad_response.summary,
+                        evidence: workpad_response.evidence,
+                        warnings: workpad_response.warnings,
+                        recommended_next_tools: workpad_response.recommended_next_tools,
+                        blocking_issues: workpad_response.blocking_issues,
+                        data: BacklogSliceMaterialization {
+                            parent_issue_identifier,
+                            milestone,
+                            results,
+                        },
+                    });
+                }
+                Some(workpad_response.data.action)
+            } else {
+                None
+            };
+
+            results.push(MaterializedBacklogSlice {
+                title: issue_response.data.issue.title.clone(),
+                issue_identifier: issue_response.data.issue.identifier.clone(),
+                action: issue_response.data.action,
+                blocker_identifiers: blocked_by,
+                symphony_candidate: slice
+                    .get("symphony_candidate")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
+                workpad_action,
+                issue: issue_response.data.issue,
+            });
+        }
+
+        json_response(ToolResponse {
+            status: CompatibilityStatus::Applied,
+            summary: format!(
+                "Smith materialized {} backlog slice(s) under {}",
+                results.len(),
+                parent_issue_identifier
+            ),
+            evidence: vec![EvidenceItem {
+                label: "parent_issue_identifier".to_string(),
+                detail: parent_issue_identifier.clone(),
+            }],
+            warnings: Vec::new(),
+            recommended_next_tools: vec![
+                "plan_queue_stage".to_string(),
+                "get_issue_execution_snapshot".to_string(),
+            ],
+            blocking_issues: Vec::new(),
+            data: BacklogSliceMaterialization {
+                parent_issue_identifier,
+                milestone,
+                results,
+            },
+        })
+    }
+
+    async fn plan_queue_stage(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let requested_identifier = string_param(&params, "issue_identifier")
+            .or_else(|| string_param(&params, "identifier"));
+        let workspace = match self.linear_workspace().await {
+            Ok(workspace) => workspace,
+            Err(err) => {
+                return json_response(blocked_response(
+                    format!("cannot plan queue staging without Linear access: {err}"),
+                    vec!["audit_workflow_readiness".to_string()],
+                    vec![err],
+                    QueueStagePlan {
+                        issue_identifier: requested_identifier,
+                        recommended_issue_identifier: None,
+                        stageable: false,
+                        blocked: true,
+                        queue_conflicts: Vec::new(),
+                        required_fixes: vec!["restore Linear access first".to_string()],
+                        queue_project_role: None,
+                        target_project: None,
+                        target_state: Some("Todo".to_string()),
+                    },
+                ))
+            }
+        };
+        let workflow = self.workflow_summary().await;
+        let configured_slug = workflow.project_slug.clone();
+
+        let plan = if let Some(identifier) = requested_identifier.clone() {
+            let context = self.load_issue_execution_context(&identifier).await?;
+            build_queue_stage_plan(
+                context.issue.as_ref(),
+                context.workpad.as_ref(),
+                &workspace,
+                &workflow,
+                configured_slug.as_deref(),
+                Some(&identifier),
+            )
+        } else {
+            let candidate_identifiers = workspace
+                .issues
+                .iter()
+                .filter(|issue| issue_is_honest_refill_candidate(issue))
+                .map(|issue| issue.identifier.clone())
+                .collect::<Vec<_>>();
+
+            let mut chosen_plan = build_queue_stage_plan(
+                None,
+                None,
+                &workspace,
+                &workflow,
+                configured_slug.as_deref(),
+                None,
+            );
+            for identifier in candidate_identifiers {
+                let context = self.load_issue_execution_context(&identifier).await?;
+                let candidate_plan = build_queue_stage_plan(
+                    context.issue.as_ref(),
+                    context.workpad.as_ref(),
+                    &workspace,
+                    &workflow,
+                    configured_slug.as_deref(),
+                    Some(&identifier),
+                );
+                if chosen_plan.recommended_issue_identifier.is_none() {
+                    chosen_plan.recommended_issue_identifier =
+                        candidate_plan.recommended_issue_identifier.clone();
+                }
+                if candidate_plan.stageable {
+                    chosen_plan = candidate_plan;
+                    break;
+                }
+                if chosen_plan.issue_identifier.is_none() {
+                    chosen_plan = candidate_plan;
+                }
+            }
+            chosen_plan
+        };
+
+        json_response(ToolResponse {
+            status: if plan.stageable {
+                CompatibilityStatus::Ok
+            } else if plan.blocked {
+                CompatibilityStatus::Degraded
+            } else {
+                CompatibilityStatus::Degraded
+            },
+            summary: if plan.stageable {
+                format!(
+                    "queue staging is honest for {}",
+                    plan.issue_identifier
+                        .clone()
+                        .unwrap_or_else(|| "the recommended issue".to_string())
+                )
+            } else {
+                "queue staging requires fixes before Smith can move work into Todo".to_string()
+            },
+            evidence: plan
+                .issue_identifier
+                .clone()
+                .into_iter()
+                .map(|issue_identifier| EvidenceItem {
+                    label: "issue_identifier".to_string(),
+                    detail: issue_identifier,
+                })
+                .collect(),
+            warnings: Vec::new(),
+            recommended_next_tools: if plan.stageable {
+                vec!["apply_queue_stage".to_string()]
+            } else {
+                vec![
+                    "save_issue_workpad".to_string(),
+                    "resolve_issue_lifecycle".to_string(),
+                ]
+            },
+            blocking_issues: if plan.stageable {
+                Vec::new()
+            } else {
+                plan.required_fixes
+                    .iter()
+                    .chain(plan.queue_conflicts.iter())
+                    .cloned()
+                    .collect()
+            },
+            data: plan,
+        })
+    }
+
+    async fn apply_queue_stage(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let planned = parse_tool_response::<QueueStagePlan>(self.plan_queue_stage(params).await?)?;
+        let issue_identifier = planned
+            .data
+            .recommended_issue_identifier
+            .clone()
+            .or_else(|| planned.data.issue_identifier.clone());
+        let Some(issue_identifier) = issue_identifier else {
+            return json_response(blocked_response(
+                "no queue-stage candidate is available",
+                vec!["plan_queue_stage".to_string()],
+                planned
+                    .data
+                    .required_fixes
+                    .iter()
+                    .chain(planned.data.queue_conflicts.iter())
+                    .cloned()
+                    .collect(),
+                QueueStageApplyResult {
+                    action: "blocked".to_string(),
+                    issue_identifier: None,
+                    planned: planned.data,
+                    issue: None,
+                },
+            ));
+        };
+        if !planned.data.stageable {
+            return json_response(blocked_response(
+                format!("{} is not stageable yet", issue_identifier),
+                vec!["plan_queue_stage".to_string()],
+                planned
+                    .data
+                    .required_fixes
+                    .iter()
+                    .chain(planned.data.queue_conflicts.iter())
+                    .cloned()
+                    .collect(),
+                QueueStageApplyResult {
+                    action: "blocked".to_string(),
+                    issue_identifier: Some(issue_identifier),
+                    planned: planned.data,
+                    issue: None,
+                },
+            ));
+        }
+
+        let workflow = self.workflow_summary().await;
+        let workspace = self
+            .linear_workspace()
+            .await
+            .map_err(McpError::ToolCallFailed)?;
+        let watched_project = workspace
+            .projects
+            .iter()
+            .find(|project| project_slug_matches(workflow.project_slug.as_deref(), &project.slug))
+            .map(|project| project.slug.clone())
+            .ok_or_else(|| McpError::ToolCallFailed("watched Linear project could not be resolved".to_string()))?;
+
+        let saved_issue = parse_tool_response::<LinearIssueSaveResult>(
+            self.save_linear_issue(serde_json::json!({
+                "issue_identifier": issue_identifier,
+                "project": watched_project,
+                "state": "Todo",
+            }))
+            .await?,
+        )?;
+        if !matches!(saved_issue.status, CompatibilityStatus::Applied) {
+            return json_response(ToolResponse {
+                status: saved_issue.status,
+                summary: saved_issue.summary,
+                evidence: saved_issue.evidence,
+                warnings: saved_issue.warnings,
+                recommended_next_tools: saved_issue.recommended_next_tools,
+                blocking_issues: saved_issue.blocking_issues,
+                data: QueueStageApplyResult {
+                    action: "blocked".to_string(),
+                    issue_identifier: Some(issue_identifier),
+                    planned: planned.data,
+                    issue: None,
+                },
+            });
+        }
+
+        json_response(ToolResponse {
+            status: CompatibilityStatus::Applied,
+            summary: format!(
+                "Smith staged {} into the watched queue",
+                saved_issue.data.issue.identifier
+            ),
+            evidence: vec![EvidenceItem {
+                label: "issue_identifier".to_string(),
+                detail: saved_issue.data.issue.identifier.clone(),
+            }],
+            warnings: Vec::new(),
+            recommended_next_tools: vec![
+                "sync_linear_with_runtime".to_string(),
+                "resolve_issue_lifecycle".to_string(),
+            ],
+            blocking_issues: Vec::new(),
+            data: QueueStageApplyResult {
+                action: "staged".to_string(),
+                issue_identifier: Some(saved_issue.data.issue.identifier.clone()),
+                planned: planned.data,
+                issue: Some(saved_issue.data.issue),
+            },
+        })
+    }
+
+    async fn resolve_issue_lifecycle(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let identifier = string_param(&params, "issue_identifier")
+            .or_else(|| string_param(&params, "identifier"));
+        let Some(identifier) = identifier else {
+            return json_response(blocked_response(
+                "issue identifier is required",
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["issue_identifier parameter is required".to_string()],
+                IssueLifecycleResolution {
+                    issue: None,
+                    issue_identifier: String::new(),
+                    next_recommended_action: "verify_issue_identifier".to_string(),
+                    required_mutations: Vec::new(),
+                    blocking_reasons: vec!["provide an issue identifier such as MS-51".to_string()],
+                    review_state: "unknown".to_string(),
+                    queue_role: "unknown".to_string(),
+                    pr_correlation: Vec::new(),
+                },
+            ));
+        };
+
+        let context = self.load_issue_execution_context(&identifier).await?;
+        let resolution = build_issue_lifecycle_resolution(
+            context.issue.clone(),
+            context.workpad.as_ref(),
+            &context.matching_pull_requests,
+            &context.workflow,
+            context.workflow.project_slug.as_deref(),
+            &identifier,
+        );
+
+        json_response(ToolResponse {
+            status: if resolution.issue.is_some() {
+                CompatibilityStatus::Ok
+            } else {
+                CompatibilityStatus::Degraded
+            },
+            summary: if resolution.issue.is_some() {
+                format!("resolved lifecycle for {}", resolution.issue_identifier)
+            } else {
+                format!("could not resolve lifecycle for {}", resolution.issue_identifier)
+            },
+            evidence: vec![EvidenceItem {
+                label: "issue_identifier".to_string(),
+                detail: resolution.issue_identifier.clone(),
+            }],
+            warnings: Vec::new(),
+            recommended_next_tools: match resolution.next_recommended_action.as_str() {
+                "plan_queue_stage" => vec!["plan_queue_stage".to_string()],
+                "save_issue_workpad" => vec!["save_issue_workpad".to_string()],
+                "land_merge" => vec!["review_merge_dispatch_cycle".to_string()],
+                _ => vec!["get_issue_execution_snapshot".to_string()],
+            },
+            blocking_issues: resolution.blocking_reasons.clone(),
+            data: resolution,
+        })
+    }
+
+    async fn prepare_ralph_packet(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let identifier = string_param(&params, "issue_identifier")
+            .or_else(|| string_param(&params, "identifier"));
+        let Some(identifier) = identifier else {
+            return json_response(blocked_response(
+                "issue identifier is required",
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["provide an issue identifier such as MS-54".to_string()],
+                RalphPacket {
+                    issue_identifier: String::new(),
+                    plan_path: None,
+                    mode: "implementation".to_string(),
+                    goal: String::new(),
+                    current_context: String::new(),
+                    source_docs: Vec::new(),
+                    workflow_requirements: Vec::new(),
+                    validation_requirements: Vec::new(),
+                    stop_conditions: Vec::new(),
+                    definition_of_done: Vec::new(),
+                    rendered_prompt: String::new(),
+                },
+            ));
+        };
+
+        let context = self.load_issue_execution_context(&identifier).await?;
+        let Some(issue) = context.issue.clone() else {
+            return json_response(blocked_response(
+                format!("could not resolve issue {}", identifier),
+                vec!["get_issue_execution_snapshot".to_string()],
+                vec!["issue must exist before Smith can prepare a Ralph packet".to_string()],
+                RalphPacket {
+                    issue_identifier: identifier,
+                    plan_path: None,
+                    mode: "implementation".to_string(),
+                    goal: String::new(),
+                    current_context: String::new(),
+                    source_docs: Vec::new(),
+                    workflow_requirements: Vec::new(),
+                    validation_requirements: Vec::new(),
+                    stop_conditions: Vec::new(),
+                    definition_of_done: Vec::new(),
+                    rendered_prompt: String::new(),
+                },
+            ));
+        };
+
+        let plan_path = string_param(&params, "plan_path").map(|raw| {
+            let raw_path = PathBuf::from(raw);
+            let resolved = if raw_path.is_absolute() {
+                raw_path
+            } else {
+                self.options.repo_root.join(raw_path)
+            };
+            resolved.display().to_string()
+        });
+        let mode = match state_name(&issue) {
+            Some("Rework") => "rework",
+            Some("Human Review") | Some("Merging") => "review",
+            _ => "implementation",
+        }
+        .to_string();
+        let source_docs = {
+            let mut docs = vec![
+                self.options.workflow_path.display().to_string(),
+                self.options
+                    .repo_root
+                    .join("docs/linear/LINEAR.md")
+                    .display()
+                    .to_string(),
+                self.options
+                    .repo_root
+                    .join("docs/plans/2026-03-16-smith-first-development-system.md")
+                    .display()
+                    .to_string(),
+                self.options
+                    .repo_root
+                    .join("docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md")
+                    .display()
+                    .to_string(),
+            ];
+            if let Some(plan_path) = plan_path.clone() {
+                docs.push(plan_path);
+            }
+            docs
+        };
+        let workflow_requirements = vec![
+            "Use Smith-first control-plane boundaries; do not replace Linear, Symphony, Ralph, or SpecKit.".to_string(),
+            "Rewrite PROMPT.md from the current issue and workpad packet immediately before running Ralph.".to_string(),
+            "Keep execution grounded in the active issue, the durable workpad, and current repo contracts.".to_string(),
+        ];
+        let validation_requirements = vec![
+            "Run the narrowest deterministic validation that proves the touched behavior.".to_string(),
+            "Record concrete commands and outcomes back into the durable workpad path.".to_string(),
+            "Escalate to real queue proof only when the slice is safe for unattended execution.".to_string(),
+        ];
+        let stop_conditions = vec![
+            "Stop for missing auth, missing required tooling, or a true repo contract conflict.".to_string(),
+            "Stop before destructive or externally risky actions that are not justified by the issue scope.".to_string(),
+        ];
+        let definition_of_done = vec![
+            "Requested slice is implemented or the blocker is explicitly recorded.".to_string(),
+            "Validation evidence is captured in the workpad.".to_string(),
+            "Any necessary follow-up is tracked through the same Smith-owned issue/workpad path.".to_string(),
+        ];
+        let current_context = format!(
+            "Issue: {} - {}\nState: {}\nProject: {}\nDescription:\n{}\n\nCurrent workpad:\n{}",
+            issue.identifier,
+            issue.title,
+            state_name(&issue).unwrap_or("unknown"),
+            issue.project.as_ref().map(|project| project.name.as_str()).unwrap_or("unassigned"),
+            issue.description.clone().unwrap_or_default(),
+            context
+                .workpad
+                .as_ref()
+                .map(|workpad| workpad.body.clone())
+                .unwrap_or_else(|| "## Codex Workpad\n\nNo existing workpad content.".to_string())
+        );
+        let goal = format!("Advance {}: {}", issue.identifier, issue.title);
+        let rendered_prompt = render_ralph_prompt(
+            &mode,
+            &goal,
+            &current_context,
+            &source_docs,
+            &workflow_requirements,
+            &validation_requirements,
+            &stop_conditions,
+            &definition_of_done,
+        );
+
+        json_response(ToolResponse {
+            status: CompatibilityStatus::Ok,
+            summary: format!("prepared a Ralph packet for {}", issue.identifier),
+            evidence: vec![EvidenceItem {
+                label: "issue_identifier".to_string(),
+                detail: issue.identifier.clone(),
+            }],
+            warnings: Vec::new(),
+            recommended_next_tools: vec![
+                "record_ralph_outcome".to_string(),
+                "save_issue_workpad".to_string(),
+            ],
+            blocking_issues: Vec::new(),
+            data: RalphPacket {
+                issue_identifier: issue.identifier,
+                plan_path,
+                mode,
+                goal,
+                current_context,
+                source_docs,
+                workflow_requirements,
+                validation_requirements,
+                stop_conditions,
+                definition_of_done,
+                rendered_prompt,
+            },
+        })
+    }
+
+    async fn record_ralph_outcome(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let identifier = string_param(&params, "issue_identifier")
+            .or_else(|| string_param(&params, "identifier"));
+        let Some(identifier) = identifier else {
+            return json_response(blocked_response(
+                "issue identifier is required",
+                vec!["prepare_ralph_packet".to_string()],
+                vec!["provide an issue identifier such as MS-55".to_string()],
+                RalphOutcomeRecord {
+                    issue_identifier: String::new(),
+                    outcome_status: String::new(),
+                    workpad_action: "blocked".to_string(),
+                    target_state: None,
+                    comment_id: None,
+                },
+            ));
+        };
+
+        let outcome_status = string_param(&params, "outcome_status")
+            .unwrap_or_else(|| "completed".to_string());
+        let evidence = string_array_param(&params, "evidence").unwrap_or_default();
+        let validation = string_array_param(&params, "validation").unwrap_or_default();
+        let next_recommended_action = string_param(&params, "next_recommended_action")
+            .unwrap_or_else(|| "review_merge_dispatch_cycle".to_string());
+        let target_state = string_param(&params, "target_state")
+            .or_else(|| string_param(&params, "state"));
+
+        let context = self.load_issue_execution_context(&identifier).await?;
+        let existing_workpad = context
+            .workpad
+            .as_ref()
+            .map(|workpad| workpad.body.clone())
+            .unwrap_or_else(|| CODEX_WORKPAD_HEADER.to_string());
+        let outcome_section = format!(
+            "## Ralph Outcome\n\n- Status: {outcome_status}\n- Next recommended action: {next_recommended_action}\n{}\n{}",
+            render_bullet_block("Evidence", &evidence),
+            render_bullet_block("Validation", &validation),
+        );
+        let merged_body = upsert_markdown_section(
+            &existing_workpad,
+            "## Ralph Outcome",
+            &outcome_section,
+        );
+        let workpad_response = parse_tool_response::<LinearWorkpadSaveResult>(
+            self.save_issue_workpad(serde_json::json!({
+                "issue_identifier": identifier,
+                "body": merged_body,
+            }))
+            .await?,
+        )?;
+        if !matches!(workpad_response.status, CompatibilityStatus::Applied) {
+            return json_response(ToolResponse {
+                status: workpad_response.status,
+                summary: workpad_response.summary,
+                evidence: workpad_response.evidence,
+                warnings: workpad_response.warnings,
+                recommended_next_tools: workpad_response.recommended_next_tools,
+                blocking_issues: workpad_response.blocking_issues,
+                data: RalphOutcomeRecord {
+                    issue_identifier: identifier,
+                    outcome_status,
+                    workpad_action: "blocked".to_string(),
+                    target_state,
+                    comment_id: None,
+                },
+            });
+        }
+
+        if let Some(state) = target_state.clone() {
+            let _ = parse_tool_response::<LinearIssueSaveResult>(
+                self.save_linear_issue(serde_json::json!({
+                    "issue_identifier": identifier,
+                    "state": state,
+                }))
+                .await?,
+            )?;
+        }
+
+        json_response(ToolResponse {
+            status: CompatibilityStatus::Applied,
+            summary: format!("recorded the Ralph outcome for {}", identifier),
+            evidence: vec![EvidenceItem {
+                label: "issue_identifier".to_string(),
+                detail: identifier.clone(),
+            }],
+            warnings: Vec::new(),
+            recommended_next_tools: vec![
+                "resolve_issue_lifecycle".to_string(),
+                "get_issue_execution_snapshot".to_string(),
+            ],
+            blocking_issues: Vec::new(),
+            data: RalphOutcomeRecord {
+                issue_identifier: identifier,
+                outcome_status,
+                workpad_action: workpad_response.data.action,
+                target_state,
+                comment_id: Some(workpad_response.data.comment_id),
+            },
+        })
+    }
+
+    async fn prepare_speckit_context(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let request_text = string_param(&params, "request_text")
+            .or_else(|| string_param(&params, "request"))
+            .unwrap_or_default();
+        let issue_identifier = string_param(&params, "issue_identifier")
+            .or_else(|| string_param(&params, "identifier"));
+        let feature_dir = string_param(&params, "feature_dir")
+            .or_else(|| string_param(&params, "feature_directory"));
+
+        let issue_context = if let Some(identifier) = issue_identifier.as_deref() {
+            self.load_issue_execution_context(identifier).await.ok()
+        } else {
+            None
+        };
+        let combined_text = format!(
+            "{}\n{}",
+            request_text,
+            issue_context
+                .as_ref()
+                .and_then(|context| context.issue.as_ref())
+                .and_then(|issue| issue.description.clone())
+                .unwrap_or_default()
+        );
+        let resolved_feature_dir = feature_dir
+            .as_deref()
+            .map(|raw| resolve_repo_path(&self.options.repo_root, raw))
+            .or_else(|| extract_feature_dir_from_text(&combined_text).map(PathBuf::from));
+        let should_use_speckit = resolved_feature_dir
+            .as_ref()
+            .map(|path| path.exists())
+            .unwrap_or(false)
+            || contains_any(
+                &combined_text.to_lowercase(),
+                &["speckit", "spec", "task pack", "tasks.md", "acceptance criteria"],
+            );
+        let mut source_docs = vec![
+            self.options
+                .repo_root
+                .join(".codex/prompts/speckit.plan.md")
+                .display()
+                .to_string(),
+            self.options
+                .repo_root
+                .join(".codex/prompts/speckit.tasks.md")
+                .display()
+                .to_string(),
+        ];
+        if let Some(feature_dir) = resolved_feature_dir.as_ref() {
+            source_docs.push(feature_dir.join("spec.md").display().to_string());
+            source_docs.push(feature_dir.join("plan.md").display().to_string());
+            source_docs.push(feature_dir.join("tasks.md").display().to_string());
+        }
+        let feature_dir_string = resolved_feature_dir
+            .as_ref()
+            .map(|path| path.display().to_string());
+        let packet_summary = if should_use_speckit {
+            if let Some(feature_dir) = feature_dir_string.as_deref() {
+                format!("Use SpecKit packet at {}", feature_dir)
+            } else {
+                "Work appears spec/task-pack shaped, but the feature directory is not resolved yet"
+                    .to_string()
+            }
+        } else {
+            "Work should stay on the direct Smith workflow path".to_string()
+        };
+        let next_command_hint = if should_use_speckit {
+            if let Some(feature_dir) = feature_dir_string.as_deref() {
+                format!("Run the repo-local SpecKit plan/tasks flow for {}", feature_dir)
+            } else {
+                "Resolve the feature directory before running the SpecKit tasks flow".to_string()
+            }
+        } else {
+            "Continue on the normal Smith workflow path without entering SpecKit".to_string()
+        };
+
+        json_response(ToolResponse {
+            status: CompatibilityStatus::Ok,
+            summary: "prepared the Smith SpecKit routing context".to_string(),
+            evidence: issue_identifier
+                .clone()
+                .into_iter()
+                .map(|identifier| EvidenceItem {
+                    label: "issue_identifier".to_string(),
+                    detail: identifier,
+                })
+                .collect(),
+            warnings: Vec::new(),
+            recommended_next_tools: if should_use_speckit {
+                vec!["translate_speckit_tasks".to_string()]
+            } else {
+                vec!["route_workflow_request".to_string()]
+            },
+            blocking_issues: Vec::new(),
+            data: SpecKitContext {
+                issue_identifier,
+                should_use_speckit,
+                feature_dir: feature_dir_string,
+                source_docs,
+                packet_summary,
+                next_command_hint,
+            },
+        })
+    }
+
+    async fn translate_speckit_tasks(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let feature_dir = string_param(&params, "feature_dir")
+            .or_else(|| string_param(&params, "feature_directory"))
+            .map(|raw| resolve_repo_path(&self.options.repo_root, &raw));
+        let tasks_path = string_param(&params, "tasks_path").map(|raw| resolve_repo_path(&self.options.repo_root, &raw));
+        let resolved_tasks_path = tasks_path
+            .clone()
+            .or_else(|| feature_dir.clone().map(|path| path.join("tasks.md")));
+        let Some(resolved_tasks_path) = resolved_tasks_path else {
+            return json_response(blocked_response(
+                "translate_speckit_tasks requires feature_dir or tasks_path",
+                vec!["prepare_speckit_context".to_string()],
+                vec!["provide a SpecKit feature directory or a tasks.md path".to_string()],
+                SpecKitTranslation {
+                    feature_dir: feature_dir.map(|path| path.display().to_string()),
+                    tasks_path: String::new(),
+                    apply_requested: bool_param(&params, "apply"),
+                    packet_summary: String::new(),
+                    translated_slices: Vec::new(),
+                    materialization: None,
+                },
+            ));
+        };
+        let tasks_markdown = match fs::read_to_string(&resolved_tasks_path) {
+            Ok(content) => content,
+            Err(err) => {
+                return json_response(blocked_response(
+                    format!("failed to read {}: {err}", resolved_tasks_path.display()),
+                    vec!["prepare_speckit_context".to_string()],
+                    vec!["tasks.md must be readable before Smith can translate it".to_string()],
+                    SpecKitTranslation {
+                        feature_dir: feature_dir.map(|path| path.display().to_string()),
+                        tasks_path: resolved_tasks_path.display().to_string(),
+                        apply_requested: bool_param(&params, "apply"),
+                        packet_summary: String::new(),
+                        translated_slices: Vec::new(),
+                        materialization: None,
+                    },
+                ));
+            }
+        };
+        let translated_slices = translate_speckit_task_markdown(&tasks_markdown);
+        let apply_requested = bool_param(&params, "apply");
+        let packet_summary = translated_slices
+            .first()
+            .map(|_| format!(
+                "Translated {} bounded slice(s) from {}",
+                translated_slices.len(),
+                resolved_tasks_path.display()
+            ))
+            .unwrap_or_else(|| format!("No bounded slices were derived from {}", resolved_tasks_path.display()));
+
+        let materialization = if apply_requested {
+            let parent_issue_identifier = string_param(&params, "parent_issue_identifier")
+                .or_else(|| string_param(&params, "parent_identifier"));
+            let Some(parent_issue_identifier) = parent_issue_identifier else {
+                return json_response(blocked_response(
+                    "parent_issue_identifier is required when apply=true",
+                    vec!["materialize_backlog_slices".to_string()],
+                    vec!["provide the parent issue identifier before applying translated slices".to_string()],
+                    SpecKitTranslation {
+                        feature_dir: feature_dir.as_ref().map(|path| path.display().to_string()),
+                        tasks_path: resolved_tasks_path.display().to_string(),
+                        apply_requested,
+                        packet_summary,
+                        translated_slices,
+                        materialization: None,
+                    },
+                ));
+            };
+            let mut created_by_title = BTreeMap::new();
+            let mut aggregate_results = Vec::new();
+            for slice in &translated_slices {
+                let blocked_by = slice
+                    .blocked_by
+                    .iter()
+                    .filter_map(|title| created_by_title.get(title).cloned())
+                    .collect::<Vec<_>>();
+                let materialized = parse_tool_response::<BacklogSliceMaterialization>(
+                    self.materialize_backlog_slices(serde_json::json!({
+                        "parent_issue_identifier": parent_issue_identifier,
+                        "milestone": string_param(&params, "milestone"),
+                        "default_labels": string_array_param(&params, "default_labels").unwrap_or_default(),
+                        "default_priority": i64_param(&params, "default_priority"),
+                        "slices": [{
+                            "title": slice.title,
+                            "description": slice.description,
+                            "blocked_by": blocked_by,
+                            "workpad_body": slice.workpad_body,
+                            "symphony_candidate": slice.symphony_candidate,
+                        }]
+                    }))
+                    .await?,
+                )?;
+                if !matches!(materialized.status, CompatibilityStatus::Applied) {
+                    return json_response(ToolResponse {
+                        status: materialized.status,
+                        summary: materialized.summary,
+                        evidence: materialized.evidence,
+                        warnings: materialized.warnings,
+                        recommended_next_tools: materialized.recommended_next_tools,
+                        blocking_issues: materialized.blocking_issues,
+                        data: SpecKitTranslation {
+                            feature_dir: feature_dir.as_ref().map(|path| path.display().to_string()),
+                            tasks_path: resolved_tasks_path.display().to_string(),
+                            apply_requested,
+                            packet_summary,
+                            translated_slices,
+                            materialization: Some(BacklogSliceMaterialization {
+                                parent_issue_identifier,
+                                milestone: string_param(&params, "milestone"),
+                                results: aggregate_results,
+                            }),
+                        },
+                    });
+                }
+                if let Some(result) = materialized.data.results.first() {
+                    created_by_title.insert(slice.title.clone(), result.issue_identifier.clone());
+                    aggregate_results.push(result.clone());
+                }
+            }
+            Some(BacklogSliceMaterialization {
+                parent_issue_identifier,
+                milestone: string_param(&params, "milestone"),
+                results: aggregate_results,
+            })
+        } else {
+            None
+        };
+
+        json_response(ToolResponse {
+            status: if apply_requested {
+                CompatibilityStatus::Applied
+            } else {
+                CompatibilityStatus::Ok
+            },
+            summary: packet_summary.clone(),
+            evidence: vec![EvidenceItem {
+                label: "tasks_path".to_string(),
+                detail: resolved_tasks_path.display().to_string(),
+            }],
+            warnings: Vec::new(),
+            recommended_next_tools: if apply_requested {
+                vec!["plan_queue_stage".to_string()]
+            } else {
+                vec!["materialize_backlog_slices".to_string()]
+            },
+            blocking_issues: Vec::new(),
+            data: SpecKitTranslation {
+                feature_dir: feature_dir.map(|path| path.display().to_string()),
+                tasks_path: resolved_tasks_path.display().to_string(),
+                apply_requested,
+                packet_summary,
+                translated_slices,
+                materialization,
+            },
+        })
+    }
+
     async fn get_issue_execution_snapshot(
         &self,
         params: serde_json::Value,
@@ -1625,35 +4146,29 @@ impl SmithCompatibilityServer {
                 vec!["issue_identifier parameter is required".to_string()],
                 IssueExecutionSnapshot {
                     issue: None,
+                    workpad: None,
                     matching_pull_requests: Vec::new(),
                     execution_state: "missing_input".to_string(),
+                    blocker_summaries: Vec::new(),
+                    workpad_status: "missing".to_string(),
+                    queue_project_role: "unknown".to_string(),
+                    next_step_hint: "verify_issue_identifier".to_string(),
                     notes: vec!["provide an issue identifier such as MS-33".to_string()],
                 },
             ));
         };
 
-        let workspace = self.linear_workspace().await.ok();
-        let issue = workspace.as_ref().and_then(|workspace| {
-            workspace
-                .issues
-                .iter()
-                .find(|issue| issue.identifier.eq_ignore_ascii_case(&identifier))
-                .cloned()
-        });
-        let github = self.github_snapshot().await;
-        let matching_pull_requests = github
-            .open_pull_requests
-            .into_iter()
-            .filter(|pr| {
-                pr.title.contains(&identifier)
-                    || pr
-                        .head_ref_name
-                        .to_lowercase()
-                        .contains(&identifier.to_lowercase())
-            })
-            .collect::<Vec<_>>();
+        let context = self.load_issue_execution_context(&identifier).await?;
+        let resolution = build_issue_lifecycle_resolution(
+            context.issue.clone(),
+            context.workpad.as_ref(),
+            &context.matching_pull_requests,
+            &context.workflow,
+            context.workflow.project_slug.as_deref(),
+            &identifier,
+        );
 
-        let (status, summary, blocking_issues) = if issue.is_some() {
+        let (status, summary, blocking_issues) = if context.issue.is_some() {
             (
                 CompatibilityStatus::Ok,
                 format!("loaded execution snapshot for {identifier}"),
@@ -1676,28 +4191,50 @@ impl SmithCompatibilityServer {
                 label: "issue_identifier".to_string(),
                 detail: identifier.clone(),
             }],
-            warnings: if workspace.is_none() {
-                vec!["Linear workspace unavailable; GitHub PR data may be partial".to_string()]
-            } else {
-                Vec::new()
-            },
+            warnings: Vec::new(),
             recommended_next_tools: vec![
-                "sync_linear_with_runtime".to_string(),
+                "resolve_issue_lifecycle".to_string(),
                 "review_merge_dispatch_cycle".to_string(),
             ],
             blocking_issues,
             data: IssueExecutionSnapshot {
-                execution_state: issue
+                execution_state: context
+                    .issue
                     .as_ref()
                     .and_then(|issue| issue.state.as_ref().map(|state| state.name.clone()))
                     .unwrap_or_else(|| "unknown".to_string()),
-                notes: if issue.is_some() {
-                    Vec::new()
+                blocker_summaries: context
+                    .issue
+                    .as_ref()
+                    .map(|issue| blocker_summaries(issue, &context.workflow))
+                    .unwrap_or_default(),
+                workpad_status: workpad_status(context.workpad.as_ref()),
+                queue_project_role: queue_project_role(
+                    context.issue.as_ref(),
+                    context.workflow.project_slug.as_deref(),
+                ),
+                next_step_hint: resolution.next_recommended_action,
+                notes: if context.issue.is_some() {
+                    context
+                        .workpad
+                        .as_ref()
+                        .and_then(|workpad| {
+                            if workpad.duplicate_count > 0 {
+                                Some(vec![format!(
+                                    "{} additional top-level Codex workpad comment(s) exist for {}",
+                                    workpad.duplicate_count, identifier
+                                )])
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_default()
                 } else {
                     vec!["refresh Linear auth or verify the identifier".to_string()]
                 },
-                issue,
-                matching_pull_requests,
+                issue: context.issue,
+                workpad: context.workpad,
+                matching_pull_requests: context.matching_pull_requests,
             },
         })
     }
@@ -1761,6 +4298,35 @@ impl SmithCompatibilityServer {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        let lifecycle_actions = if let Some(workspace) = workspace.as_ref() {
+            let watched_issue_identifiers = workspace
+                .issues
+                .iter()
+                .filter(|issue| issue_in_watched_project(issue, configured_slug.as_deref()))
+                .map(|issue| issue.identifier.clone())
+                .collect::<Vec<_>>();
+            let mut actions = Vec::new();
+            for identifier in watched_issue_identifiers {
+                let context = self.load_issue_execution_context(&identifier).await?;
+                let resolution = build_issue_lifecycle_resolution(
+                    context.issue.clone(),
+                    context.workpad.as_ref(),
+                    &context.matching_pull_requests,
+                    &context.workflow,
+                    configured_slug.as_deref(),
+                    &identifier,
+                );
+                if resolution.next_recommended_action != "no_further_action" {
+                    actions.push(format!(
+                        "{} -> {}",
+                        resolution.issue_identifier, resolution.next_recommended_action
+                    ));
+                }
+            }
+            actions
+        } else {
+            Vec::new()
+        };
 
         let stale_pull_requests = if linear.data.active_issue_count == 0 {
             github
@@ -1797,6 +4363,7 @@ impl SmithCompatibilityServer {
                 "validated backlog has no honest refill candidates; slice or validate more independent work to increase Symphony concurrency".to_string(),
             );
         }
+        recommended_actions.extend(lifecycle_actions);
 
         json_response(ToolResponse {
             status: if recommended_actions.is_empty() {
@@ -1812,7 +4379,7 @@ impl SmithCompatibilityServer {
             warnings: Vec::new(),
             recommended_next_tools: vec![
                 "get_issue_execution_snapshot".to_string(),
-                "plan_phase_execution".to_string(),
+                "plan_queue_stage".to_string(),
             ],
             blocking_issues: Vec::new(),
             data: ReviewDispatchCycle {
@@ -2262,50 +4829,6 @@ impl SmithCompatibilityServer {
             },
             data: plan.data,
         })
-    }
-
-    async fn linear_issue_update(
-        &self,
-        issue_id: Option<String>,
-        input: serde_json::Value,
-    ) -> Result<(), String> {
-        let issue_id = issue_id.ok_or_else(|| "issue id is missing".to_string())?;
-        let api_key = self
-            .linear_api_key()
-            .ok_or_else(|| "LINEAR_API_KEY is unavailable".to_string())?;
-        let response = reqwest::Client::new()
-            .post(&self.options.linear_endpoint)
-            .header(reqwest::header::AUTHORIZATION, api_key)
-            .json(&serde_json::json!({
-                "query": LINEAR_ISSUE_UPDATE_MUTATION,
-                "variables": {
-                    "id": issue_id,
-                    "input": input,
-                }
-            }))
-            .send()
-            .await
-            .map_err(|err| format!("Linear issue update failed: {err}"))?;
-        let status = response.status();
-        let body: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|err| format!("failed to decode Linear mutation response: {err}"))?;
-        if !status.is_success() {
-            return Err(format!("Linear mutation returned HTTP {status}: {body}"));
-        }
-        if let Some(errors) = body.get("errors") {
-            return Err(format!("Linear mutation errors: {errors}"));
-        }
-        let success = body
-            .pointer("/data/issueUpdate/success")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
-        if success {
-            Ok(())
-        } else {
-            Err(format!("Linear mutation did not report success: {body}"))
-        }
     }
 
     async fn evaluate_issue_legitimacy(
@@ -2796,6 +5319,141 @@ pub async fn build_smith_compatibility_server(
     register_compatibility_tool(
         &server,
         &compatibility,
+        "save_linear_issue",
+        "Create or update a Linear issue through the Smith control plane.",
+        object_schema(
+            &[
+                (
+                    "issue_identifier",
+                    string_schema("Issue identifier such as MS-50"),
+                ),
+                ("identifier", string_schema("Alias for issue_identifier")),
+                ("issue_id", string_schema("Internal Linear issue id")),
+                ("title", string_schema("Issue title")),
+                ("description", string_schema("Markdown issue description")),
+                ("team_key", string_schema("Linear team key such as MS")),
+                ("project", string_schema("Linear project name or slug id")),
+                ("state", string_schema("Linear state name")),
+                (
+                    "parent_identifier",
+                    string_schema("Parent issue identifier"),
+                ),
+                (
+                    "blocked_by",
+                    string_array_schema("Blocking issue identifiers"),
+                ),
+                ("priority", integer_schema("Linear priority value")),
+                ("milestone", string_schema("Project milestone name")),
+                ("labels", string_array_schema("Label names to apply")),
+            ],
+            &[],
+        ),
+        |state, params| async move { state.save_linear_issue(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "save_issue_workpad",
+        "Create or update the durable ## Codex Workpad comment for a Linear issue.",
+        object_schema(
+            &[
+                (
+                    "issue_identifier",
+                    string_schema("Issue identifier such as MS-50"),
+                ),
+                ("identifier", string_schema("Alias for issue_identifier")),
+                ("issue_id", string_schema("Internal Linear issue id")),
+                ("body", string_schema("Workpad markdown body")),
+            ],
+            &["body"],
+        ),
+        |state, params| async move { state.save_issue_workpad(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "materialize_backlog_slices",
+        "Create or update bounded backlog child issues under a parent issue and optionally seed their Codex workpads.",
+        object_schema(
+            &[
+                (
+                    "parent_issue_identifier",
+                    string_schema("Parent issue identifier such as MS-49"),
+                ),
+                ("parent_identifier", string_schema("Alias for parent_issue_identifier")),
+                ("milestone", string_schema("Optional project milestone name")),
+                (
+                    "default_labels",
+                    string_array_schema("Default label names applied to every slice"),
+                ),
+                ("default_priority", integer_schema("Default Linear priority value")),
+                (
+                    "slices",
+                    serde_json::json!({
+                        "type": "array",
+                        "description": "Backlog slice objects to create or update",
+                        "items": object_schema(
+                            &[
+                                ("issue_identifier", string_schema("Optional existing child issue identifier")),
+                                ("title", string_schema("Slice issue title")),
+                                ("description", string_schema("Slice issue description")),
+                                ("priority", integer_schema("Optional slice-specific priority")),
+                                ("labels", string_array_schema("Optional slice-specific labels")),
+                                ("blocked_by", string_array_schema("Blocking issue identifiers")),
+                                ("symphony_candidate", bool_schema("Whether to apply the Symphony Candidate label")),
+                                ("workpad_body", string_schema("Optional initial Codex workpad body"))
+                            ],
+                            &["title", "description"]
+                        )
+                    }),
+                ),
+            ],
+            &["parent_issue_identifier", "slices"],
+        ),
+        |state, params| async move { state.materialize_backlog_slices(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "plan_queue_stage",
+        "Evaluate whether a validated backlog issue can be honestly staged into the watched queue.",
+        object_schema(
+            &[
+                (
+                    "issue_identifier",
+                    string_schema("Optional issue identifier to evaluate"),
+                ),
+                ("identifier", string_schema("Alias for issue_identifier")),
+            ],
+            &[],
+        ),
+        |state, params| async move { state.plan_queue_stage(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "apply_queue_stage",
+        "Move exactly one honest validated backlog issue into the watched queue and Todo state.",
+        object_schema(
+            &[
+                (
+                    "issue_identifier",
+                    string_schema("Optional issue identifier to stage"),
+                ),
+                ("identifier", string_schema("Alias for issue_identifier")),
+            ],
+            &[],
+        ),
+        |state, params| async move { state.apply_queue_stage(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
         "get_issue_execution_snapshot",
         "Load the current Linear and GitHub execution snapshot for a specific issue identifier.",
         object_schema(
@@ -2809,6 +5467,120 @@ pub async fn build_smith_compatibility_server(
             &[],
         ),
         |state, params| async move { state.get_issue_execution_snapshot(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "resolve_issue_lifecycle",
+        "Resolve the next recommended Smith action for a specific issue based on queue role, workpad state, blockers, and PR correlation.",
+        object_schema(
+            &[
+                (
+                    "issue_identifier",
+                    string_schema("Issue identifier such as MS-53"),
+                ),
+                ("identifier", string_schema("Alias for issue_identifier")),
+            ],
+            &["issue_identifier"],
+        ),
+        |state, params| async move { state.resolve_issue_lifecycle(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "prepare_ralph_packet",
+        "Generate a Smith-owned Ralph packet from the active issue, workpad, and optional plan path.",
+        object_schema(
+            &[
+                (
+                    "issue_identifier",
+                    string_schema("Issue identifier such as MS-54"),
+                ),
+                ("identifier", string_schema("Alias for issue_identifier")),
+                ("plan_path", string_schema("Optional absolute or repo-relative plan path")),
+            ],
+            &["issue_identifier"],
+        ),
+        |state, params| async move { state.prepare_ralph_packet(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "record_ralph_outcome",
+        "Write a Ralph execution outcome back into the durable Codex workpad path and optionally update the issue state.",
+        object_schema(
+            &[
+                (
+                    "issue_identifier",
+                    string_schema("Issue identifier such as MS-55"),
+                ),
+                ("identifier", string_schema("Alias for issue_identifier")),
+                ("outcome_status", string_schema("Outcome status summary")),
+                ("evidence", string_array_schema("Evidence bullets to record")),
+                ("validation", string_array_schema("Validation bullets to record")),
+                (
+                    "next_recommended_action",
+                    string_schema("Next recommended Smith action"),
+                ),
+                ("target_state", string_schema("Optional Linear state update")),
+                ("state", string_schema("Alias for target_state")),
+            ],
+            &["issue_identifier", "outcome_status"],
+        ),
+        |state, params| async move { state.record_ralph_outcome(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "prepare_speckit_context",
+        "Decide whether work should enter SpecKit and return the repo-local context packet.",
+        object_schema(
+            &[
+                ("request_text", string_schema("Optional request text to classify")),
+                ("request", string_schema("Alias for request_text")),
+                (
+                    "issue_identifier",
+                    string_schema("Optional issue identifier for context"),
+                ),
+                ("identifier", string_schema("Alias for issue_identifier")),
+                ("feature_dir", string_schema("Optional absolute or repo-relative feature directory")),
+                ("feature_directory", string_schema("Alias for feature_dir")),
+            ],
+            &[],
+        ),
+        |state, params| async move { state.prepare_speckit_context(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "translate_speckit_tasks",
+        "Translate a SpecKit tasks packet into bounded backlog slices and optionally materialize them in Linear.",
+        object_schema(
+            &[
+                ("feature_dir", string_schema("Optional absolute or repo-relative feature directory")),
+                ("feature_directory", string_schema("Alias for feature_dir")),
+                ("tasks_path", string_schema("Optional absolute or repo-relative tasks.md path")),
+                (
+                    "parent_issue_identifier",
+                    string_schema("Parent issue identifier when apply=true"),
+                ),
+                ("parent_identifier", string_schema("Alias for parent_issue_identifier")),
+                ("milestone", string_schema("Optional project milestone name")),
+                (
+                    "default_labels",
+                    string_array_schema("Default labels for translated slices"),
+                ),
+                ("default_priority", integer_schema("Default priority for translated slices")),
+                ("apply", bool_schema("Materialize translated slices in Linear")),
+            ],
+            &[],
+        ),
+        |state, params| async move { state.translate_speckit_tasks(params).await },
     )
     .await;
     register_compatibility_tool(
@@ -2912,10 +5684,27 @@ fn bool_schema(description: &str) -> serde_json::Value {
     })
 }
 
+fn integer_schema(description: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "integer",
+        "description": description
+    })
+}
+
 fn string_schema(description: &str) -> serde_json::Value {
     serde_json::json!({
         "type": "string",
         "description": description
+    })
+}
+
+fn string_array_schema(description: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "array",
+        "description": description,
+        "items": {
+            "type": "string"
+        }
     })
 }
 
@@ -3230,6 +6019,38 @@ fn string_param(params: &serde_json::Value, key: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn string_array_param(params: &serde_json::Value, key: &str) -> Option<Vec<String>> {
+    params
+        .get(key)
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+}
+
+fn object_array_param<'a>(
+    params: &'a serde_json::Value,
+    key: &str,
+) -> Option<Vec<&'a serde_json::Map<String, serde_json::Value>>> {
+    params
+        .get(key)
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(serde_json::Value::as_object)
+                .collect::<Vec<_>>()
+        })
+}
+
+fn i64_param(params: &serde_json::Value, key: &str) -> Option<i64> {
+    params.get(key).and_then(serde_json::Value::as_i64)
+}
+
 fn bool_param(params: &serde_json::Value, key: &str) -> bool {
     params
         .get(key)
@@ -3239,6 +6060,14 @@ fn bool_param(params: &serde_json::Value, key: &str) -> bool {
 
 fn contains_any(haystack: &str, needles: &[&str]) -> bool {
     needles.iter().any(|needle| haystack.contains(needle))
+}
+
+fn parse_tool_response<T>(value: serde_json::Value) -> Result<ToolResponse<T>, McpError>
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(value)
+        .map_err(|err| McpError::SerializationError(format!("failed to parse tool response: {err}")))
 }
 
 #[derive(Debug, Clone)]
@@ -3363,6 +6192,11 @@ fn parse_linear_workspace(data: &serde_json::Value) -> LinearWorkspaceData {
         .and_then(serde_json::Value::as_array)
         .map(|nodes| nodes.iter().map(parse_linear_issue).collect())
         .unwrap_or_default();
+    let teams = data
+        .pointer("/teams/nodes")
+        .and_then(serde_json::Value::as_array)
+        .map(|nodes| nodes.iter().map(parse_linear_team).collect())
+        .unwrap_or_default();
     let states_by_team = data
         .pointer("/teams/nodes")
         .and_then(serde_json::Value::as_array)
@@ -3388,6 +6222,7 @@ fn parse_linear_workspace(data: &serde_json::Value) -> LinearWorkspaceData {
     LinearWorkspaceData {
         projects,
         issues,
+        teams,
         states_by_team,
     }
 }
@@ -3433,6 +6268,44 @@ fn parse_linear_state(value: &serde_json::Value) -> LinearStateSnapshot {
     }
 }
 
+fn parse_linear_label(value: &serde_json::Value) -> LinearLabelSnapshot {
+    LinearLabelSnapshot {
+        id: value
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        name: value
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+    }
+}
+
+fn parse_linear_team(value: &serde_json::Value) -> LinearTeamSnapshot {
+    LinearTeamSnapshot {
+        id: value
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        key: value
+            .get("key")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        name: value
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        labels: value
+            .pointer("/labels/nodes")
+            .and_then(serde_json::Value::as_array)
+            .map(|nodes| nodes.iter().map(parse_linear_label).collect())
+            .unwrap_or_default(),
+    }
+}
+
 fn parse_linear_issue(value: &serde_json::Value) -> LinearIssueSnapshot {
     LinearIssueSnapshot {
         id: value
@@ -3449,6 +6322,10 @@ fn parse_linear_issue(value: &serde_json::Value) -> LinearIssueSnapshot {
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default()
             .to_string(),
+        description: value
+            .get("description")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
         priority: value.get("priority").and_then(serde_json::Value::as_i64),
         url: value
             .get("url")
@@ -3456,6 +6333,7 @@ fn parse_linear_issue(value: &serde_json::Value) -> LinearIssueSnapshot {
             .map(ToOwned::to_owned),
         state: value.get("state").map(parse_linear_state),
         project: value.get("project").map(parse_linear_project),
+        parent: value.get("parent").map(parse_linear_parent_issue),
         team_key: value
             .pointer("/team/key")
             .and_then(serde_json::Value::as_str)
@@ -3488,6 +6366,20 @@ fn parse_linear_issue(value: &serde_json::Value) -> LinearIssueSnapshot {
     }
 }
 
+fn parse_linear_parent_issue(value: &serde_json::Value) -> LinearIssueParentSnapshot {
+    LinearIssueParentSnapshot {
+        id: value
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        identifier: value
+            .get("identifier")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+    }
+}
+
 fn parse_linear_blocker(value: &serde_json::Value) -> Option<LinearIssueBlockerSnapshot> {
     let relation_type = value.get("type")?.as_str()?.trim().to_ascii_lowercase();
     if relation_type != "blocks" {
@@ -3509,6 +6401,153 @@ fn parse_linear_blocker(value: &serde_json::Value) -> Option<LinearIssueBlockerS
             .pointer("/state/name")
             .and_then(serde_json::Value::as_str)
             .map(ToOwned::to_owned),
+    })
+}
+
+fn parse_linear_comment(value: &serde_json::Value) -> LinearCommentSnapshot {
+    LinearCommentSnapshot {
+        id: value
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        body: value
+            .get("body")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        updated_at: value
+            .get("updatedAt")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        parent_id: value
+            .pointer("/parent/id")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+    }
+}
+
+fn parse_linear_project_milestone(value: &serde_json::Value) -> LinearProjectMilestoneSnapshot {
+    LinearProjectMilestoneSnapshot {
+        id: value
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        name: value
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        project_id: value
+            .pointer("/project/id")
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+    }
+}
+
+fn find_linear_issue<'a>(
+    workspace: &'a LinearWorkspaceData,
+    issue_id: Option<&str>,
+    issue_identifier: Option<&str>,
+) -> Option<&'a LinearIssueSnapshot> {
+    workspace.issues.iter().find(|issue| {
+        issue_id
+            .map(|candidate| issue.id.as_deref() == Some(candidate))
+            .unwrap_or(false)
+            || issue_identifier
+                .map(|candidate| issue.identifier.eq_ignore_ascii_case(candidate))
+                .unwrap_or(false)
+    })
+}
+
+fn find_linear_team<'a>(
+    workspace: &'a LinearWorkspaceData,
+    team_key_or_name: &str,
+) -> Option<&'a LinearTeamSnapshot> {
+    workspace.teams.iter().find(|team| {
+        team.key.eq_ignore_ascii_case(team_key_or_name)
+            || team.name.eq_ignore_ascii_case(team_key_or_name)
+    })
+}
+
+fn find_linear_project<'a>(
+    workspace: &'a LinearWorkspaceData,
+    project_name_or_slug: &str,
+) -> Option<&'a LinearProjectSnapshot> {
+    workspace.projects.iter().find(|project| {
+        project.name.eq_ignore_ascii_case(project_name_or_slug)
+            || project.slug.eq_ignore_ascii_case(project_name_or_slug)
+    })
+}
+
+fn find_linear_state<'a>(
+    workspace: &'a LinearWorkspaceData,
+    team_key: &str,
+    state_name: &str,
+) -> Option<&'a LinearStateSnapshot> {
+    workspace.states_by_team.get(team_key).and_then(|states| {
+        states
+            .iter()
+            .find(|state| state.name.eq_ignore_ascii_case(state_name))
+    })
+}
+
+fn resolve_linear_label_ids(
+    team: &LinearTeamSnapshot,
+    label_names: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let mut resolved = Vec::new();
+    let mut missing = Vec::new();
+
+    for label_name in label_names {
+        if let Some(label_id) = team
+            .labels
+            .iter()
+            .find(|label| label.name.eq_ignore_ascii_case(label_name))
+            .and_then(|label| label.id.clone())
+        {
+            resolved.push(label_id);
+        } else {
+            missing.push(label_name.clone());
+        }
+    }
+
+    (resolved, missing)
+}
+
+fn normalize_workpad_body(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.starts_with(CODEX_WORKPAD_HEADER) {
+        trimmed.to_string()
+    } else if trimmed.is_empty() {
+        CODEX_WORKPAD_HEADER.to_string()
+    } else {
+        format!("{CODEX_WORKPAD_HEADER}\n\n{trimmed}")
+    }
+}
+
+fn select_current_workpad(comments: &[LinearCommentSnapshot]) -> Option<LinearWorkpadSnapshot> {
+    let mut matching = comments
+        .iter()
+        .filter(|comment| comment.parent_id.is_none())
+        .filter(|comment| comment.body.trim_start().starts_with(CODEX_WORKPAD_HEADER))
+        .cloned()
+        .collect::<Vec<_>>();
+    if matching.is_empty() {
+        return None;
+    }
+
+    matching.sort_by(|left, right| {
+        left.updated_at
+            .cmp(&right.updated_at)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let selected = matching.pop().unwrap_or_default();
+    Some(LinearWorkpadSnapshot {
+        comment_id: selected.id,
+        updated_at: selected.updated_at,
+        body: selected.body,
+        duplicate_count: matching.len(),
     })
 }
 
@@ -3592,6 +6631,421 @@ fn issue_is_honest_refill_candidate(issue: &LinearIssueSnapshot) -> bool {
             .as_ref()
             .map(|project| project.name == "MisterSmith Validated Backlog")
             .unwrap_or(false)
+}
+
+fn find_linear_child_issue_by_parent_and_title<'a>(
+    workspace: &'a LinearWorkspaceData,
+    parent_identifier: &str,
+    title: &str,
+) -> Option<&'a LinearIssueSnapshot> {
+    workspace.issues.iter().find(|issue| {
+        issue
+            .parent
+            .as_ref()
+            .map(|parent| parent.identifier.eq_ignore_ascii_case(parent_identifier))
+            .unwrap_or(false)
+            && issue.title.eq_ignore_ascii_case(title)
+    })
+}
+
+fn workpad_status(workpad: Option<&LinearWorkpadSnapshot>) -> String {
+    match workpad {
+        Some(workpad) if workpad.duplicate_count > 0 => "duplicate".to_string(),
+        Some(_) => "present".to_string(),
+        None => "missing".to_string(),
+    }
+}
+
+fn queue_project_role(issue: Option<&LinearIssueSnapshot>, configured_slug: Option<&str>) -> String {
+    let Some(issue) = issue else {
+        return "unknown".to_string();
+    };
+    if issue_in_watched_project(issue, configured_slug) {
+        return "watched_queue".to_string();
+    }
+    if issue
+        .project
+        .as_ref()
+        .map(|project| project.name == "MisterSmith Validated Backlog")
+        .unwrap_or(false)
+    {
+        return "validated_backlog".to_string();
+    }
+    if issue.project.is_some() {
+        "other_project".to_string()
+    } else {
+        "unassigned".to_string()
+    }
+}
+
+fn blocker_summaries(issue: &LinearIssueSnapshot, workflow: &WorkflowSummary) -> Vec<String> {
+    issue.blocked_by
+        .iter()
+        .filter_map(|blocker| {
+            let state = blocker.state.as_deref().unwrap_or("unknown");
+            if is_terminal_state(state, workflow) {
+                None
+            } else {
+                Some(format!("{} ({state})", blocker.identifier))
+            }
+        })
+        .collect()
+}
+
+fn lifecycle_review_state(
+    issue: &LinearIssueSnapshot,
+    matching_pull_requests: &[GitHubPullRequest],
+) -> String {
+    match state_name(issue) {
+        Some("Human Review") => "awaiting_human_review".to_string(),
+        Some("Rework") => "rework".to_string(),
+        Some("Merging") => "merge_ready".to_string(),
+        Some("In Progress") if !matching_pull_requests.is_empty() => "pull_request_open".to_string(),
+        Some("In Progress") => "active_execution".to_string(),
+        Some("Todo") => "ready_for_dispatch".to_string(),
+        Some("Backlog") => "backlog".to_string(),
+        Some(state) => state.to_ascii_lowercase().replace(' ', "_"),
+        None => "unknown".to_string(),
+    }
+}
+
+fn pr_correlation(matching_pull_requests: &[GitHubPullRequest]) -> Vec<String> {
+    matching_pull_requests
+        .iter()
+        .map(|pr| format!("#{} {}", pr.number, pr.title))
+        .collect()
+}
+
+fn build_issue_lifecycle_resolution(
+    issue: Option<LinearIssueSnapshot>,
+    workpad: Option<&LinearWorkpadSnapshot>,
+    matching_pull_requests: &[GitHubPullRequest],
+    workflow: &WorkflowSummary,
+    configured_slug: Option<&str>,
+    issue_identifier: &str,
+) -> IssueLifecycleResolution {
+    let Some(issue_value) = issue.clone() else {
+        return IssueLifecycleResolution {
+            issue: None,
+            issue_identifier: issue_identifier.to_string(),
+            next_recommended_action: "verify_issue_identifier".to_string(),
+            required_mutations: Vec::new(),
+            blocking_reasons: vec![format!(
+                "issue {issue_identifier} was not found in the current Linear snapshot"
+            )],
+            review_state: "unknown".to_string(),
+            queue_role: "unknown".to_string(),
+            pr_correlation: Vec::new(),
+        };
+    };
+
+    let queue_role = queue_project_role(Some(&issue_value), configured_slug);
+    let workpad_status_value = workpad_status(workpad);
+    let blocker_details = blocker_summaries(&issue_value, workflow);
+    let mut required_mutations = Vec::new();
+
+    if workpad_status_value == "missing" {
+        required_mutations.push("create_or_reconcile_codex_workpad".to_string());
+    }
+    if workpad_status_value == "duplicate" {
+        required_mutations.push("consolidate_duplicate_codex_workpads".to_string());
+    }
+    if queue_role == "validated_backlog" && !issue_value.labels.iter().any(|label| label == "Validated")
+    {
+        required_mutations.push("apply_validated_label".to_string());
+    }
+    if queue_role == "validated_backlog"
+        && !issue_value
+            .labels
+            .iter()
+            .any(|label| label == "Symphony Candidate")
+    {
+        required_mutations.push("apply_symphony_candidate_label".to_string());
+    }
+
+    let next_recommended_action = match state_name(&issue_value) {
+        Some("Backlog") if workpad_status_value != "present" => "save_issue_workpad".to_string(),
+        Some("Backlog") if !blocker_details.is_empty() => "resolve_blockers_before_staging".to_string(),
+        Some("Backlog") if queue_role == "validated_backlog" => "plan_queue_stage".to_string(),
+        Some("Todo") => "move_issue_to_in_progress".to_string(),
+        Some("In Progress") => "continue_execution".to_string(),
+        Some("Human Review") => "await_review_or_route_to_rework".to_string(),
+        Some("Rework") => "restart_execution_with_fresh_plan".to_string(),
+        Some("Merging") => "land_merge".to_string(),
+        Some(state) if is_terminal_state(state, workflow) => "no_further_action".to_string(),
+        Some(_) => "sync_linear_with_runtime".to_string(),
+        None => "sync_linear_with_runtime".to_string(),
+    };
+
+    IssueLifecycleResolution {
+        issue: Some(issue_value.clone()),
+        issue_identifier: issue_value.identifier.clone(),
+        next_recommended_action,
+        required_mutations,
+        blocking_reasons: blocker_details,
+        review_state: lifecycle_review_state(&issue_value, matching_pull_requests),
+        queue_role,
+        pr_correlation: pr_correlation(matching_pull_requests),
+    }
+}
+
+fn build_queue_stage_plan(
+    issue: Option<&LinearIssueSnapshot>,
+    workpad: Option<&LinearWorkpadSnapshot>,
+    workspace: &LinearWorkspaceData,
+    workflow: &WorkflowSummary,
+    configured_slug: Option<&str>,
+    requested_identifier: Option<&str>,
+) -> QueueStagePlan {
+    let watched_project = workspace
+        .projects
+        .iter()
+        .find(|project| project_slug_matches(configured_slug, &project.slug));
+    let blocked_todo_issues = workspace
+        .issues
+        .iter()
+        .filter(|candidate| issue_in_watched_project(candidate, configured_slug))
+        .filter_map(|candidate| blocked_todo_detail(candidate, workflow))
+        .collect::<Vec<_>>();
+    let queue_conflicts = blocked_todo_issues;
+
+    let Some(issue) = issue else {
+        return QueueStagePlan {
+            issue_identifier: requested_identifier.map(ToOwned::to_owned),
+            recommended_issue_identifier: workspace
+                .issues
+                .iter()
+                .find(|candidate| issue_is_honest_refill_candidate(candidate))
+                .map(|candidate| candidate.identifier.clone()),
+            stageable: false,
+            blocked: true,
+            queue_conflicts,
+            required_fixes: vec!["issue must resolve to a current Linear issue".to_string()],
+            queue_project_role: Some("unknown".to_string()),
+            target_project: watched_project.map(|project| project.name.clone()),
+            target_state: Some("Todo".to_string()),
+        };
+    };
+
+    let queue_role = queue_project_role(Some(issue), configured_slug);
+    let workpad_status_value = workpad_status(workpad);
+    let blocker_details = blocker_summaries(issue, workflow);
+    let mut required_fixes = Vec::new();
+    if queue_role != "validated_backlog" {
+        required_fixes.push("issue must be in MisterSmith Validated Backlog before staging".to_string());
+    }
+    if state_name(issue) != Some("Backlog") {
+        required_fixes.push("issue must be in Backlog before staging".to_string());
+    }
+    if !issue.labels.iter().any(|label| label == "Validated") {
+        required_fixes.push("issue must carry the Validated label".to_string());
+    }
+    if !issue.labels.iter().any(|label| label == "Symphony Candidate") {
+        required_fixes.push("issue must carry the Symphony Candidate label".to_string());
+    }
+    if workpad_status_value == "missing" {
+        required_fixes.push("issue needs a durable ## Codex Workpad before staging".to_string());
+    }
+    if workpad_status_value == "duplicate" {
+        required_fixes.push("issue has duplicate top-level Codex workpads to reconcile".to_string());
+    }
+    if !blocker_details.is_empty() {
+        required_fixes.push(format!(
+            "issue is blocked by non-terminal dependencies: {}",
+            blocker_details.join(", ")
+        ));
+    }
+
+    QueueStagePlan {
+        issue_identifier: Some(issue.identifier.clone()),
+        recommended_issue_identifier: Some(issue.identifier.clone()),
+        stageable: queue_conflicts.is_empty() && required_fixes.is_empty(),
+        blocked: !queue_conflicts.is_empty(),
+        queue_conflicts,
+        required_fixes,
+        queue_project_role: Some(queue_role),
+        target_project: watched_project.map(|project| project.name.clone()),
+        target_state: Some("Todo".to_string()),
+    }
+}
+
+fn resolve_repo_path(repo_root: &Path, raw: &str) -> PathBuf {
+    let candidate = PathBuf::from(raw);
+    if candidate.is_absolute() {
+        candidate
+    } else {
+        repo_root.join(candidate)
+    }
+}
+
+fn render_bullet_block(title: &str, items: &[String]) -> String {
+    if items.is_empty() {
+        format!("- {title}: none recorded")
+    } else {
+        let rendered = items
+            .iter()
+            .map(|item| format!("  - {item}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("- {title}:\n{rendered}")
+    }
+}
+
+fn upsert_markdown_section(body: &str, heading: &str, replacement: &str) -> String {
+    let trimmed_body = body.trim();
+    if let Some(start) = trimmed_body.find(heading) {
+        let after_heading = &trimmed_body[start + heading.len()..];
+        let next_section_offset = after_heading.find("\n## ");
+        let prefix = trimmed_body[..start].trim_end();
+        let suffix = next_section_offset
+            .map(|offset| &after_heading[offset + 1..])
+            .unwrap_or("")
+            .trim_start();
+        return match (prefix.is_empty(), suffix.is_empty()) {
+            (true, true) => replacement.to_string(),
+            (true, false) => format!("{replacement}\n\n{suffix}"),
+            (false, true) => format!("{prefix}\n\n{replacement}"),
+            (false, false) => format!("{prefix}\n\n{replacement}\n\n{suffix}"),
+        };
+    }
+
+    if trimmed_body.is_empty() {
+        replacement.to_string()
+    } else {
+        format!("{trimmed_body}\n\n{replacement}")
+    }
+}
+
+fn render_ralph_prompt(
+    mode: &str,
+    goal: &str,
+    current_context: &str,
+    source_docs: &[String],
+    workflow_requirements: &[String],
+    validation_requirements: &[String],
+    stop_conditions: &[String],
+    definition_of_done: &[String],
+) -> String {
+    format!(
+        "# Ralph Packet\n\n## Mode\n\n{mode}\n\n## Goal\n\n{goal}\n\n## Current Context\n\n{current_context}\n\n## Source Docs\n\n{}\n\n## Workflow Requirements\n\n{}\n\n## Validation Requirements\n\n{}\n\n## Stop Conditions\n\n{}\n\n## Definition Of Done\n\n{}",
+        source_docs
+            .iter()
+            .map(|doc| format!("- {doc}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        workflow_requirements
+            .iter()
+            .map(|item| format!("- {item}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        validation_requirements
+            .iter()
+            .map(|item| format!("- {item}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        stop_conditions
+            .iter()
+            .map(|item| format!("- {item}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        definition_of_done
+            .iter()
+            .map(|item| format!("- {item}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+}
+
+fn extract_feature_dir_from_text(text: &str) -> Option<String> {
+    text.split_whitespace()
+        .map(|token| token.trim_matches(|ch: char| ch == '`' || ch == '"' || ch == '\''))
+        .find(|token| token.starts_with("specs/") && token.contains("/tasks.md"))
+        .map(|token| token.trim_end_matches("/tasks.md").to_string())
+        .or_else(|| {
+            text.split_whitespace()
+                .map(|token| token.trim_matches(|ch: char| ch == '`' || ch == '"' || ch == '\''))
+                .find(|token| token.starts_with("specs/"))
+                .map(ToOwned::to_owned)
+        })
+}
+
+fn translate_speckit_task_markdown(markdown: &str) -> Vec<TranslatedSpecKitSlice> {
+    let mut sections = Vec::<(String, Vec<String>)>::new();
+    let mut current_heading: Option<String> = None;
+    let mut current_lines = Vec::new();
+
+    for line in markdown.lines() {
+        if let Some(rest) = line.strip_prefix("## ") {
+            if let Some(heading) = current_heading.take() {
+                sections.push((heading, current_lines));
+            }
+            current_heading = Some(rest.trim().to_string());
+            current_lines = Vec::new();
+        } else if current_heading.is_some() {
+            current_lines.push(line.to_string());
+        }
+    }
+    if let Some(heading) = current_heading.take() {
+        sections.push((heading, current_lines));
+    }
+
+    let mut translated = Vec::new();
+    let mut prior_titles = Vec::<String>::new();
+    for (heading, lines) in sections {
+        if heading.to_ascii_lowercase().contains("explicitly out of scope") {
+            continue;
+        }
+        let tasks = lines
+            .iter()
+            .filter(|line| line.trim_start().starts_with("- [ ]"))
+            .cloned()
+            .collect::<Vec<_>>();
+        if tasks.is_empty() {
+            continue;
+        }
+        let goal = lines
+            .iter()
+            .find(|line| line.trim_start().starts_with("**Goal**:"))
+            .cloned()
+            .unwrap_or_default();
+        let independent_test = lines
+            .iter()
+            .find(|line| line.trim_start().starts_with("**Independent Test**:"))
+            .cloned()
+            .unwrap_or_default();
+        let checkpoint = lines
+            .iter()
+            .find(|line| line.trim_start().starts_with("**Checkpoint**:"))
+            .cloned()
+            .unwrap_or_default();
+        let description = [
+            format!("## {}", heading),
+            goal,
+            independent_test,
+            checkpoint,
+            "### Tasks".to_string(),
+            tasks.join("\n"),
+        ]
+        .into_iter()
+        .filter(|part| !part.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+        let workpad_body = format!(
+            "{CODEX_WORKPAD_HEADER}\n\n- [ ] Translate the SpecKit slice `{}` into execution evidence\n- [ ] Record validation and follow-up notes here",
+            heading
+        );
+        let title = format!("SpecKit: {}", heading.replace(" - ", " "));
+        translated.push(TranslatedSpecKitSlice {
+            title: title.clone(),
+            description,
+            blocked_by: prior_titles.last().cloned().into_iter().collect(),
+            workpad_body: Some(workpad_body),
+            symphony_candidate: false,
+        });
+        prior_titles.push(title);
+    }
+
+    translated
 }
 
 fn phase_slice_status(issue: &LinearIssueSnapshot, workflow: &WorkflowSummary) -> String {
@@ -3916,6 +7370,455 @@ apps = true
         assert!(!issue_is_honest_refill_candidate(&questionable_backlog));
     }
 
+    #[test]
+    fn normalize_workpad_body_adds_header_when_missing() {
+        let normalized = normalize_workpad_body("- [ ] Investigate Smith write path");
+        assert!(normalized.starts_with("## Codex Workpad"));
+        assert!(normalized.contains("Investigate Smith write path"));
+    }
+
+    #[test]
+    fn normalize_workpad_body_preserves_existing_header() {
+        let normalized = normalize_workpad_body("## Codex Workpad\n\n- [x] Existing");
+        assert_eq!(normalized, "## Codex Workpad\n\n- [x] Existing");
+    }
+
+    #[test]
+    fn select_current_workpad_prefers_latest_top_level_comment() {
+        let workpad = select_current_workpad(&[
+            LinearCommentSnapshot {
+                id: "c1".to_string(),
+                body: "## Codex Workpad\n\nold".to_string(),
+                updated_at: Some("2026-03-16T10:00:00.000Z".to_string()),
+                parent_id: None,
+            },
+            LinearCommentSnapshot {
+                id: "reply".to_string(),
+                body: "## Codex Workpad\n\nreply".to_string(),
+                updated_at: Some("2026-03-16T12:00:00.000Z".to_string()),
+                parent_id: Some("c1".to_string()),
+            },
+            LinearCommentSnapshot {
+                id: "c2".to_string(),
+                body: "## Codex Workpad\n\nnew".to_string(),
+                updated_at: Some("2026-03-16T11:00:00.000Z".to_string()),
+                parent_id: None,
+            },
+        ])
+        .unwrap();
+
+        assert_eq!(workpad.comment_id, "c2");
+        assert_eq!(workpad.duplicate_count, 1);
+        assert_eq!(workpad.body, "## Codex Workpad\n\nnew");
+    }
+
+    #[test]
+    fn upsert_markdown_section_replaces_existing_section() {
+        let body = "## Codex Workpad\n\n- [ ] Existing\n\n## Ralph Outcome\n\nold\n\n## Notes\n\nkeep";
+        let updated = upsert_markdown_section(
+            body,
+            "## Ralph Outcome",
+            "## Ralph Outcome\n\n- Status: completed",
+        );
+
+        assert!(updated.contains("- Status: completed"));
+        assert!(!updated.contains("\n\nold\n\n"));
+        assert!(updated.contains("## Notes\n\nkeep"));
+    }
+
+    #[test]
+    fn translate_speckit_task_markdown_creates_ordered_slice_chain() {
+        let tasks = fs::read_to_string(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../specs/013-multi-turn-same-agent-conversations/tasks.md"),
+        )
+        .unwrap();
+
+        let translated = translate_speckit_task_markdown(&tasks);
+
+        assert!(translated.len() >= 4);
+        assert!(translated[0].title.starts_with("SpecKit: Foundational Tasks"));
+        assert_eq!(
+            translated[1].blocked_by,
+            vec![translated[0].title.clone()]
+        );
+        assert!(translated[0].description.contains("T001"));
+        assert!(translated[0].description.contains("### Tasks"));
+    }
+
+    #[test]
+    fn build_queue_stage_plan_requires_workpad_before_staging() {
+        let workflow = WorkflowSummary {
+            project_slug: Some("320a0741920c".to_string()),
+            active_states: vec!["Todo".to_string(), "In Progress".to_string()],
+            terminal_states: vec![
+                "Done".to_string(),
+                "Canceled".to_string(),
+                "Duplicate".to_string(),
+            ],
+            workspace_root: None,
+            codex_command: None,
+        };
+        let workspace = LinearWorkspaceData {
+            projects: vec![
+                LinearProjectSnapshot {
+                    name: "MisterSmith Execution Queue".to_string(),
+                    slug: "320a0741920c".to_string(),
+                    ..LinearProjectSnapshot::default()
+                },
+                LinearProjectSnapshot {
+                    name: "MisterSmith Validated Backlog".to_string(),
+                    slug: "validated-backlog".to_string(),
+                    ..LinearProjectSnapshot::default()
+                },
+            ],
+            issues: Vec::new(),
+            teams: Vec::new(),
+            states_by_team: BTreeMap::new(),
+        };
+        let issue = LinearIssueSnapshot {
+            identifier: "MS-51".to_string(),
+            title: "Backlog slicing".to_string(),
+            state: Some(LinearStateSnapshot {
+                name: "Backlog".to_string(),
+                ..LinearStateSnapshot::default()
+            }),
+            project: Some(LinearProjectSnapshot {
+                name: "MisterSmith Validated Backlog".to_string(),
+                slug: "validated-backlog".to_string(),
+                ..LinearProjectSnapshot::default()
+            }),
+            labels: vec!["Validated".to_string(), "Symphony Candidate".to_string()],
+            ..LinearIssueSnapshot::default()
+        };
+
+        let plan = build_queue_stage_plan(
+            Some(&issue),
+            None,
+            &workspace,
+            &workflow,
+            workflow.project_slug.as_deref(),
+            Some("MS-51"),
+        );
+
+        assert!(!plan.stageable);
+        assert!(plan
+            .required_fixes
+            .iter()
+            .any(|fix| fix.contains("Codex Workpad")));
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_recognizes_development_workflow_requests() {
+        let repo_root = temp_path("route-development-workflow");
+        write_fixture_repo(&repo_root);
+        let symphony_checkout = temp_path("symphony-route-development-workflow");
+        let workspace_root = temp_path("workspaces-route-development-workflow");
+        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
+        fs::create_dir_all(&workspace_root).unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(workspace_root),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Prepare a Smith-first development workflow operating model and Ralph prompt chain for Mister Smith"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("development_workflow".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("get_control_plane_snapshot".to_string())
+        );
+        assert!(result["recommended_next_tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "sync_linear_with_runtime"));
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_keeps_pull_request_requests_in_review_dispatch() {
+        let repo_root = temp_path("route-review-dispatch");
+        write_fixture_repo(&repo_root);
+        let symphony_checkout = temp_path("symphony-route-review-dispatch");
+        let workspace_root = temp_path("workspaces-route-review-dispatch");
+        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
+        fs::create_dir_all(&workspace_root).unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(workspace_root),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Review the pull request and merge it if checks are green"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("review_dispatch".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("review_merge_dispatch_cycle".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_routes_workpad_mutations_to_linear_workflow() {
+        let repo_root = temp_path("route-workpad-mutations");
+        write_fixture_repo(&repo_root);
+        let symphony_checkout = temp_path("symphony-route-workpad-mutations");
+        let workspace_root = temp_path("workspaces-route-workpad-mutations");
+        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
+        fs::create_dir_all(&workspace_root).unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(workspace_root),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Update the Codex workpad comment for MS-50"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("linear_workflow".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("save_issue_workpad".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_routes_child_issue_creation_to_linear_workflow() {
+        let repo_root = temp_path("route-child-issue");
+        write_fixture_repo(&repo_root);
+        let symphony_checkout = temp_path("symphony-route-child-issue");
+        let workspace_root = temp_path("workspaces-route-child-issue");
+        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
+        fs::create_dir_all(&workspace_root).unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(workspace_root),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Create a child issue under MS-49 for backlog slicing"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("linear_workflow".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("save_linear_issue".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_routes_backlog_slicing_requests() {
+        let repo_root = temp_path("route-backlog-slicing");
+        write_fixture_repo(&repo_root);
+        let symphony_checkout = temp_path("symphony-route-backlog-slicing");
+        let workspace_root = temp_path("workspaces-route-backlog-slicing");
+        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
+        fs::create_dir_all(&workspace_root).unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(workspace_root),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Translate the SpecKit tasks packet into backlog slicing work"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("backlog_slicing".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("translate_speckit_tasks".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_routes_issue_lifecycle_requests() {
+        let repo_root = temp_path("route-issue-lifecycle");
+        write_fixture_repo(&repo_root);
+        let symphony_checkout = temp_path("symphony-route-issue-lifecycle");
+        let workspace_root = temp_path("workspaces-route-issue-lifecycle");
+        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
+        fs::create_dir_all(&workspace_root).unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(workspace_root),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Resolve the issue lifecycle and next action for MS-53"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("issue_lifecycle".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("resolve_issue_lifecycle".to_string())
+        );
+    }
+
     #[tokio::test]
     async fn compatibility_server_lists_plain_tool_names() {
         let repo_root = temp_path("plain-tools");
@@ -3950,6 +7853,30 @@ apps = true
         assert!(tools
             .iter()
             .any(|tool| tool.name == "get_server_runtime_info"));
+        assert!(tools.iter().any(|tool| tool.name == "save_linear_issue"));
+        assert!(tools.iter().any(|tool| tool.name == "save_issue_workpad"));
+        assert!(tools
+            .iter()
+            .any(|tool| tool.name == "materialize_backlog_slices"));
+        assert!(tools.iter().any(|tool| tool.name == "plan_queue_stage"));
+        assert!(tools
+            .iter()
+            .any(|tool| tool.name == "apply_queue_stage"));
+        assert!(tools
+            .iter()
+            .any(|tool| tool.name == "resolve_issue_lifecycle"));
+        assert!(tools
+            .iter()
+            .any(|tool| tool.name == "prepare_ralph_packet"));
+        assert!(tools
+            .iter()
+            .any(|tool| tool.name == "record_ralph_outcome"));
+        assert!(tools
+            .iter()
+            .any(|tool| tool.name == "prepare_speckit_context"));
+        assert!(tools
+            .iter()
+            .any(|tool| tool.name == "translate_speckit_tasks"));
         assert!(!tools.iter().any(|tool| tool.name.contains("smith.")));
     }
 
@@ -4109,5 +8036,265 @@ apps = true
                 .unwrap(),
             "smith"
         );
+    }
+
+    #[tokio::test]
+    async fn rmcp_round_trip_supports_new_workflow_tools() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let symphony_checkout = temp_path("symphony-workflow-tools");
+        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
+        let workspace_root = temp_path("workspaces-workflow-tools");
+        fs::create_dir_all(&workspace_root).unwrap();
+        let config_path = temp_path("workflow-tools-config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(workspace_root),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let (server_transport, client_transport) = tokio::io::duplex(4096);
+        tokio::spawn({
+            let server = server.clone();
+            async move {
+                let running =
+                    serve_server(crate::server::McpServerAdapter { server }, server_transport)
+                        .await
+                        .unwrap();
+                let _ = running.waiting().await;
+            }
+        });
+
+        let session = TestClient.serve(client_transport).await.unwrap();
+        let peer = session.peer().clone();
+
+        let speckit_context = peer
+            .call_tool(CallToolRequestParams::new(
+                "prepare_speckit_context".to_string(),
+            )
+            .with_arguments(
+                serde_json::json!({
+                    "request_text": "Translate specs/013-multi-turn-same-agent-conversations/tasks.md into backlog slices"
+                })
+                .as_object()
+                .cloned()
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert!(!speckit_context.is_error.unwrap_or(false));
+        assert!(speckit_context.structured_content.as_ref().unwrap()["data"]["should_use_speckit"]
+            .as_bool()
+            .unwrap());
+
+        let translation = peer
+            .call_tool(CallToolRequestParams::new(
+                "translate_speckit_tasks".to_string(),
+            )
+            .with_arguments(
+                serde_json::json!({
+                    "feature_dir": "specs/013-multi-turn-same-agent-conversations",
+                    "apply": false
+                })
+                .as_object()
+                .cloned()
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert!(!translation.is_error.unwrap_or(false));
+        assert!(translation.structured_content.as_ref().unwrap()["data"]["translated_slices"]
+            .as_array()
+            .map(|slices| !slices.is_empty())
+            .unwrap_or(false));
+    }
+
+    #[tokio::test]
+    #[ignore = "manual live Linear mutation proof for Smith issue/workpad handlers"]
+    async fn live_linear_issue_and_workpad_mutation_round_trip() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let target_issue =
+            env::var("SMITH_LIVE_LINEAR_PROOF_ISSUE").unwrap_or_else(|_| "MS-50".to_string());
+        let config_path = expand_home(DEFAULT_CODEX_CONFIG);
+        let symphony_checkout = expand_home(DEFAULT_SYMPHONY_CHECKOUT);
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: None,
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let before = server
+            .handle_tools_call(
+                "get_issue_execution_snapshot",
+                serde_json::json!({ "issue_identifier": target_issue }),
+            )
+            .await
+            .unwrap();
+        let current_title = before["data"]["issue"]["title"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let issue_result = server
+            .handle_tools_call(
+                "save_linear_issue",
+                serde_json::json!({
+                    "issue_identifier": target_issue,
+                    "title": current_title,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            issue_result["status"],
+            serde_json::Value::String("applied".to_string())
+        );
+
+        let workpad_body = format!(
+            "## Codex Workpad\n\n- [x] Smith live proof via `save_issue_workpad`\n- [x] Verified issue path: {target_issue}\n"
+        );
+        let workpad_result = server
+            .handle_tools_call(
+                "save_issue_workpad",
+                serde_json::json!({
+                    "issue_identifier": target_issue,
+                    "body": workpad_body,
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            workpad_result["status"],
+            serde_json::Value::String("applied".to_string())
+        );
+
+        let after = server
+            .handle_tools_call(
+                "get_issue_execution_snapshot",
+                serde_json::json!({ "issue_identifier": target_issue }),
+            )
+            .await
+            .unwrap();
+        let workpad = &after["data"]["workpad"];
+        assert!(!workpad["comment_id"].as_str().unwrap().is_empty());
+        assert!(workpad["body"]
+            .as_str()
+            .unwrap()
+            .starts_with("## Codex Workpad"));
+    }
+
+    #[tokio::test]
+    #[ignore = "manual live Linear read proof for queue-stage planning"]
+    async fn live_plan_queue_stage_reads_real_issue_state() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let target_issue =
+            env::var("SMITH_LIVE_QUEUE_PLAN_ISSUE").unwrap_or_else(|_| "MS-51".to_string());
+        let config_path = expand_home(DEFAULT_CODEX_CONFIG);
+        let symphony_checkout = expand_home(DEFAULT_SYMPHONY_CHECKOUT);
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: None,
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "plan_queue_stage",
+                serde_json::json!({ "issue_identifier": target_issue }),
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            result["status"].as_str(),
+            Some("ok" | "degraded")
+        ));
+        assert!(!result["data"]["issue_identifier"]
+            .as_str()
+            .unwrap_or_default()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "manual live Linear read proof for Ralph packet preparation"]
+    async fn live_prepare_ralph_packet_reads_real_issue_context() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        let target_issue =
+            env::var("SMITH_LIVE_RALPH_PACKET_ISSUE").unwrap_or_else(|_| "MS-54".to_string());
+        let config_path = expand_home(DEFAULT_CODEX_CONFIG);
+        let symphony_checkout = expand_home(DEFAULT_SYMPHONY_CHECKOUT);
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: None,
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "prepare_ralph_packet",
+                serde_json::json!({ "issue_identifier": target_issue }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["status"],
+            serde_json::Value::String("ok".to_string())
+        );
+        assert!(result["data"]["rendered_prompt"]
+            .as_str()
+            .unwrap()
+            .contains("# Ralph Packet"));
     }
 }

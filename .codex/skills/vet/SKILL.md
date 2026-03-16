@@ -29,6 +29,8 @@ vet --help
 
 ## Running Vet
 
+In this repository, prefer `scripts/run-vet.sh`. It auto-discovers the current Codex session, and it now defaults to the authenticated Codex ChatGPT harness when local Codex auth is present. Use `scripts/run-vet.sh --api ...` only when you explicitly want direct API mode.
+
 ### Standard Usage
 
 Before running vet, determine the correct Python binary:

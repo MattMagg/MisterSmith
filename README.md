@@ -24,6 +24,10 @@ CI-validated state, not a static README guarantee.
 
 ## Current Control Plane
 
+- Smith-first development workflow system:
+  [`docs/plans/2026-03-16-smith-first-development-system.md`](docs/plans/2026-03-16-smith-first-development-system.md)
+- Current Smith workflow-family implementation note:
+  [`docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md`](docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md)
 - Live queue contract:
   [`WORKFLOW.md`](WORKFLOW.md) and
   [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md)
@@ -36,6 +40,28 @@ CI-validated state, not a static README guarantee.
   [`docs/plans/2026-03-14-smith-mcp-rebuild.md`](docs/plans/2026-03-14-smith-mcp-rebuild.md),
   [`docs/plans/2026-03-15-smith-mcp-workflow-forensics.md`](docs/plans/2026-03-15-smith-mcp-workflow-forensics.md),
   [`docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md`](docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md)
+
+## Smith MCP Workflow Families
+
+Use Smith as the default control-plane entrypoint for repo development work.
+
+- route and state discovery:
+  `route_workflow_request`, `get_control_plane_snapshot`, `get_issue_execution_snapshot`,
+  `resolve_issue_lifecycle`
+- Linear issue and workpad mutation:
+  `save_linear_issue`, `save_issue_workpad`
+- backlog slicing and watched-queue control:
+  `materialize_backlog_slices`, `plan_queue_stage`, `apply_queue_stage`
+- Ralph and SpecKit glue:
+  `prepare_ralph_packet`, `record_ralph_outcome`, `prepare_speckit_context`,
+  `translate_speckit_tasks`
+
+Default operator sequence:
+
+1. Route the request with `route_workflow_request`.
+2. Snapshot current repo, issue, or queue state before mutation.
+3. Use the Smith workflow-family tools before raw Linear or ad hoc shell fallbacks.
+4. Stage watched-queue work only through `plan_queue_stage` and `apply_queue_stage`.
 
 Phase 10 gate evidence on 2026-03-15:
 
@@ -98,8 +124,8 @@ Mister Smith coordinates distributed AI agents through three core subsystems:
 # Build
 cargo build --workspace
 
-# Test
-cargo test --workspace
+# Test the affected crate
+cargo test -p <crate-name>
 
 # Lint
 cargo clippy --workspace -- -D warnings

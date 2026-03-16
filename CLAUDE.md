@@ -31,6 +31,10 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 
 ## Current Control Plane Sources
 
+- Smith-first development workflow system:
+  `docs/plans/2026-03-16-smith-first-development-system.md`
+- Current Smith workflow-family implementation note:
+  `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md`
 - Runtime contract: `WORKFLOW.md`
 - Linear operating model: `docs/linear/LINEAR.md`
 - Current operating-system direction: `docs/plans/2026-03-16-winyear-frontier-direction.md`
@@ -40,6 +44,22 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
   `docs/plans/2026-03-14-smith-mcp-rebuild.md`,
   `docs/plans/2026-03-15-smith-mcp-workflow-forensics.md`,
   `docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md`
+
+## Smith-First Operator Flow
+
+For Mister Smith development sessions, assume Smith MCP is the first hop unless the repo proves a
+real gap.
+
+1. Route the operator request with `route_workflow_request`.
+2. Pull current state with `get_control_plane_snapshot` or `get_issue_execution_snapshot`.
+3. Use the Smith workflow-family tools for the actual task:
+   - `save_linear_issue` and `save_issue_workpad`
+   - `materialize_backlog_slices`, `plan_queue_stage`, and `apply_queue_stage`
+   - `resolve_issue_lifecycle`
+   - `prepare_ralph_packet` and `record_ralph_outcome`
+   - `prepare_speckit_context` and `translate_speckit_tasks`
+4. Fall back to raw Linear, shell, or one-off repo glue only when Smith does not yet model the
+   operation.
 
 ## Workspace Crate Dependencies
 

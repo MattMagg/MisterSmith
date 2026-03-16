@@ -24,6 +24,25 @@ implementation phase.
 Treat `docs/plans/2026-03-16-winyear-frontier-direction.md` as the current forward-direction note
 when the task is about what should happen next after the March 16 recovery landings.
 
+## Smith-First Workflow Posture
+
+For Mister Smith development work, treat Smith MCP as the default control-plane entrypoint.
+
+- Start broad workflow requests with `route_workflow_request`.
+- Pull current state with `get_control_plane_snapshot` or `get_issue_execution_snapshot` before
+  mutating Linear, queue, or review state.
+- Use Smith workflow-family tools before raw Linear or ad hoc repo glue:
+  - `save_linear_issue`, `save_issue_workpad`
+  - `materialize_backlog_slices`, `plan_queue_stage`, `apply_queue_stage`
+  - `resolve_issue_lifecycle`
+  - `prepare_ralph_packet`, `record_ralph_outcome`
+  - `prepare_speckit_context`, `translate_speckit_tasks`
+- Treat `docs/plans/2026-03-16-smith-first-development-system.md` as the high-level operating
+  model and `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current implemented
+  workflow-family surface.
+- Keep Linear as the durable source of truth, Symphony as the watched-queue executor, Ralph as the
+  loop runner, and SpecKit as the upstream spec/task-pack scaffold.
+
 ## Build, Test, and Development Commands
 
 Run from repository root unless noted.
