@@ -18,9 +18,22 @@ Initiative (strategic goal)
 ### Initiatives
 
 Use initiatives as the strategic layer, not as Symphony's dispatch boundary. Historical initiatives
-remain useful for reporting and status updates, but the current operational focus is
-`Production Hardening`, which is active and owns the current hardening queue plus follow-on
-validated backlog.
+remain useful for reporting and status updates, but the current forward direction is `WinYear`,
+the program that turns Mister Smith from a validated substrate into a differentiated orchestration
+operating system.
+
+### Current Strategy
+
+- `WinYear` is the active strategic direction for new operating-system work after the March 16
+  recovery landings.
+- `MS-45` through `MS-48` are the current WinYear backlog epics; keep them in `Backlog` until the
+  next execution cycle explicitly stages bounded slices.
+- `MisterSmith Validated Backlog` should hold the next WinYear epics in `Backlog` until they are
+  explicitly staged.
+- Do not move WinYear issues into the watched queue just to keep Symphony busy. Stage only the
+  next bounded runnable slice.
+- The current repo-owned direction note is
+  `docs/plans/2026-03-16-winyear-frontier-direction.md`.
 
 ### Projects
 

@@ -1,6 +1,7 @@
 # Mister Smith
 
-A multi-agent orchestration framework built in Rust with NATS messaging and Erlang-inspired supervision trees. Model-agnostic — works with any LLM backend.
+A frontier orchestration operating system built in Rust with NATS messaging and Erlang-inspired
+supervision trees. Model-agnostic and designed for supervised, stateful, multi-agent execution.
 
 ## Implementation Status
 
@@ -26,6 +27,8 @@ CI-validated state, not a static README guarantee.
 - Live queue contract:
   [`WORKFLOW.md`](WORKFLOW.md) and
   [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md)
+- Current mainline direction and validated-backlog posture:
+  [`docs/plans/2026-03-16-winyear-frontier-direction.md`](docs/plans/2026-03-16-winyear-frontier-direction.md)
 - Phase 10 design and gate artifacts:
   [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
   [`docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`](docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md)
@@ -76,6 +79,8 @@ Primary notes for the March 16 operator surfaces:
   [`docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`](docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md)
 - bounded same-agent session packet and live validation notes:
   [`docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`](docs/plans/2026-03-16-multi-turn-same-agent-conversations.md)
+- post-recovery operating-system direction and next frontier epics:
+  [`docs/plans/2026-03-16-winyear-frontier-direction.md`](docs/plans/2026-03-16-winyear-frontier-direction.md)
 
 ## Architecture
 
@@ -180,7 +185,7 @@ mister-smith-core          Foundation types, traits, error hierarchy
 
 - **Process lifecycle**: Deterministic bootstrap sequence with configurable startup timeout
 - **Health probes**: `/health/live` (always 200), `/health/ready` (200 when Ready, 503 otherwise)
-- **Prometheus metrics**: `/metrics` endpoint with framework-level counters, gauges, histograms
+- **Prometheus metrics**: `/metrics` endpoint with system-level counters, gauges, histograms
 - **Distributed tracing**: W3C TraceContext propagation through NATS message envelopes
 - **Graceful shutdown**: Signal handling (SIGTERM graceful, second signal forced), connection draining
 - **Deployment**: Multi-stage Dockerfile (<100MB), Kubernetes manifests, Grafana dashboards, Prometheus alert rules

@@ -131,7 +131,7 @@ Next action after this slice:
 
 ### Slice 2: Task-Only Runtime Path
 
-Status: ready to land on `main`
+Status: landed on `main`
 
 Scope:
 
@@ -232,7 +232,7 @@ Next action after this slice:
 
 ### Slice 4: Bounded Session Implementation
 
-Status: ready to land on `main`
+Status: landed on `main`
 
 Scope:
 
@@ -293,6 +293,17 @@ Remaining recovery scope after this slice:
   `docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`, and
   `docs/plans/2026-03-16-recovery-triage.md`
 - no unreconciled session code or migration files remain after this slice
+
+## Recovery Closure
+
+The recovery goal is now complete in substance:
+
+- the recovered runtime-backed task path is on `main`
+- the recovered bounded session path is on `main`
+- the remaining reconciliation work is documentation and forward-direction cleanup only
+
+This note is now historical recovery evidence, not the primary forward-planning artifact. Use
+`docs/plans/2026-03-16-winyear-frontier-direction.md` for the next backlog and staging decisions.
 
 ## Stop Condition
 

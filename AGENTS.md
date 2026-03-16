@@ -2,9 +2,9 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Rust workspace implementing the Mister Smith multi-agent orchestration
-framework. It contains 20 crates across 10 implemented phases, with the framework build now
-validated through Phase 10.
+This repository is a Rust workspace implementing the Mister Smith orchestration operating system.
+It contains 20 crates across 10 implemented phases, with the operating-system substrate now
+validated through Phase 10 plus the March 16 runtime and session recovery slices.
 
 - `crates/`: Rust workspace — 18 library crates + 1 binary + 1 integration test crate
 - `spec/`: Canonical architecture specifications (the system contract)
@@ -20,7 +20,9 @@ Use `README.md`, `ROADMAP.md`, and `CLAUDE.md` as orientation entry points.
 Treat `WORKFLOW.md` and `docs/linear/LINEAR.md` as the live control-plane contract.
 Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the current runtime-proof
 direction when the task is about proving real end-to-end execution rather than adding another
-framework phase.
+implementation phase.
+Treat `docs/plans/2026-03-16-winyear-frontier-direction.md` as the current forward-direction note
+when the task is about what should happen next after the March 16 recovery landings.
 
 ## Build, Test, and Development Commands
 

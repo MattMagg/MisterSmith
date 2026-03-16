@@ -1,6 +1,7 @@
 # Mister Smith
 
-Multi-agent orchestration framework — Rust + NATS + supervision trees. Model-agnostic (works with any LLM).
+Frontier orchestration operating system — Rust + NATS + supervision trees. Model-agnostic and
+built for supervised multi-agent execution.
 
 ## Commands
 
@@ -32,6 +33,7 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 
 - Runtime contract: `WORKFLOW.md`
 - Linear operating model: `docs/linear/LINEAR.md`
+- Current operating-system direction: `docs/plans/2026-03-16-winyear-frontier-direction.md`
 - Phase 10 artifact set and gate evidence: `specs/012-phase10-frontier-autonomy/`,
   `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`
 - Active control-plane recovery and queue-governance plans:
@@ -85,7 +87,7 @@ mister-smith-core (foundation types, traits, errors)
 
 ## Key Entry Points
 
-Start here when reading the framework:
+Start here when reading the system:
 
 1. **Build roadmap**: `ROADMAP.md` — 9-phase implementation order with gate criteria
 2. **Architecture overview**: `spec/core-architecture/system-architecture.md`

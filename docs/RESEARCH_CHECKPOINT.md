@@ -9,7 +9,23 @@ updated: 2026-03-07
 > **Checkpoint Date**: 2026-03-07
 > **Status**: 7 rounds complete, synthesis DONE. No new research being launched.
 > **Governing directive**: Frontier-first — optimize for strategic advantage, not comprehensiveness
-> **Current Action**: Research phase complete. Ready for implementation planning.
+> **Current Action**: Research phase complete. Use
+> `docs/plans/2026-03-16-winyear-frontier-direction.md` for implementation planning and issue
+> staging.
+
+## March 16, 2026 Direction
+
+Research is no longer the limiting factor. The current operating-system direction is to convert the
+research corpus into bounded backlog epics that preserve the frontier mandate:
+
+- task-shape-aware orchestration and dynamic team sizing
+- session restart-resume and distributed operating state
+- step-level intelligence and model routing control loops
+- capability-kernel and external-agent interoperability
+
+Those directions are consolidated in
+`docs/plans/2026-03-16-winyear-frontier-direction.md`, which supersedes ad hoc "what next"
+interpretation from older phase notes.
 
 ---
 

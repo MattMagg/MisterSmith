@@ -1,17 +1,20 @@
 # Mister Smith — Build Roadmap
 
-Linear build order for the framework, end to end. Each phase depends on the phases above it. Within a phase, subphases are ordered but items at the same level can often be built in parallel.
+Linear build order for the operating-system substrate, end to end. Each phase depends on the
+phases above it. Within a phase, subphases are ordered but items at the same level can often be
+built in parallel.
 
 This is not an implementation plan. It does not prescribe tasks, timelines, or code. It is a
 dependency-aware map of what to build and in what order, with references to the specifications that
 define each component.
 
 Current scope note: this roadmap remains the architectural build map through the completed
-framework phases. Phase 10 is now implemented and validated in the repo, and the active
+implementation phases. Phase 10 is now implemented and validated in the repo, and the active
 frontier-autonomy artifact set spans
 [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
 [`WORKFLOW.md`](WORKFLOW.md), [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md), and the dated
-plans under [`docs/plans/`](docs/plans/).
+plans under [`docs/plans/`](docs/plans/). The current post-Phase-10 direction lives in
+[`docs/plans/2026-03-16-winyear-frontier-direction.md`](docs/plans/2026-03-16-winyear-frontier-direction.md).
 
 ## How to Read This
 
@@ -50,7 +53,8 @@ The type system that every other crate imports. Define it once, get it right —
 
 ### 1.2 Core Traits
 
-Abstract contracts that define the framework's extension points. These are trait definitions only — no implementations yet.
+Abstract contracts that define the system's extension points. These are trait definitions only —
+no implementations yet.
 
 - `Actor` trait (handle_message, lifecycle hooks)
 - `Agent` trait (extends Actor with orchestration capabilities)
@@ -143,7 +147,8 @@ In-process pub/sub for system events. This is not NATS — it is internal `tokio
 
 ### 2.4 Async Execution Patterns
 
-Reusable async building blocks used across the framework. Not a crate consumers interact with directly — internal infrastructure.
+Reusable async building blocks used across the system. Not a crate consumers interact with directly
+— internal infrastructure.
 
 - `TaskExecutor` (structured task spawning with cancellation)
 - `TaskGuard` (RAII cleanup for async tasks)
@@ -219,7 +224,7 @@ The fault tolerance layer. Supervisors form a tree; when a child fails, the supe
 **Depends on**: 3.1 (supervises actors), 2.3 (supervision events), 2.2 (failure detection)
 **Produces**: `mister-smith-supervision` crate
 
-> **Gate 3** ✅ (validated 2026-03-04): Actors can be spawned, communicate via mailboxes, and be supervised. A failing actor triggers its supervisor's restart policy. Supervision trees can be composed hierarchically. This is the architectural proof point — if supervision works, the framework's concurrency model is sound.
+> **Gate 3** ✅ (validated 2026-03-04): Actors can be spawned, communicate via mailboxes, and be supervised. A failing actor triggers its supervisor's restart policy. Supervision trees can be composed hierarchically. This is the architectural proof point — if supervision works, the runtime's concurrency model is sound.
 > Validation checklist: [Phase 3 Deep Dive](plans/roadmap-phases/phase-3-actor-system-and-supervision.md).
 
 ---
@@ -440,7 +445,9 @@ CRUD patterns, transactions, and event sourcing that sit on top of the storage b
 
 ## Phase 7: Agent System
 
-The agent orchestration layer — the reason the framework exists. Agents are actors with orchestration capabilities: they form teams, decompose tasks, communicate through the transport layer, and are supervised.
+The agent orchestration layer — the reason the system exists. Agents are actors with
+orchestration capabilities: they form teams, decompose tasks, communicate through the transport
+layer, and are supervised.
 
 ### 7.1 Agent Lifecycle
 
@@ -527,14 +534,14 @@ The 9 concrete agent types, each with domain-specific behavior.
 **Depends on**: 7.1–7.4 (all agent infrastructure)
 **Produces**: `mister-smith-agents` crate — the complete agent system
 
-> **Gate 7** ✅ (validated 2026-03-05): A multi-agent team can be spawned: a Coordinator decomposes a task, assigns subtasks to Workers via NATS, Workers execute and report results, a Supervisor restarts any Worker that fails, and results aggregate back to the Coordinator. This is the end-to-end proof of the framework.
+> **Gate 7** ✅ (validated 2026-03-05): A multi-agent team can be spawned: a Coordinator decomposes a task, assigns subtasks to Workers via NATS, Workers execute and report results, a Supervisor restarts any Worker that fails, and results aggregate back to the Coordinator. This is the end-to-end proof of the operating-system substrate.
 > Validation checklist: [Phase 7 Deep Dive](plans/roadmap-phases/phase-7-agent-system.md).
 
 ---
 
 ## Phase 8: Operations & Production Readiness
 
-Everything needed to deploy, observe, and operate the framework in production.
+Everything needed to deploy, observe, and operate the system in production.
 
 ### 8.1 Observability
 
@@ -587,14 +594,15 @@ Container images, Kubernetes manifests, and deployment configuration.
 **Depends on**: 8.2 (binary to deploy), 8.1 (observability endpoints)
 **Produces**: Deployable artifacts
 
-> **Gate 8** ✅ (validated 2026-03-06): The framework runs as a containerized service. Health probes respond. Traces appear in the collector. Metrics are scraped. Graceful shutdown completes without message loss. The system is production-ready.
+> **Gate 8** ✅ (validated 2026-03-06): The system runs as a containerized service. Health probes respond. Traces appear in the collector. Metrics are scraped. Graceful shutdown completes without message loss. The system is production-ready.
 > Validation checklist: [Phase 8 Deep Dive](plans/roadmap-phases/phase-8-operations-and-production-readiness.md). Implementation: [specs/010-phase8-operations/](specs/010-phase8-operations/).
 
 ---
 
 ## Phase 9: LLM Provider Integration
 
-Model-agnostic LLM connectivity — the layer that turns the orchestration framework into a system that can call real models.
+Model-agnostic LLM connectivity — the layer that turns the operating system into a runtime that can
+call real models.
 
 ### 9.1 Core Types & MockProvider
 

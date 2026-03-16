@@ -1,5 +1,8 @@
 # First Live Multi-Agent Runtime Proof
 
+Status: landed on `main`; use `docs/plans/2026-03-16-winyear-frontier-direction.md` for forward
+planning beyond this proof.
+
 Date: March 15, 2026
 
 ## Objective
