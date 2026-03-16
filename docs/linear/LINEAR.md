@@ -530,4 +530,3 @@ Symphony agents use skills defined in `.codex/skills/`:
 | `pull` | Merge `origin/main` into current branch |
 | `push` | Publish branch and create/update PR |
 | `land` | Merge PR when issue reaches Merging |
-| `vet` | Run validation checks |

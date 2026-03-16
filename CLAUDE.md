@@ -37,7 +37,7 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
   `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md`
 - Runtime contract: `WORKFLOW.md`
 - Linear operating model: `docs/linear/LINEAR.md`
-- Current operating-system direction: `docs/plans/2026-03-16-winyear-frontier-direction.md`
+- Current operating-system direction: `docs/plans/2026-03-16-frontier-direction.md`
 - Phase 10 artifact set and gate evidence: `specs/012-phase10-frontier-autonomy/`,
   `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`
 - Active control-plane recovery and queue-governance plans:
