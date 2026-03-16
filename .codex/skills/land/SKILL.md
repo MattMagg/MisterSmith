@@ -14,6 +14,7 @@ Use this skill when a Symphony issue moves to `Merging`.
 - Keep the PR conflict-free with `origin/main`.
 - Make sure feedback is addressed.
 - Wait for checks to complete and only merge when green.
+- Leave the issue workspace on a clean `origin/main` checkpoint after merge.
 
 ## Preconditions
 
@@ -41,9 +42,19 @@ Use this skill when a Symphony issue moves to `Merging`.
    - commit, push, and re-run the watch
 9. When all checks are green and feedback is resolved, squash-merge:
    - `gh pr merge --squash --subject "$pr_title" --body "$pr_body"`
+10. After merge, run:
+
+    ```sh
+    git fetch origin --prune
+    branch=$(git branch --show-current)
+    git switch -C main origin/main
+    if [ "$branch" != "main" ]; then git branch -D "$branch"; fi
+    scripts/verify_worktree_closure.sh
+    ```
 
 ## Notes
 
 - Do not use auto-merge.
 - Do not merge while actionable review feedback is still open.
 - Keep PR title and body aligned with the actual final scope.
+- `Done` is not honest until the post-merge workspace cleanup is complete.

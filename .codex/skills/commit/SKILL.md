@@ -22,16 +22,18 @@ description: |
 ## Steps
 
 1. Read the current session context and inspect the working tree.
-2. Stage only the intended files.
-3. Sanity-check the index for unrelated files, generated junk, or secrets.
-4. Write a conventional subject such as `feat(scope): ...`, `fix(scope): ...`, `docs: ...`, or `chore: ...`.
-5. Keep the subject imperative and under 72 characters.
-6. Write a body with:
+2. If unexpected leftovers are present, decide whether they belong in this commit, a dedicated
+   follow-up branch/PR, or should be dropped because they are already landed or stale.
+3. Stage only the intended files.
+4. Sanity-check the index for unrelated files, generated junk, or secrets.
+5. Write a conventional subject such as `feat(scope): ...`, `fix(scope): ...`, `docs: ...`, or `chore: ...`.
+6. Keep the subject imperative and under 72 characters.
+7. Write a body with:
    - Summary: what changed
    - Rationale: why it changed
    - Validation: exact commands run, or `not run (reason)`
-7. Wrap body lines at 72 characters.
-8. Create the commit with `git commit -F <file>`.
+8. Wrap body lines at 72 characters.
+9. Create the commit with `git commit -F <file>`.
 
 ## Template
 
