@@ -108,7 +108,7 @@ Files with mixed concerns that should be split last unless a current slice truly
 
 ### Slice 1: Recovery Triage On Main
 
-Status: active at note creation
+Status: landed on `main`
 
 Scope:
 
@@ -120,10 +120,91 @@ Validation target:
 
 - `npx markdownlint-cli2 docs/plans/2026-03-16-recovery-triage.md --config .markdownlint.json`
 
+Validation result:
+
+- passed on `main` before commit `9a1a0bd925ba0b4d2441a74bf3c98c4f5d0e44d7`
+
 Next action after this slice:
 
 - isolate the runtime task-path subset inside the mixed `mister-smith-http` and `mister-smith-app`
   edits, then decide whether that code slice is separable enough to land safely on `main`
+
+### Slice 2: Task-Only Runtime Path
+
+Status: ready to land on `main`
+
+Scope:
+
+- restore a real runtime-backed `POST /api/v1/tasks` path without pulling in the Spec 013 session
+  surface
+- restore operator-visible autonomy inspection for runtime-backed task execution
+- carry the minimum `mister-smith-llm` and persistence migration fixes needed for a live local run
+  against PostgreSQL and NATS
+- defer conversation/session identifiers, session HTTP endpoints, and migration `00006` to the
+  later session slice
+
+Files in scope:
+
+- `crates/mister-smith-app/src/execution.rs`
+- `crates/mister-smith-app/src/bootstrap.rs`
+- `crates/mister-smith-app/src/main.rs`
+- `crates/mister-smith-app/Cargo.toml`
+- `crates/mister-smith-http/src/server.rs`
+- `crates/mister-smith-http/src/handlers.rs`
+- `crates/mister-smith-http/src/routes.rs`
+- `crates/mister-smith-agents/src/orchestrator.rs`
+- `crates/mister-smith-llm/src/app_server.rs`
+- `crates/mister-smith-llm/src/providers/openai_chatgpt.rs`
+- `crates/mister-smith-persistence/src/postgres/migrations.rs`
+- `crates/mister-smith-persistence/migrations/00002_indexes.sql`
+- `crates/mister-smith-persistence/migrations/00003_partitions.sql`
+- `crates/mister-smith-persistence/migrations/00004_audit_schema.sql`
+- `crates/mister-smith-persistence/migrations/00005_message_idempotency.sql`
+- `Cargo.lock`
+
+Validation:
+
+- `cargo fmt --all`
+- `cargo build -p mister-smith-http -p mister-smith-llm -p mister-smith-app`
+- `cargo test -p mister-smith-app`
+- `cargo test -p mister-smith-http`
+- `cargo test -p mister-smith-llm --test app_server_tests --test openai_provider_tests`
+- `cargo run -q -p mister-smith-app -- auth openai-chatgpt status`
+- `env DATABASE_URL='postgres://mistersmith:mistersmith_dev@127.0.0.1:5433/mistersmith_runtime_slice3' MISTER_SMITH_TRANSPORT__NATS_URL='nats://127.0.0.1:4223' cargo run -q -p mister-smith-app -- run`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/tasks -H 'content-type: application/json'`
+  `-d '{"description":"Create a concise runtime readiness brief by splitting the work into two`
+  `parallel tracks: one worker analyzes bootstrap and infrastructure startup, one worker analyzes`
+  `HTTP task submission and autonomy visibility, then synthesize the findings into one final`
+  `answer.","priority":"high"}'`
+- `cargo run -q -p mister-smith-app -- autonomy list --base-url http://127.0.0.1:8080`
+- `cargo run -q -p mister-smith-app -- autonomy status --workflow-id cc209240-cfc6-4232-b159-b8de21b2a55e --base-url http://127.0.0.1:8080`
+
+Validation result:
+
+- all compile and targeted crate tests passed
+- ChatGPT auth proof succeeded for `openai_chatgpt`
+- runtime startup on a fresh local database succeeded after carrying the recovered migration fixes
+- live task submission returned workflow `cc209240-cfc6-4232-b159-b8de21b2a55e`
+- autonomy list/status reflected the live workflow and later terminal completion on `gpt-5.4`
+- advisory `vet` attempts were inconclusive because one run lacked `OPENAI_API_KEY` and the
+  agentic retry stalled without producing findings
+
+Notes:
+
+- the first live startup attempt against the existing `mistersmith` database failed honestly because
+  migration `00006` from the session stream had already been applied there; using a fresh database
+  kept this slice bounded and avoided smuggling session migration state into the runtime slice
+- `mister-smith-persistence` required the recovered `migration_table_exists()` guard and SQL fixes in
+  migrations `00002` through `00005` before a cold-start database could boot cleanly
+- the runtime proof for this slice used the explicit provider/model pair named in the recovered
+  workstream: `openai_chatgpt` with `gpt-5.4`
+
+Remaining recovery scope after this slice:
+
+- Spec 013 session lifecycle code and migration `00006`
+- session/spec docs in `docs/plans/2026-03-16-multi-turn-same-agent-conversations.md` and
+  `specs/013-multi-turn-same-agent-conversations/`
+- shared overlap files still tied to the unreconciled session stream
 
 ## Stop Condition
 

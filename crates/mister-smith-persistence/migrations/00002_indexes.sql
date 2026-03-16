@@ -21,5 +21,5 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status_priority ON tasks.records (status, p
 CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks.records (created_at);
 
 -- Configuration indexes
-CREATE INDEX IF NOT EXISTS idx_config_agent ON configurations (agent_id);
-CREATE INDEX IF NOT EXISTS idx_config_environment ON configurations (environment);
+CREATE INDEX IF NOT EXISTS idx_config_agent ON config.configurations (agent_id);
+CREATE INDEX IF NOT EXISTS idx_config_environment ON config.configurations (environment);

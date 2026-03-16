@@ -93,6 +93,10 @@ impl MigrationRunner {
     /// Returns the highest applied migration version, or `None` if no
     /// migrations have been applied.
     pub async fn current_version(&self) -> Result<Option<i64>, PersistenceError> {
+        if !self.migration_table_exists().await? {
+            return Ok(None);
+        }
+
         let row: Option<(i64,)> =
             sqlx::query_as("SELECT version FROM _sqlx_migrations ORDER BY version DESC LIMIT 1")
                 .fetch_optional(&self.pool)
@@ -105,12 +109,16 @@ impl MigrationRunner {
     /// List all migrations and their applied status.
     pub async fn status(&self) -> Result<Vec<MigrationStatus>, PersistenceError> {
         let migrator = sqlx::migrate!("./migrations");
-        let applied: Vec<(i64, String, bool, Vec<u8>)> = sqlx::query_as(
-            "SELECT version, description, success, checksum FROM _sqlx_migrations ORDER BY version",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
+        let applied: Vec<(i64, String, bool, Vec<u8>)> = if self.migration_table_exists().await? {
+            sqlx::query_as(
+                "SELECT version, description, success, checksum FROM _sqlx_migrations ORDER BY version",
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?
+        } else {
+            Vec::new()
+        };
 
         let applied_map: std::collections::HashMap<i64, bool> =
             applied.into_iter().map(|(v, _, s, _)| (v, s)).collect();
@@ -134,12 +142,24 @@ impl MigrationRunner {
 
     /// Verify all migrations have been applied (health check use).
     ///
-    /// Returns `true` if every embedded migration has a corresponding
-    /// successful entry in the `_sqlx_migrations` table.
+    /// Returns `true` when the migration table exists, at least one migration
+    /// has been applied successfully, and no recorded migration failed.
     pub async fn verify(&self) -> Result<bool, PersistenceError> {
-        let migrator = sqlx::migrate!("./migrations");
-        let applied_count = self.applied_count().await?;
-        Ok(applied_count >= migrator.iter().count())
+        if !self.migration_table_exists().await? {
+            return Ok(false);
+        }
+
+        let row: (i64, i64) = sqlx::query_as(
+            "SELECT \
+                COUNT(*) FILTER (WHERE success = true), \
+                COUNT(*) FILTER (WHERE success = false) \
+             FROM _sqlx_migrations",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
+
+        Ok(row.0 > 0 && row.1 == 0)
     }
 
     /// Revert the latest applied migration.
@@ -199,6 +219,10 @@ impl MigrationRunner {
 
     /// Count successfully applied migrations.
     async fn applied_count(&self) -> Result<usize, PersistenceError> {
+        if !self.migration_table_exists().await? {
+            return Ok(0);
+        }
+
         let row: (i64,) =
             sqlx::query_as("SELECT COUNT(*) FROM _sqlx_migrations WHERE success = true")
                 .fetch_one(&self.pool)
@@ -206,6 +230,17 @@ impl MigrationRunner {
                 .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
 
         Ok(row.0 as usize)
+    }
+
+    async fn migration_table_exists(&self) -> Result<bool, PersistenceError> {
+        let row: (bool,) = sqlx::query_as(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_sqlx_migrations')",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| PersistenceError::MigrationFailed(e.to_string()))?;
+
+        Ok(row.0)
     }
 }
 

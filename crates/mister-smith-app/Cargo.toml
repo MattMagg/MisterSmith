@@ -25,7 +25,7 @@ mister-smith-nats = { workspace = true }
 mister-smith-http = { workspace = true }
 mister-smith-security = { workspace = true }
 mister-smith-persistence = { workspace = true }
-mister-smith-agents = { workspace = true }
+mister-smith-agents = { workspace = true, features = ["llm"] }
 mister-smith-llm = { workspace = true, features = ["openai-chatgpt", "claude-subscription"] }
 
 # HTTP server (for direct axum::serve in bootstrap)
@@ -57,6 +57,7 @@ serde_json = { workspace = true }
 async-nats = { workspace = true }
 sqlx = { workspace = true }
 reqwest = { workspace = true }
+async-trait = { workspace = true }
 
 # Utilities
 chrono = { workspace = true }

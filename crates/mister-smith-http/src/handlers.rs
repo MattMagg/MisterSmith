@@ -1,7 +1,6 @@
 //! HTTP request handlers for REST API endpoints.
 //!
 //! All handlers accept `State<AppState>` and return JSON responses.
-//! Currently uses placeholder/mock data since there is no backend store yet.
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -11,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::errors::HttpError;
-use crate::server::AppState;
+use crate::server::{AppState, TaskSubmissionRequest};
 
 // ---------------------------------------------------------------------------
 // Response types
@@ -227,38 +226,55 @@ pub async fn get_agent(
 
 /// `POST /api/v1/tasks` — Submit a task, returns 202 Accepted.
 pub async fn create_task(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(request): Json<CreateTaskRequest>,
-) -> (StatusCode, Json<CreateTaskResponse>) {
-    let _ = request.description;
-    let task_id = TaskId::new();
-    let assigned_agent_id = AgentId::new();
+) -> Result<(StatusCode, Json<CreateTaskResponse>), HttpError> {
+    let task_service = state
+        .task_service
+        .as_ref()
+        .ok_or_else(|| HttpError::InternalError("runtime task service unavailable".to_string()))?;
 
-    (
+    let response = task_service
+        .submit_task(TaskSubmissionRequest {
+            description: request.description,
+            agent_type: request.agent_type,
+            priority: request.priority,
+        })
+        .await
+        .map_err(HttpError::InternalError)?;
+
+    Ok((
         StatusCode::ACCEPTED,
         Json(CreateTaskResponse {
-            task_id,
-            assigned_agent_id,
-            status: "pending".to_string(),
+            task_id: response.task_id,
+            assigned_agent_id: response.assigned_agent_id,
+            status: response.status,
         }),
-    )
+    ))
 }
 
 /// `GET /api/v1/tasks/{task_id}` — Task status and result.
 pub async fn get_task(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskStatusResponse>, HttpError> {
-    let uuid = Uuid::parse_str(&task_id)
+    let task_service = state
+        .task_service
+        .as_ref()
+        .ok_or_else(|| HttpError::InternalError("runtime task service unavailable".to_string()))?;
+    let task_uuid = Uuid::parse_str(&task_id)
         .map_err(|_| HttpError::BadRequest(format!("Invalid task ID: {task_id}")))?;
 
-    // Placeholder: return a mock task status.
+    let view = task_service
+        .get_task(TaskId::from_uuid(task_uuid))
+        .await
+        .map_err(HttpError::InternalError)?
+        .ok_or_else(|| HttpError::NotFound(format!("Task {task_id} not found")))?;
+
     Ok(Json(TaskStatusResponse {
-        task_id: TaskId::from_uuid(uuid),
-        status: "completed".to_string(),
-        result: Some(serde_json::json!({
-            "output": "Task completed successfully",
-        })),
+        task_id: view.task_id,
+        status: view.status,
+        result: view.result,
     }))
 }
 
@@ -396,25 +412,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_task_returns_202_fields() {
+    async fn create_task_requires_runtime_service() {
         let state = test_state();
         let request = CreateTaskRequest {
             description: "Test task".to_string(),
             agent_type: None,
             priority: None,
         };
-        let (_status, Json(response)) = create_task(State(state), Json(request)).await;
-        assert_eq!(response.status, "pending");
+        let result = create_task(State(state), Json(request)).await;
+        assert!(matches!(result, Err(HttpError::InternalError(_))));
     }
 
     #[tokio::test]
-    async fn get_task_valid_id() {
+    async fn get_task_requires_runtime_service() {
         let state = test_state();
         let task_id = Uuid::new_v4().to_string();
         let result = get_task(State(state), Path(task_id)).await;
-        assert!(result.is_ok());
-        let Json(status) = result.unwrap();
-        assert_eq!(status.status, "completed");
+        assert!(matches!(result, Err(HttpError::InternalError(_))));
     }
 
     #[tokio::test]

@@ -16,6 +16,27 @@ const DEFAULT_CODEX_BIN: &str = "codex";
 const CODEX_BIN_ENV: &str = "MISTER_SMITH_CODEX_BIN";
 const CODEX_LOGIN_TIMEOUT_ENV: &str = "MISTER_SMITH_OPENAI_CHATGPT_LOGIN_TIMEOUT_MS";
 const DEFAULT_LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
+const OPT_OUT_NOTIFICATION_METHODS: &[&str] = &[
+    "codex/event/warning",
+    "codex/event/mcp_startup_update",
+    "codex/event/mcp_startup_complete",
+    "codex/event/task_started",
+    "codex/event/item_started",
+    "codex/event/item_completed",
+    "codex/event/user_message",
+    "codex/event/agent_message_content_delta",
+    "codex/event/agent_message_delta",
+    "codex/event/agent_message",
+    "codex/event/token_count",
+    "codex/event/task_complete",
+];
+const NON_STREAMING_NOTIFICATION_OPT_OUT_METHODS: &[&str] = &[
+    "thread/started",
+    "thread/status/changed",
+    "turn/started",
+    "item/started",
+    "item/agentMessage/delta",
+];
 
 /// Login flow handle returned by Codex app-server for ChatGPT browser authentication.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -286,6 +307,15 @@ pub struct CodexAppServerClient {
 impl CodexAppServerClient {
     /// Spawn and initialize a new Codex app-server client.
     pub async fn connect() -> Result<Self, LlmError> {
+        Self::connect_with_opt_out(NON_STREAMING_NOTIFICATION_OPT_OUT_METHODS).await
+    }
+
+    /// Spawn and initialize a new Codex app-server client with streaming notifications enabled.
+    pub async fn connect_streaming() -> Result<Self, LlmError> {
+        Self::connect_with_opt_out(&[]).await
+    }
+
+    async fn connect_with_opt_out(extra_opt_out: &[&str]) -> Result<Self, LlmError> {
         let isolated_cwd = isolated_codex_cwd()?;
         let mut command = Command::new(codex_binary_path());
         command
@@ -319,7 +349,7 @@ impl CodexAppServerClient {
             buffered: VecDeque::new(),
         };
 
-        client.initialize().await?;
+        client.initialize(extra_opt_out).await?;
         Ok(client)
     }
 
@@ -527,9 +557,9 @@ impl CodexAppServerClient {
                     if method == "item/agentMessage/delta"
                         && notification_matches_turn(&params, thread_id, turn_id) =>
                 {
-                    let delta = turn_state.apply_agent_delta(&params)?;
-                    content.push_str(&delta);
                     if let Some(stream_tx) = &stream_tx {
+                        let delta = turn_state.apply_agent_delta(&params)?;
+                        content.push_str(&delta);
                         let _ = stream_tx
                             .send(Ok(StreamChunk {
                                 index,
@@ -639,7 +669,13 @@ impl CodexAppServerClient {
         })
     }
 
-    async fn initialize(&mut self) -> Result<(), LlmError> {
+    async fn initialize(&mut self, extra_opt_out: &[&str]) -> Result<(), LlmError> {
+        let mut opt_out_notification_methods = OPT_OUT_NOTIFICATION_METHODS
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        opt_out_notification_methods.extend(extra_opt_out.iter().copied());
+
         self.request(
             "initialize",
             json!({
@@ -649,7 +685,7 @@ impl CodexAppServerClient {
                     "version": env!("CARGO_PKG_VERSION")
                 },
                 "capabilities": {
-                    "optOutNotificationMethods": []
+                    "optOutNotificationMethods": opt_out_notification_methods
                 }
             }),
         )

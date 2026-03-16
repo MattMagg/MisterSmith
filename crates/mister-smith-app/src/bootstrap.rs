@@ -29,6 +29,7 @@ use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 use crate::autonomy;
+use crate::execution::RuntimeTaskService;
 use crate::observability;
 use crate::observability::ObservabilityGuard;
 use crate::ProcessStateTracker;
@@ -120,7 +121,13 @@ async fn bootstrap_inner(
     // Step 3: Connect to NATS (if configured)
     let nats_transport = connect_nats(config).await?;
 
-    // Step 4: Initialize supervision tree
+    // Step 4: Initialize runtime-backed task execution
+    let task_service = RuntimeTaskService::bootstrap(event_bus.clone(), nats_transport.clone())
+        .await
+        .map_err(|error| format!("runtime task service bootstrap failed: {error}"))?;
+    info!("Runtime task service initialized");
+
+    // Step 5: Initialize supervision tree
     let actor_config = mister_smith_actor::ActorSystemConfig::default();
     let supervised_system = Arc::new(SupervisedSystem::with_event_bus(
         actor_config,
@@ -128,11 +135,11 @@ async fn bootstrap_inner(
     ));
     info!("Supervision tree initialized");
 
-    // Step 5: Initialize agent registry
+    // Step 6: Initialize agent registry
     let agent_registry = Arc::new(AgentRegistry::new());
     info!("Agent registry initialized");
 
-    // Step 6: Start background monitoring loops
+    // Step 7: Start background monitoring loops
     let monitor_handle = {
         let monitor = health_monitor.clone();
         let flag = shutdown_flag.clone();
@@ -150,17 +157,19 @@ async fn bootstrap_inner(
     };
     info!("Background monitors started");
 
-    // Step 7: Start HTTP server (with /metrics endpoint if prometheus enabled)
+    // Step 8: Start HTTP server (with /metrics endpoint if prometheus enabled)
     let http_handle = start_http_server(
         config,
         &shutdown_tx,
         otel_guard,
         state_tracker,
         event_bus.clone(),
+        nats_transport.clone(),
+        task_service,
     )
     .await?;
 
-    // Step 8: Mark ready
+    // Step 9: Mark ready
     state_tracker.set(ProcessLifecycle::Ready);
     let startup_duration = start.elapsed();
     info!(
@@ -229,6 +238,8 @@ async fn start_http_server(
     otel_guard: &ObservabilityGuard,
     state_tracker: &ProcessStateTracker,
     event_bus: Arc<EventBus>,
+    nats_transport: Option<Arc<NatsTransport>>,
+    task_service: Arc<RuntimeTaskService>,
 ) -> Result<Option<tokio::task::JoinHandle<()>>, Box<dyn std::error::Error + Send + Sync>> {
     let port = config.transport.http_port.unwrap_or(8080);
     let bind_address = format!("0.0.0.0:{port}");
@@ -237,7 +248,11 @@ async fn start_http_server(
         bind_address: bind_address.clone(),
         ..Default::default()
     };
-    let app_state = mister_smith_http::AppState::new();
+    let app_state = mister_smith_http::AppState::new()
+        .with_transport_health(Arc::new(mister_smith_http::server::NatsHealthCheck::new(
+            nats_transport.is_some(),
+        )))
+        .with_task_service(task_service.clone());
     let mut app = mister_smith_http::server::build_router(&http_config, app_state);
 
     // Add Kubernetes health probe endpoints
@@ -283,24 +298,45 @@ async fn start_http_server(
     info!("Health probe endpoints registered (/health/live, /health/ready)");
 
     let autonomy_bus = event_bus.clone();
+    let autonomy_task_service_for_workflows = task_service.clone();
     app = app.route(
         "/api/v1/autonomy/workflows",
         axum::routing::get(move || {
             let event_bus = autonomy_bus.clone();
-            async move { axum::Json(autonomy::workflows_from_bus(event_bus).await) }
+            let task_service = autonomy_task_service_for_workflows.clone();
+            async move {
+                let mut workflows = autonomy::workflows_from_bus(event_bus).await.workflows;
+                workflows.extend(
+                    task_service
+                        .autonomy_workflows()
+                        .into_iter()
+                        .map(|workflow_id| workflow_id.to_string()),
+                );
+                workflows.sort();
+                workflows.dedup();
+                axum::Json(autonomy::AutonomyWorkflowList { workflows })
+            }
         }),
     );
 
     let autonomy_bus = event_bus.clone();
+    let autonomy_task_service_for_status = task_service.clone();
     app = app.route(
         "/api/v1/autonomy/status/{workflow_id}",
         axum::routing::get(
             move |axum::extract::Path(workflow_id): axum::extract::Path<String>| {
                 let event_bus = autonomy_bus.clone();
+                let task_service = autonomy_task_service_for_status.clone();
                 async move {
-                    autonomy::status_from_bus(event_bus, &workflow_id)
-                        .await
-                        .map(axum::Json)
+                    match autonomy::status_from_bus(event_bus, &workflow_id).await {
+                        Ok(view) => Ok(axum::Json(view)),
+                        Err(autonomy::AutonomyStatusError::NotFound(workflow_id)) => task_service
+                            .autonomy_status(workflow_id)
+                            .await
+                            .map(axum::Json)
+                            .ok_or(autonomy::AutonomyStatusError::NotFound(workflow_id)),
+                        Err(error) => Err(error),
+                    }
                 }
             },
         ),

@@ -98,7 +98,7 @@ impl ModelProvider for OpenAiChatGptProvider {
                 return;
             }
 
-            match CodexAppServerClient::connect().await {
+            match CodexAppServerClient::connect_streaming().await {
                 Ok(mut client) => {
                     if let Err(error) = Self::ensure_authenticated(&mut client).await {
                         let _ = tx.send(Err(error)).await;

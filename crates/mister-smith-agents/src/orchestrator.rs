@@ -659,6 +659,18 @@ impl Orchestrator {
         })
     }
 
+    /// List workflow IDs that currently have recorded autonomy state.
+    pub fn autonomy_workflow_ids(&self) -> Vec<TaskId> {
+        let mut workflow_ids = self
+            .autonomy_events
+            .iter()
+            .map(|entry| *entry.key())
+            .collect::<Vec<_>>();
+        workflow_ids.sort_by_key(|workflow_id| workflow_id.to_string());
+        workflow_ids.dedup();
+        workflow_ids
+    }
+
     /// Return the latest monitor state for a workflow, when available.
     pub fn monitor_state(&self, workflow_id: &TaskId) -> Option<MonitorState> {
         self.monitor_states

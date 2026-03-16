@@ -4,8 +4,10 @@
 //! function that composes the router with middleware and starts the Axum server
 //! with graceful shutdown.
 
+use async_trait::async_trait;
 use axum::middleware as axum_mw;
 use axum::Router;
+use mister_smith_core::{AgentId, AgentType, TaskId};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -26,6 +28,52 @@ const EVENT_CHANNEL_CAPACITY: usize = 1024;
 pub trait TransportHealth: Send + Sync {
     /// Return true when the underlying transport is connected and serving traffic.
     fn is_connected(&self) -> bool;
+}
+
+/// Submission request passed from HTTP handlers into the runtime task service.
+#[derive(Debug, Clone)]
+pub struct TaskSubmissionRequest {
+    /// Goal or description submitted by the operator.
+    pub description: String,
+    /// Optional requested agent type.
+    pub agent_type: Option<AgentType>,
+    /// Optional priority label.
+    pub priority: Option<String>,
+}
+
+/// Submission response returned by the runtime task service.
+#[derive(Debug, Clone)]
+pub struct TaskSubmissionResponse {
+    /// Stable task and workflow identifier.
+    pub task_id: TaskId,
+    /// Coordinator agent selected for the run.
+    pub assigned_agent_id: AgentId,
+    /// Current root task status.
+    pub status: String,
+}
+
+/// Point-in-time task view returned by the runtime task service.
+#[derive(Debug, Clone)]
+pub struct TaskStatusView {
+    /// Stable task identifier.
+    pub task_id: TaskId,
+    /// Current persisted status.
+    pub status: String,
+    /// Final result payload when the task is terminal.
+    pub result: Option<serde_json::Value>,
+}
+
+/// Runtime execution contract for task submission and lookup.
+#[async_trait]
+pub trait TaskExecutionService: Send + Sync {
+    /// Submit a new task for runtime-backed execution.
+    async fn submit_task(
+        &self,
+        request: TaskSubmissionRequest,
+    ) -> Result<TaskSubmissionResponse, String>;
+
+    /// Look up the latest task state by its stable identifier.
+    async fn get_task(&self, task_id: TaskId) -> Result<Option<TaskStatusView>, String>;
 }
 
 /// NATS transport health check implementation backed by an atomic connection flag.
@@ -61,6 +109,8 @@ pub struct AppState {
     pub event_tx: broadcast::Sender<WsEvent>,
     /// Transport health dependency used by readiness/liveness handlers.
     pub transport_health: Arc<dyn TransportHealth>,
+    /// Optional runtime-backed task submission service.
+    pub task_service: Option<Arc<dyn TaskExecutionService>>,
     /// Optional security layer for JWT authentication.
     #[cfg(feature = "security")]
     pub security: Option<Arc<mister_smith_security::middleware::SecurityLayer>>,
@@ -73,6 +123,7 @@ impl AppState {
         Self {
             event_tx,
             transport_health: Arc::new(NatsHealthCheck::new(true)),
+            task_service: None,
             #[cfg(feature = "security")]
             security: None,
         }
@@ -84,6 +135,7 @@ impl AppState {
         Self {
             event_tx,
             transport_health: Arc::new(NatsHealthCheck::new(true)),
+            task_service: None,
             #[cfg(feature = "security")]
             security: None,
         }
@@ -92,6 +144,12 @@ impl AppState {
     /// Set a custom transport health checker implementation.
     pub fn with_transport_health(mut self, transport_health: Arc<dyn TransportHealth>) -> Self {
         self.transport_health = transport_health;
+        self
+    }
+
+    /// Set the runtime-backed task execution service.
+    pub fn with_task_service(mut self, task_service: Arc<dyn TaskExecutionService>) -> Self {
+        self.task_service = Some(task_service);
         self
     }
 

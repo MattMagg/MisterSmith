@@ -7,11 +7,11 @@
 -- Add message_id column (nullable for backward compatibility with existing rows)
 ALTER TABLE messages.records ADD COLUMN IF NOT EXISTS message_id UUID;
 
--- Unique index for deduplication. Uses NULLS NOT DISTINCT to prevent multiple
--- NULL entries (though in practice all new inserts should set message_id).
--- Partial index: only enforces uniqueness where message_id IS NOT NULL.
+-- Partition-local unique index for deduplication. PostgreSQL requires the
+-- partition key on unique indexes over partitioned tables, so include
+-- `created_at` to keep the migration valid on a range-partitioned table.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_dedup
-    ON messages.records (message_id)
+    ON messages.records (message_id, created_at)
     WHERE message_id IS NOT NULL;
 
 -- Index on correlation_id for workflow-level lookups (complements existing

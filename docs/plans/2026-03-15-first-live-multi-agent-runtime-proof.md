@@ -152,6 +152,57 @@ Validation:
 - `cargo test -p mister-smith-agents`
 - smoke procedure or script introduced by this work
 
+## March 16, 2026 Recovery Landing Status
+
+Recovered slice now re-landed on `main`:
+
+- runtime-backed `POST /api/v1/tasks` and `GET /api/v1/tasks/{task_id}` now flow through a real
+  execution service instead of returning placeholder task state
+- autonomy inspection now falls back to the runtime-backed task service when the event bus does not
+  yet hold workflow state
+- the recovered `openai_chatgpt` app-server fix separates streaming from non-streaming notification
+  handling so the real provider-backed path can run cleanly
+- the recovered persistence fixes for migrations `00002` through `00005` were required before a
+  fresh Postgres database could cold-start successfully
+
+Selected Tier 2 provider/model for the recovered proof:
+
+- provider: `openai_chatgpt`
+- model: `gpt-5.4`
+
+Local March 16 evidence:
+
+- `cargo build -p mister-smith-http -p mister-smith-llm -p mister-smith-app`
+- `cargo test -p mister-smith-app`
+- `cargo test -p mister-smith-http`
+- `cargo test -p mister-smith-llm --test app_server_tests --test openai_provider_tests`
+- `cargo run -q -p mister-smith-app -- auth openai-chatgpt status`
+- `env DATABASE_URL='postgres://mistersmith:mistersmith_dev@127.0.0.1:5433/mistersmith_runtime_slice3' MISTER_SMITH_TRANSPORT__NATS_URL='nats://127.0.0.1:4223' cargo run -q -p mister-smith-app -- run`
+- `curl -sS -X POST http://127.0.0.1:8080/api/v1/tasks -H 'content-type: application/json'`
+  `-d '{"description":"Create a concise runtime readiness brief by splitting the work into two`
+  `parallel tracks: one worker analyzes bootstrap and infrastructure startup, one worker analyzes`
+  `HTTP task submission and autonomy visibility, then synthesize the findings into one final`
+  `answer.","priority":"high"}'`
+- `cargo run -q -p mister-smith-app -- autonomy list --base-url http://127.0.0.1:8080`
+- `cargo run -q -p mister-smith-app -- autonomy status --workflow-id cc209240-cfc6-4232-b159-b8de21b2a55e --base-url http://127.0.0.1:8080`
+
+Observed results:
+
+- runtime startup logged `Runtime task execution service ready` with `provider_kind=openai_chatgpt`
+  and `model_id=gpt-5.4`
+- the submitted workflow `cc209240-cfc6-4232-b159-b8de21b2a55e` was accepted, appeared in
+  `autonomy list`, and reached a terminal completed topology
+- runtime logs showed parallel worker execution followed by join and completion on the selected real
+  provider/model
+
+What this does and does not prove:
+
+- this is honest Tier 2 local runtime evidence for the recovered task-only path on `main`
+- this does not yet satisfy the broader Tier 1 requirement in this plan, because no provider-neutral
+  `MockProvider` proof or repeatable smoke harness was added in this recovery slice
+- session-oriented recovery work, including migration `00006`, remains deferred to the later Spec
+  013 slice
+
 ## Stop Conditions
 
 - Stop and narrow scope if the current HTTP route cannot honestly map to the runtime without a much

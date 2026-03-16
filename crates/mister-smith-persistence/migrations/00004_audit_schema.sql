@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 -- Create audit log partitions: current month + 3 months ahead
 SELECT create_monthly_partition('public', 'audit_log', CURRENT_DATE);
-SELECT create_monthly_partition('public', 'audit_log', CURRENT_DATE + INTERVAL '1 month');
-SELECT create_monthly_partition('public', 'audit_log', CURRENT_DATE + INTERVAL '2 months');
-SELECT create_monthly_partition('public', 'audit_log', CURRENT_DATE + INTERVAL '3 months');
+SELECT create_monthly_partition('public', 'audit_log', (CURRENT_DATE + INTERVAL '1 month')::DATE);
+SELECT create_monthly_partition('public', 'audit_log', (CURRENT_DATE + INTERVAL '2 months')::DATE);
+SELECT create_monthly_partition('public', 'audit_log', (CURRENT_DATE + INTERVAL '3 months')::DATE);
 
 -- Audit log indexes
 CREATE INDEX IF NOT EXISTS idx_audit_agent_created ON audit_log (agent_id, created_at);

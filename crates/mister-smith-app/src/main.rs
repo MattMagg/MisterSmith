@@ -9,6 +9,7 @@ mod bootstrap;
 #[allow(dead_code)]
 mod bridges;
 mod config;
+mod execution;
 mod observability;
 mod shutdown;
 

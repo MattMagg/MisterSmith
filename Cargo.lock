@@ -1825,6 +1825,7 @@ name = "mister-smith-app"
 version = "0.1.0"
 dependencies = [
  "async-nats",
+ "async-trait",
  "axum",
  "chrono",
  "clap",
