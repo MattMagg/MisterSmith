@@ -206,6 +206,30 @@ Remaining recovery scope after this slice:
   `specs/013-multi-turn-same-agent-conversations/`
 - shared overlap files still tied to the unreconciled session stream
 
+### Slice 3: Spec 013 Docs And Packet
+
+Status: ready to land on `main`
+
+Scope:
+
+- import the recovered SpecKit packet under `specs/013-multi-turn-same-agent-conversations/`
+- import the companion plan note
+- correct the companion note so it distinguishes recovered implementation evidence from code that
+  is already ported onto `main`
+
+Validation:
+
+- `npx markdownlint-cli2 docs/plans/2026-03-16-multi-turn-same-agent-conversations.md 'specs/013-multi-turn-same-agent-conversations/**/*.md' --config .markdownlint.json`
+
+Validation result:
+
+- passed on `main`
+
+Next action after this slice:
+
+- port the bounded session code path from `codex/recovery-20260316` onto `main`, then validate the
+  session crate/test bundle before attempting any live two-turn proof
+
 ## Stop Condition
 
 Stop the progressive landing flow if the next slice cannot be separated without high-risk
