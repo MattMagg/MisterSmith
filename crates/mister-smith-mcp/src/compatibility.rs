@@ -934,10 +934,7 @@ impl SmithCompatibilityServer {
         Ok(parse_linear_issue(issue))
     }
 
-    async fn linear_issue_relation_create(
-        &self,
-        input: serde_json::Value,
-    ) -> Result<(), String> {
+    async fn linear_issue_relation_create(&self, input: serde_json::Value) -> Result<(), String> {
         let data = self
             .linear_graphql(
                 LINEAR_ISSUE_RELATION_CREATE_MUTATION,
@@ -2320,7 +2317,9 @@ impl SmithCompatibilityServer {
             .iter()
             .find(|issue| issue_is_honest_refill_candidate(issue))
         {
-            let candidate_context = self.load_issue_execution_context(&candidate.identifier).await?;
+            let candidate_context = self
+                .load_issue_execution_context(&candidate.identifier)
+                .await?;
             let candidate_plan = build_queue_stage_plan(
                 candidate_context.issue.as_ref(),
                 candidate_context.workpad.as_ref(),
@@ -2336,7 +2335,10 @@ impl SmithCompatibilityServer {
                 ));
             } else {
                 suggested_actions.extend(candidate_plan.required_fixes.iter().map(|fix| {
-                    format!("{} must be fixed before honest staging: {fix}", candidate.identifier)
+                    format!(
+                        "{} must be fixed before honest staging: {fix}",
+                        candidate.identifier
+                    )
                 }));
             }
         }
@@ -3178,11 +3180,17 @@ impl SmithCompatibilityServer {
 
             let mut issue_params = serde_json::Map::new();
             if let Some(identifier) = issue_identifier.clone() {
-                issue_params.insert("issue_identifier".to_string(), serde_json::json!(identifier));
+                issue_params.insert(
+                    "issue_identifier".to_string(),
+                    serde_json::json!(identifier),
+                );
             }
             issue_params.insert("title".to_string(), serde_json::json!(title));
             issue_params.insert("description".to_string(), serde_json::json!(description));
-            issue_params.insert("project".to_string(), serde_json::json!("MisterSmith Validated Backlog"));
+            issue_params.insert(
+                "project".to_string(),
+                serde_json::json!("MisterSmith Validated Backlog"),
+            );
             issue_params.insert("state".to_string(), serde_json::json!("Backlog"));
             issue_params.insert(
                 "parent_identifier".to_string(),
@@ -3484,7 +3492,9 @@ impl SmithCompatibilityServer {
             .iter()
             .find(|project| project_slug_matches(workflow.project_slug.as_deref(), &project.slug))
             .map(|project| project.slug.clone())
-            .ok_or_else(|| McpError::ToolCallFailed("watched Linear project could not be resolved".to_string()))?;
+            .ok_or_else(|| {
+                McpError::ToolCallFailed("watched Linear project could not be resolved".to_string())
+            })?;
 
         let saved_issue = parse_tool_response::<LinearIssueSaveResult>(
             self.save_linear_issue(serde_json::json!({
@@ -3579,7 +3589,10 @@ impl SmithCompatibilityServer {
             summary: if resolution.issue.is_some() {
                 format!("resolved lifecycle for {}", resolution.issue_identifier)
             } else {
-                format!("could not resolve lifecycle for {}", resolution.issue_identifier)
+                format!(
+                    "could not resolve lifecycle for {}",
+                    resolution.issue_identifier
+                )
             },
             evidence: vec![EvidenceItem {
                 label: "issue_identifier".to_string(),
@@ -3691,9 +3704,11 @@ impl SmithCompatibilityServer {
             "Keep execution grounded in the active issue, the durable workpad, and current repo contracts.".to_string(),
         ];
         let validation_requirements = vec![
-            "Run the narrowest deterministic validation that proves the touched behavior.".to_string(),
+            "Run the narrowest deterministic validation that proves the touched behavior."
+                .to_string(),
             "Record concrete commands and outcomes back into the durable workpad path.".to_string(),
-            "Escalate to real queue proof only when the slice is safe for unattended execution.".to_string(),
+            "Escalate to real queue proof only when the slice is safe for unattended execution."
+                .to_string(),
         ];
         let stop_conditions = vec![
             "Stop for missing auth, missing required tooling, or a true repo contract conflict.".to_string(),
@@ -3702,14 +3717,19 @@ impl SmithCompatibilityServer {
         let definition_of_done = vec![
             "Requested slice is implemented or the blocker is explicitly recorded.".to_string(),
             "Validation evidence is captured in the workpad.".to_string(),
-            "Any necessary follow-up is tracked through the same Smith-owned issue/workpad path.".to_string(),
+            "Any necessary follow-up is tracked through the same Smith-owned issue/workpad path."
+                .to_string(),
         ];
         let current_context = format!(
             "Issue: {} - {}\nState: {}\nProject: {}\nDescription:\n{}\n\nCurrent workpad:\n{}",
             issue.identifier,
             issue.title,
             state_name(&issue).unwrap_or("unknown"),
-            issue.project.as_ref().map(|project| project.name.as_str()).unwrap_or("unassigned"),
+            issue
+                .project
+                .as_ref()
+                .map(|project| project.name.as_str())
+                .unwrap_or("unassigned"),
             issue.description.clone().unwrap_or_default(),
             context
                 .workpad
@@ -3781,14 +3801,14 @@ impl SmithCompatibilityServer {
             ));
         };
 
-        let outcome_status = string_param(&params, "outcome_status")
-            .unwrap_or_else(|| "completed".to_string());
+        let outcome_status =
+            string_param(&params, "outcome_status").unwrap_or_else(|| "completed".to_string());
         let evidence = string_array_param(&params, "evidence").unwrap_or_default();
         let validation = string_array_param(&params, "validation").unwrap_or_default();
         let next_recommended_action = string_param(&params, "next_recommended_action")
             .unwrap_or_else(|| "review_merge_dispatch_cycle".to_string());
-        let target_state = string_param(&params, "target_state")
-            .or_else(|| string_param(&params, "state"));
+        let target_state =
+            string_param(&params, "target_state").or_else(|| string_param(&params, "state"));
 
         let context = self.load_issue_execution_context(&identifier).await?;
         let existing_workpad = context
@@ -3801,11 +3821,8 @@ impl SmithCompatibilityServer {
             render_bullet_block("Evidence", &evidence),
             render_bullet_block("Validation", &validation),
         );
-        let merged_body = upsert_markdown_section(
-            &existing_workpad,
-            "## Ralph Outcome",
-            &outcome_section,
-        );
+        let merged_body =
+            upsert_markdown_section(&existing_workpad, "## Ralph Outcome", &outcome_section);
         let workpad_response = parse_tool_response::<LinearWorkpadSaveResult>(
             self.save_issue_workpad(serde_json::json!({
                 "issue_identifier": identifier,
@@ -3900,7 +3917,13 @@ impl SmithCompatibilityServer {
             .unwrap_or(false)
             || contains_any(
                 &combined_text.to_lowercase(),
-                &["speckit", "spec", "task pack", "tasks.md", "acceptance criteria"],
+                &[
+                    "speckit",
+                    "spec",
+                    "task pack",
+                    "tasks.md",
+                    "acceptance criteria",
+                ],
             );
         let mut source_docs = vec![
             self.options
@@ -3934,7 +3957,10 @@ impl SmithCompatibilityServer {
         };
         let next_command_hint = if should_use_speckit {
             if let Some(feature_dir) = feature_dir_string.as_deref() {
-                format!("Run the repo-local SpecKit plan/tasks flow for {}", feature_dir)
+                format!(
+                    "Run the repo-local SpecKit plan/tasks flow for {}",
+                    feature_dir
+                )
             } else {
                 "Resolve the feature directory before running the SpecKit tasks flow".to_string()
             }
@@ -3978,7 +4004,8 @@ impl SmithCompatibilityServer {
         let feature_dir = string_param(&params, "feature_dir")
             .or_else(|| string_param(&params, "feature_directory"))
             .map(|raw| resolve_repo_path(&self.options.repo_root, &raw));
-        let tasks_path = string_param(&params, "tasks_path").map(|raw| resolve_repo_path(&self.options.repo_root, &raw));
+        let tasks_path = string_param(&params, "tasks_path")
+            .map(|raw| resolve_repo_path(&self.options.repo_root, &raw));
         let resolved_tasks_path = tasks_path
             .clone()
             .or_else(|| feature_dir.clone().map(|path| path.join("tasks.md")));
@@ -4019,12 +4046,19 @@ impl SmithCompatibilityServer {
         let apply_requested = bool_param(&params, "apply");
         let packet_summary = translated_slices
             .first()
-            .map(|_| format!(
-                "Translated {} bounded slice(s) from {}",
-                translated_slices.len(),
-                resolved_tasks_path.display()
-            ))
-            .unwrap_or_else(|| format!("No bounded slices were derived from {}", resolved_tasks_path.display()));
+            .map(|_| {
+                format!(
+                    "Translated {} bounded slice(s) from {}",
+                    translated_slices.len(),
+                    resolved_tasks_path.display()
+                )
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "No bounded slices were derived from {}",
+                    resolved_tasks_path.display()
+                )
+            });
 
         let materialization = if apply_requested {
             let parent_issue_identifier = string_param(&params, "parent_issue_identifier")
@@ -4033,7 +4067,10 @@ impl SmithCompatibilityServer {
                 return json_response(blocked_response(
                     "parent_issue_identifier is required when apply=true",
                     vec!["materialize_backlog_slices".to_string()],
-                    vec!["provide the parent issue identifier before applying translated slices".to_string()],
+                    vec![
+                        "provide the parent issue identifier before applying translated slices"
+                            .to_string(),
+                    ],
                     SpecKitTranslation {
                         feature_dir: feature_dir.as_ref().map(|path| path.display().to_string()),
                         tasks_path: resolved_tasks_path.display().to_string(),
@@ -4077,7 +4114,9 @@ impl SmithCompatibilityServer {
                         recommended_next_tools: materialized.recommended_next_tools,
                         blocking_issues: materialized.blocking_issues,
                         data: SpecKitTranslation {
-                            feature_dir: feature_dir.as_ref().map(|path| path.display().to_string()),
+                            feature_dir: feature_dir
+                                .as_ref()
+                                .map(|path| path.display().to_string()),
                             tasks_path: resolved_tasks_path.display().to_string(),
                             apply_requested,
                             packet_summary,
@@ -5540,14 +5579,20 @@ pub async fn build_smith_compatibility_server(
         "Decide whether work should enter SpecKit and return the repo-local context packet.",
         object_schema(
             &[
-                ("request_text", string_schema("Optional request text to classify")),
+                (
+                    "request_text",
+                    string_schema("Optional request text to classify"),
+                ),
                 ("request", string_schema("Alias for request_text")),
                 (
                     "issue_identifier",
                     string_schema("Optional issue identifier for context"),
                 ),
                 ("identifier", string_schema("Alias for issue_identifier")),
-                ("feature_dir", string_schema("Optional absolute or repo-relative feature directory")),
+                (
+                    "feature_dir",
+                    string_schema("Optional absolute or repo-relative feature directory"),
+                ),
                 ("feature_directory", string_schema("Alias for feature_dir")),
             ],
             &[],
@@ -6066,8 +6111,9 @@ fn parse_tool_response<T>(value: serde_json::Value) -> Result<ToolResponse<T>, M
 where
     T: DeserializeOwned,
 {
-    serde_json::from_value(value)
-        .map_err(|err| McpError::SerializationError(format!("failed to parse tool response: {err}")))
+    serde_json::from_value(value).map_err(|err| {
+        McpError::SerializationError(format!("failed to parse tool response: {err}"))
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -6656,7 +6702,10 @@ fn workpad_status(workpad: Option<&LinearWorkpadSnapshot>) -> String {
     }
 }
 
-fn queue_project_role(issue: Option<&LinearIssueSnapshot>, configured_slug: Option<&str>) -> String {
+fn queue_project_role(
+    issue: Option<&LinearIssueSnapshot>,
+    configured_slug: Option<&str>,
+) -> String {
     let Some(issue) = issue else {
         return "unknown".to_string();
     };
@@ -6679,7 +6728,8 @@ fn queue_project_role(issue: Option<&LinearIssueSnapshot>, configured_slug: Opti
 }
 
 fn blocker_summaries(issue: &LinearIssueSnapshot, workflow: &WorkflowSummary) -> Vec<String> {
-    issue.blocked_by
+    issue
+        .blocked_by
         .iter()
         .filter_map(|blocker| {
             let state = blocker.state.as_deref().unwrap_or("unknown");
@@ -6700,7 +6750,9 @@ fn lifecycle_review_state(
         Some("Human Review") => "awaiting_human_review".to_string(),
         Some("Rework") => "rework".to_string(),
         Some("Merging") => "merge_ready".to_string(),
-        Some("In Progress") if !matching_pull_requests.is_empty() => "pull_request_open".to_string(),
+        Some("In Progress") if !matching_pull_requests.is_empty() => {
+            "pull_request_open".to_string()
+        }
         Some("In Progress") => "active_execution".to_string(),
         Some("Todo") => "ready_for_dispatch".to_string(),
         Some("Backlog") => "backlog".to_string(),
@@ -6750,7 +6802,8 @@ fn build_issue_lifecycle_resolution(
     if workpad_status_value == "duplicate" {
         required_mutations.push("consolidate_duplicate_codex_workpads".to_string());
     }
-    if queue_role == "validated_backlog" && !issue_value.labels.iter().any(|label| label == "Validated")
+    if queue_role == "validated_backlog"
+        && !issue_value.labels.iter().any(|label| label == "Validated")
     {
         required_mutations.push("apply_validated_label".to_string());
     }
@@ -6765,7 +6818,9 @@ fn build_issue_lifecycle_resolution(
 
     let next_recommended_action = match state_name(&issue_value) {
         Some("Backlog") if workpad_status_value != "present" => "save_issue_workpad".to_string(),
-        Some("Backlog") if !blocker_details.is_empty() => "resolve_blockers_before_staging".to_string(),
+        Some("Backlog") if !blocker_details.is_empty() => {
+            "resolve_blockers_before_staging".to_string()
+        }
         Some("Backlog") if queue_role == "validated_backlog" => "plan_queue_stage".to_string(),
         Some("Todo") => "move_issue_to_in_progress".to_string(),
         Some("In Progress") => "continue_execution".to_string(),
@@ -6832,7 +6887,8 @@ fn build_queue_stage_plan(
     let blocker_details = blocker_summaries(issue, workflow);
     let mut required_fixes = Vec::new();
     if queue_role != "validated_backlog" {
-        required_fixes.push("issue must be in MisterSmith Validated Backlog before staging".to_string());
+        required_fixes
+            .push("issue must be in MisterSmith Validated Backlog before staging".to_string());
     }
     if state_name(issue) != Some("Backlog") {
         required_fixes.push("issue must be in Backlog before staging".to_string());
@@ -6840,14 +6896,19 @@ fn build_queue_stage_plan(
     if !issue.labels.iter().any(|label| label == "Validated") {
         required_fixes.push("issue must carry the Validated label".to_string());
     }
-    if !issue.labels.iter().any(|label| label == "Symphony Candidate") {
+    if !issue
+        .labels
+        .iter()
+        .any(|label| label == "Symphony Candidate")
+    {
         required_fixes.push("issue must carry the Symphony Candidate label".to_string());
     }
     if workpad_status_value == "missing" {
         required_fixes.push("issue needs a durable ## Codex Workpad before staging".to_string());
     }
     if workpad_status_value == "duplicate" {
-        required_fixes.push("issue has duplicate top-level Codex workpads to reconcile".to_string());
+        required_fixes
+            .push("issue has duplicate top-level Codex workpads to reconcile".to_string());
     }
     if !blocker_details.is_empty() {
         required_fixes.push(format!(
@@ -7001,7 +7062,10 @@ fn translate_speckit_task_markdown(markdown: &str) -> Vec<TranslatedSpecKitSlice
     let mut translated = Vec::new();
     let mut prior_titles = Vec::<String>::new();
     for (heading, lines) in sections {
-        if heading.to_ascii_lowercase().contains("explicitly out of scope") {
+        if heading
+            .to_ascii_lowercase()
+            .contains("explicitly out of scope")
+        {
             continue;
         }
         let tasks = lines
@@ -7423,7 +7487,8 @@ apps = true
 
     #[test]
     fn upsert_markdown_section_replaces_existing_section() {
-        let body = "## Codex Workpad\n\n- [ ] Existing\n\n## Ralph Outcome\n\nold\n\n## Notes\n\nkeep";
+        let body =
+            "## Codex Workpad\n\n- [ ] Existing\n\n## Ralph Outcome\n\nold\n\n## Notes\n\nkeep";
         let updated = upsert_markdown_section(
             body,
             "## Ralph Outcome",
@@ -7446,11 +7511,10 @@ apps = true
         let translated = translate_speckit_task_markdown(&tasks);
 
         assert!(translated.len() >= 4);
-        assert!(translated[0].title.starts_with("SpecKit: Foundational Tasks"));
-        assert_eq!(
-            translated[1].blocked_by,
-            vec![translated[0].title.clone()]
-        );
+        assert!(translated[0]
+            .title
+            .starts_with("SpecKit: Foundational Tasks"));
+        assert_eq!(translated[1].blocked_by, vec![translated[0].title.clone()]);
         assert!(translated[0].description.contains("T001"));
         assert!(translated[0].description.contains("### Tasks"));
     }
@@ -7868,18 +7932,12 @@ apps = true
             .iter()
             .any(|tool| tool.name == "materialize_backlog_slices"));
         assert!(tools.iter().any(|tool| tool.name == "plan_queue_stage"));
-        assert!(tools
-            .iter()
-            .any(|tool| tool.name == "apply_queue_stage"));
+        assert!(tools.iter().any(|tool| tool.name == "apply_queue_stage"));
         assert!(tools
             .iter()
             .any(|tool| tool.name == "resolve_issue_lifecycle"));
-        assert!(tools
-            .iter()
-            .any(|tool| tool.name == "prepare_ralph_packet"));
-        assert!(tools
-            .iter()
-            .any(|tool| tool.name == "record_ralph_outcome"));
+        assert!(tools.iter().any(|tool| tool.name == "prepare_ralph_packet"));
+        assert!(tools.iter().any(|tool| tool.name == "record_ralph_outcome"));
         assert!(tools
             .iter()
             .any(|tool| tool.name == "prepare_speckit_context"));
@@ -8110,30 +8168,33 @@ apps = true
             .await
             .unwrap();
         assert!(!speckit_context.is_error.unwrap_or(false));
-        assert!(speckit_context.structured_content.as_ref().unwrap()["data"]["should_use_speckit"]
-            .as_bool()
-            .unwrap());
+        assert!(
+            speckit_context.structured_content.as_ref().unwrap()["data"]["should_use_speckit"]
+                .as_bool()
+                .unwrap()
+        );
 
         let translation = peer
-            .call_tool(CallToolRequestParams::new(
-                "translate_speckit_tasks".to_string(),
+            .call_tool(
+                CallToolRequestParams::new("translate_speckit_tasks".to_string()).with_arguments(
+                    serde_json::json!({
+                        "feature_dir": "specs/013-multi-turn-same-agent-conversations",
+                        "apply": false
+                    })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+                ),
             )
-            .with_arguments(
-                serde_json::json!({
-                    "feature_dir": "specs/013-multi-turn-same-agent-conversations",
-                    "apply": false
-                })
-                .as_object()
-                .cloned()
-                .unwrap(),
-            ))
             .await
             .unwrap();
         assert!(!translation.is_error.unwrap_or(false));
-        assert!(translation.structured_content.as_ref().unwrap()["data"]["translated_slices"]
-            .as_array()
-            .map(|slices| !slices.is_empty())
-            .unwrap_or(false));
+        assert!(
+            translation.structured_content.as_ref().unwrap()["data"]["translated_slices"]
+                .as_array()
+                .map(|slices| !slices.is_empty())
+                .unwrap_or(false)
+        );
     }
 
     #[tokio::test]
@@ -8254,10 +8315,7 @@ apps = true
             .await
             .unwrap();
 
-        assert!(matches!(
-            result["status"].as_str(),
-            Some("ok" | "degraded")
-        ));
+        assert!(matches!(result["status"].as_str(), Some("ok" | "degraded")));
         assert!(!result["data"]["issue_identifier"]
             .as_str()
             .unwrap_or_default()
