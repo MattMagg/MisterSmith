@@ -79,6 +79,9 @@ For markdown linting:
 
 - Conventional commits with scope: `feat(llm):`, `fix(agents):`, `docs:`, `chore:`, `style:`
 - Keep commits atomic and scoped to one concern
+- Do not end a workflow or handoff with uncommitted or untracked repository changes; review
+  leftovers immediately and either land them on a branch/PR or drop them only after verifying they
+  are already landed or stale
 - PRs should include: concise problem/solution summary, touched files, validation commands run
 - PR references use `(#NNN)` suffix
 

@@ -241,6 +241,9 @@ matthewtmaggio/ms-<number>-<slug>
 ```
 
 Include `MS-###` in commit messages and PR titles to link them to Linear issues.
+No Symphony execution should finish with local uncommitted or untracked changes. Leftovers must be
+reviewed, landed on a branch/PR if valid, or explicitly dropped after verifying they are already
+landed or stale.
 
 ## Statuses
 
@@ -270,7 +273,8 @@ In Review → Done (PR merged)
 
 With GitHub integration, branch creation should move to `In Progress`, PR open/review-requested
 should move Symphony issues to `Human Review`, review-complete work should move to `Merging`, and
-merge to `main` should move to `Done`.
+merge to `main` should move to `Done`, but only after the issue workspace has been reconciled back
+to a clean local checkpoint.
 
 ### Status Transitions (Symphony)
 
@@ -457,10 +461,13 @@ is `Todo`.
 
 - **Todo → In Progress**: Symphony picks up the issue, spawns a Codex agent
 - **In Progress → Human Review**: Agent opens a PR and requests review
+- **Human Review gate**: PR branch must already be pushed and the workspace must pass the clean
+  closure check
 - **Human Review → Merging**: Delegated agent review or external reviewer approval completes
 - **Human Review → Rework**: Reviewer or delegated agent requests changes; agent restarts
 - **Rework → In Progress**: Agent re-reads feedback, creates fresh plan
-- **Merging → Done**: Agent lands the PR merge via the `land` skill
+- **Merging → Done**: Agent lands the PR merge via the `land` skill and restores the issue
+  workspace to a clean `origin/main` checkpoint
 
 ### Configuration
 

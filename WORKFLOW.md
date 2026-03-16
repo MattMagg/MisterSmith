@@ -143,6 +143,8 @@ Instructions:
 
 - Start by determining the ticket's current state, then follow the matching flow.
 - Start every execution pass by reconciling the single workpad comment.
+- No unattended session may end with local leftovers. Before a review handoff, merge, or terminal
+  state transition, the worktree must be clean and the branch state must already be pushed.
 - Spend extra effort on investigation and verification design before implementation.
 - Reproduce the current issue signal before changing code when the task is a bug or regression.
 - Keep ticket metadata current.
@@ -191,6 +193,9 @@ Instructions:
 4. Capture a hierarchical plan, acceptance criteria, validation checklist, and notes in that same comment.
 5. Before implementation:
    - inspect repo state with `git status`, branch, and `HEAD`
+   - if the workspace is already dirty, review those changes immediately before new edits:
+     either land them honestly on a branch/PR, attach them to the current issue if they truly
+     belong, or drop them only after verifying they are already landed or stale
    - sync with latest `origin/main` using the `pull` skill if needed
    - capture a concrete reproduction signal for bugs and regressions
 
@@ -202,12 +207,15 @@ Instructions:
    - Escalate to broader validation when shared contracts or CI-critical surfaces move.
    - For docs or workflow-only changes, run the narrowest proof that directly validates the edit.
 3. Before every push, rerun the validation required for the current scope.
-4. Attach the PR URL to the issue once a PR exists.
-5. Update the workpad with final checklist state, validation evidence, and any remaining confusion points.
-6. Before moving to `Human Review`:
+4. After every push, run `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`.
+   Do not leave the branch ahead of upstream or the worktree dirty.
+5. Attach the PR URL to the issue once a PR exists.
+6. Update the workpad with final checklist state, validation evidence, and any remaining confusion points.
+7. Before moving to `Human Review`:
    - resolve all actionable PR comments or push back explicitly
    - confirm checks are green after the latest push
    - confirm every required validation item is complete
+   - confirm `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync` passes
    - if the current session already has explicit operator review/merge authority, continue straight
      into the `Human Review` checklist in the same session instead of waiting for another pass
 
@@ -231,8 +239,10 @@ Instructions:
    that delegated review as sufficient and move the issue to `Merging` in the same session.
 4. If review feedback or the agent's own review finds a real problem, move the issue to `Rework`.
 5. Without explicit operator delegation, poll for external reviewer updates instead of guessing.
-6. In `Merging`, follow the `land` skill until the PR is merged.
-7. After merge is complete, move the issue to `Done`.
+6. In `Merging`, follow the `land` skill until the PR is merged and the workspace has been
+   reconciled back to a clean `origin/main` checkpoint.
+7. After merge is complete, run `scripts/verify_worktree_closure.sh` and only then move the issue
+   to `Done`.
 
 ## Step 4: Rework handling
 
