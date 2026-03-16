@@ -28,6 +28,10 @@ on:
 env:
   STRICT_MODE: ${{ github.event.inputs.strict_mode || false }}
 
+concurrency:
+  group: docs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Markdown formatting and linting
   markdown-lint:

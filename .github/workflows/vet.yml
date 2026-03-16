@@ -3,6 +3,17 @@ name: Vet
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, ready_for_review]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'scripts/**'
+      - '.vet/**'
+      - '.github/workflows/vet.yml'
+
+concurrency:
+  group: vet-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -10,7 +21,7 @@ permissions:
 
 jobs:
   vet:
-    if: github.event.pull_request.draft == false
+    if: github.event.pull_request.draft == false && github.actor != 'dependabot[bot]' && secrets.OPENAI_API_KEY != ''
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

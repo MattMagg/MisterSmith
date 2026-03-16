@@ -8,14 +8,18 @@ jobs.
 
 ### Core automation
 
-- `ci.yml`: Required Rust CI for pushes and pull requests targeting `main`.
+- `ci.yml`: Required Rust CI for code-changing pushes and pull requests
+  targeting `main`. It is intentionally scoped away from docs-only and
+  release-note-only changes, and it cancels superseded runs for the same PR.
 - `vet.yml`: Pull-request review workflow that runs `imbue-ai/vet` with the
   repository's `.vet/configs.toml` CI profile and posts findings back to the
-  PR.
+  PR. It is scoped to code-changing PRs, skips Dependabot, and skips cleanly
+  when `OPENAI_API_KEY` is unavailable.
 - `claude.yml`: On-demand Claude assistant for `@claude` issue and pull request
   interactions using `anthropics/claude-code-action@v1`.
-- `claude-code-review.yml`: Automatic Claude review on pull request updates using
-  the same OAuth-backed action.
+- `claude-code-review.yml`: Automatic Claude review on code-changing pull
+  request updates using the same OAuth-backed action. It skips Dependabot and
+  cancels superseded runs for the same PR.
 - `pr-labeler.yml`: Automatic pull request labeling based on changed files and
   branch patterns.
 - `release-drafter.yml`: Maintains a draft release on `main` so release notes
@@ -56,6 +60,9 @@ the old `CLAUDE_ACCESS_TOKEN`, `CLAUDE_REFRESH_TOKEN`, `CLAUDE_EXPIRES_AT`, and
 - The Rust CI is the repository's primary enforcement workflow.
 - Vet adds LLM-based PR review on top of CI instead of replacing compile/test
   validation.
+- `Human Review` remains the native Symphony state name, but delegated-agent
+  review may satisfy that checkpoint when the operator has already granted
+  review-and-merge authority in the active session.
 - The documentation workflows are still scoped to the `spec/` corpus.
 - Claude automation now uses a single authentication approach based on
   `CLAUDE_CODE_OAUTH_TOKEN` rather than maintaining two competing action

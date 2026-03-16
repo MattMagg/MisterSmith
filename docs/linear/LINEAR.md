@@ -18,22 +18,19 @@ Initiative (strategic goal)
 ### Initiatives
 
 Use initiatives as the strategic layer, not as Symphony's dispatch boundary. Historical initiatives
-remain useful for reporting and status updates, but the current forward direction is `WinYear`,
-the program that turns Mister Smith from a validated substrate into a differentiated orchestration
-operating system.
+remain useful for reporting and status updates, but the current forward direction is the
+post-recovery operating-system work captured in `docs/plans/2026-03-16-frontier-direction.md`.
 
 ### Current Strategy
 
-- `WinYear` is the active strategic direction for new operating-system work after the March 16
-  recovery landings.
-- `MS-45` through `MS-48` are the current WinYear backlog epics; keep them in `Backlog` until the
-  next execution cycle explicitly stages bounded slices.
-- `MisterSmith Validated Backlog` should hold the next WinYear epics in `Backlog` until they are
-  explicitly staged.
-- Do not move WinYear issues into the watched queue just to keep Symphony busy. Stage only the
-  next bounded runnable slice.
+- `MS-45` through `MS-48` are the current post-recovery operating-system backlog epics; keep them
+  in `Backlog` until the next execution cycle explicitly stages bounded slices.
+- `MisterSmith Validated Backlog` should hold these epics in `Backlog` until they are explicitly
+  staged.
+- Do not move these issues into the watched queue just to keep Symphony busy. Stage only the next
+  bounded runnable slice.
 - The current repo-owned direction note is
-  `docs/plans/2026-03-16-winyear-frontier-direction.md`.
+  `docs/plans/2026-03-16-frontier-direction.md`.
 
 ### Projects
 
@@ -70,7 +67,9 @@ project and in active workflow states can dispatch. Project placement is therefo
 decorative.
 
 `Human Review` is a real workflow state, but it is intentionally not part of Symphony's
-`active_states` because review handoff is not dispatch-active work.
+`active_states` because review handoff is not dispatch-active work. Keep the native state name,
+but do not require a second human hop when the active Codex session already has explicit operator
+authority to review and merge.
 
 Do not collapse all planning into a single giant `MisterSmith` project just to satisfy that current
 runtime limitation. If project switching becomes the real bottleneck, prefer a dedicated execution
@@ -252,9 +251,9 @@ Include `MS-###` in commit messages and PR titles to link them to Linear issues.
 | Todo | unstarted | Unblocked work in the watched project, ready to start |
 | In Progress | started | Actively being worked on |
 | In Review | started | Optional human-only review state; avoid using it for the Symphony path |
-| Human Review | started | Agent finished, awaiting human approval (Symphony) |
+| Human Review | started | Native Symphony review checkpoint; delegated-agent review may satisfy it when the operator has already granted authority |
 | Rework | started | Reviewer requested changes, agent restarts (Symphony) |
-| Merging | started | PR approved, agent lands the merge (Symphony) |
+| Merging | started | Review is complete, agent lands the merge (Symphony) |
 | Done | completed | Merged and verified |
 | Duplicate | canceled | Duplicate of another issue |
 | Canceled | canceled | Will not be done |
@@ -270,7 +269,7 @@ In Review → Done (PR merged)
 ```
 
 With GitHub integration, branch creation should move to `In Progress`, PR open/review-requested
-should move Symphony issues to `Human Review`, ready-to-merge work should move to `Merging`, and
+should move Symphony issues to `Human Review`, review-complete work should move to `Merging`, and
 merge to `main` should move to `Done`.
 
 ### Status Transitions (Symphony)
@@ -278,8 +277,8 @@ merge to `main` should move to `Done`.
 ```
 Todo → In Progress (agent picks up issue)
 In Progress → Human Review (agent opens PR, requests review)
-Human Review → Merging (reviewer approves)
-Human Review → Rework (reviewer requests changes)
+Human Review → Merging (delegated agent or reviewer completes review)
+Human Review → Rework (reviewer or delegated agent requests changes)
 Rework → In Progress (agent restarts with feedback)
 Merging → Done (agent lands PR merge)
 ```
@@ -303,7 +302,9 @@ Linear documents are used for reference material linked to projects:
 | Phase 9.1 Security Hardening Spec | Phase 9.1 | Security hardening specification |
 | Research Corpus Index | MisterSmith Workspace Docs | Research program navigation |
 
-Documents require a project link. For cross-cutting documents, link them to `MisterSmith Workspace Docs` as the general-purpose project. Historical phase-specific specs can stay attached to their archived phase projects.
+Documents require a project link. For cross-cutting documents, link them to
+`MisterSmith Workspace Docs` as the general-purpose project. Historical
+phase-specific specs can stay attached to their archived phase projects.
 
 ## Templates
 
@@ -315,7 +316,7 @@ default template for members or non-members.
 |----------|-----|
 | Symphony Execution-Ready Issue | Work that is truly safe to stage into the watched execution queue |
 | Validated Backlog Item | Repo-validated work that is real but not yet scheduled |
-| Human Review Handoff | PR-ready or review-ready work that needs human sign-off or merge action |
+| Human Review Handoff | PR-ready or review-ready work that needs a final review decision or merge action |
 | Workflow / CI Issue | Repo workflow, automation, CI, tooling, or release-process failures |
 
 Keep templates opinionated and small. They should enforce issue quality and routing clarity, not
@@ -382,6 +383,9 @@ Settings > Integrations > GitHub > Connect `matthewmaggio/Mister-Smith`
 - PR becomes mergeable → issue moves to Merging
 - PR merge to `main` → issue moves to Done
 - Include `MS-###` in branch names and commit messages
+- When the operator has explicitly delegated authority in the active Codex session, the agent may
+  perform the Human Review decision and advance the issue to `Merging` without waiting for another
+  human to click approve.
 
 ### Claude Code Integration (manual setup required)
 
@@ -431,7 +435,9 @@ When adding a new crate to the workspace:
 
 ## Symphony Integration
 
-[OpenAI Symphony](https://github.com/openai/symphony) orchestrates Codex agents against Linear issues. It polls for `Todo` issues, spawns a Codex `app-server` per issue, and manages the full lifecycle through the status state machine.
+[OpenAI Symphony](https://github.com/openai/symphony) orchestrates Codex agents
+against Linear issues. It polls for `Todo` issues, spawns a Codex `app-server`
+per issue, and manages the full lifecycle through the status state machine.
 
 Important: Symphony is currently scoped to one watched `project_slug`, and that value must be the
 Linear project `slugId`. Issues outside that watched project do not dispatch, even if their status
@@ -451,8 +457,8 @@ is `Todo`.
 
 - **Todo → In Progress**: Symphony picks up the issue, spawns a Codex agent
 - **In Progress → Human Review**: Agent opens a PR and requests review
-- **Human Review → Merging**: Reviewer approves the PR
-- **Human Review → Rework**: Reviewer requests changes; agent restarts
+- **Human Review → Merging**: Delegated agent review or external reviewer approval completes
+- **Human Review → Rework**: Reviewer or delegated agent requests changes; agent restarts
 - **Rework → In Progress**: Agent re-reads feedback, creates fresh plan
 - **Merging → Done**: Agent lands the PR merge via the `land` skill
 
