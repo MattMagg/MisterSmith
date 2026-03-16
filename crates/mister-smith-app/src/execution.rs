@@ -294,7 +294,7 @@ impl RuntimeTaskService {
         )
         .await?;
 
-        let compiler = TopologyCompiler::default();
+        let compiler = TopologyCompiler;
         let mut graph = compiler
             .compile(
                 workflow_id,

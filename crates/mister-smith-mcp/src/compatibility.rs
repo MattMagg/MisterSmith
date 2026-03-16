@@ -3381,8 +3381,6 @@ impl SmithCompatibilityServer {
         json_response(ToolResponse {
             status: if plan.stageable {
                 CompatibilityStatus::Ok
-            } else if plan.blocked {
-                CompatibilityStatus::Degraded
             } else {
                 CompatibilityStatus::Degraded
             },
@@ -3724,11 +3722,13 @@ impl SmithCompatibilityServer {
             &mode,
             &goal,
             &current_context,
-            &source_docs,
-            &workflow_requirements,
-            &validation_requirements,
-            &stop_conditions,
-            &definition_of_done,
+            RalphPromptSections {
+                source_docs: &source_docs,
+                workflow_requirements: &workflow_requirements,
+                validation_requirements: &validation_requirements,
+                stop_conditions: &stop_conditions,
+                definition_of_done: &definition_of_done,
+            },
         );
 
         json_response(ToolResponse {
@@ -6916,39 +6916,48 @@ fn upsert_markdown_section(body: &str, heading: &str, replacement: &str) -> Stri
     }
 }
 
+struct RalphPromptSections<'a> {
+    source_docs: &'a [String],
+    workflow_requirements: &'a [String],
+    validation_requirements: &'a [String],
+    stop_conditions: &'a [String],
+    definition_of_done: &'a [String],
+}
+
 fn render_ralph_prompt(
     mode: &str,
     goal: &str,
     current_context: &str,
-    source_docs: &[String],
-    workflow_requirements: &[String],
-    validation_requirements: &[String],
-    stop_conditions: &[String],
-    definition_of_done: &[String],
+    sections: RalphPromptSections<'_>,
 ) -> String {
     format!(
         "# Ralph Packet\n\n## Mode\n\n{mode}\n\n## Goal\n\n{goal}\n\n## Current Context\n\n{current_context}\n\n## Source Docs\n\n{}\n\n## Workflow Requirements\n\n{}\n\n## Validation Requirements\n\n{}\n\n## Stop Conditions\n\n{}\n\n## Definition Of Done\n\n{}",
-        source_docs
+        sections
+            .source_docs
             .iter()
             .map(|doc| format!("- {doc}"))
             .collect::<Vec<_>>()
             .join("\n"),
-        workflow_requirements
+        sections
+            .workflow_requirements
             .iter()
             .map(|item| format!("- {item}"))
             .collect::<Vec<_>>()
             .join("\n"),
-        validation_requirements
+        sections
+            .validation_requirements
             .iter()
             .map(|item| format!("- {item}"))
             .collect::<Vec<_>>()
             .join("\n"),
-        stop_conditions
+        sections
+            .stop_conditions
             .iter()
             .map(|item| format!("- {item}"))
             .collect::<Vec<_>>()
             .join("\n"),
-        definition_of_done
+        sections
+            .definition_of_done
             .iter()
             .map(|item| format!("- {item}"))
             .collect::<Vec<_>>()

@@ -670,10 +670,7 @@ impl CodexAppServerClient {
     }
 
     async fn initialize(&mut self, extra_opt_out: &[&str]) -> Result<(), LlmError> {
-        let mut opt_out_notification_methods = OPT_OUT_NOTIFICATION_METHODS
-            .iter()
-            .copied()
-            .collect::<Vec<_>>();
+        let mut opt_out_notification_methods = OPT_OUT_NOTIFICATION_METHODS.to_vec();
         opt_out_notification_methods.extend(extra_opt_out.iter().copied());
 
         self.request(
