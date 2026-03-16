@@ -201,6 +201,16 @@ impl ExecutionGraph {
                 "topology parallelism width must be at least 1".to_string(),
             ));
         }
+        if self.topology_plan.task_shape.root_count == 0 {
+            return Err(TopologyError::Invalid(
+                "task-shape classification must report at least one root".to_string(),
+            ));
+        }
+        if self.topology_plan.task_shape.max_parallel_width == 0 {
+            return Err(TopologyError::Invalid(
+                "task-shape classification must report parallel width of at least 1".to_string(),
+            ));
+        }
         if self.topology_plan.topology_kind == mister_smith_core::TopologyKind::Hybrid
             && self.topology_plan.coordination_policy
                 != mister_smith_core::CoordinationPolicy::Mixed

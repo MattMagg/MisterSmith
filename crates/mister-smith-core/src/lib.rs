@@ -20,7 +20,8 @@ pub use ids::{
 pub use autonomy::{
     AuthorityPrincipal, ContextBudget, DelegationCapability, GuardDecision, GuardEvidence,
     GuardTarget, InterventionRecord, MetricWindow, ProfileSnapshot, ProvenanceChain,
-    ProvenanceLink, SemanticSignal, TopologyPlan, TopologyRationale,
+    ProvenanceLink, SemanticSignal, TaskShapeClassification, TaskShapeKind, TopologyPlan,
+    TopologyRationale,
 };
 
 // Core enums

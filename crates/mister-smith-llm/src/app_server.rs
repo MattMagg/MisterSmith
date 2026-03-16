@@ -557,9 +557,9 @@ impl CodexAppServerClient {
                     if method == "item/agentMessage/delta"
                         && notification_matches_turn(&params, thread_id, turn_id) =>
                 {
+                    let delta = turn_state.apply_agent_delta(&params)?;
+                    content.push_str(&delta);
                     if let Some(stream_tx) = &stream_tx {
-                        let delta = turn_state.apply_agent_delta(&params)?;
-                        content.push_str(&delta);
                         let _ = stream_tx
                             .send(Ok(StreamChunk {
                                 index,
@@ -670,10 +670,7 @@ impl CodexAppServerClient {
     }
 
     async fn initialize(&mut self, extra_opt_out: &[&str]) -> Result<(), LlmError> {
-        let mut opt_out_notification_methods = OPT_OUT_NOTIFICATION_METHODS
-            .iter()
-            .copied()
-            .collect::<Vec<_>>();
+        let mut opt_out_notification_methods = OPT_OUT_NOTIFICATION_METHODS.to_vec();
         opt_out_notification_methods.extend(extra_opt_out.iter().copied());
 
         self.request(

@@ -18,6 +18,54 @@ use crate::ids::{
     ExecutionNodeId, GuardDecisionId, InterventionRecordId, ProfileSnapshotId,
 };
 
+/// Coarse task-structure class derived from dependency analysis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TaskShapeKind {
+    /// A strict dependency chain with at most one ready step at a time.
+    StrictChain,
+    /// Independent work can fan out safely without a downstream join.
+    ParallelFanout,
+    /// Parallel work fans out and later reconverges through an explicit join.
+    FanoutJoin,
+    /// A deeper fanout tree benefits from hierarchical coordination.
+    HierarchicalFanout,
+    /// The graph does not fit one of the bounded representative shapes cleanly.
+    MixedGraph,
+}
+
+impl TaskShapeKind {
+    /// Return the stable status-surface label for this task shape.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::StrictChain => "strict-chain",
+            Self::ParallelFanout => "parallel-fanout",
+            Self::FanoutJoin => "fanout-join",
+            Self::HierarchicalFanout => "hierarchical-fanout",
+            Self::MixedGraph => "mixed-graph",
+        }
+    }
+}
+
+/// Structured task-shape classification derived before topology selection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskShapeClassification {
+    /// Bounded representative task-shape label.
+    pub kind: TaskShapeKind,
+    /// Number of root nodes with no upstream dependencies.
+    pub root_count: usize,
+    /// Widest dependency level available for parallel execution.
+    pub max_parallel_width: usize,
+    /// Deepest dependency distance from any root.
+    pub max_depth: usize,
+    /// Whether the graph contains a downstream reconvergence point.
+    pub has_join: bool,
+    /// Whether any node fans out to more than one dependent.
+    pub has_fanout: bool,
+    /// Stable heuristic signals used to justify the classification.
+    pub structural_signals: Vec<String>,
+}
+
 /// Structured explanation for why a topology was selected.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TopologyRationale {
@@ -38,6 +86,8 @@ pub struct TopologyPlan {
     pub topology_kind: TopologyKind,
     /// Maximum concurrent execution width for this plan.
     pub parallelism_width: usize,
+    /// Dependency-derived task shape that informed topology selection.
+    pub task_shape: TaskShapeClassification,
     /// Why this topology was selected.
     pub rationale: TopologyRationale,
     /// Coordination behavior used by the orchestrator.

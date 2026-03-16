@@ -9,7 +9,8 @@ use mister_smith_agents::scheduler::{
 use mister_smith_agents::{ProfileAssessment, TopologyCompiler, TopologySignals};
 use mister_smith_core::{
     AgentId, BudgetPolicy, BudgetScope, ContextBudget, ContextBudgetId, CoordinationPolicy,
-    GuardTarget, HealthState, NodeState, SemanticSignal, SemanticSignalKind, TaskId, TopologyKind,
+    GuardTarget, HealthState, NodeState, SemanticSignal, SemanticSignalKind, TaskId, TaskShapeKind,
+    TopologyKind,
 };
 use mister_smith_events::AutonomyEvent;
 use serde_json::json;
@@ -180,6 +181,10 @@ fn topology_compiler_selects_parallel_for_independent_branches() {
 
     assert_eq!(graph.topology_plan.topology_kind, TopologyKind::Parallel);
     assert_eq!(
+        graph.topology_plan.task_shape.kind,
+        TaskShapeKind::ParallelFanout
+    );
+    assert_eq!(
         graph.topology_plan.coordination_policy,
         CoordinationPolicy::Barrier
     );
@@ -204,6 +209,10 @@ fn topology_compiler_selects_sequential_for_strict_chain() {
 
     assert_eq!(graph.topology_plan.topology_kind, TopologyKind::Sequential);
     assert_eq!(
+        graph.topology_plan.task_shape.kind,
+        TaskShapeKind::StrictChain
+    );
+    assert_eq!(
         graph.topology_plan.coordination_policy,
         CoordinationPolicy::StrictSequence
     );
@@ -223,6 +232,10 @@ fn topology_compiler_selects_pipeline_for_streaming_chain() {
 
     assert_eq!(graph.topology_plan.topology_kind, TopologyKind::Pipeline);
     assert_eq!(
+        graph.topology_plan.task_shape.kind,
+        TaskShapeKind::StrictChain
+    );
+    assert_eq!(
         graph.topology_plan.coordination_policy,
         CoordinationPolicy::Streaming
     );
@@ -240,6 +253,10 @@ fn topology_compiler_selects_hybrid_for_join_graph() {
         .expect("join graph should compile");
 
     assert_eq!(graph.topology_plan.topology_kind, TopologyKind::Hybrid);
+    assert_eq!(
+        graph.topology_plan.task_shape.kind,
+        TaskShapeKind::FanoutJoin
+    );
     assert_eq!(
         graph.topology_plan.coordination_policy,
         CoordinationPolicy::Mixed
@@ -266,9 +283,14 @@ fn topology_compiler_honors_compatible_hierarchical_hint() {
         TopologyKind::Hierarchical
     );
     assert_eq!(
+        graph.topology_plan.task_shape.kind,
+        TaskShapeKind::ParallelFanout
+    );
+    assert_eq!(
         graph.topology_plan.coordination_policy,
         CoordinationPolicy::HierarchicalReduce
     );
+    assert!(!graph.topology_plan.task_shape.structural_signals.is_empty());
     assert!(graph
         .topology_plan
         .rationale

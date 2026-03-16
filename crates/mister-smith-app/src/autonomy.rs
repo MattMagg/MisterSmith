@@ -200,6 +200,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         _ => "none".to_string(),
     };
     let topology_reason = &view.topology.rationale.selected_for;
+    let task_shape = view.topology.task_shape.kind.as_str();
     let fallback_reason = view
         .topology
         .rationale
@@ -308,13 +309,14 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\ntopology: {:?} width={} rationale={}\nfallback: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\ntopology: {:?} width={} shape={} rationale={}\nfallback: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
         session_summary,
         view.topology.topology_kind,
         view.topology.parallelism_width,
+        task_shape,
         topology_reason,
         fallback_reason,
         if branch_summary.is_empty() { "none".to_string() } else { branch_summary },
