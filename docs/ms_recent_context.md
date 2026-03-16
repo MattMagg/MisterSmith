@@ -20,7 +20,7 @@ Status: Current
 3. `docs/linear/LINEAR.md`
 4. `docs/plans/2026-03-16-smith-first-development-system.md`
 5. `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md`
-6. `docs/plans/2026-03-16-winyear-frontier-direction.md`
+6. `docs/plans/2026-03-16-frontier-direction.md`
 7. `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`
 8. `docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`
 
@@ -39,7 +39,7 @@ The current development-workflow program is Smith-first:
   the default development control plane across planning, coding, validation, review, Ralph, and
   SpecKit flows.
 
-The next program is `WinYear`: make Mister Smith clearly behave like an orchestration operating
+The next program is the frontier direction refresh: make Mister Smith clearly behave like an orchestration operating
 system rather than a generic framework.
 
 Recommended primary epic:
@@ -74,5 +74,5 @@ Closed March 16 recovery issues:
   development-workflow model
 - use `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the source of truth for the
   currently implemented Smith workflow-family surface
-- use `docs/plans/2026-03-16-winyear-frontier-direction.md` as the source of truth for "what next"
+- use `docs/plans/2026-03-16-frontier-direction.md` as the source of truth for "what next"
 - update Linear and repo docs together when the direction changes

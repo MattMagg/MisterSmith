@@ -29,7 +29,7 @@ to build the repo-backed workflow system itself.
 - `docs/linear/LINEAR.md`: Linear taxonomy, queue boundary, and project roles
 - `docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md`: recovered Smith workflow design
 - `docs/plans/2026-03-15-smith-mcp-workflow-forensics.md`: evidence for the workflow model
-- `docs/plans/2026-03-16-winyear-frontier-direction.md`: current mainline direction note, useful as
+- `docs/plans/2026-03-16-frontier-direction.md`: current mainline direction note, useful as
   repo history but not the defining objective for this effort
 
 ### Live control-plane facts verified on March 16, 2026

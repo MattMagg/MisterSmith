@@ -1,4 +1,4 @@
-# WinYear Frontier Direction
+# Frontier Direction
 
 Date: March 16, 2026
 Status: Active
@@ -9,8 +9,9 @@ Define the post-recovery mainline direction for Mister Smith, update the repo's 
 surfaces to match what is now true on `main`, and identify the next frontier epics that should
 feed Symphony once they are explicitly staged.
 
-`WinYear` is the name for this next program of work: turn Mister Smith from a validated
-multi-agent substrate into a clearly differentiated orchestration operating system.
+This note captures the next operating-system direction after the March 16 recovery: turn Mister
+Smith from a validated multi-agent substrate into a clearly differentiated orchestration operating
+system.
 
 ## Scope
 
@@ -48,12 +49,12 @@ multi-agent substrate into a clearly differentiated orchestration operating syst
   surfaces
 - the watched Symphony queue is currently empty, which is correct because no new runnable slice has
   been staged into `Todo`
-- Linear now treats `WinYear` as the active strategic initiative, with `MS-43` and `MS-44` closed
-  against the March 16 landed work and `MS-45` through `MS-48` holding the next backlog epics
+- Linear now tracks `MS-45` through `MS-48` as the next backlog epics after `MS-43` and `MS-44`
+  closed against the March 16 landed work
 - the repo and Linear still needed a narrative refresh because several canonical docs and backlog
   artifacts still described Mister Smith as a framework or still described March 16 work as future
 
-## Frontier Direction
+## Directional Mandate
 
 The next phase should optimize for one outcome:
 
@@ -216,10 +217,3 @@ If the answer to both questions is not clearly yes, the issue should stay out of
   work
 - historical recovery and runtime/session notes updated so they point forward here instead of
   implying March 16 work is still pending
-
-## Stop Conditions
-
-- stop before staging any new watched-queue issue during this pass
-- stop if a proposed epic cannot be described with a bounded validation bundle
-- stop if a proposed direction drifts into generic framework parity instead of operating-system
-  leverage

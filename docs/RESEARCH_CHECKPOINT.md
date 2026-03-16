@@ -10,7 +10,7 @@ updated: 2026-03-07
 > **Status**: 7 rounds complete, synthesis DONE. No new research being launched.
 > **Governing directive**: Frontier-first — optimize for strategic advantage, not comprehensiveness
 > **Current Action**: Research phase complete. Use
-> `docs/plans/2026-03-16-winyear-frontier-direction.md` for implementation planning and issue
+> `docs/plans/2026-03-16-frontier-direction.md` for implementation planning and issue
 > staging.
 
 ## March 16, 2026 Direction
@@ -24,7 +24,7 @@ research corpus into bounded backlog epics that preserve the frontier mandate:
 - capability-kernel and external-agent interoperability
 
 Those directions are consolidated in
-`docs/plans/2026-03-16-winyear-frontier-direction.md`, which supersedes ad hoc "what next"
+`docs/plans/2026-03-16-frontier-direction.md`, which supersedes ad hoc "what next"
 interpretation from older phase notes.
 
 ---

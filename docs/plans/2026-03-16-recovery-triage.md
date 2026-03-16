@@ -303,7 +303,7 @@ The recovery goal is now complete in substance:
 - the remaining reconciliation work is documentation and forward-direction cleanup only
 
 This note is now historical recovery evidence, not the primary forward-planning artifact. Use
-`docs/plans/2026-03-16-winyear-frontier-direction.md` for the next backlog and staging decisions.
+`docs/plans/2026-03-16-frontier-direction.md` for the next backlog and staging decisions.
 
 ## Stop Condition
 

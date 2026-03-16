@@ -21,7 +21,7 @@ Treat `WORKFLOW.md` and `docs/linear/LINEAR.md` as the live control-plane contra
 Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the current runtime-proof
 direction when the task is about proving real end-to-end execution rather than adding another
 implementation phase.
-Treat `docs/plans/2026-03-16-winyear-frontier-direction.md` as the current forward-direction note
+Treat `docs/plans/2026-03-16-frontier-direction.md` as the current forward-direction note
 when the task is about what should happen next after the March 16 recovery landings.
 
 ## Smith-First Workflow Posture

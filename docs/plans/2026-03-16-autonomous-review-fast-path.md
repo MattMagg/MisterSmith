@@ -22,8 +22,7 @@ latency from redundant or mis-scoped workflow automation.
 - Symphony's native state machine keeps the `Human Review` and `Merging` state names.
 - Explicit operator delegation in the active Codex session is sufficient authority for the agent to
   perform the review step and land a clean PR.
-- `vet` and automated Claude review remain advisory layers on top of substantive repository
-  validation.
+- automated Claude review remains an advisory layer on top of substantive repository validation.
 
 ## Constraints
 
