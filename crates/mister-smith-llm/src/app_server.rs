@@ -557,9 +557,9 @@ impl CodexAppServerClient {
                     if method == "item/agentMessage/delta"
                         && notification_matches_turn(&params, thread_id, turn_id) =>
                 {
+                    let delta = turn_state.apply_agent_delta(&params)?;
+                    content.push_str(&delta);
                     if let Some(stream_tx) = &stream_tx {
-                        let delta = turn_state.apply_agent_delta(&params)?;
-                        content.push_str(&delta);
                         let _ = stream_tx
                             .send(Ok(StreamChunk {
                                 index,
