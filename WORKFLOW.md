@@ -161,7 +161,9 @@ Instructions:
 - `Backlog` -> out of scope for this workflow. Do not modify.
 - `Todo` -> immediately move to `In Progress`, then start execution.
 - `In Progress` -> active implementation.
-- `Human Review` -> wait for reviewer input and poll for updates.
+- `Human Review` -> Symphony-native review checkpoint. Keep the state name, but when the active
+  Codex session has explicit operator authority to review and merge, the agent may satisfy the
+  review step here instead of waiting for a separate human hop.
 - `Merging` -> follow `.codex/skills/land/SKILL.md`.
 - `Rework` -> reopen the execution flow with a fresh plan.
 - `Done` -> terminal; no further action.
@@ -206,6 +208,8 @@ Instructions:
    - resolve all actionable PR comments or push back explicitly
    - confirm checks are green after the latest push
    - confirm every required validation item is complete
+   - if the current session already has explicit operator review/merge authority, continue straight
+     into the `Human Review` checklist in the same session instead of waiting for another pass
 
 ### Merge posture for Claude review automation
 
@@ -215,16 +219,20 @@ Instructions:
   shows the known SDK crash signature (`SDK execution error:
   Error: Claude Code process exited with code 1`) and the PR does
   not change that workflow or its plugin configuration.
-- Merge may proceed only when required repository validation is green and there are no unresolved human review findings.
+- Merge may proceed only when required repository validation is green and there are no unresolved
+  review findings.
 - Otherwise, treat a `claude-review` failure as potentially repo-local until the workflow change or failure mode is reviewed.
 
 ## Step 3: Human review and merge handling
 
-1. In `Human Review`, do not code. Poll for updates.
-2. If review feedback requires changes, move the issue to `Rework`.
-3. If approved, the issue moves to `Merging`.
-4. In `Merging`, follow the `land` skill until the PR is merged.
-5. After merge is complete, move the issue to `Done`.
+1. Keep the state name `Human Review`; it is native to Symphony.
+2. In `Human Review`, review the PR diff, comments, and current checks.
+3. If the active session has explicit operator review/merge authority and the PR is clean, treat
+   that delegated review as sufficient and move the issue to `Merging` in the same session.
+4. If review feedback or the agent's own review finds a real problem, move the issue to `Rework`.
+5. Without explicit operator delegation, poll for external reviewer updates instead of guessing.
+6. In `Merging`, follow the `land` skill until the PR is merged.
+7. After merge is complete, move the issue to `Done`.
 
 ## Step 4: Rework handling
 

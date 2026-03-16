@@ -4340,8 +4340,10 @@ impl SmithCompatibilityServer {
 
         let mut recommended_actions = linear.data.suggested_actions.clone();
         if human_review_count > 0 {
-            recommended_actions
-                .push("inspect Human Review issues and land approved PRs".to_string());
+            recommended_actions.push(
+                "inspect Human Review issues, complete delegated review when authorized, and land merge-ready PRs"
+                    .to_string(),
+            );
         }
         if merging_count > 0 {
             recommended_actions
@@ -6697,7 +6699,7 @@ fn lifecycle_review_state(
     matching_pull_requests: &[GitHubPullRequest],
 ) -> String {
     match state_name(issue) {
-        Some("Human Review") => "awaiting_human_review".to_string(),
+        Some("Human Review") => "review_pending".to_string(),
         Some("Rework") => "rework".to_string(),
         Some("Merging") => "merge_ready".to_string(),
         Some("In Progress") if !matching_pull_requests.is_empty() => "pull_request_open".to_string(),
@@ -6769,7 +6771,7 @@ fn build_issue_lifecycle_resolution(
         Some("Backlog") if queue_role == "validated_backlog" => "plan_queue_stage".to_string(),
         Some("Todo") => "move_issue_to_in_progress".to_string(),
         Some("In Progress") => "continue_execution".to_string(),
-        Some("Human Review") => "await_review_or_route_to_rework".to_string(),
+        Some("Human Review") => "review_or_route_to_rework".to_string(),
         Some("Rework") => "restart_execution_with_fresh_plan".to_string(),
         Some("Merging") => "land_merge".to_string(),
         Some(state) if is_terminal_state(state, workflow) => "no_further_action".to_string(),
