@@ -11,7 +11,8 @@ use uuid::Uuid;
 use mister_smith_core::{
     AgentType, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope, CheckpointPolicy,
     ContextBudget, CoordinationPolicy, DelegationScope, ExecutionBranchId, ExecutionNodeId,
-    HealthState, NodeState, TaskId, TopologyError, TopologyKind, TopologyPlan, TopologyRationale,
+    HealthState, NodeState, TaskId, TaskShapeClassification, TaskShapeKind, TopologyError,
+    TopologyKind, TopologyPlan, TopologyRationale,
 };
 
 use crate::execution_graph::{ExecutionBranch, ExecutionEdge, ExecutionGraph, ExecutionNode};
@@ -87,6 +88,15 @@ impl TopologyCompiler {
         let placeholder_plan = TopologyPlan {
             topology_kind: TopologyKind::Sequential,
             parallelism_width: 1,
+            task_shape: TaskShapeClassification {
+                kind: TaskShapeKind::MixedGraph,
+                root_count: 1,
+                max_parallel_width: 1,
+                max_depth: 0,
+                has_join: false,
+                has_fanout: false,
+                structural_signals: vec!["shape:unclassified".to_string()],
+            },
             rationale: TopologyRationale {
                 dependency_shape: "unclassified".to_string(),
                 operational_signals: vec!["health:unknown".to_string()],
@@ -127,17 +137,15 @@ impl TopologyCompiler {
     ) -> Result<TopologyPlan, TopologyError> {
         graph.validate()?;
 
-        let analysis = analyze_graph(graph)?;
-        let dependency_shape = describe_dependency_shape(&analysis);
+        let task_shape = classify_task_shape(graph)?;
         let operational_signals = describe_operational_signals(signals);
 
         if let Some(hint) = hint {
-            if hint_is_compatible(hint, &analysis, graph.nodes.len()) {
+            if hint_is_compatible(hint, &task_shape, graph.nodes.len()) {
                 return Ok(build_plan(
                     hint,
-                    &analysis,
                     signals,
-                    &dependency_shape,
+                    &task_shape,
                     &operational_signals,
                     &format!(
                         "selected {} topology from compatible planner policy hint",
@@ -154,22 +162,22 @@ impl TopologyCompiler {
             )
             || signals.budget_pressure.unwrap_or(0) >= 90
         {
-            if analysis.is_chain && signals.prefer_streaming {
+            if task_shape.kind == TaskShapeKind::StrictChain && signals.prefer_streaming {
                 TopologyKind::Pipeline
             } else {
                 TopologyKind::Sequential
             }
-        } else if analysis.is_chain {
+        } else if task_shape.kind == TaskShapeKind::StrictChain {
             if signals.prefer_streaming && graph.nodes.len() > 1 {
                 TopologyKind::Pipeline
             } else {
                 TopologyKind::Sequential
             }
-        } else if analysis.has_join && analysis.max_parallel_width > 1 {
+        } else if task_shape.has_join && task_shape.max_parallel_width > 1 {
             TopologyKind::Hybrid
-        } else if analysis.has_fanout && analysis.max_depth >= 3 && analysis.root_count == 1 {
+        } else if task_shape.has_fanout && task_shape.max_depth >= 3 && task_shape.root_count == 1 {
             TopologyKind::Hierarchical
-        } else if analysis.max_parallel_width > 1 {
+        } else if task_shape.max_parallel_width > 1 {
             TopologyKind::Parallel
         } else {
             TopologyKind::Sequential
@@ -177,9 +185,8 @@ impl TopologyCompiler {
 
         Ok(build_plan(
             selected,
-            &analysis,
             signals,
-            &dependency_shape,
+            &task_shape,
             &operational_signals,
             &format!(
                 "selected {} topology from dependency analysis",
@@ -557,6 +564,33 @@ fn describe_dependency_shape(analysis: &GraphAnalysis) -> String {
     }
 }
 
+fn classify_task_shape(graph: &ExecutionGraph) -> Result<TaskShapeClassification, TopologyError> {
+    let analysis = analyze_graph(graph)?;
+    let dependency_shape = describe_dependency_shape(&analysis);
+
+    Ok(TaskShapeClassification {
+        kind: match dependency_shape.as_str() {
+            "strict-chain" => TaskShapeKind::StrictChain,
+            "parallel-fanout" => TaskShapeKind::ParallelFanout,
+            "fanout-join" => TaskShapeKind::FanoutJoin,
+            "hierarchical-fanout" => TaskShapeKind::HierarchicalFanout,
+            _ => TaskShapeKind::MixedGraph,
+        },
+        root_count: analysis.root_count,
+        max_parallel_width: analysis.max_parallel_width,
+        max_depth: analysis.max_depth,
+        has_join: analysis.has_join,
+        has_fanout: analysis.has_fanout,
+        structural_signals: vec![
+            format!("roots:{}", analysis.root_count),
+            format!("max_parallel_width:{}", analysis.max_parallel_width),
+            format!("max_depth:{}", analysis.max_depth),
+            format!("fanout:{}", analysis.has_fanout),
+            format!("join:{}", analysis.has_join),
+        ],
+    })
+}
+
 fn describe_operational_signals(signals: &TopologySignals) -> Vec<String> {
     let mut descriptions = Vec::new();
     descriptions.push(format!(
@@ -587,15 +621,14 @@ fn describe_operational_signals(signals: &TopologySignals) -> Vec<String> {
 
 fn build_plan(
     topology_kind: TopologyKind,
-    analysis: &GraphAnalysis,
     signals: &TopologySignals,
-    dependency_shape: &str,
+    task_shape: &TaskShapeClassification,
     operational_signals: &[String],
     selected_for: &str,
 ) -> TopologyPlan {
     let mut parallelism_width = match topology_kind {
         TopologyKind::Sequential => 1,
-        _ => analysis.max_parallel_width.max(1),
+        _ => task_shape.max_parallel_width.max(1),
     };
     if let Some(limit) = signals.max_parallelism {
         parallelism_width = parallelism_width.min(limit.max(1));
@@ -618,8 +651,9 @@ fn build_plan(
     TopologyPlan {
         topology_kind,
         parallelism_width,
+        task_shape: task_shape.clone(),
         rationale: TopologyRationale {
-            dependency_shape: dependency_shape.to_string(),
+            dependency_shape: task_shape.kind.as_str().to_string(),
             operational_signals: operational_signals.to_vec(),
             selected_for: selected_for.to_string(),
             fallback_reason,
@@ -629,13 +663,17 @@ fn build_plan(
     }
 }
 
-fn hint_is_compatible(hint: TopologyKind, analysis: &GraphAnalysis, node_count: usize) -> bool {
+fn hint_is_compatible(
+    hint: TopologyKind,
+    task_shape: &TaskShapeClassification,
+    node_count: usize,
+) -> bool {
     match hint {
-        TopologyKind::Sequential => analysis.is_chain,
-        TopologyKind::Parallel => analysis.max_parallel_width > 1 && !analysis.has_join,
-        TopologyKind::Pipeline => analysis.is_chain && node_count > 1,
-        TopologyKind::Hierarchical => analysis.has_fanout,
-        TopologyKind::Hybrid => analysis.has_join && analysis.max_parallel_width > 1,
+        TopologyKind::Sequential => task_shape.kind == TaskShapeKind::StrictChain,
+        TopologyKind::Parallel => task_shape.max_parallel_width > 1 && !task_shape.has_join,
+        TopologyKind::Pipeline => task_shape.kind == TaskShapeKind::StrictChain && node_count > 1,
+        TopologyKind::Hierarchical => task_shape.has_fanout,
+        TopologyKind::Hybrid => task_shape.has_join && task_shape.max_parallel_width > 1,
     }
 }
 

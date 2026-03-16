@@ -194,6 +194,10 @@ pub fn build_metric_operations(
                 format!("{:?}", view.topology.topology_kind).to_lowercase(),
             ),
             (
+                "task_shape".to_string(),
+                view.topology.task_shape.kind.as_str().to_string(),
+            ),
+            (
                 "rationale".to_string(),
                 view.topology.rationale.selected_for.clone(),
             ),

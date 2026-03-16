@@ -13,7 +13,7 @@ use mister_smith_core::{
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
     InterventionRecord, MemorySnapshotId, ProfileSnapshot, ProfileSnapshotId, ProvenanceChain,
-    RevocationState, SessionId, TaskId, TopologyKind, TopologyRationale,
+    RevocationState, SessionId, TaskId, TaskShapeClassification, TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -45,6 +45,8 @@ pub struct TopologyPlanSummary {
     pub topology_kind: TopologyKind,
     /// Maximum execution width for the selected topology.
     pub parallelism_width: usize,
+    /// Dependency-derived task shape that informed topology selection.
+    pub task_shape: TaskShapeClassification,
     /// Coordination behavior for the graph.
     pub coordination_policy: CoordinationPolicy,
     /// Structured rationale for the topology choice.

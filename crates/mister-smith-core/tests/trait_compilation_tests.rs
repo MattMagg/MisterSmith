@@ -353,6 +353,8 @@ where
 
 #[test]
 fn autonomy_types_compile_with_shared_trait_bounds() {
+    assert_autonomy_traits::<TaskShapeKind>();
+    assert_autonomy_traits::<TaskShapeClassification>();
     assert_autonomy_traits::<TopologyRationale>();
     assert_autonomy_traits::<TopologyPlan>();
     assert_autonomy_traits::<ContextBudget>();
@@ -380,6 +382,19 @@ fn autonomy_ids_enums_and_errors_are_available() {
     let plan = TopologyPlan {
         topology_kind: TopologyKind::Hybrid,
         parallelism_width: 4,
+        task_shape: TaskShapeClassification {
+            kind: TaskShapeKind::FanoutJoin,
+            root_count: 1,
+            max_parallel_width: 4,
+            max_depth: 3,
+            has_join: true,
+            has_fanout: true,
+            structural_signals: vec![
+                "roots:1".to_string(),
+                "max_parallel_width:4".to_string(),
+                "max_depth:3".to_string(),
+            ],
+        },
         rationale: TopologyRationale {
             dependency_shape: "mixed dependency graph".to_string(),
             operational_signals: vec!["budget.pressure".to_string()],

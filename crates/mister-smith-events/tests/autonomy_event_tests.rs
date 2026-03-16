@@ -4,7 +4,7 @@ use mister_smith_core::{
     ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
     GuardEvidence, HealthState, InterventionRecordId, InterventionType, ProfileSnapshot,
     ProfileSnapshotId, ProfileTarget, ProvenanceChain, ProvenanceLink, RevocationState, TaskId,
-    TopologyKind, TopologyRationale,
+    TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
@@ -39,6 +39,29 @@ fn sample_provenance(
     }
 }
 
+fn sample_task_shape(kind: TaskShapeKind) -> TaskShapeClassification {
+    let (max_parallel_width, max_depth, has_join, has_fanout) = match kind {
+        TaskShapeKind::StrictChain => (1, 2, false, false),
+        TaskShapeKind::ParallelFanout => (2, 1, false, true),
+        TaskShapeKind::FanoutJoin => (2, 2, true, true),
+        TaskShapeKind::HierarchicalFanout => (3, 3, false, true),
+        TaskShapeKind::MixedGraph => (2, 2, true, true),
+    };
+    TaskShapeClassification {
+        kind,
+        root_count: 1,
+        max_parallel_width,
+        max_depth,
+        has_join,
+        has_fanout,
+        structural_signals: vec![
+            "roots:1".to_string(),
+            format!("max_parallel_width:{max_parallel_width}"),
+            format!("max_depth:{max_depth}"),
+        ],
+    }
+}
+
 #[test]
 fn autonomy_event_surfaces_compile_with_shared_trait_bounds() {
     assert_event_traits::<ExecutionGraphSummary>();
@@ -68,6 +91,7 @@ fn autonomy_event_roundtrips_and_converts_to_generic_event() {
         graph_id,
         topology_kind: TopologyKind::Parallel,
         parallelism_width: 3,
+        task_shape: sample_task_shape(TaskShapeKind::ParallelFanout),
         coordination_policy: CoordinationPolicy::Barrier,
         rationale: TopologyRationale {
             dependency_shape: "independent branches".to_string(),
@@ -117,6 +141,7 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             graph_id,
             topology_kind: TopologyKind::Hybrid,
             parallelism_width: 2,
+            task_shape: sample_task_shape(TaskShapeKind::FanoutJoin),
             coordination_policy: CoordinationPolicy::Mixed,
             rationale: TopologyRationale {
                 dependency_shape: "mixed graph".to_string(),
@@ -251,6 +276,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
             graph_id,
             topology_kind: TopologyKind::Sequential,
             parallelism_width: 1,
+            task_shape: sample_task_shape(TaskShapeKind::StrictChain),
             coordination_policy: CoordinationPolicy::Barrier,
             rationale: TopologyRationale {
                 dependency_shape: "single branch".to_string(),
@@ -383,6 +409,7 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
                     graph_id,
                     topology_kind: TopologyKind::Sequential,
                     parallelism_width: 1,
+                    task_shape: sample_task_shape(TaskShapeKind::StrictChain),
                     coordination_policy: CoordinationPolicy::Barrier,
                     rationale: TopologyRationale {
                         dependency_shape: "single branch".to_string(),
@@ -579,6 +606,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
             graph_id,
             topology_kind: TopologyKind::Sequential,
             parallelism_width: 1,
+            task_shape: sample_task_shape(TaskShapeKind::StrictChain),
             coordination_policy: CoordinationPolicy::StrictSequence,
             rationale: TopologyRationale {
                 dependency_shape: "single branch".to_string(),

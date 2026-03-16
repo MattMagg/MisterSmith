@@ -63,6 +63,11 @@ pub struct BootstrapContext {
     pub metrics_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
+struct HttpServerServices {
+    task_service: Arc<RuntimeTaskService>,
+    conversation_service: Arc<ConversationRuntimeService>,
+}
+
 /// Run the full bootstrap sequence with startup timeout enforcement.
 ///
 /// Returns [`BootstrapContext`] on success, or an error if:
@@ -167,8 +172,10 @@ async fn bootstrap_inner(
         state_tracker,
         event_bus.clone(),
         nats_transport.clone(),
-        task_service,
-        conversation_service,
+        HttpServerServices {
+            task_service,
+            conversation_service,
+        },
     )
     .await?;
 
@@ -242,8 +249,7 @@ async fn start_http_server(
     state_tracker: &ProcessStateTracker,
     event_bus: Arc<EventBus>,
     nats_transport: Option<Arc<NatsTransport>>,
-    task_service: Arc<RuntimeTaskService>,
-    conversation_service: Arc<ConversationRuntimeService>,
+    services: HttpServerServices,
 ) -> Result<Option<tokio::task::JoinHandle<()>>, Box<dyn std::error::Error + Send + Sync>> {
     let port = config.transport.http_port.unwrap_or(8080);
     let bind_address = format!("0.0.0.0:{port}");
@@ -252,14 +258,14 @@ async fn start_http_server(
         bind_address: bind_address.clone(),
         ..Default::default()
     };
-    let autonomy_pool = task_service.pool();
-    let autonomy_task_service = task_service.clone();
+    let autonomy_pool = services.task_service.pool();
+    let autonomy_task_service = services.task_service.clone();
     let app_state = mister_smith_http::AppState::new()
         .with_transport_health(Arc::new(mister_smith_http::server::NatsHealthCheck::new(
             nats_transport.is_some(),
         )))
-        .with_task_service(task_service)
-        .with_conversation_service(conversation_service);
+        .with_task_service(services.task_service)
+        .with_conversation_service(services.conversation_service);
     let mut app = mister_smith_http::server::build_router(&http_config, app_state);
 
     // Add Kubernetes health probe endpoints
