@@ -80,8 +80,7 @@ fi
 
 if [[ "$require_sync" == true ]]; then
   counts="$(git rev-list --left-right --count "${upstream}...HEAD")"
-  behind="${counts%% *}"
-  ahead="${counts##* }"
+  read -r behind ahead <<<"$counts"
   if (( behind > 0 || ahead > 0 )); then
     echo "Branch '$branch' is not synced with '$upstream' (behind=$behind ahead=$ahead)." >&2
     exit 1
