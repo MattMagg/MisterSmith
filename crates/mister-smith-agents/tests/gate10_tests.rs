@@ -91,6 +91,44 @@ fn cyclic_plan() -> serde_json::Value {
     })
 }
 
+fn frontier_rebalance_plan() -> serde_json::Value {
+    json!({
+        "goal": "gate10-frontier-rebalance",
+        "steps": [
+            {
+                "id": "root",
+                "step": 1,
+                "action": "root",
+                "description": "root"
+            },
+            {
+                "id": "left",
+                "step": 2,
+                "action": "left",
+                "description": "left",
+                "depends_on": ["root"],
+                "branch": "left"
+            },
+            {
+                "id": "right",
+                "step": 3,
+                "action": "right",
+                "description": "right",
+                "depends_on": ["root"],
+                "branch": "right"
+            },
+            {
+                "id": "join",
+                "step": 4,
+                "action": "join",
+                "description": "join",
+                "depends_on": ["left", "right"],
+                "branch": "join"
+            }
+        ]
+    })
+}
+
 fn branch_id_for(
     graph: &mister_smith_agents::ExecutionGraph,
     step_key: &str,
@@ -496,10 +534,8 @@ async fn gate10_mixed_dependency_resume_preserves_completed_branches() {
         .as_ref()
         .expect("orchestrator should emit the frozen adaptive-team contract");
     assert_eq!(team_sizing.decision_phase, "initial");
-    assert_eq!(
-        team_sizing.desired_workers,
-        status.topology.parallelism_width
-    );
+    assert_eq!(team_sizing.branch_frontier_width, 1);
+    assert_eq!(team_sizing.desired_workers, 1);
     assert!(status.routing_history[0]
         .rationale
         .iter()
@@ -914,4 +950,126 @@ async fn gate10_rejected_delegated_resume_surfaces_operator_reason() {
         .iter()
         .any(|alert| alert.rejection_reason.as_deref()
             == Some("delegation revoked before branch resume")));
+}
+
+#[tokio::test]
+async fn gate10_frontier_rebalance_keeps_completed_branches_closed() {
+    let scheduler = Arc::new(TaskScheduler::new());
+    let orchestrator = Orchestrator::new(
+        Arc::new(IdentityDecomposer),
+        Arc::new(ArrayAggregator),
+        scheduler.clone(),
+    );
+    let mut graph = TopologyCompiler::default()
+        .compile(
+            TaskId::new(),
+            &frontier_rebalance_plan(),
+            &TopologySignals::default(),
+        )
+        .expect("frontier rebalance graph should compile");
+    let workflow_id = graph.workflow_id;
+    let root = node_id_for(&graph, "root");
+    let left = node_id_for(&graph, "left");
+    let right = node_id_for(&graph, "right");
+    let join = node_id_for(&graph, "join");
+    let root_branch = branch_id_for(&graph, "root");
+    let left_branch = branch_id_for(&graph, "left");
+    let right_branch = branch_id_for(&graph, "right");
+    let join_branch = branch_id_for(&graph, "join");
+
+    graph
+        .nodes
+        .iter_mut()
+        .find(|node| node.node_id == root)
+        .expect("root node should exist")
+        .state = NodeState::Completed;
+    graph.branch_mut(&root_branch).unwrap().state = BranchState::Completed;
+    orchestrator.register_execution_graph(graph.clone());
+
+    submit_task(
+        &scheduler,
+        TaskId::from_uuid(*root.as_ref()),
+        "root",
+        workflow_id,
+        TaskState::Completed,
+    );
+    submit_task(
+        &scheduler,
+        TaskId::from_uuid(*left.as_ref()),
+        "left",
+        workflow_id,
+        TaskState::Pending,
+    );
+    submit_task(
+        &scheduler,
+        TaskId::from_uuid(*right.as_ref()),
+        "right",
+        workflow_id,
+        TaskState::Pending,
+    );
+    submit_task(
+        &scheduler,
+        TaskId::from_uuid(*join.as_ref()),
+        "join",
+        workflow_id,
+        TaskState::Pending,
+    );
+
+    let first_pass = orchestrator
+        .route_ready_branches(&workflow_id, &[AgentId::new(), AgentId::new()])
+        .expect("wide frontier should route");
+    assert_eq!(first_pass.len(), 2);
+    let first_team_plan = orchestrator
+        .adaptive_team_plan(&workflow_id)
+        .expect("initial frontier should materialize a team plan");
+    assert_eq!(first_team_plan.sizing_decision.decision_phase, "initial");
+    assert_eq!(first_team_plan.sizing_decision.selected_workers, 2);
+
+    for decision in &first_pass {
+        for task_id in &decision.task_ids {
+            scheduler.start(task_id).unwrap();
+            scheduler.complete(task_id, json!({"done": true})).unwrap();
+        }
+    }
+
+    let mut advanced_graph = orchestrator
+        .execution_graph(&workflow_id)
+        .expect("execution graph should remain registered");
+    for node in &mut advanced_graph.nodes {
+        if node.node_id == left || node.node_id == right {
+            node.state = NodeState::Completed;
+        }
+    }
+    advanced_graph.branch_mut(&left_branch).unwrap().state = BranchState::Completed;
+    advanced_graph.branch_mut(&right_branch).unwrap().state = BranchState::Completed;
+    advanced_graph.branch_mut(&join_branch).unwrap().state = BranchState::Pending;
+    orchestrator.register_execution_graph(advanced_graph);
+
+    let second_pass = orchestrator
+        .route_ready_branches(&workflow_id, &[AgentId::new(), AgentId::new()])
+        .expect("join frontier should route");
+    assert_eq!(second_pass.len(), 1);
+    assert_eq!(second_pass[0].branch_id, join_branch);
+    assert_eq!(
+        scheduler
+            .get(&TaskId::from_uuid(*left.as_ref()))
+            .unwrap()
+            .state,
+        TaskState::Completed
+    );
+    assert_eq!(
+        scheduler
+            .get(&TaskId::from_uuid(*right.as_ref()))
+            .unwrap()
+            .state,
+        TaskState::Completed
+    );
+    let second_team_plan = orchestrator
+        .adaptive_team_plan(&workflow_id)
+        .expect("rebalanced frontier should materialize a team plan");
+    assert_eq!(
+        second_team_plan.sizing_decision.decision_phase,
+        "frontier_rebalance"
+    );
+    assert_eq!(second_team_plan.sizing_decision.selected_workers, 1);
 }

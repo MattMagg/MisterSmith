@@ -198,6 +198,8 @@ impl RuntimeTaskService {
         request: TaskSubmissionRequest,
     ) -> Result<(), String> {
         let coordinator_id = coordinator_id_for_request(&request, self.default_coordinator_id);
+        self.orchestrator
+            .register_workflow_coordinator(&workflow_id, coordinator_id);
         let mut metadata = initial_metadata(&request, coordinator_id, &self.worker_ids, "running");
         self.update_root_record(
             workflow_id,
@@ -329,6 +331,20 @@ impl RuntimeTaskService {
                 ));
             }
 
+            let adaptive_team_plan = self.orchestrator.adaptive_team_plan(&workflow_id);
+            if let Some(team_plan) = adaptive_team_plan.as_ref() {
+                put_metadata(
+                    &mut metadata,
+                    "active_worker_ids",
+                    json!(team_plan.worker_ids),
+                );
+                put_metadata(
+                    &mut metadata,
+                    "team_sizing",
+                    json!(team_plan.sizing_decision),
+                );
+            }
+
             let decision_payload = decisions
                 .iter()
                 .map(|decision| {
@@ -352,6 +368,14 @@ impl RuntimeTaskService {
                 json!({
                     "workflow_id": workflow_id,
                     "routing": decision_payload,
+                    "active_worker_ids": adaptive_team_plan
+                        .as_ref()
+                        .map(|team_plan| json!(team_plan.worker_ids))
+                        .unwrap_or(Value::Null),
+                    "team_sizing": adaptive_team_plan
+                        .as_ref()
+                        .map(|team_plan| json!(team_plan.sizing_decision))
+                        .unwrap_or(Value::Null),
                 }),
             )
             .await?;
@@ -954,9 +978,11 @@ fn initial_metadata(
         "requested_priority": request.priority,
         "coordinator_agent_id": coordinator_id,
         "worker_agent_ids": worker_ids,
+        "active_worker_ids": [],
         "planner_output": Value::Null,
         "execution_plan": Value::Null,
         "routing_history": [],
+        "team_sizing": Value::Null,
         "step_results": [],
     });
 

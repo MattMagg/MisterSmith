@@ -7,6 +7,7 @@ use mister_smith_core::{AgentId, InterventionType, TaskId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 use crate::config::TaskState;
 use crate::errors::AgentSystemError;
@@ -134,6 +135,25 @@ impl TaskScheduler {
 
     /// Assign a task to an agent (Pending → Assigned).
     pub fn assign(&self, task_id: &TaskId, agent_id: AgentId) -> Result<(), AgentSystemError> {
+        self.assign_with_team(task_id, agent_id, None)
+    }
+
+    /// Assign a task to an agent and retain the adaptive team that owns it.
+    pub fn assign_to_team(
+        &self,
+        task_id: &TaskId,
+        agent_id: AgentId,
+        team_id: Uuid,
+    ) -> Result<(), AgentSystemError> {
+        self.assign_with_team(task_id, agent_id, Some(team_id))
+    }
+
+    fn assign_with_team(
+        &self,
+        task_id: &TaskId,
+        agent_id: AgentId,
+        team_id: Option<Uuid>,
+    ) -> Result<(), AgentSystemError> {
         let mut entry = self
             .tasks
             .get_mut(task_id)
@@ -148,6 +168,7 @@ impl TaskScheduler {
 
         entry.state = TaskState::Assigned;
         entry.assigned_to = Some(agent_id);
+        entry.team_id = team_id;
         entry.assigned_at = Some(Utc::now());
         Ok(())
     }
@@ -240,6 +261,7 @@ impl TaskScheduler {
 
         entry.state = TaskState::Pending;
         entry.assigned_to = None;
+        entry.team_id = None;
         entry.assigned_at = None;
         entry.output = None;
         entry.completed_at = None;
@@ -545,6 +567,25 @@ mod tests {
         let reset = scheduler.get(&task_id).unwrap();
         assert_eq!(reset.state, TaskState::Pending);
         assert!(reset.assigned_to.is_none());
+        assert!(reset.team_id.is_none());
+    }
+
+    #[test]
+    fn test_assign_to_team_records_membership() {
+        let scheduler = TaskScheduler::new();
+        let task = TaskAssignment::new("analysis", serde_json::json!({}));
+        let task_id = task.task_id;
+        let agent_id = AgentId::new();
+        let team_id = Uuid::new_v4();
+
+        scheduler.submit(task);
+        scheduler
+            .assign_to_team(&task_id, agent_id, team_id)
+            .unwrap();
+
+        let assigned = scheduler.get(&task_id).unwrap();
+        assert_eq!(assigned.assigned_to, Some(agent_id));
+        assert_eq!(assigned.team_id, Some(team_id));
     }
 
     #[tokio::test]

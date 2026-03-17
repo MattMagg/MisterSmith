@@ -25,6 +25,7 @@ use crate::roles::planner::planner_output_from_subtasks;
 use crate::roles::router::BranchRoutingDecision;
 use crate::roles::supervisor::{SupervisorMessage, SupervisorState};
 use crate::scheduler::{ResultAggregator, TaskAssignment, TaskDecomposer, TaskScheduler};
+use crate::team::{plan_adaptive_team, AdaptiveTeamPlan, AdaptiveTeamSizingInputs};
 use crate::topology::{TopologyCompiler, TopologySignals};
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
@@ -55,6 +56,8 @@ pub struct Orchestrator {
     interventions: DashMap<TaskId, Vec<InterventionRecord>>,
     profiles: DashMap<TaskId, Vec<ProfileAssessment>>,
     conservative_reasons: DashMap<TaskId, Vec<String>>,
+    adaptive_team_plans: DashMap<TaskId, AdaptiveTeamPlan>,
+    workflow_coordinators: DashMap<TaskId, AgentId>,
     autonomy_events: DashMap<TaskId, Vec<AutonomyEvent>>,
     autonomy_event_tx: Option<mpsc::Sender<Event>>,
     monitor_states: DashMap<TaskId, MonitorState>,
@@ -160,6 +163,8 @@ impl Orchestrator {
             interventions: DashMap::new(),
             profiles: DashMap::new(),
             conservative_reasons: DashMap::new(),
+            adaptive_team_plans: DashMap::new(),
+            workflow_coordinators: DashMap::new(),
             autonomy_events: DashMap::new(),
             autonomy_event_tx: None,
             monitor_states: DashMap::new(),
@@ -193,6 +198,19 @@ impl Orchestrator {
             .expect("autonomy event publisher thread should spawn");
         self.autonomy_event_tx = Some(tx);
         self
+    }
+
+    /// Remember the workflow coordinator so adaptive team plans can retain a stable owner.
+    pub fn register_workflow_coordinator(&self, workflow_id: &TaskId, coordinator_id: AgentId) {
+        self.workflow_coordinators
+            .insert(*workflow_id, coordinator_id);
+    }
+
+    /// Return the latest adaptive team plan for a workflow, when one has been materialized.
+    pub fn adaptive_team_plan(&self, workflow_id: &TaskId) -> Option<AdaptiveTeamPlan> {
+        self.adaptive_team_plans
+            .get(workflow_id)
+            .map(|entry| entry.value().clone())
     }
 
     /// Decompose a task into subtasks and register them with the scheduler.
@@ -676,8 +694,13 @@ impl Orchestrator {
             .iter()
             .filter_map(CapabilitySummary::to_alert)
             .collect::<Vec<_>>();
-        let team_sizing =
-            baseline_team_sizing_decision(&graph, &routing_history, &conservative_reasons);
+        let team_sizing = self
+            .adaptive_team_plans
+            .get(workflow_id)
+            .map(|plan| plan.sizing_decision.clone())
+            .unwrap_or_else(|| {
+                baseline_team_sizing_decision(&graph, &routing_history, &conservative_reasons)
+            });
 
         Some(AutonomyStatusView {
             session_id: None,
@@ -832,6 +855,11 @@ impl Orchestrator {
             .get(workflow_id)
             .map(|entries| entries.value().clone())
             .unwrap_or_default();
+        let conservative_reasons = self
+            .conservative_reasons
+            .get(workflow_id)
+            .map(|notes| notes.value().clone())
+            .unwrap_or_default();
 
         struct Candidate {
             decision: BranchRoutingDecision,
@@ -899,7 +927,7 @@ impl Orchestrator {
                         recovery_node_ids,
                         recovery_strategy: branch.recovery_strategy,
                         checkpoint_id,
-                        selected_agent: Some(worker_ids[0]),
+                        selected_agent: None,
                         health_state,
                         budget_pressure,
                         dependency_depth,
@@ -934,10 +962,64 @@ impl Orchestrator {
                 })
         });
 
+        if candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mut worker_loads = self.scheduler.worker_loads(worker_ids);
+        let prior_team_plan = self
+            .adaptive_team_plans
+            .get(workflow_id)
+            .map(|plan| plan.value().clone());
+        let frontier_budget_pressure = aggregate_frontier_budget_pressure(
+            candidates
+                .iter()
+                .map(|candidate| candidate.decision.budget_pressure),
+        );
+        let frontier_dependency_depth = candidates
+            .iter()
+            .map(|candidate| candidate.decision.dependency_depth)
+            .max()
+            .unwrap_or(graph.topology_plan.task_shape.max_depth);
+        let frontier_health_state = aggregate_frontier_health(
+            candidates
+                .iter()
+                .map(|candidate| candidate.decision.health_state),
+        );
+        let coordinator_id = self
+            .workflow_coordinators
+            .get(workflow_id)
+            .map(|entry| *entry.value())
+            .or_else(|| prior_team_plan.as_ref().map(|plan| plan.coordinator_id))
+            .unwrap_or(worker_ids[0]);
+        let adaptive_team_plan = plan_adaptive_team(AdaptiveTeamSizingInputs {
+            workflow_id: *workflow_id,
+            graph_id: graph.graph_id,
+            coordinator_id,
+            topology_kind: graph.topology_plan.topology_kind,
+            task_shape_kind: graph.topology_plan.task_shape.kind,
+            decision_phase: if prior_team_plan.is_some() {
+                "frontier_rebalance"
+            } else {
+                "initial"
+            },
+            structural_parallelism: graph.topology_plan.parallelism_width,
+            branch_frontier_width: candidates.len(),
+            dependency_depth: frontier_dependency_depth,
+            available_worker_ids: worker_ids,
+            worker_loads: &worker_loads,
+            health_state: frontier_health_state,
+            budget_pressure: frontier_budget_pressure,
+            conservative_reasons: &conservative_reasons,
+            existing_team_id: prior_team_plan.as_ref().map(|plan| plan.team_id),
+        });
+        let active_worker_ids = adaptive_team_plan.worker_ids.clone();
+        self.adaptive_team_plans
+            .insert(*workflow_id, adaptive_team_plan.clone());
+
         let mut decisions = Vec::new();
-        for mut candidate in candidates {
-            let worker = select_worker(worker_ids, &worker_loads);
+        for mut candidate in candidates.into_iter().take(active_worker_ids.len()) {
+            let worker = select_worker(&active_worker_ids, &worker_loads);
             let mut assigned_task_ids = Vec::new();
             for task_id in &candidate.decision.task_ids {
                 let Some(task) = self.scheduler.get(task_id) else {
@@ -952,7 +1034,8 @@ impl Orchestrator {
                     TaskState::Pending => {}
                 }
 
-                self.scheduler.assign(task_id, worker)?;
+                self.scheduler
+                    .assign_to_team(task_id, worker, adaptive_team_plan.team_id)?;
                 assigned_task_ids.push(*task_id);
             }
 
@@ -1034,6 +1117,9 @@ impl Orchestrator {
                     );
                 }
             }
+
+            drop(graph);
+            self.record_status_update(workflow_id);
         }
 
         Ok(decisions)
@@ -1300,6 +1386,23 @@ impl Orchestrator {
         }
     }
 
+    fn record_status_update(&self, workflow_id: &TaskId) {
+        let Some(view) = self.autonomy_status(workflow_id) else {
+            return;
+        };
+
+        self.record_autonomy_event(
+            workflow_id,
+            AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
+                workflow_id: *workflow_id,
+                graph_id: Some(view.graph.graph_id),
+                branch_id: None,
+                payload: view,
+                operator_visible: true,
+            })),
+        );
+    }
+
     fn record_monitor_message(&self, workflow_id: &TaskId, message: &MonitorMessage) {
         let mut state = self.monitor_states.entry(*workflow_id).or_default();
         state.value_mut().apply(message);
@@ -1532,6 +1635,49 @@ fn health_priority(health_state: HealthState) -> u8 {
         HealthState::Unhealthy => 2,
         HealthState::Unknown => 3,
     }
+}
+
+fn aggregate_frontier_health<I>(health_states: I) -> HealthState
+where
+    I: IntoIterator<Item = HealthState>,
+{
+    let states = health_states.into_iter().collect::<Vec<_>>();
+    if states.is_empty() {
+        return HealthState::Unknown;
+    }
+
+    if states
+        .iter()
+        .all(|health_state| *health_state == HealthState::Unhealthy)
+    {
+        HealthState::Unhealthy
+    } else if states
+        .iter()
+        .all(|health_state| matches!(health_state, HealthState::Degraded | HealthState::Unhealthy))
+    {
+        HealthState::Degraded
+    } else if states
+        .iter()
+        .all(|health_state| *health_state == HealthState::Unknown)
+    {
+        HealthState::Unknown
+    } else {
+        HealthState::Healthy
+    }
+}
+
+fn aggregate_frontier_budget_pressure<I>(budget_pressures: I) -> Option<u8>
+where
+    I: IntoIterator<Item = u8>,
+{
+    let pressures = budget_pressures.into_iter().collect::<Vec<_>>();
+    (!pressures.is_empty()).then(|| {
+        let total = pressures
+            .iter()
+            .map(|pressure| u16::from(*pressure))
+            .sum::<u16>();
+        (total / pressures.len() as u16) as u8
+    })
 }
 
 fn branch_id_for_target(
