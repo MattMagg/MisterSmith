@@ -615,6 +615,19 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         view.topology.rationale.selected_for,
         "minimize restart blast radius"
     );
+    let team_sizing = view
+        .team_sizing
+        .expect("typed event projection should infer team sizing");
+    assert_eq!(team_sizing.decision_phase, "event_projection");
+    assert_eq!(team_sizing.desired_workers, 1);
+    assert_eq!(team_sizing.selected_workers, 1);
+    assert_eq!(team_sizing.available_workers, 1);
+    assert_eq!(team_sizing.budget_pressure, Some(88));
+    assert!(team_sizing.conservative_mode);
+    assert!(team_sizing
+        .rationale_lines
+        .iter()
+        .any(|line| line.contains("minimize restart blast radius")));
     assert_eq!(view.checkpoint_lineage.len(), 1);
     assert_eq!(view.routing_history.len(), 1);
     assert_eq!(
@@ -748,4 +761,135 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         .expect("autonomy projection should remain visible after reactivation");
 
     assert!(view.delegation_alerts.is_empty());
+}
+
+#[tokio::test]
+async fn event_bus_derives_parallel_team_sizing_without_status_snapshot() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let alpha_branch = ExecutionBranchId::new();
+    let beta_branch = ExecutionBranchId::new();
+    let alpha_agent = AgentId::new();
+    let beta_agent = AgentId::new();
+
+    event_bus
+        .publish(
+            AutonomyEvent::GraphUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: ExecutionGraphSummary {
+                    graph_id,
+                    workflow_id,
+                    state: GraphState::Running,
+                    branch_count: 2,
+                    node_count: 3,
+                    active_topology: Some(TopologyKind::Parallel),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::TopologySelected(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: TopologyPlanSummary {
+                    graph_id,
+                    topology_kind: TopologyKind::Parallel,
+                    parallelism_width: 2,
+                    task_shape: sample_task_shape(TaskShapeKind::ParallelFanout),
+                    coordination_policy: CoordinationPolicy::Barrier,
+                    rationale: TopologyRationale {
+                        dependency_shape: "independent branches".to_string(),
+                        operational_signals: vec!["healthy profile".to_string()],
+                        selected_for: "maximize safe concurrency".to_string(),
+                        fallback_reason: Some(
+                            "degrade to sequential when budgets tighten".to_string(),
+                        ),
+                    },
+                    fallback_topology: Some(TopologyKind::Sequential),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    for (branch_id, agent_id) in [(alpha_branch, alpha_agent), (beta_branch, beta_agent)] {
+        event_bus
+            .publish(
+                AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                    workflow_id,
+                    graph_id: Some(graph_id),
+                    branch_id: Some(branch_id),
+                    payload: BranchSummary {
+                        branch_id,
+                        graph_id,
+                        state: BranchState::Running,
+                        assigned_agents: vec![agent_id],
+                        checkpoint_id: None,
+                        recovery_strategy: BranchRecoveryStrategy::Resume,
+                    },
+                    operator_visible: true,
+                })
+                .into_event("autonomy-test"),
+            )
+            .await
+            .unwrap();
+        event_bus
+            .publish(
+                AutonomyEvent::RoutingDecisionRecorded(AutonomyEventEnvelope {
+                    workflow_id,
+                    graph_id: Some(graph_id),
+                    branch_id: Some(branch_id),
+                    payload: RoutingDecisionSummary {
+                        graph_id,
+                        branch_id,
+                        selected_agent: agent_id,
+                        task_ids: vec![TaskId::new()],
+                        recovery_strategy: BranchRecoveryStrategy::Resume,
+                        checkpoint_id: None,
+                        dependency_depth: 1,
+                        budget_pressure: 10,
+                        health_state: HealthState::Healthy,
+                        profile_id: None,
+                        rationale: vec![
+                            "parallel routing preserved independent branches".to_string()
+                        ],
+                    },
+                    operator_visible: true,
+                })
+                .into_event("autonomy-test"),
+            )
+            .await
+            .unwrap();
+    }
+
+    let view = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .expect("parallel projection should remain operator visible");
+    let team_sizing = view
+        .team_sizing
+        .expect("parallel typed event projection should infer team sizing");
+
+    assert_eq!(team_sizing.decision_phase, "event_projection");
+    assert_eq!(team_sizing.desired_workers, 2);
+    assert_eq!(team_sizing.selected_workers, 2);
+    assert_eq!(team_sizing.available_workers, 2);
+    assert_eq!(team_sizing.branch_frontier_width, 2);
+    assert_eq!(team_sizing.dependency_depth, 1);
+    assert_eq!(team_sizing.budget_pressure, Some(10));
+    assert!(!team_sizing.conservative_mode);
+    assert!(team_sizing.cap_reason.is_none());
+    assert!(team_sizing
+        .rationale_lines
+        .iter()
+        .any(|line| line.contains("maximize safe concurrency")));
 }

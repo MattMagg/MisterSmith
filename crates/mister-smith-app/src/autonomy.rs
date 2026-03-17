@@ -201,11 +201,53 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
     let topology_reason = &view.topology.rationale.selected_for;
     let task_shape = view.topology.task_shape.kind.as_str();
+    let structural_signals = if view.topology.task_shape.structural_signals.is_empty() {
+        "none".to_string()
+    } else {
+        view.topology.task_shape.structural_signals.join(" | ")
+    };
+    let dependency_shape = &view.topology.rationale.dependency_shape;
+    let topology_signals = if view.topology.rationale.operational_signals.is_empty() {
+        "none".to_string()
+    } else {
+        view.topology.rationale.operational_signals.join(" | ")
+    };
     let fallback_reason = view
         .topology
         .rationale
         .fallback_reason
         .clone()
+        .unwrap_or_else(|| "none".to_string());
+    let team_sizing_summary = view
+        .team_sizing
+        .as_ref()
+        .map(|decision| {
+            let budget_pressure = decision
+                .budget_pressure
+                .map(|pressure| pressure.to_string())
+                .unwrap_or_else(|| "none".to_string());
+            let cap_reason = decision
+                .cap_reason
+                .clone()
+                .unwrap_or_else(|| "none".to_string());
+            let rationale = if decision.rationale_lines.is_empty() {
+                "none".to_string()
+            } else {
+                decision.rationale_lines.join(" | ")
+            };
+            format!(
+                "phase={} desired={} selected={} frontier={} depth={} conservative={} budget={} cap={} rationale={}",
+                decision.decision_phase,
+                decision.desired_workers,
+                decision.selected_workers,
+                decision.branch_frontier_width,
+                decision.dependency_depth,
+                decision.conservative_mode,
+                budget_pressure,
+                cap_reason,
+                rationale
+            )
+        })
         .unwrap_or_else(|| "none".to_string());
     let branch_summary = view
         .branches
@@ -309,7 +351,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\ntopology: {:?} width={} shape={} rationale={}\nfallback: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -317,8 +359,12 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         view.topology.topology_kind,
         view.topology.parallelism_width,
         task_shape,
+        structural_signals,
+        dependency_shape,
         topology_reason,
+        topology_signals,
         fallback_reason,
+        team_sizing_summary,
         if branch_summary.is_empty() { "none".to_string() } else { branch_summary },
         if checkpoint_summary.is_empty() { "none".to_string() } else { checkpoint_summary },
         if routing_summary.is_empty() { "none".to_string() } else { routing_summary },
