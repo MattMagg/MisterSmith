@@ -43,6 +43,27 @@ For Mister Smith development work, treat Smith MCP as the default control-plane 
 - Keep Linear as the durable source of truth, Symphony as the watched-queue executor, Ralph as the
   loop runner, and SpecKit as the upstream spec/task-pack scaffold.
 
+## Subagent Orchestration
+
+This repo ships a project-scoped Codex agent roster under `.codex/agents/`.
+
+- Use explicit subagent delegation aggressively for bounded, parallel work. The repo default is
+  `24` threads and depth `4`; use the `smith-burst` profile when the task is naturally wide or
+  nested enough to justify `32 / 6`.
+- Use `smith_repo_grounder` plus `smith_control_plane_auditor` for kickoff and recovery. Add
+  `smith_docs_researcher` when external docs or tool behavior matter.
+- Use `smith_frontier_guard` plus `smith_slice_planner` for backlog legitimacy, bounded slicing,
+  and queue-readiness analysis.
+- Use one `smith_crate_worker` per disjoint write scope, pair it with `smith_validator`, and run
+  `smith_reviewer` before parent-controlled finalization.
+- Use `smith_ralph_packet_builder` for Ralph-assisted flows and `smith_speckit_router` plus
+  `smith_slice_planner` for SpecKit entry and task-pack translation.
+- Use `spawn_agents_on_csv` for repeated audits or review sweeps across many similar files, issues,
+  or services.
+- Keep durable control-plane mutations in the parent thread:
+  `save_linear_issue`, `save_issue_workpad`, `apply_queue_stage`, PR merge/push/land, and final
+  issue state transitions stay parent-owned unless a one-off exception is explicitly delegated.
+
 ## Build, Test, and Development Commands
 
 Run from repository root unless noted.

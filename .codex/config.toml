@@ -1,0 +1,9 @@
+[agents]
+max_threads = 24
+max_depth = 4
+job_max_runtime_seconds = 3600
+
+[profiles.smith-burst.agents]
+max_threads = 32
+max_depth = 6
+job_max_runtime_seconds = 5400

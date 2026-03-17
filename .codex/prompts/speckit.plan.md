@@ -20,7 +20,9 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
 
-1. **Setup**: Run `.specify/scripts/bash/setup-plan.sh --json` from repo root and parse JSON for FEATURE_SPEC, IMPL_PLAN, SPECS_DIR, BRANCH. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+1. **Setup**: Run `.specify/scripts/bash/setup-plan.sh --json` from repo root and parse JSON
+   for FEATURE_SPEC, IMPL_PLAN, SPECS_DIR, BRANCH. For single quotes in args like "I'm Groot",
+   use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
 2. **Load context**: Read FEATURE_SPEC and `.specify/memory/constitution.md`. Load IMPL_PLAN template (already copied).
 
@@ -46,11 +48,25 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 2. **Generate and dispatch research agents**:
 
+   For Mister Smith work, default to this planning fan-out before broad research:
+
+   - `smith_repo_grounder` for repo contracts, touched crates, and prior attempts
+   - `smith_control_plane_auditor` for Smith, Linear, PR, and lifecycle evidence
+   - `smith_docs_researcher` when external docs, providers, or tools matter
+   - `smith_slice_planner` when the ask is backlog, spec, or slice heavy
+   - `smith_frontier_guard` when the plan could change frontier posture or staging decisions
+
+   Keep any actual Linear, queue, or PR mutation in the parent thread.
+
    ```text
-   For each unknown in Technical Context:
-     Task: "Research {unknown} for {feature context}"
-   For each technology choice:
-     Task: "Find best practices for {tech} in {domain}"
+   Kickoff:
+     Spawn smith_repo_grounder and smith_control_plane_auditor.
+   If docs or provider behavior matter:
+     Spawn smith_docs_researcher for the external questions.
+   If the plan needs bounded slices:
+     Spawn smith_slice_planner.
+   If legitimacy or frontier leverage is uncertain:
+     Spawn smith_frontier_guard.
    ```
 
 3. **Consolidate findings** in `research.md` using format:

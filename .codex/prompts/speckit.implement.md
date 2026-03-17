@@ -150,6 +150,17 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Core development**: Implement models, services, CLI commands, endpoints
    - **Integration work**: Database connections, middleware, logging, external services
    - **Polish and validation**: Unit tests, performance optimization, documentation
+   - **Mister Smith subagent wiring**:
+     - start with `smith_repo_grounder` when repo grounding is incomplete
+     - add `smith_control_plane_auditor` when workflow, queue, issue, or PR state matters
+     - add `smith_docs_researcher` when external docs or provider behavior are relevant
+     - use one `smith_crate_worker` per disjoint write scope
+     - pair each write worker with `smith_validator`
+     - run `smith_reviewer` before final parent-thread finalization
+     - use `smith_ralph_packet_builder` for Ralph flows and `smith_speckit_router`
+       plus `smith_slice_planner` for SpecKit flows
+     - keep `save_linear_issue`, `save_issue_workpad`, `apply_queue_stage`,
+       PR merge/push/land, and final state transitions in the parent thread
 
 8. Progress tracking and error handling:
    - Report progress after each completed task
