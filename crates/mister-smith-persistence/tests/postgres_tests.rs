@@ -454,6 +454,104 @@ async fn task_find_by_correlation() {
 
 #[tokio::test]
 #[ignore] // Requires PostgreSQL: DATABASE_URL=postgres://...
+async fn task_list_workflows_with_persisted_autonomy_status() {
+    let pool = setup_pool().await;
+
+    let recoverable_workflow_id = Uuid::new_v4();
+    let recoverable = TaskRecord {
+        task_id: recoverable_workflow_id,
+        task_type: "workflow".to_string(),
+        agent_id: None,
+        payload: serde_json::json!({"description": "restart-safe session turn"}),
+        result: Some(serde_json::json!({"status": "completed"})),
+        metadata: serde_json::json!({
+            "session_id": Uuid::new_v4().to_string(),
+            "autonomy_status": {
+                "session_id": null,
+                "turn_index": null,
+                "coordinator_agent_id": null,
+                "graph": {
+                    "graph_id": Uuid::new_v4().to_string(),
+                    "workflow_id": recoverable_workflow_id.to_string(),
+                    "state": "Completed",
+                    "branch_count": 1,
+                    "node_count": 1,
+                    "active_topology": "Sequential"
+                },
+                "topology": {
+                    "graph_id": Uuid::new_v4().to_string(),
+                    "topology_kind": "Sequential",
+                    "parallelism_width": 1,
+                    "task_shape": {
+                        "kind": "strict-chain",
+                        "root_count": 1,
+                        "max_parallel_width": 1,
+                        "max_depth": 1,
+                        "has_join": false,
+                        "has_fanout": false,
+                        "structural_signals": ["roots:1"]
+                    },
+                    "coordination_policy": "Barrier",
+                    "rationale": {
+                        "dependency_shape": "single branch",
+                        "operational_signals": [],
+                        "selected_for": "restart-safe recovery",
+                        "fallback_reason": null
+                    },
+                    "fallback_topology": "Sequential"
+                },
+                "team_sizing": null,
+                "branches": [],
+                "checkpoint_lineage": [],
+                "memory_pressure": [],
+                "routing_history": [],
+                "interventions": [],
+                "delegation_capabilities": [],
+                "delegation_alerts": [],
+                "profiles": [],
+                "guard_decisions": [],
+                "conservative_reasons": []
+            }
+        }),
+        status: "completed".to_string(),
+        priority: 1,
+        correlation_id: Some(recoverable_workflow_id),
+        parent_task_id: None,
+        created_at: Utc::now(),
+        started_at: Some(Utc::now()),
+        completed_at: Some(Utc::now()),
+        expires_at: None,
+    };
+    insert_task(&pool, &recoverable).await.unwrap();
+
+    let unrelated = TaskRecord {
+        task_id: Uuid::new_v4(),
+        task_type: "workflow".to_string(),
+        agent_id: None,
+        payload: serde_json::json!({"description": "no persisted autonomy"}),
+        result: None,
+        metadata: serde_json::json!({}),
+        status: "queued".to_string(),
+        priority: 2,
+        correlation_id: None,
+        parent_task_id: None,
+        created_at: Utc::now(),
+        started_at: None,
+        completed_at: None,
+        expires_at: None,
+    };
+    insert_task(&pool, &unrelated).await.unwrap();
+
+    let workflow_ids = list_workflows_with_persisted_autonomy_status(&pool)
+        .await
+        .unwrap();
+
+    assert!(workflow_ids.contains(&recoverable_workflow_id));
+    assert!(!workflow_ids.contains(&unrelated.task_id));
+}
+
+#[tokio::test]
+#[ignore] // Requires PostgreSQL: DATABASE_URL=postgres://...
 async fn task_not_found() {
     let pool = setup_pool().await;
 

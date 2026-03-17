@@ -325,6 +325,13 @@ async fn start_http_server(
                         .into_iter()
                         .map(|workflow_id| workflow_id.to_string()),
                 );
+                workflows.extend(
+                    task_service
+                        .persisted_autonomy_workflows()
+                        .await
+                        .into_iter()
+                        .map(|workflow_id| workflow_id.to_string()),
+                );
                 workflows.sort();
                 workflows.dedup();
                 axum::Json(autonomy::AutonomyWorkflowList { workflows })

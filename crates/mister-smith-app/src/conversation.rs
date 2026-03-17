@@ -69,7 +69,17 @@ impl ConversationRuntimeService {
 
         if let Some(active_workflow_id) = session.active_workflow_id {
             let workflow_id = TaskId::from_uuid(active_workflow_id);
-            let task = self.load_task(workflow_id).await?;
+            let mut task = self.load_task(workflow_id).await?;
+            if !is_terminal_status(&task.status) {
+                if let Some(recovered) = self
+                    .runtime_task_service
+                    .recover_orphaned_workflow(workflow_id)
+                    .await
+                    .map_err(ConversationServiceError::Internal)?
+                {
+                    task = recovered;
+                }
+            }
             if is_terminal_status(&task.status) {
                 let mut turn = self
                     .session_repository
