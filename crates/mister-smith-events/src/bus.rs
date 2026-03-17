@@ -5,7 +5,7 @@
 //! any component that depends on `mister-smith-core` to publish events without
 //! depending on this crate directly.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -164,13 +164,23 @@ impl AutonomyStatusAccumulator {
         let mut guard_decisions = self.guard_decisions.values().cloned().collect::<Vec<_>>();
         guard_decisions.sort_by_key(|decision| decision.decision_id.to_string());
 
+        let team_sizing = self.team_sizing.clone().or_else(|| {
+            infer_team_sizing_from_projection(
+                &graph,
+                &topology,
+                &branches,
+                &self.routing_history,
+                &self.conservative_reasons,
+            )
+        });
+
         Some(AutonomyStatusView {
             session_id: self.session_id,
             turn_index: self.turn_index,
             coordinator_agent_id: self.coordinator_agent_id,
             graph,
             topology,
-            team_sizing: self.team_sizing.clone(),
+            team_sizing,
             branches,
             checkpoint_lineage,
             memory_pressure,
@@ -256,6 +266,94 @@ impl AutonomyStatusAccumulator {
             }
         }
     }
+}
+
+fn infer_team_sizing_from_projection(
+    graph: &ExecutionGraphSummary,
+    topology: &TopologyPlanSummary,
+    branches: &[BranchSummary],
+    routing_history: &[RoutingDecisionSummary],
+    conservative_reasons: &[String],
+) -> Option<TeamSizingDecision> {
+    let desired_workers = topology.parallelism_width.max(1);
+    let routed_agents = routing_history
+        .iter()
+        .map(|decision| decision.selected_agent)
+        .collect::<HashSet<_>>();
+    let observed_agents = if routed_agents.is_empty() {
+        branches
+            .iter()
+            .flat_map(|branch| branch.assigned_agents.iter().cloned())
+            .collect::<HashSet<_>>()
+    } else {
+        routed_agents
+    };
+
+    let observed_workers = observed_agents.len();
+    if observed_workers == 0 {
+        return None;
+    }
+
+    let selected_workers = observed_workers.min(desired_workers);
+    let budget_pressure = routing_history
+        .iter()
+        .map(|decision| decision.budget_pressure)
+        .max();
+    let dependency_depth = routing_history
+        .iter()
+        .map(|decision| decision.dependency_depth)
+        .max()
+        .unwrap_or(topology.task_shape.max_depth);
+    let cap_reason = (selected_workers < desired_workers).then(|| {
+        conservative_reasons
+            .first()
+            .cloned()
+            .or_else(|| topology.rationale.fallback_reason.clone())
+            .unwrap_or_else(|| {
+                format!(
+                    "event projection observed {selected_workers} active worker(s) for desired width {desired_workers}"
+                )
+            })
+    });
+
+    let mut rationale_lines = vec![
+        format!(
+            "event projection derived desired width {desired_workers} from topology {:?} and task shape {}",
+            topology.topology_kind,
+            topology.task_shape.kind.as_str()
+        ),
+        format!(
+            "event projection observed {observed_workers} active worker(s) across {} routed branch(es)",
+            routing_history.len().max(1)
+        ),
+        format!("topology rationale: {}", topology.rationale.selected_for),
+    ];
+    if let Some(pressure) = budget_pressure {
+        rationale_lines.push(format!("latest routed budget pressure {pressure}"));
+    }
+    if let Some(reason) = cap_reason.as_ref() {
+        rationale_lines.push(reason.clone());
+    }
+
+    Some(TeamSizingDecision {
+        workflow_id: graph.workflow_id,
+        graph_id: graph.graph_id,
+        decision_phase: "event_projection".to_string(),
+        desired_workers,
+        selected_workers,
+        available_workers: observed_workers,
+        branch_frontier_width: topology
+            .task_shape
+            .max_parallel_width
+            .max(routing_history.len())
+            .max(1),
+        dependency_depth,
+        conservative_mode: selected_workers < desired_workers || !conservative_reasons.is_empty(),
+        budget_pressure,
+        cap_reason,
+        rationale_lines,
+        decided_at: chrono::DateTime::<chrono::Utc>::from(SystemTime::UNIX_EPOCH),
+    })
 }
 
 fn delegation_alert_key(alert: &DelegationAlert) -> String {

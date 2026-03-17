@@ -206,6 +206,11 @@ fn render_status_surfaces_operator_rationale_and_history() {
 
     assert!(rendered.contains("minimize restart blast radius"));
     assert!(rendered.contains("shape=strict-chain"));
+    assert!(rendered.contains("structure=roots:1 | max_parallel_width:1 | max_depth:2"));
+    assert!(rendered.contains("dependency=single branch"));
+    assert!(rendered.contains("signals=degraded stream"));
+    assert!(rendered.contains("team sizing: phase=initial desired=1 selected=1"));
+    assert!(rendered.contains("task shape strict-chain with frontier width 1"));
     assert!(rendered.contains(&branch_id.to_string()));
     assert!(rendered.contains("checkpoint scope narrowed resume"));
     assert!(rendered.contains("applied retry for targeted recovery"));
@@ -213,6 +218,66 @@ fn render_status_surfaces_operator_rationale_and_history() {
     assert!(rendered.contains("lineage="));
     assert!(rendered.contains("delegation revoked before tool execution"));
     assert!(rendered.contains("control-plane state unavailable"));
+}
+
+#[test]
+fn render_status_surfaces_capped_parallel_team_decisions() {
+    let (mut view, _, _) = sample_view();
+    let workflow_id = view.graph.workflow_id;
+    let graph_id = view.graph.graph_id;
+
+    view.topology.topology_kind = TopologyKind::Parallel;
+    view.topology.parallelism_width = 3;
+    view.topology.task_shape = TaskShapeClassification {
+        kind: TaskShapeKind::ParallelFanout,
+        root_count: 1,
+        max_parallel_width: 3,
+        max_depth: 2,
+        has_join: false,
+        has_fanout: true,
+        structural_signals: vec![
+            "roots:1".to_string(),
+            "max_parallel_width:3".to_string(),
+            "max_depth:2".to_string(),
+        ],
+    };
+    view.topology.rationale = TopologyRationale {
+        dependency_shape: "independent branches".to_string(),
+        operational_signals: vec![
+            "budget pressure".to_string(),
+            "conservative mode".to_string(),
+        ],
+        selected_for: "maximize safe concurrency".to_string(),
+        fallback_reason: Some("budget pressure capped the active team".to_string()),
+    };
+    view.team_sizing = Some(TeamSizingDecision {
+        workflow_id,
+        graph_id,
+        decision_phase: "frontier_rebalance".to_string(),
+        desired_workers: 3,
+        selected_workers: 1,
+        available_workers: 3,
+        branch_frontier_width: 3,
+        dependency_depth: 2,
+        conservative_mode: true,
+        budget_pressure: Some(88),
+        cap_reason: Some("budget pressure capped the active team".to_string()),
+        rationale_lines: vec![
+            "parallel fanout exposed three ready branches".to_string(),
+            "budget pressure forced the active team to stay sequential".to_string(),
+        ],
+        decided_at: chrono::Utc::now(),
+    });
+
+    let rendered = autonomy::render_status(&view);
+
+    assert!(rendered.contains("shape=parallel-fanout"));
+    assert!(rendered.contains("structure=roots:1 | max_parallel_width:3 | max_depth:2"));
+    assert!(rendered.contains("dependency=independent branches"));
+    assert!(rendered.contains("signals=budget pressure | conservative mode"));
+    assert!(rendered.contains("team sizing: phase=frontier_rebalance desired=3 selected=1"));
+    assert!(rendered.contains("cap=budget pressure capped the active team"));
+    assert!(rendered.contains("parallel fanout exposed three ready branches"));
 }
 
 #[test]
