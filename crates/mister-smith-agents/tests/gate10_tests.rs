@@ -491,6 +491,15 @@ async fn gate10_mixed_dependency_resume_preserves_completed_branches() {
         status.checkpoint_lineage[0].checkpoint_id,
         fixture.checkpoint_id
     );
+    let team_sizing = status
+        .team_sizing
+        .as_ref()
+        .expect("orchestrator should emit the frozen adaptive-team contract");
+    assert_eq!(team_sizing.decision_phase, "initial");
+    assert_eq!(
+        team_sizing.desired_workers,
+        status.topology.parallelism_width
+    );
     assert!(status.routing_history[0]
         .rationale
         .iter()

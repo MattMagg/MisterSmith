@@ -13,7 +13,8 @@ use mister_smith_core::{
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
     InterventionRecord, MemorySnapshotId, ProfileSnapshot, ProfileSnapshotId, ProvenanceChain,
-    RevocationState, SessionId, TaskId, TaskShapeClassification, TopologyKind, TopologyRationale,
+    RevocationState, SessionId, TaskId, TaskShapeClassification, TeamSizingDecision, TopologyKind,
+    TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -199,6 +200,9 @@ pub struct AutonomyStatusView {
     pub graph: ExecutionGraphSummary,
     /// Selected topology summary.
     pub topology: TopologyPlanSummary,
+    /// Frozen adaptive team-sizing decision when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_sizing: Option<TeamSizingDecision>,
     /// Branch-level status summaries.
     pub branches: Vec<BranchSummary>,
     /// Checkpoint lineage visible to operators for targeted recovery.

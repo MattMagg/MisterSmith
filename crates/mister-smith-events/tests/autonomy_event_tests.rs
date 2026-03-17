@@ -4,7 +4,7 @@ use mister_smith_core::{
     ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
     GuardEvidence, HealthState, InterventionRecordId, InterventionType, ProfileSnapshot,
     ProfileSnapshotId, ProfileTarget, ProvenanceChain, ProvenanceLink, RevocationState, TaskId,
-    TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale,
+    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
@@ -59,6 +59,40 @@ fn sample_task_shape(kind: TaskShapeKind) -> TaskShapeClassification {
             format!("max_parallel_width:{max_parallel_width}"),
             format!("max_depth:{max_depth}"),
         ],
+    }
+}
+
+fn sample_team_sizing(
+    workflow_id: TaskId,
+    graph_id: ExecutionGraphId,
+    kind: TaskShapeKind,
+) -> TeamSizingDecision {
+    let task_shape = sample_task_shape(kind);
+    let desired_workers = task_shape.max_parallel_width.max(1);
+    TeamSizingDecision {
+        workflow_id,
+        graph_id,
+        decision_phase: "initial".to_string(),
+        desired_workers,
+        selected_workers: desired_workers,
+        available_workers: desired_workers,
+        branch_frontier_width: task_shape.max_parallel_width.max(1),
+        dependency_depth: task_shape.max_depth,
+        conservative_mode: false,
+        budget_pressure: Some(35),
+        cap_reason: None,
+        rationale_lines: vec![
+            format!(
+                "task shape {} with frontier width {}",
+                task_shape.kind.as_str(),
+                task_shape.max_parallel_width.max(1)
+            ),
+            format!(
+                "selected {} workers from the available pool",
+                desired_workers
+            ),
+        ],
+        decided_at: chrono::Utc::now(),
     }
 }
 
@@ -123,6 +157,7 @@ fn autonomy_event_roundtrips_and_converts_to_generic_event() {
 
 #[test]
 fn autonomy_status_view_serializes_with_typed_summaries() {
+    let workflow_id = TaskId::new();
     let graph_id = ExecutionGraphId::new();
     let branch_id = ExecutionBranchId::new();
     let view = AutonomyStatusView {
@@ -131,7 +166,7 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
         coordinator_agent_id: None,
         graph: ExecutionGraphSummary {
             graph_id,
-            workflow_id: TaskId::new(),
+            workflow_id,
             state: GraphState::Running,
             branch_count: 2,
             node_count: 5,
@@ -151,6 +186,11 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             },
             fallback_topology: Some(TopologyKind::Sequential),
         },
+        team_sizing: Some(sample_team_sizing(
+            workflow_id,
+            graph_id,
+            TaskShapeKind::FanoutJoin,
+        )),
         branches: vec![BranchSummary {
             branch_id,
             graph_id,
@@ -286,6 +326,11 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
             },
             fallback_topology: Some(TopologyKind::Sequential),
         },
+        team_sizing: Some(sample_team_sizing(
+            workflow_id,
+            graph_id,
+            TaskShapeKind::StrictChain,
+        )),
         branches: vec![BranchSummary {
             branch_id,
             graph_id,
@@ -616,6 +661,11 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
             },
             fallback_topology: Some(TopologyKind::Sequential),
         },
+        team_sizing: Some(sample_team_sizing(
+            workflow_id,
+            graph_id,
+            TaskShapeKind::StrictChain,
+        )),
         branches: vec![BranchSummary {
             branch_id,
             graph_id,

@@ -11,7 +11,7 @@ use mister_smith_core::{
     GuardDecision, GuardDecisionId, GuardEvidence, HealthState, InterventionRecord,
     InterventionRecordId, InterventionType, MemorySnapshotId, ProfileSnapshotId, ProfileTarget,
     ProvenanceChain, ProvenanceLink, RevocationState, TaskId, TaskShapeClassification,
-    TaskShapeKind, TopologyKind, TopologyRationale,
+    TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
@@ -32,6 +32,27 @@ fn sample_task_shape(kind: TaskShapeKind) -> TaskShapeClassification {
             "max_parallel_width:1".to_string(),
             "max_depth:2".to_string(),
         ],
+    }
+}
+
+fn sample_team_sizing(workflow_id: TaskId, graph_id: ExecutionGraphId) -> TeamSizingDecision {
+    TeamSizingDecision {
+        workflow_id,
+        graph_id,
+        decision_phase: "initial".to_string(),
+        desired_workers: 1,
+        selected_workers: 1,
+        available_workers: 1,
+        branch_frontier_width: 1,
+        dependency_depth: 2,
+        conservative_mode: true,
+        budget_pressure: Some(88),
+        cap_reason: None,
+        rationale_lines: vec![
+            "task shape strict-chain with frontier width 1".to_string(),
+            "selected 1 worker from the available pool".to_string(),
+        ],
+        decided_at: chrono::Utc::now(),
     }
 }
 
@@ -68,6 +89,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             },
             fallback_topology: Some(TopologyKind::Sequential),
         },
+        team_sizing: Some(sample_team_sizing(workflow_id, graph_id)),
         branches: vec![BranchSummary {
             branch_id,
             graph_id,

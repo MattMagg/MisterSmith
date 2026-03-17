@@ -15,7 +15,7 @@ use crate::enums::{
 };
 use crate::ids::{
     AgentId, CapabilityId, CheckpointId, ContextBudgetId, ExecutionBranchId, ExecutionGraphId,
-    ExecutionNodeId, GuardDecisionId, InterventionRecordId, ProfileSnapshotId,
+    ExecutionNodeId, GuardDecisionId, InterventionRecordId, ProfileSnapshotId, TaskId,
 };
 
 /// Coarse task-structure class derived from dependency analysis.
@@ -94,6 +94,37 @@ pub struct TopologyPlan {
     pub coordination_policy: CoordinationPolicy,
     /// Conservative fallback topology when signals degrade.
     pub fallback_topology: Option<TopologyKind>,
+}
+
+/// Operator-visible sizing decision for one workflow or frontier transition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeamSizingDecision {
+    /// Workflow that owns the decision.
+    pub workflow_id: TaskId,
+    /// Graph the decision applies to.
+    pub graph_id: ExecutionGraphId,
+    /// Decision phase for this slice, e.g. `initial` or `frontier_rebalance`.
+    pub decision_phase: String,
+    /// Width implied by structure before caps.
+    pub desired_workers: usize,
+    /// Final worker count after caps.
+    pub selected_workers: usize,
+    /// Workers available to the runtime at decision time.
+    pub available_workers: usize,
+    /// Frontier width that shaped the decision.
+    pub branch_frontier_width: usize,
+    /// Depth signal that shaped the decision.
+    pub dependency_depth: usize,
+    /// Whether the runtime narrowed posture conservatively.
+    pub conservative_mode: bool,
+    /// Budget-pressure signal used for capping when present.
+    pub budget_pressure: Option<u8>,
+    /// Main explanation when `selected_workers < desired_workers`.
+    pub cap_reason: Option<String>,
+    /// Operator-visible explanation of the decision.
+    pub rationale_lines: Vec<String>,
+    /// Decision timestamp.
+    pub decided_at: DateTime<Utc>,
 }
 
 /// Bounded context allowance for a workflow scope.

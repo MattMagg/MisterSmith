@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 use std::sync::Arc;
 
@@ -7,6 +7,7 @@ use dashmap::DashMap;
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, ExecutionBranchId, ExecutionNodeId,
     GuardDecision, GuardTarget, HealthState, InterventionRecord, ProfileSnapshot, TaskId,
+    TeamSizingDecision,
 };
 use tracing::{instrument, warn};
 
@@ -61,6 +62,83 @@ pub struct Orchestrator {
 }
 
 const AUTONOMY_EVENT_SOURCE: &str = "mister-smith-agents::orchestrator";
+
+fn baseline_team_sizing_decision(
+    graph: &ExecutionGraph,
+    routing_history: &[RoutingDecisionSummary],
+    conservative_reasons: &[String],
+) -> TeamSizingDecision {
+    let desired_workers = graph.topology_plan.parallelism_width.max(1);
+    let available_workers = graph
+        .branches
+        .iter()
+        .flat_map(|branch| branch.assigned_agents.iter().copied())
+        .collect::<HashSet<_>>()
+        .len()
+        .max(1);
+    let selected_workers = desired_workers.min(available_workers);
+    let branch_frontier_width = graph
+        .topology_plan
+        .task_shape
+        .max_parallel_width
+        .max(graph.branches.len())
+        .max(1);
+    let dependency_depth = routing_history
+        .iter()
+        .map(|decision| decision.dependency_depth)
+        .max()
+        .unwrap_or(graph.topology_plan.task_shape.max_depth);
+    let budget_pressure = routing_history
+        .iter()
+        .map(|decision| decision.budget_pressure)
+        .max();
+    let conservative_mode = !conservative_reasons.is_empty();
+    let cap_reason = (selected_workers < desired_workers)
+        .then_some("available worker pool smaller than structural width".to_string());
+
+    let mut rationale_lines = vec![
+        format!(
+            "task shape {} with frontier width {}",
+            graph.topology_plan.task_shape.kind.as_str(),
+            branch_frontier_width
+        ),
+        format!(
+            "topology {:?} requested {} workers",
+            graph.topology_plan.topology_kind, desired_workers
+        )
+        .to_ascii_lowercase(),
+        format!(
+            "selected {} workers because {} workers are currently available",
+            selected_workers, available_workers
+        ),
+    ];
+    if let Some(pressure) = budget_pressure {
+        rationale_lines.push(format!("latest routing budget pressure {}", pressure));
+    }
+    if conservative_mode {
+        rationale_lines.extend(
+            conservative_reasons
+                .iter()
+                .map(|reason| format!("conservative posture: {}", reason)),
+        );
+    }
+
+    TeamSizingDecision {
+        workflow_id: graph.workflow_id,
+        graph_id: graph.graph_id,
+        decision_phase: "initial".to_string(),
+        desired_workers,
+        selected_workers,
+        available_workers,
+        branch_frontier_width,
+        dependency_depth,
+        conservative_mode,
+        budget_pressure,
+        cap_reason,
+        rationale_lines,
+        decided_at: chrono::Utc::now(),
+    }
+}
 
 impl Orchestrator {
     pub fn new(
@@ -598,6 +676,8 @@ impl Orchestrator {
             .iter()
             .filter_map(CapabilitySummary::to_alert)
             .collect::<Vec<_>>();
+        let team_sizing =
+            baseline_team_sizing_decision(&graph, &routing_history, &conservative_reasons);
 
         Some(AutonomyStatusView {
             session_id: None,
@@ -620,6 +700,7 @@ impl Orchestrator {
                 rationale: graph.topology_plan.rationale.clone(),
                 fallback_topology: graph.topology_plan.fallback_topology,
             },
+            team_sizing: Some(team_sizing),
             branches: graph
                 .branches
                 .iter()

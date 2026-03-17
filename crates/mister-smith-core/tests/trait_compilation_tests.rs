@@ -357,6 +357,7 @@ fn autonomy_types_compile_with_shared_trait_bounds() {
     assert_autonomy_traits::<TaskShapeClassification>();
     assert_autonomy_traits::<TopologyRationale>();
     assert_autonomy_traits::<TopologyPlan>();
+    assert_autonomy_traits::<TeamSizingDecision>();
     assert_autonomy_traits::<ContextBudget>();
     assert_autonomy_traits::<MetricWindow>();
     assert_autonomy_traits::<SemanticSignal>();
@@ -371,6 +372,7 @@ fn autonomy_types_compile_with_shared_trait_bounds() {
 
 #[test]
 fn autonomy_ids_enums_and_errors_are_available() {
+    let workflow_id = TaskId::new();
     let graph_id = ExecutionGraphId::new();
     let budget = ContextBudget {
         budget_id: ContextBudgetId::new(),
@@ -406,6 +408,24 @@ fn autonomy_ids_enums_and_errors_are_available() {
         coordination_policy: CoordinationPolicy::Mixed,
         fallback_topology: Some(TopologyKind::Sequential),
     };
+    let team_sizing = TeamSizingDecision {
+        workflow_id,
+        graph_id,
+        decision_phase: "initial".to_string(),
+        desired_workers: 6,
+        selected_workers: 4,
+        available_workers: 4,
+        branch_frontier_width: 4,
+        dependency_depth: 3,
+        conservative_mode: true,
+        budget_pressure: Some(72),
+        cap_reason: Some("available worker cap".to_string()),
+        rationale_lines: vec![
+            "frontier width justified wider fanout".to_string(),
+            "available workers capped the active team".to_string(),
+        ],
+        decided_at: chrono::Utc::now(),
+    };
     let decision = GuardDecision {
         decision_id: GuardDecisionId::new(),
         failure_class: FailureClass::Streaming,
@@ -429,6 +449,9 @@ fn autonomy_ids_enums_and_errors_are_available() {
     assert_ne!(graph_id.to_string(), "");
     assert_eq!(budget.scope, BudgetScope::Branch);
     assert_eq!(plan.topology_kind, TopologyKind::Hybrid);
+    assert_eq!(team_sizing.workflow_id, workflow_id);
+    assert!(team_sizing.selected_workers <= team_sizing.desired_workers);
+    assert!(team_sizing.selected_workers <= team_sizing.available_workers);
     assert_eq!(decision.intervention, InterventionType::BranchIsolation);
     assert!(matches!(
         system_error,
