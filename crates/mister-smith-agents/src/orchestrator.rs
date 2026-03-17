@@ -1646,20 +1646,11 @@ where
         return HealthState::Unknown;
     }
 
-    if states
-        .iter()
-        .all(|health_state| *health_state == HealthState::Unhealthy)
-    {
+    if states.contains(&HealthState::Unhealthy) {
         HealthState::Unhealthy
-    } else if states
-        .iter()
-        .all(|health_state| matches!(health_state, HealthState::Degraded | HealthState::Unhealthy))
-    {
+    } else if states.contains(&HealthState::Degraded) {
         HealthState::Degraded
-    } else if states
-        .iter()
-        .all(|health_state| *health_state == HealthState::Unknown)
-    {
+    } else if states.contains(&HealthState::Unknown) {
         HealthState::Unknown
     } else {
         HealthState::Healthy
@@ -1980,5 +1971,25 @@ mod tests {
         // Aggregate
         let result = orchestrator.aggregate(&task_id).await.unwrap();
         assert!(result.is_array());
+    }
+
+    #[test]
+    fn aggregate_frontier_health_tracks_worst_present_state() {
+        assert_eq!(
+            aggregate_frontier_health([
+                HealthState::Healthy,
+                HealthState::Unhealthy,
+                HealthState::Unknown,
+            ]),
+            HealthState::Unhealthy
+        );
+        assert_eq!(
+            aggregate_frontier_health([HealthState::Healthy, HealthState::Degraded]),
+            HealthState::Degraded
+        );
+        assert_eq!(
+            aggregate_frontier_health([HealthState::Healthy, HealthState::Unknown]),
+            HealthState::Unknown
+        );
     }
 }

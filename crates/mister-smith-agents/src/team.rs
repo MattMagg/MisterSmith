@@ -115,7 +115,8 @@ pub fn plan_adaptive_team(inputs: AdaptiveTeamSizingInputs<'_>) -> AdaptiveTeamP
         .max(1)
         .min(branch_frontier_width);
     let available_workers = inputs.available_worker_ids.len().max(1);
-    let conservative_mode = !inputs.conservative_reasons.is_empty()
+    let explicit_conservative_posture = !inputs.conservative_reasons.is_empty();
+    let conservative_mode = explicit_conservative_posture
         || matches!(
             inputs.health_state,
             HealthState::Degraded | HealthState::Unhealthy
@@ -172,7 +173,7 @@ pub fn plan_adaptive_team(inputs: AdaptiveTeamSizingInputs<'_>) -> AdaptiveTeamP
         _ => {}
     }
 
-    if conservative_mode && selected_workers > 1 {
+    if explicit_conservative_posture && selected_workers > 1 {
         selected_workers = 1;
         cap_notes.push("conservative posture requested single-worker execution".to_string());
     }
@@ -389,5 +390,38 @@ mod tests {
         assert_eq!(plan.sizing_decision.selected_workers, 1);
         assert!(plan.sizing_decision.cap_reason.is_some());
         assert_eq!(plan.worker_ids.len(), 1);
+    }
+
+    #[test]
+    fn adaptive_team_plan_keeps_two_worker_cap_under_moderate_pressure() {
+        let workers = vec![AgentId::new(), AgentId::new(), AgentId::new()];
+        let worker_loads = HashMap::new();
+        let plan = plan_adaptive_team(AdaptiveTeamSizingInputs {
+            workflow_id: TaskId::new(),
+            graph_id: ExecutionGraphId::new(),
+            coordinator_id: AgentId::new(),
+            topology_kind: TopologyKind::Parallel,
+            task_shape_kind: TaskShapeKind::ParallelFanout,
+            decision_phase: "frontier_rebalance",
+            structural_parallelism: 3,
+            branch_frontier_width: 3,
+            dependency_depth: 1,
+            available_worker_ids: &workers,
+            worker_loads: &worker_loads,
+            health_state: HealthState::Healthy,
+            budget_pressure: Some(80),
+            conservative_reasons: &[],
+            existing_team_id: None,
+        });
+
+        assert_eq!(plan.sizing_decision.desired_workers, 3);
+        assert_eq!(plan.sizing_decision.selected_workers, 2);
+        assert_eq!(plan.worker_ids.len(), 2);
+        assert_eq!(plan.sizing_decision.budget_pressure, Some(80));
+        assert!(plan.sizing_decision.conservative_mode);
+        assert_eq!(
+            plan.sizing_decision.cap_reason.as_deref(),
+            Some("budget pressure 80 caps the active team at 2 workers")
+        );
     }
 }

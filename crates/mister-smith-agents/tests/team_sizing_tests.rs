@@ -303,3 +303,75 @@ fn degraded_pressure_caps_parallel_frontier_to_single_worker() {
     assert_eq!(team_plan.sizing_decision.budget_pressure, Some(100));
     assert_eq!(team_plan.sizing_decision.conservative_mode, true);
 }
+
+#[test]
+fn moderate_pressure_caps_parallel_frontier_to_two_workers() {
+    let scheduler = Arc::new(TaskScheduler::new());
+    let orchestrator = Orchestrator::new(
+        Arc::new(IdentityDecomposer),
+        Arc::new(ArrayAggregator),
+        scheduler.clone(),
+    );
+    let mut graph = TopologyCompiler::default()
+        .compile(
+            TaskId::new(),
+            &wide_fanout_plan(),
+            &TopologySignals::default(),
+        )
+        .expect("wide graph should compile");
+    let workflow_id = graph.workflow_id;
+    let root_branch = step_branch_id(&graph, "root");
+
+    graph
+        .nodes
+        .iter_mut()
+        .find(|node| node.step_key == "root")
+        .expect("root node should exist")
+        .state = NodeState::Completed;
+    graph.branch_mut(&root_branch).unwrap().state = mister_smith_core::BranchState::Completed;
+    for step_key in ["alpha", "beta", "gamma"] {
+        graph
+            .nodes
+            .iter_mut()
+            .find(|node| node.step_key == step_key)
+            .expect("fanout node should exist")
+            .budget = ContextBudget {
+            budget_id: ContextBudgetId::new(),
+            scope: BudgetScope::Branch,
+            max_units: 10,
+            reserved_units: 8,
+            policy: BudgetPolicy::Summarize,
+        };
+    }
+    orchestrator.register_execution_graph(graph.clone());
+
+    for node in &graph.nodes {
+        let state = if node.step_key == "root" {
+            TaskState::Completed
+        } else {
+            TaskState::Pending
+        };
+        submit_task(
+            &scheduler,
+            TaskId::from_uuid(*node.node_id.as_ref()),
+            node.step_key.as_str(),
+            workflow_id,
+            state,
+        );
+    }
+
+    let workers = [AgentId::new(), AgentId::new(), AgentId::new()];
+    let decisions = orchestrator
+        .route_ready_branches(&workflow_id, &workers)
+        .expect("moderately pressured frontier should still route");
+    let team_plan = orchestrator
+        .adaptive_team_plan(&workflow_id)
+        .expect("moderately pressured frontier should materialize a team plan");
+
+    assert_eq!(decisions.len(), 2);
+    assert_eq!(team_plan.sizing_decision.desired_workers, 3);
+    assert_eq!(team_plan.sizing_decision.selected_workers, 2);
+    assert_eq!(team_plan.worker_ids.len(), 2);
+    assert_eq!(team_plan.sizing_decision.budget_pressure, Some(80));
+    assert_eq!(team_plan.sizing_decision.conservative_mode, true);
+}
