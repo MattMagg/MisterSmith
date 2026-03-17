@@ -262,7 +262,7 @@ pub fn plan_adaptive_team(inputs: AdaptiveTeamSizingInputs<'_>) -> AdaptiveTeamP
 
 fn coordination_depth_cap(dependency_depth: usize, desired_workers: usize) -> usize {
     if dependency_depth >= 3 {
-        desired_workers.min(2).max(1)
+        desired_workers.clamp(1, 2)
     } else {
         desired_workers.max(1)
     }
