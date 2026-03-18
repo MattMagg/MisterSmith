@@ -488,4 +488,38 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn routing_decision_deserializes_legacy_payload_without_step_signal() {
+        let legacy = serde_json::json!({
+            "event_type": "routing_decision",
+            "model_id": "legacy-model",
+            "tier": "direct",
+            "reason": "legacy payload"
+        });
+
+        let event: ModelEvent = serde_json::from_value(legacy).unwrap();
+
+        match event {
+            ModelEvent::RoutingDecision {
+                model_id,
+                tier,
+                reason,
+                step_signal,
+            } => {
+                assert_eq!(model_id, "legacy-model");
+                assert_eq!(tier, "direct");
+                assert_eq!(reason, "legacy payload");
+                assert_eq!(step_signal.metadata.step_id, "completion.request");
+                assert_eq!(
+                    step_signal.metadata.step_kind.as_deref(),
+                    Some("completion")
+                );
+                assert_eq!(step_signal.action, crate::routing_signal::StepRoutingAction::Continue);
+                assert!(step_signal.confidence.is_none());
+                assert!(step_signal.checkpoints.is_empty());
+            }
+            other => panic!("expected RoutingDecision, got: {other:?}"),
+        }
+    }
 }

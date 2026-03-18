@@ -157,6 +157,18 @@ impl ModelRouter {
         }
     }
 
+    fn emit_routing_decision(&self, decision: &RoutingDecision) {
+        self.emit_routing_event(
+            decision.model_id.clone(),
+            decision
+                .tier_label
+                .clone()
+                .unwrap_or_else(|| "direct".to_string()),
+            decision.reason.clone(),
+            decision.step_signal.clone(),
+        );
+    }
+
     /// Register a provider.
     pub async fn add_provider(
         &self,
@@ -620,6 +632,7 @@ impl ModelRouter {
                     estimated_cost_tokens: Some(estimated),
                     step_signal,
                 };
+                self.emit_routing_decision(&decision);
 
                 Ok((response, decision))
             }
@@ -864,6 +877,19 @@ impl ModelProvider for ModelRouter {
 
                 match self.select_provider_from_entries(&providers, hint, estimated) {
                     Ok(idx) => {
+                        let step_signal = self.build_step_signal(
+                            &request,
+                            None,
+                            StepRoutingAction::Continue,
+                            vec![],
+                            None,
+                        );
+                        self.emit_routing_event(
+                            providers[idx].provider.model_id().to_string(),
+                            "direct".to_string(),
+                            format!("Selected via {:?} (stream)", self.routing_policy),
+                            step_signal,
+                        );
                         let provider = providers[idx].provider.clone();
                         drop(providers);
                         provider.stream(Self::provider_request(&request))
