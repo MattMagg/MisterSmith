@@ -4,9 +4,7 @@ use crate::context_manager::{
     resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
 };
 #[cfg(feature = "llm")]
-use crate::orchestrator::LlmSupervision;
-#[cfg(feature = "llm")]
-use crate::roles::llm_bridge::complete_with_optional_supervision;
+use crate::orchestrator::{LlmSupervision, StepRoutingControl};
 use crate::scheduler::TaskAssignment;
 use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
 use mister_smith_persistence::SnapshotScope;
@@ -41,6 +39,11 @@ pub enum PlannerMessage {
 pub struct PlannerState {
     /// The most recently generated plan, if any.
     pub current_plan: Option<serde_json::Value>,
+    /// Number of planner turns completed through the live LLM loop.
+    pub planning_iterations: u64,
+    /// Step-level routing carryover to apply at the next planner boundary.
+    #[cfg(feature = "llm")]
+    pub routing_control: StepRoutingControl,
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +168,20 @@ impl PlannerAgent {
         )
         .await
     }
+}
+
+#[cfg(feature = "llm")]
+fn planner_system_prompt(routing_control: &StepRoutingControl) -> String {
+    let mut prompt = "You are a task planning agent. Given a goal and context, \
+                      decompose it into concrete steps. Return a JSON object with \
+                      'goal', 'steps' (array of objects with 'step' number, 'action', \
+                      and 'description'), and 'context'."
+        .to_string();
+    if let Some(guidance) = routing_control.verification_guidance() {
+        prompt.push_str("\n\n");
+        prompt.push_str(&guidance);
+    }
+    prompt
 }
 
 /// Normalize planner output into the minimum shape required by the Phase 10 control plane.
@@ -305,31 +322,68 @@ impl Actor for PlannerAgent {
                 #[cfg(feature = "llm")]
                 if let Some(router) = &self.router {
                     let result: Result<serde_json::Value, PlannerError> = async {
-                        use mister_smith_llm::{ChatMessage, CompletionRequest, ContentBlock};
+                        use mister_smith_llm::{
+                            ChatMessage, CompletionRequest, ContentBlock, ModelEvent, ModelProvider,
+                        };
+
+                        let planning_iteration = state.planning_iterations.saturating_add(1);
+                        let step_index = u32::try_from(planning_iteration).unwrap_or(u32::MAX);
 
                         let request = CompletionRequest {
-                            system: Some(
-                                "You are a task planning agent. Given a goal and context, \
-                                 decompose it into concrete steps. Return a JSON object with \
-                                 'goal', 'steps' (array of objects with 'step' number, 'action', \
-                                 and 'description'), and 'context'."
-                                    .to_string(),
-                            ),
+                            system: Some(planner_system_prompt(&state.routing_control)),
                             messages: vec![ChatMessage::User {
                                 content: serde_json::json!({
                                     "goal": goal,
                                     "context": context,
                                 }),
                             }],
+                            routing_hint: Some(state.routing_control.request_hint(
+                                format!("planner.step.{planning_iteration}"),
+                                Some(step_index),
+                                "planner",
+                            )),
                             ..CompletionRequest::default()
                         };
-                        let response = complete_with_optional_supervision(
-                            router,
-                            request,
-                            self.supervision.as_ref(),
-                        )
-                        .await
-                        .map_err(|error| PlannerError::Internal(error.to_string()))?;
+
+                        if let Some(supervision) = self.supervision.as_ref() {
+                            supervision
+                                .request_started(router.model_id())
+                                .await
+                                .map_err(|error| PlannerError::Internal(error.to_string()))?;
+                        }
+
+                        let (response, decision) = match router.route_completion(request).await {
+                            Ok(result) => result,
+                            Err(error) => {
+                                if let Some(supervision) = self.supervision.as_ref() {
+                                    supervision.completion_failed(&error).await.map_err(
+                                        |supervision_error| {
+                                            PlannerError::Internal(supervision_error.to_string())
+                                        },
+                                    )?;
+                                }
+                                return Err(PlannerError::Internal(error.to_string()));
+                            }
+                        };
+
+                        if let Some(supervision) = self.supervision.as_ref() {
+                            supervision
+                                .observe_model_event(&ModelEvent::RoutingDecision {
+                                    model_id: decision.model_id.clone(),
+                                    tier: decision
+                                        .tier_label
+                                        .clone()
+                                        .unwrap_or_else(|| "direct".to_string()),
+                                    reason: decision.reason.clone(),
+                                    step_signal: decision.step_signal.clone(),
+                                })
+                                .await
+                                .map_err(|error| PlannerError::Internal(error.to_string()))?;
+                            supervision
+                                .completion_succeeded(&response)
+                                .await
+                                .map_err(|error| PlannerError::Internal(error.to_string()))?;
+                        }
 
                         // Extract text from the first text content block.
                         let text = response
@@ -355,6 +409,8 @@ impl Actor for PlannerAgent {
                                 )
                             });
 
+                        state.routing_control.apply_routing_decision(&decision);
+                        state.planning_iterations = planning_iteration;
                         Ok(plan)
                     }
                     .await;

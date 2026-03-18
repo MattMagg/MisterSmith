@@ -36,7 +36,13 @@ use mister_smith_events::{
 #[cfg(feature = "llm")]
 use mister_smith_llm::router::ConfidenceSignal;
 #[cfg(feature = "llm")]
-use mister_smith_llm::{CompletionResponse, ModelEvent, StreamMonitor, StreamMonitorConfig};
+use mister_smith_llm::{
+    CompletionResponse, ModelEvent, RoutingDecision, RoutingHint, StepRoutingAction,
+    StepRoutingMetadata, StepRoutingSignal, StepVerificationCheckpoint,
+    StepVerificationCheckpointKind, StreamMonitor, StreamMonitorConfig,
+};
+#[cfg(feature = "llm")]
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "llm")]
 use tokio::sync::Mutex;
 
@@ -1908,6 +1914,114 @@ impl LlmSupervision {
             .supervise(&self.workflow_id, context)
             .await
             .map(Some)
+    }
+}
+
+#[cfg(feature = "llm")]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct StepRoutingControl {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_preferred_tier: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verification_checkpoints: Vec<StepVerificationCheckpoint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_signal: Option<StepRoutingSignal>,
+}
+
+#[cfg(feature = "llm")]
+impl StepRoutingControl {
+    pub fn request_hint(
+        &self,
+        step_id: impl Into<String>,
+        step_index: Option<u32>,
+        step_kind: impl Into<String>,
+    ) -> RoutingHint {
+        RoutingHint {
+            preferred_tier: self.next_preferred_tier.clone(),
+            step_metadata: Some(StepRoutingMetadata {
+                step_id: step_id.into(),
+                step_index,
+                step_kind: Some(step_kind.into()),
+            }),
+            ..RoutingHint::default()
+        }
+    }
+
+    pub fn verification_guidance(&self) -> Option<String> {
+        if self.verification_checkpoints.is_empty() {
+            return None;
+        }
+
+        let mut directives = Vec::new();
+        if let Some(signal) = &self.last_signal {
+            match signal.action {
+                StepRoutingAction::Escalate => directives.push(
+                    "Routing carryover: keep the stronger reasoning tier active until the step stabilizes."
+                        .to_string(),
+                ),
+                StepRoutingAction::Downgrade => directives.push(
+                    "Routing carryover: keep this step concise and avoid unnecessary optional breadth."
+                        .to_string(),
+                ),
+                StepRoutingAction::Fallback => directives.push(
+                    "Routing carryover: prefer resilient assumptions because the previous step required a fallback path."
+                        .to_string(),
+                ),
+                StepRoutingAction::Continue => {}
+            }
+        }
+
+        for checkpoint in &self.verification_checkpoints {
+            if checkpoint.outcome != mister_smith_llm::StepVerificationOutcome::Triggered {
+                continue;
+            }
+            match checkpoint.kind {
+                StepVerificationCheckpointKind::ConfidenceReview => directives.push(
+                    "Confidence review is active: perform an explicit self-check before finalizing."
+                        .to_string(),
+                ),
+                StepVerificationCheckpointKind::BudgetPolicy => directives.push(
+                    "Budget policy is active: stay compact and defer non-essential expansion."
+                        .to_string(),
+                ),
+                StepVerificationCheckpointKind::ProviderFailure => directives.push(
+                    "Provider failure fallback is active: restate critical assumptions and prefer robust output."
+                        .to_string(),
+                ),
+                StepVerificationCheckpointKind::FinalTierGuard => directives.push(
+                    "Final tier guard is active: include a compact verification pass before returning."
+                        .to_string(),
+                ),
+            }
+        }
+
+        directives.sort();
+        directives.dedup();
+        Some(directives.join(" "))
+    }
+
+    pub fn apply_routing_decision(&mut self, decision: &RoutingDecision) {
+        self.last_signal = Some(decision.step_signal.clone());
+        self.verification_checkpoints = decision.step_signal.checkpoints.clone();
+
+        match decision.step_signal.action {
+            StepRoutingAction::Downgrade => {
+                self.next_preferred_tier = None;
+            }
+            StepRoutingAction::Escalate | StepRoutingAction::Fallback => {
+                self.next_preferred_tier = decision
+                    .tier_label
+                    .clone()
+                    .or_else(|| Some(decision.provider_id.clone()));
+            }
+            StepRoutingAction::Continue => {
+                if let Some(tier_label) = &decision.tier_label {
+                    self.next_preferred_tier = Some(tier_label.clone());
+                } else if self.next_preferred_tier.is_some() {
+                    self.next_preferred_tier = Some(decision.provider_id.clone());
+                }
+            }
+        }
     }
 }
 
