@@ -25,9 +25,31 @@ implementation phase.
 Treat `docs/plans/2026-03-16-frontier-direction.md` as the current forward-direction note
 when the task is about what should happen next after the March 16 recovery landings.
 
+## Product Boundary
+
+Treat the Mister Smith OS and the repo-development workflow as different layers.
+
+- Mister Smith OS: the Rust workspace, runtime process, task/session/autonomy operator surfaces,
+  NATS and persistence integration, the shipped `mister-smith-mcp` crate, security model, deploy
+  assets, and the architecture captured in `spec/` and implemented in `crates/`.
+- Repository development workflow around Mister Smith: Linear, Symphony, Ralph, SpecKit, repo
+  workpads, PR flow, and watched-queue orchestration.
+- Smith MCP is a repo-owned crate and control-plane surface in this workspace. Do not collapse it
+  into the same bucket as external workflow services.
+- Linear and Symphony are not part of the Mister Smith operating system. They are external
+  development tools and workflow machinery used to plan, stage, execute, review, and land changes
+  to Mister Smith.
+- Do not describe the product as if Linear state, Symphony queue execution, or other repo workflow
+  control-plane helpers are runtime subsystems of the shipped OS.
+- When a task is about the product, prioritize repo/runtime truth first. When a task is about the
+  development workflow, use the control-plane docs and tools deliberately without collapsing that
+  workflow into the OS architecture.
+
 ## Smith-First Workflow Posture
 
-For Mister Smith development work, treat Smith MCP as the default control-plane entrypoint.
+For Mister Smith development work, treat Smith MCP as the default control-plane entrypoint. This
+section is about how the repository is developed, not about what the Mister Smith OS contains at
+runtime.
 
 - Start broad workflow requests with `route_workflow_request`.
 - Pull current state with `get_control_plane_snapshot` or `get_issue_execution_snapshot` before
@@ -41,8 +63,9 @@ For Mister Smith development work, treat Smith MCP as the default control-plane 
 - Treat `docs/plans/2026-03-16-smith-first-development-system.md` as the high-level operating
   model and `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current implemented
   workflow-family surface.
-- Keep Linear as the durable source of truth, Symphony as the watched-queue executor, Ralph as the
-  loop runner, and SpecKit as the upstream spec/task-pack scaffold.
+- For repo development workflow only, keep Linear as the durable source of truth, Symphony as the
+  watched-queue executor, Ralph as the loop runner, and SpecKit as the upstream spec/task-pack
+  scaffold.
 
 ## Subagent Orchestration
 
