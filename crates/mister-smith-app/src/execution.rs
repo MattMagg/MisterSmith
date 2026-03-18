@@ -243,6 +243,7 @@ impl RuntimeTaskService {
             }),
         );
         put_metadata(&mut metadata, "failure", json!({ "message": message }));
+        mark_persisted_autonomy_status_failed(&mut metadata);
 
         let result = json!({
             "workflow_id": workflow_id,
@@ -382,7 +383,8 @@ impl RuntimeTaskService {
         graph.state = GraphState::Running;
         self.orchestrator.register_execution_graph(graph.clone());
         self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
-        self.update_task_metadata(workflow_id, metadata.clone()).await?;
+        self.update_task_metadata(workflow_id, metadata.clone())
+            .await?;
 
         for node in &graph.nodes {
             self.orchestrator
@@ -1103,6 +1105,24 @@ fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStat
     Some(view)
 }
 
+fn mark_persisted_autonomy_status_failed(metadata: &mut Value) {
+    let Some(raw) = metadata.get(AUTONOMY_STATUS_METADATA_KEY).cloned() else {
+        return;
+    };
+    let Ok(mut view) = serde_json::from_value::<AutonomyStatusView>(raw) else {
+        return;
+    };
+
+    view.graph.state = GraphState::Failed;
+    for branch in &mut view.branches {
+        if !matches!(branch.state, BranchState::Completed | BranchState::Failed) {
+            branch.state = BranchState::Failed;
+        }
+    }
+
+    persist_autonomy_status(metadata, &view);
+}
+
 fn put_metadata(metadata: &mut Value, key: &str, value: Value) {
     if let Some(object) = metadata.as_object_mut() {
         object.insert(key.to_string(), value);
@@ -1166,12 +1186,19 @@ mod tests {
     use chrono::Utc;
     use mister_smith_core::{
         BranchRecoveryStrategy, BranchState, CoordinationPolicy, ExecutionBranchId,
-        ExecutionGraphId, GraphState, TaskShapeClassification, TaskShapeKind, TopologyRationale,
-        TopologyKind, SessionId,
+        ExecutionGraphId, GraphState, SessionId, TaskShapeClassification, TaskShapeKind,
+        TopologyKind, TopologyRationale,
     };
     use mister_smith_events::{BranchSummary, ExecutionGraphSummary, TopologyPlanSummary};
 
     fn sample_autonomy_view() -> AutonomyStatusView {
+        sample_autonomy_view_with_states(GraphState::Completed, BranchState::Completed)
+    }
+
+    fn sample_autonomy_view_with_states(
+        graph_state: GraphState,
+        branch_state: BranchState,
+    ) -> AutonomyStatusView {
         let workflow_id = TaskId::new();
         let graph_id = ExecutionGraphId::new();
         let branch_id = ExecutionBranchId::new();
@@ -1182,7 +1209,7 @@ mod tests {
             graph: ExecutionGraphSummary {
                 graph_id,
                 workflow_id,
-                state: GraphState::Completed,
+                state: graph_state,
                 branch_count: 1,
                 node_count: 3,
                 active_topology: Some(TopologyKind::Sequential),
@@ -1213,7 +1240,7 @@ mod tests {
             branches: vec![BranchSummary {
                 branch_id,
                 graph_id,
-                state: BranchState::Completed,
+                state: branch_state,
                 assigned_agents: vec![],
                 checkpoint_id: None,
                 recovery_strategy: BranchRecoveryStrategy::Resume,
@@ -1282,17 +1309,30 @@ mod tests {
     }
 
     #[test]
+    fn mark_persisted_autonomy_status_failed_rewrites_running_projection() {
+        let mut metadata = json!({});
+        let view = sample_autonomy_view_with_states(GraphState::Running, BranchState::Running);
+        persist_autonomy_status(&mut metadata, &view);
+
+        mark_persisted_autonomy_status_failed(&mut metadata);
+
+        let record = sample_task_with_metadata(metadata);
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("rewritten autonomy snapshot should still deserialize");
+
+        assert_eq!(recovered.graph.state, GraphState::Failed);
+        assert_eq!(recovered.branches.len(), 1);
+        assert_eq!(recovered.branches[0].state, BranchState::Failed);
+    }
+
+    #[test]
     fn should_recover_orphaned_workflow_when_previous_process_left_it_running() {
         let mut record = sample_task_with_metadata(json!({}));
         record.status = "running".to_string();
         record.created_at = Utc::now() - chrono::Duration::minutes(5);
         record.started_at = Some(Utc::now() - chrono::Duration::minutes(4));
 
-        assert!(should_recover_orphaned_workflow(
-            &record,
-            Utc::now(),
-            false,
-        ));
+        assert!(should_recover_orphaned_workflow(&record, Utc::now(), false,));
     }
 
     #[test]
@@ -1316,11 +1356,7 @@ mod tests {
         record.created_at = Utc::now() - chrono::Duration::minutes(5);
         record.started_at = Some(Utc::now() - chrono::Duration::minutes(4));
 
-        assert!(!should_recover_orphaned_workflow(
-            &record,
-            Utc::now(),
-            true,
-        ));
+        assert!(!should_recover_orphaned_workflow(&record, Utc::now(), true,));
     }
 }
 
