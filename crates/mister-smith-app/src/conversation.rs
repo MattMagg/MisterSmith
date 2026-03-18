@@ -10,17 +10,19 @@ use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{AgentId, SessionId, SessionStatus, TaskId};
 use mister_smith_http::server::{
     ConversationContinueRequest, ConversationCreateRequest, ConversationEndView,
-    ConversationServiceError, ConversationSessionService, ConversationSessionView,
-    ConversationTurnAccepted, ConversationTurnContext, ConversationTurnSummaryView,
-    TaskSubmissionRequest,
+    ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionService,
+    ConversationSessionView, ConversationTurnAccepted, ConversationTurnContext,
+    ConversationTurnSummaryView, TaskSubmissionRequest,
 };
 use mister_smith_persistence::postgres::queries::{self, TaskRecord};
 use mister_smith_persistence::{SessionRecord, SessionRepository, SessionTurnRecord};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::autonomy::resume_provenance_from_metadata;
 use crate::execution::{RuntimeTaskService, MODEL_ID, PROVIDER_KIND_NAME};
 
 /// Runtime-backed durable conversation service.
@@ -336,7 +338,9 @@ impl ConversationSessionService for ConversationRuntimeService {
         }
 
         let (session, turns) = self.sync_session(session_id).await?;
-        Ok(Some(build_session_view(session, turns)))
+        let pool = self.runtime_task_service.pool();
+        let view = build_session_view(session, turns, &pool).await?;
+        Ok(Some(view))
     }
 
     async fn end_session(
@@ -372,11 +376,38 @@ impl ConversationSessionService for ConversationRuntimeService {
     }
 }
 
-fn build_session_view(
+async fn build_session_view(
     session: SessionRecord,
     turns: Vec<SessionTurnRecord>,
-) -> ConversationSessionView {
-    ConversationSessionView {
+    pool: &PgPool,
+) -> Result<ConversationSessionView, ConversationServiceError> {
+    let mut turn_summaries = Vec::with_capacity(turns.len());
+    for turn in turns {
+        let workflow_id = TaskId::from_uuid(turn.workflow_id);
+        let task = queries::find_task(&pool, turn.workflow_id)
+            .await
+            .map_err(persistence_error)?;
+        let resume_provenance = task
+            .as_ref()
+            .and_then(|record| resume_provenance_from_metadata(&record.metadata))
+            .map(|details| ConversationResumeProvenanceView {
+                recovered_after_restart: details.recovered_after_restart,
+                resumed_after_restart: details.resumed_after_restart,
+                recovered_at: details.recovered_at,
+                recovery_reason: details.recovery_reason,
+                resumed_from_workflow_id: details.resumed_from_workflow_id,
+                resumed_from_turn_index: details.resumed_from_turn_index,
+            });
+        turn_summaries.push(ConversationTurnSummaryView {
+            turn_index: turn.turn_index.max(0) as u32,
+            workflow_id,
+            status: turn.status,
+            user_message: turn.user_message,
+            resume_provenance,
+        });
+    }
+
+    Ok(ConversationSessionView {
         session_id: SessionId::from_uuid(session.session_id),
         status: parse_session_status(&session.status),
         coordinator_agent_id: AgentId::from_uuid(session.coordinator_agent_id),
@@ -385,17 +416,9 @@ fn build_session_view(
         active_workflow_id: session.active_workflow_id.map(TaskId::from_uuid),
         last_completed_workflow_id: session.last_completed_workflow_id.map(TaskId::from_uuid),
         turn_count: session.turn_count.max(0) as u32,
-        turns: turns
-            .into_iter()
-            .map(|turn| ConversationTurnSummaryView {
-                turn_index: turn.turn_index.max(0) as u32,
-                workflow_id: TaskId::from_uuid(turn.workflow_id),
-                status: turn.status,
-                user_message: turn.user_message,
-            })
-            .collect(),
+        turns: turn_summaries,
         ended_at: session.ended_at,
-    }
+    })
 }
 
 fn validate_message(message: &str) -> Result<(), ConversationServiceError> {
@@ -524,8 +547,21 @@ pub(crate) struct ConversationCliSessionView {
     pub active_workflow_id: Option<String>,
     pub last_completed_workflow_id: Option<String>,
     pub turn_count: u32,
+    #[serde(default)]
     pub turns: Vec<ConversationCliTurnSummary>,
     pub ended_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ConversationCliResumeProvenanceView {
+    #[serde(default)]
+    pub recovered_after_restart: bool,
+    #[serde(default)]
+    pub resumed_after_restart: bool,
+    pub recovered_at: Option<String>,
+    pub recovery_reason: Option<String>,
+    pub resumed_from_workflow_id: Option<String>,
+    pub resumed_from_turn_index: Option<u32>,
 }
 
 /// Client-facing turn summary.
@@ -535,6 +571,8 @@ pub(crate) struct ConversationCliTurnSummary {
     pub workflow_id: String,
     pub status: String,
     pub user_message: String,
+    #[serde(default)]
+    pub resume_provenance: Option<ConversationCliResumeProvenanceView>,
 }
 
 /// Client-facing end response.
@@ -691,9 +729,18 @@ pub(crate) fn render_session(view: &ConversationCliSessionView) -> String {
         .turns
         .iter()
         .map(|turn| {
+            let resume_provenance = turn
+                .resume_provenance
+                .as_ref()
+                .map(render_resume_provenance)
+                .unwrap_or_else(|| "none".to_string());
             format!(
-                "  {} {} {} {}",
-                turn.turn_index, turn.workflow_id, turn.status, turn.user_message
+                "  {} {} {} resume={} {}",
+                turn.turn_index,
+                turn.workflow_id,
+                turn.status,
+                resume_provenance,
+                turn.user_message
             )
         })
         .collect::<Vec<_>>()
@@ -719,6 +766,35 @@ pub(crate) fn render_end_view(view: &ConversationCliEndView) -> String {
         "session_id: {}\nstatus: {}\nended_at: {}",
         view.session_id, view.status, view.ended_at
     )
+}
+
+fn render_resume_provenance(view: &ConversationCliResumeProvenanceView) -> String {
+    let mut parts = Vec::new();
+
+    if view.recovered_after_restart {
+        parts.push("recovered_after_restart=true".to_string());
+    }
+    if view.resumed_after_restart {
+        parts.push("resumed_after_restart=true".to_string());
+    }
+    if let Some(recovered_at) = view.recovered_at.as_ref() {
+        parts.push(format!("recovered_at={recovered_at}"));
+    }
+    if let Some(reason) = view.recovery_reason.as_ref() {
+        parts.push(format!("reason={reason}"));
+    }
+    if let Some(turn_index) = view.resumed_from_turn_index {
+        parts.push(format!("resumed_from_turn={turn_index}"));
+    }
+    if let Some(workflow_id) = view.resumed_from_workflow_id.as_ref() {
+        parts.push(format!("resumed_from_workflow={workflow_id}"));
+    }
+
+    if parts.is_empty() {
+        "none".to_string()
+    } else {
+        parts.join(" ")
+    }
 }
 
 #[cfg(test)]
@@ -787,5 +863,96 @@ mod tests {
         assert!(rendered.contains("workflow_id: 22222222-2222-2222-2222-222222222222"));
         assert!(rendered.contains("turn_index: 2"));
         assert!(rendered.contains("status: queued"));
+    }
+
+    #[test]
+    fn resume_provenance_derives_from_existing_turn_metadata() {
+        let resumed_from_workflow = "44444444-4444-4444-4444-444444444444".to_string();
+        let metadata = json!({
+            "turn_index": 2,
+            "retained_context": {
+                "latest_workflow_id": resumed_from_workflow,
+                "transcript_summary": [
+                    {
+                        "turn_index": 1,
+                        "workflow_id": "44444444-4444-4444-4444-444444444444",
+                        "assistant_result": {
+                            "recovered_after_restart": true
+                        }
+                    }
+                ]
+            }
+        });
+
+        let provenance = crate::autonomy::resume_provenance_from_metadata(&metadata)
+            .expect("resume provenance should derive from retained context");
+
+        assert!(provenance.resumed_after_restart);
+        assert_eq!(provenance.resumed_from_turn_index, Some(1));
+        assert_eq!(
+            provenance
+                .resumed_from_workflow_id
+                .map(|value| value.to_string()),
+            Some("44444444-4444-4444-4444-444444444444".to_string())
+        );
+    }
+
+    #[test]
+    fn render_session_surfaces_restart_resume_provenance() {
+        let view = ConversationCliSessionView {
+            session_id: "11111111-1111-1111-1111-111111111111".to_string(),
+            status: "active".to_string(),
+            coordinator_agent_id: "33333333-3333-3333-3333-333333333333".to_string(),
+            provider_kind: "openai_chatgpt".to_string(),
+            model_id: "gpt-5.4".to_string(),
+            active_workflow_id: None,
+            last_completed_workflow_id: Some("55555555-5555-5555-5555-555555555555".to_string()),
+            turn_count: 2,
+            turns: vec![
+                ConversationCliTurnSummary {
+                    turn_index: 1,
+                    workflow_id: "44444444-4444-4444-4444-444444444444".to_string(),
+                    status: "failed".to_string(),
+                    user_message: "turn one".to_string(),
+                    resume_provenance: Some(ConversationCliResumeProvenanceView {
+                        recovered_after_restart: true,
+                        resumed_after_restart: false,
+                        recovered_at: Some("2026-03-17T21:00:00+00:00".to_string()),
+                        recovery_reason: Some(
+                            "workflow interrupted by runtime restart before session sync"
+                                .to_string(),
+                        ),
+                        resumed_from_workflow_id: None,
+                        resumed_from_turn_index: None,
+                    }),
+                },
+                ConversationCliTurnSummary {
+                    turn_index: 2,
+                    workflow_id: "55555555-5555-5555-5555-555555555555".to_string(),
+                    status: "completed".to_string(),
+                    user_message: "turn two".to_string(),
+                    resume_provenance: Some(ConversationCliResumeProvenanceView {
+                        recovered_after_restart: false,
+                        resumed_after_restart: true,
+                        recovered_at: None,
+                        recovery_reason: None,
+                        resumed_from_workflow_id: Some(
+                            "44444444-4444-4444-4444-444444444444".to_string(),
+                        ),
+                        resumed_from_turn_index: Some(1),
+                    }),
+                },
+            ],
+            ended_at: None,
+        };
+
+        let rendered = render_session(&view);
+
+        assert!(rendered.contains("resume=recovered_after_restart=true"));
+        assert!(
+            rendered.contains("reason=workflow interrupted by runtime restart before session sync")
+        );
+        assert!(rendered.contains("resume=resumed_after_restart=true resumed_from_turn=1"));
+        assert!(rendered.contains("resumed_from_workflow=44444444-4444-4444-4444-444444444444"));
     }
 }

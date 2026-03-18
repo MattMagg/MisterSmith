@@ -16,7 +16,7 @@ use mister_smith_core::{
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
-    RoutingDecisionSummary, TopologyPlanSummary,
+    ResumeProvenanceSummary, RoutingDecisionSummary, TopologyPlanSummary,
 };
 
 fn sample_task_shape(kind: TaskShapeKind) -> TaskShapeClassification {
@@ -67,6 +67,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
         session_id: None,
         turn_index: None,
         coordinator_agent_id: None,
+        resume_provenance: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -218,6 +219,34 @@ fn render_status_surfaces_operator_rationale_and_history() {
     assert!(rendered.contains("lineage="));
     assert!(rendered.contains("delegation revoked before tool execution"));
     assert!(rendered.contains("control-plane state unavailable"));
+}
+
+#[test]
+fn render_status_surfaces_restart_resume_provenance() {
+    let (mut view, _, _) = sample_view();
+    let resumed_from_workflow_id = TaskId::new();
+    view.session_id = Some(mister_smith_core::SessionId::new());
+    view.turn_index = Some(2);
+    view.coordinator_agent_id = Some(AgentId::new());
+    view.resume_provenance = Some(ResumeProvenanceSummary {
+        recovered_after_restart: true,
+        resumed_after_restart: true,
+        recovered_at: Some(chrono::Utc::now()),
+        recovery_reason: Some(
+            "workflow interrupted by runtime restart before session sync".to_string(),
+        ),
+        resumed_from_workflow_id: Some(resumed_from_workflow_id),
+        resumed_from_turn_index: Some(1),
+    });
+
+    let rendered = autonomy::render_status(&view);
+
+    assert!(rendered.contains("resume provenance:"));
+    assert!(rendered.contains("recovered_after_restart=true"));
+    assert!(rendered.contains("resumed_after_restart=true"));
+    assert!(rendered.contains("resumed_from_turn=1"));
+    assert!(rendered.contains(&format!("resumed_from_workflow={resumed_from_workflow_id}")));
+    assert!(rendered.contains("runtime restart before session sync"));
 }
 
 #[test]

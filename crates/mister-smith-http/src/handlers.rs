@@ -17,6 +17,10 @@ use crate::server::{
     TaskSubmissionRequest,
 };
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 // ---------------------------------------------------------------------------
 // Response types
 // ---------------------------------------------------------------------------
@@ -152,6 +156,32 @@ pub struct SessionTurnSummaryResponse {
     pub status: String,
     /// Original operator message.
     pub user_message: String,
+    /// Restart and resume provenance derived from workflow metadata, when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume_provenance: Option<SessionResumeProvenanceResponse>,
+}
+
+/// Restart and resume provenance for one session turn.
+#[derive(Debug, Serialize)]
+pub struct SessionResumeProvenanceResponse {
+    /// Workflow record was recovered after a runtime restart.
+    #[serde(skip_serializing_if = "is_false")]
+    pub recovered_after_restart: bool,
+    /// Turn resumes after a prior workflow was restart-recovered.
+    #[serde(skip_serializing_if = "is_false")]
+    pub resumed_after_restart: bool,
+    /// Timestamp recorded when the workflow was marked recovered.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovered_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Human-readable recovery reason recorded in workflow metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_reason: Option<String>,
+    /// Prior workflow in the resumed turn lineage, when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resumed_from_workflow_id: Option<TaskId>,
+    /// Prior turn index in the resumed turn lineage, when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resumed_from_turn_index: Option<u32>,
 }
 
 /// Session inspect response.
@@ -440,6 +470,16 @@ pub async fn get_session(
                 workflow_id: turn.workflow_id,
                 status: turn.status,
                 user_message: turn.user_message,
+                resume_provenance: turn.resume_provenance.map(|provenance| {
+                    SessionResumeProvenanceResponse {
+                        recovered_after_restart: provenance.recovered_after_restart,
+                        resumed_after_restart: provenance.resumed_after_restart,
+                        recovered_at: provenance.recovered_at,
+                        recovery_reason: provenance.recovery_reason,
+                        resumed_from_workflow_id: provenance.resumed_from_workflow_id,
+                        resumed_from_turn_index: provenance.resumed_from_turn_index,
+                    }
+                }),
             })
             .collect(),
         ended_at: view.ended_at,
