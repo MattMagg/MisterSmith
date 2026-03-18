@@ -9,7 +9,8 @@ use mister_smith_core::{
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
     CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, EventBus,
-    EventType, ExecutionGraphSummary, RoutingDecisionSummary, TopologyPlanSummary,
+    EventType, ExecutionGraphSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
+    TopologyPlanSummary,
 };
 use serde::de::DeserializeOwned;
 
@@ -164,6 +165,16 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
         session_id: None,
         turn_index: None,
         coordinator_agent_id: None,
+        resume_provenance: Some(ResumeProvenanceSummary {
+            recovered_after_restart: true,
+            resumed_after_restart: true,
+            recovered_at: Some(chrono::Utc::now()),
+            recovery_reason: Some(
+                "workflow interrupted by runtime restart before session sync".to_string(),
+            ),
+            resumed_from_workflow_id: Some(TaskId::new()),
+            resumed_from_turn_index: Some(1),
+        }),
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -293,6 +304,13 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
     let roundtrip: AutonomyStatusView = serde_json::from_str(&json).unwrap();
 
     assert_eq!(roundtrip, view);
+    assert!(
+        roundtrip
+            .resume_provenance
+            .as_ref()
+            .expect("resume provenance should round-trip")
+            .resumed_after_restart
+    );
 }
 
 #[test]
@@ -304,6 +322,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
         session_id: None,
         turn_index: None,
         coordinator_agent_id: None,
+        resume_provenance: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -652,6 +671,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         session_id: None,
         turn_index: None,
         coordinator_agent_id: None,
+        resume_provenance: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,

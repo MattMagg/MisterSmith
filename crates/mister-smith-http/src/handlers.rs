@@ -17,6 +17,10 @@ use crate::server::{
     TaskSubmissionRequest,
 };
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 // ---------------------------------------------------------------------------
 // Response types
 // ---------------------------------------------------------------------------
@@ -152,6 +156,32 @@ pub struct SessionTurnSummaryResponse {
     pub status: String,
     /// Original operator message.
     pub user_message: String,
+    /// Restart and resume provenance derived from workflow metadata, when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume_provenance: Option<SessionResumeProvenanceResponse>,
+}
+
+/// Restart and resume provenance for one session turn.
+#[derive(Debug, Serialize)]
+pub struct SessionResumeProvenanceResponse {
+    /// Workflow record was recovered after a runtime restart.
+    #[serde(skip_serializing_if = "is_false")]
+    pub recovered_after_restart: bool,
+    /// Turn resumes after a prior workflow was restart-recovered.
+    #[serde(skip_serializing_if = "is_false")]
+    pub resumed_after_restart: bool,
+    /// Timestamp recorded when the workflow was marked recovered.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovered_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Human-readable recovery reason recorded in workflow metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_reason: Option<String>,
+    /// Prior workflow in the resumed turn lineage, when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resumed_from_workflow_id: Option<TaskId>,
+    /// Prior turn index in the resumed turn lineage, when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resumed_from_turn_index: Option<u32>,
 }
 
 /// Session inspect response.
@@ -440,6 +470,16 @@ pub async fn get_session(
                 workflow_id: turn.workflow_id,
                 status: turn.status,
                 user_message: turn.user_message,
+                resume_provenance: turn.resume_provenance.map(|provenance| {
+                    SessionResumeProvenanceResponse {
+                        recovered_after_restart: provenance.recovered_after_restart,
+                        resumed_after_restart: provenance.resumed_after_restart,
+                        recovered_at: provenance.recovered_at,
+                        recovery_reason: provenance.recovery_reason,
+                        resumed_from_workflow_id: provenance.resumed_from_workflow_id,
+                        resumed_from_turn_index: provenance.resumed_from_turn_index,
+                    }
+                }),
             })
             .collect(),
         ended_at: view.ended_at,
@@ -583,7 +623,60 @@ fn map_conversation_error(error: ConversationServiceError) -> HttpError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::server::{AppState, NatsHealthCheck};
+    use std::sync::Arc;
+
+    use crate::server::{
+        AppState, ConversationContinueRequest, ConversationEndView,
+        ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionService,
+        ConversationSessionView, ConversationTurnAccepted, ConversationTurnSummaryView,
+        NatsHealthCheck,
+    };
+
+    #[derive(Clone)]
+    struct FixedConversationService {
+        view: ConversationSessionView,
+    }
+
+    #[async_trait::async_trait]
+    impl ConversationSessionService for FixedConversationService {
+        async fn create_session(
+            &self,
+            _request: ConversationCreateRequest,
+        ) -> Result<ConversationTurnAccepted, ConversationServiceError> {
+            Err(ConversationServiceError::Internal(
+                "create_session not used in handler test".to_string(),
+            ))
+        }
+
+        async fn continue_session(
+            &self,
+            _request: ConversationContinueRequest,
+        ) -> Result<ConversationTurnAccepted, ConversationServiceError> {
+            Err(ConversationServiceError::Internal(
+                "continue_session not used in handler test".to_string(),
+            ))
+        }
+
+        async fn get_session(
+            &self,
+            session_id: SessionId,
+        ) -> Result<Option<ConversationSessionView>, ConversationServiceError> {
+            if self.view.session_id == session_id {
+                Ok(Some(self.view.clone()))
+            } else {
+                Ok(None)
+            }
+        }
+
+        async fn end_session(
+            &self,
+            _session_id: SessionId,
+        ) -> Result<ConversationEndView, ConversationServiceError> {
+            Err(ConversationServiceError::Internal(
+                "end_session not used in handler test".to_string(),
+            ))
+        }
+    }
 
     fn test_state() -> AppState {
         AppState::new()
@@ -694,5 +787,85 @@ mod tests {
         let state = test_state();
         let Json(config) = get_config(State(state)).await;
         assert_eq!(config.version, "0.1.0");
+    }
+
+    #[tokio::test]
+    async fn get_session_surfaces_turn_level_restart_resume_provenance() {
+        let session_id = SessionId::new();
+        let resumed_from_workflow_id = TaskId::new();
+        let active_workflow_id = TaskId::new();
+        let state = test_state().with_conversation_service(Arc::new(FixedConversationService {
+            view: ConversationSessionView {
+                session_id,
+                status: mister_smith_core::SessionStatus::Active,
+                coordinator_agent_id: AgentId::new(),
+                provider_kind: "openai_chatgpt".to_string(),
+                model_id: "gpt-5.4".to_string(),
+                active_workflow_id: Some(active_workflow_id),
+                last_completed_workflow_id: Some(resumed_from_workflow_id),
+                turn_count: 2,
+                turns: vec![
+                    ConversationTurnSummaryView {
+                        turn_index: 1,
+                        workflow_id: resumed_from_workflow_id,
+                        status: "failed".to_string(),
+                        user_message: "turn one".to_string(),
+                        resume_provenance: Some(ConversationResumeProvenanceView {
+                            recovered_after_restart: true,
+                            resumed_after_restart: false,
+                            recovered_at: Some(chrono::Utc::now()),
+                            recovery_reason: Some(
+                                "workflow interrupted by runtime restart before session sync"
+                                    .to_string(),
+                            ),
+                            resumed_from_workflow_id: None,
+                            resumed_from_turn_index: None,
+                        }),
+                    },
+                    ConversationTurnSummaryView {
+                        turn_index: 2,
+                        workflow_id: active_workflow_id,
+                        status: "queued".to_string(),
+                        user_message: "turn two".to_string(),
+                        resume_provenance: Some(ConversationResumeProvenanceView {
+                            recovered_after_restart: false,
+                            resumed_after_restart: true,
+                            recovered_at: None,
+                            recovery_reason: None,
+                            resumed_from_workflow_id: Some(resumed_from_workflow_id),
+                            resumed_from_turn_index: Some(1),
+                        }),
+                    },
+                ],
+                ended_at: None,
+            },
+        }));
+
+        let Json(response) = get_session(State(state), Path(session_id.to_string()))
+            .await
+            .expect("session inspect should succeed");
+        let value = serde_json::to_value(response).expect("inspect response should serialize");
+
+        assert_eq!(value["session_id"], session_id.to_string());
+        assert_eq!(
+            value["turns"][0]["resume_provenance"]["recovered_after_restart"],
+            true
+        );
+        assert_eq!(
+            value["turns"][0]["resume_provenance"]["recovery_reason"],
+            "workflow interrupted by runtime restart before session sync"
+        );
+        assert_eq!(
+            value["turns"][1]["resume_provenance"]["resumed_after_restart"],
+            true
+        );
+        assert_eq!(
+            value["turns"][1]["resume_provenance"]["resumed_from_turn_index"],
+            1
+        );
+        assert_eq!(
+            value["turns"][1]["resume_provenance"]["resumed_from_workflow_id"],
+            resumed_from_workflow_id.to_string()
+        );
     }
 }

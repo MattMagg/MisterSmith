@@ -21,8 +21,8 @@ use mister_smith_core::{
 
 use crate::autonomy::{
     AutonomyEvent, AutonomyStatusView, BranchSummary, CapabilitySummary, CheckpointRecordSummary,
-    ContextPressureSummary, DelegationAlert, ExecutionGraphSummary, RoutingDecisionSummary,
-    TopologyPlanSummary,
+    ContextPressureSummary, DelegationAlert, ExecutionGraphSummary, ResumeProvenanceSummary,
+    RoutingDecisionSummary, TopologyPlanSummary,
 };
 use crate::dead_letter::DeadLetterQueue;
 use crate::error::EventBusError;
@@ -38,6 +38,7 @@ struct AutonomyStatusAccumulator {
     session_id: Option<mister_smith_core::SessionId>,
     turn_index: Option<u32>,
     coordinator_agent_id: Option<mister_smith_core::AgentId>,
+    resume_provenance: Option<ResumeProvenanceSummary>,
     graph: Option<ExecutionGraphSummary>,
     topology: Option<TopologyPlanSummary>,
     team_sizing: Option<TeamSizingDecision>,
@@ -178,6 +179,7 @@ impl AutonomyStatusAccumulator {
             session_id: self.session_id,
             turn_index: self.turn_index,
             coordinator_agent_id: self.coordinator_agent_id,
+            resume_provenance: self.resume_provenance.clone(),
             graph,
             topology,
             team_sizing,
@@ -199,6 +201,7 @@ impl AutonomyStatusAccumulator {
             session_id: view.session_id,
             turn_index: view.turn_index,
             coordinator_agent_id: view.coordinator_agent_id,
+            resume_provenance: view.resume_provenance,
             graph: Some(view.graph),
             topology: Some(view.topology),
             team_sizing: view.team_sizing,

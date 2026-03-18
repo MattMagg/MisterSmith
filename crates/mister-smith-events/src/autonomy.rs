@@ -20,6 +20,10 @@ use mister_smith_core::{
 use crate::builder::EventBuilder;
 use crate::types::{Event, EventType};
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 /// Summary of an execution graph for operator-visible status surfaces.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionGraphSummary {
@@ -184,6 +188,29 @@ pub struct DelegationAlert {
     pub message: String,
 }
 
+/// Operator-visible restart and resume provenance for a workflow turn.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResumeProvenanceSummary {
+    /// Workflow record was recovered after a runtime restart.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub recovered_after_restart: bool,
+    /// Resumed turn continues after a restart-recovered prior workflow.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub resumed_after_restart: bool,
+    /// Timestamp recorded when the runtime marked the workflow as recovered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovered_at: Option<DateTime<Utc>>,
+    /// Human-readable recovery reason recorded in workflow metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_reason: Option<String>,
+    /// Prior workflow in the resumed turn lineage, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_workflow_id: Option<TaskId>,
+    /// Prior turn index in the resumed turn lineage, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_turn_index: Option<u32>,
+}
+
 /// Operator-facing autonomy status reconstructed from typed event state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AutonomyStatusView {
@@ -196,6 +223,9 @@ pub struct AutonomyStatusView {
     /// Stable session coordinator identity when available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub coordinator_agent_id: Option<AgentId>,
+    /// Restart and resume provenance for the workflow when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume_provenance: Option<ResumeProvenanceSummary>,
     /// Graph summary for the running workflow.
     pub graph: ExecutionGraphSummary,
     /// Selected topology summary.

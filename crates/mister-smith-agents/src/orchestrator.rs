@@ -706,6 +706,7 @@ impl Orchestrator {
             session_id: None,
             turn_index: None,
             coordinator_agent_id: None,
+            resume_provenance: None,
             graph: ExecutionGraphSummary {
                 graph_id: graph.graph_id,
                 workflow_id: graph.workflow_id,

@@ -7,12 +7,14 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{AgentId, SessionId, TaskId};
-use mister_smith_events::{AutonomyStatusView, EventBus};
+use mister_smith_events::{AutonomyStatusView, EventBus, ResumeProvenanceSummary};
 use mister_smith_persistence::postgres::queries;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -76,6 +78,16 @@ impl IntoResponse for AutonomyStatusError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct AutonomyErrorBody {
     error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResumeProvenanceDetails {
+    pub recovered_after_restart: bool,
+    pub resumed_after_restart: bool,
+    pub recovered_at: Option<DateTime<Utc>>,
+    pub recovery_reason: Option<String>,
+    pub resumed_from_workflow_id: Option<TaskId>,
+    pub resumed_from_turn_index: Option<u32>,
 }
 
 /// Derive the local autonomy inspection base URL from framework config.
@@ -199,6 +211,11 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         ),
         _ => "none".to_string(),
     };
+    let resume_summary = view
+        .resume_provenance
+        .as_ref()
+        .map(render_resume_provenance)
+        .unwrap_or_else(|| "none".to_string());
     let topology_reason = &view.topology.rationale.selected_for;
     let task_shape = view.topology.task_shape.kind.as_str();
     let structural_signals = if view.topology.task_shape.structural_signals.is_empty() {
@@ -351,11 +368,12 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
         session_summary,
+        resume_summary,
         view.topology.topology_kind,
         view.topology.parallelism_width,
         task_shape,
@@ -408,4 +426,115 @@ pub(crate) fn enrich_session_linkage(view: &mut AutonomyStatusView, metadata: &s
             .and_then(|raw| Uuid::parse_str(raw).ok())
             .map(AgentId::from_uuid);
     }
+    if view.resume_provenance.is_none() {
+        view.resume_provenance =
+            resume_provenance_from_metadata(metadata).map(|details| ResumeProvenanceSummary {
+                recovered_after_restart: details.recovered_after_restart,
+                resumed_after_restart: details.resumed_after_restart,
+                recovered_at: details.recovered_at,
+                recovery_reason: details.recovery_reason,
+                resumed_from_workflow_id: details.resumed_from_workflow_id,
+                resumed_from_turn_index: details.resumed_from_turn_index,
+            });
+    }
+}
+
+pub(crate) fn resume_provenance_from_metadata(metadata: &Value) -> Option<ResumeProvenanceDetails> {
+    let restart_recovery = metadata.get("restart_recovery").and_then(Value::as_object);
+    let recovered_after_restart = restart_recovery.is_some();
+    let recovered_at = restart_recovery
+        .and_then(|payload| payload.get("recovered_at"))
+        .and_then(parse_datetime);
+    let recovery_reason = restart_recovery
+        .and_then(|payload| payload.get("reason"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+
+    let retained_context = metadata.get("retained_context").and_then(Value::as_object);
+    let transcript_entry = retained_context
+        .and_then(|payload| payload.get("transcript_summary"))
+        .and_then(Value::as_array)
+        .and_then(|entries| entries.last());
+    let resumed_from_workflow_id = retained_context
+        .and_then(|payload| payload.get("latest_workflow_id"))
+        .and_then(Value::as_str)
+        .and_then(parse_task_id);
+    let resumed_from_turn_index = transcript_entry
+        .and_then(|entry| entry.get("turn_index"))
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .or_else(|| {
+            resumed_from_workflow_id.as_ref().and_then(|_| {
+                metadata
+                    .get("turn_index")
+                    .and_then(Value::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())
+                    .filter(|value| *value > 1)
+                    .map(|value| value - 1)
+            })
+        });
+    let resumed_after_restart = transcript_entry
+        .and_then(|entry| entry.get("assistant_result"))
+        .and_then(|result| result.get("recovered_after_restart"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    if !recovered_after_restart
+        && !resumed_after_restart
+        && recovered_at.is_none()
+        && recovery_reason.is_none()
+        && resumed_from_workflow_id.is_none()
+        && resumed_from_turn_index.is_none()
+    {
+        return None;
+    }
+
+    Some(ResumeProvenanceDetails {
+        recovered_after_restart,
+        resumed_after_restart,
+        recovered_at,
+        recovery_reason,
+        resumed_from_workflow_id,
+        resumed_from_turn_index,
+    })
+}
+
+fn render_resume_provenance(summary: &ResumeProvenanceSummary) -> String {
+    let mut parts = Vec::new();
+
+    if summary.recovered_after_restart {
+        parts.push("recovered_after_restart=true".to_string());
+    }
+    if summary.resumed_after_restart {
+        parts.push("resumed_after_restart=true".to_string());
+    }
+    if let Some(recovered_at) = summary.recovered_at {
+        parts.push(format!("recovered_at={recovered_at}"));
+    }
+    if let Some(reason) = summary.recovery_reason.as_ref() {
+        parts.push(format!("reason={reason}"));
+    }
+    if let Some(turn_index) = summary.resumed_from_turn_index {
+        parts.push(format!("resumed_from_turn={turn_index}"));
+    }
+    if let Some(workflow_id) = summary.resumed_from_workflow_id {
+        parts.push(format!("resumed_from_workflow={workflow_id}"));
+    }
+
+    if parts.is_empty() {
+        "none".to_string()
+    } else {
+        parts.join(" ")
+    }
+}
+
+fn parse_datetime(value: &Value) -> Option<DateTime<Utc>> {
+    value
+        .as_str()
+        .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok())
+        .map(|datetime| datetime.with_timezone(&Utc))
+}
+
+fn parse_task_id(raw: &str) -> Option<TaskId> {
+    Uuid::parse_str(raw).ok().map(TaskId::from_uuid)
 }

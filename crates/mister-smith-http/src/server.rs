@@ -139,6 +139,25 @@ pub struct ConversationTurnSummaryView {
     pub status: String,
     /// Original operator message for the turn.
     pub user_message: String,
+    /// Restart and resume provenance derived from workflow metadata when available.
+    pub resume_provenance: Option<ConversationResumeProvenanceView>,
+}
+
+/// Restart and resume provenance for one session turn.
+#[derive(Debug, Clone)]
+pub struct ConversationResumeProvenanceView {
+    /// Workflow record was recovered after a runtime restart.
+    pub recovered_after_restart: bool,
+    /// Turn resumes after a prior workflow was restart-recovered.
+    pub resumed_after_restart: bool,
+    /// Timestamp recorded when the workflow was marked recovered.
+    pub recovered_at: Option<DateTime<Utc>>,
+    /// Human-readable recovery reason recorded in workflow metadata.
+    pub recovery_reason: Option<String>,
+    /// Prior workflow in the resumed turn lineage, when available.
+    pub resumed_from_workflow_id: Option<TaskId>,
+    /// Prior turn index in the resumed turn lineage, when available.
+    pub resumed_from_turn_index: Option<u32>,
 }
 
 /// Operator-facing inspect view for a conversation session.

@@ -1206,6 +1206,7 @@ mod tests {
             session_id: None,
             turn_index: None,
             coordinator_agent_id: None,
+            resume_provenance: None,
             graph: ExecutionGraphSummary {
                 graph_id,
                 workflow_id,
@@ -1297,6 +1298,51 @@ mod tests {
         assert_eq!(recovered.session_id, Some(session_id));
         assert_eq!(recovered.turn_index, Some(2));
         assert_eq!(recovered.coordinator_agent_id, Some(coordinator_agent_id));
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_surfaces_restart_resume_provenance() {
+        let resumed_from_workflow_id = TaskId::new();
+        let view = sample_autonomy_view();
+        let mut metadata = json!({
+            "turn_index": 2,
+            "restart_recovery": {
+                "reason": "workflow interrupted by runtime restart before session sync",
+                "recovered_at": "2026-03-17T21:00:00Z"
+            },
+            "retained_context": {
+                "latest_workflow_id": resumed_from_workflow_id,
+                "transcript_summary": [
+                    {
+                        "turn_index": 1,
+                        "workflow_id": resumed_from_workflow_id,
+                        "assistant_result": {
+                            "recovered_after_restart": true
+                        }
+                    }
+                ]
+            }
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should expose restart and resume provenance");
+        let provenance = recovered
+            .resume_provenance
+            .expect("resume provenance should be attached to the recovered view");
+
+        assert!(provenance.recovered_after_restart);
+        assert!(provenance.resumed_after_restart);
+        assert_eq!(
+            provenance.recovery_reason.as_deref(),
+            Some("workflow interrupted by runtime restart before session sync")
+        );
+        assert_eq!(provenance.resumed_from_turn_index, Some(1));
+        assert_eq!(
+            provenance.resumed_from_workflow_id,
+            Some(resumed_from_workflow_id)
+        );
     }
 
     #[test]

@@ -548,6 +548,34 @@ pub async fn find_task(
     .map_err(from_sqlx_error)
 }
 
+/// Find many tasks by primary key.
+///
+/// Returns only rows that exist.
+pub async fn find_tasks_by_ids(
+    pool: &PgPool,
+    task_ids: &[Uuid],
+) -> Result<Vec<TaskRecord>, PersistenceError> {
+    if task_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    sqlx::query_as::<_, TaskRecord>(
+        r#"
+        SELECT
+            task_id, task_type, agent_id, payload, result,
+            metadata, status::TEXT AS status, priority, correlation_id,
+            parent_task_id, created_at, started_at,
+            completed_at, expires_at
+        FROM tasks.records
+        WHERE task_id = ANY($1::uuid[])
+        "#,
+    )
+    .bind(task_ids)
+    .fetch_all(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
 /// Update a task's status.
 ///
 /// The `status` string must be a valid `task_status_type` variant
