@@ -24,33 +24,17 @@ implementation phase.
 Treat `docs/plans/2026-03-16-frontier-direction.md` as the current forward-direction note
 when the task is about what should happen next after the March 16 recovery landings.
 
-## Current Repository State
-
-- `main` is the only durable development branch.
-- The March 16 recovery reconciliation is landed on `main`.
-- The Rust workspace is the product: Mister Smith is the orchestration operating system implemented
-  in `crates/`, surfaced through the runtime, HTTP, autonomy, conversation, persistence, security,
-  transport, and deployment layers in this repository.
-- The runtime-backed task path is live on `main` through `mister-smith run`,
-  `POST /api/v1/tasks`, `GET /api/v1/tasks/{task_id}`, and the autonomy inspection surfaces.
-- The bounded same-agent session slice is live on `main` through the session HTTP and CLI
-  surfaces.
-- The current forward direction is the post-recovery operating-system program in
-  `docs/plans/2026-03-16-frontier-direction.md`.
-- `MS-45` through `MS-48` are the current validated backlog epics and should remain outside the
-  watched queue until explicitly staged.
-- An empty watched queue is currently the correct state unless a bounded runnable slice has been
-  deliberately staged into `Todo`.
-
 ## Product Boundary
 
 Treat the Mister Smith OS and the repo-development workflow as different layers.
 
 - Mister Smith OS: the Rust workspace, runtime process, task/session/autonomy operator surfaces,
-  NATS and persistence integration, security model, deploy assets, and the architecture captured in
-  `spec/` and implemented in `crates/`.
-- Development tooling and workflow around Mister Smith: Smith MCP, Linear, Symphony, Ralph,
-  SpecKit, repo workpads, PR flow, and watched-queue orchestration.
+  NATS and persistence integration, the shipped `mister-smith-mcp` crate, security model, deploy
+  assets, and the architecture captured in `spec/` and implemented in `crates/`.
+- Repository development workflow around Mister Smith: Linear, Symphony, Ralph, SpecKit, repo
+  workpads, PR flow, and watched-queue orchestration.
+- Smith MCP is a repo-owned crate and control-plane surface in this workspace. Do not collapse it
+  into the same bucket as external workflow services.
 - Linear and Symphony are not part of the Mister Smith operating system. They are external
   development tools and workflow machinery used to plan, stage, execute, review, and land changes
   to Mister Smith.
