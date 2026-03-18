@@ -13,19 +13,14 @@ pub struct StepRoutingMetadata {
 }
 
 /// Step-level action that downstream workflow consumers may take after routing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StepRoutingAction {
+    #[default]
     Continue,
     Escalate,
     Downgrade,
     Fallback,
-}
-
-impl Default for StepRoutingAction {
-    fn default() -> Self {
-        Self::Continue
-    }
 }
 
 /// Bounded checkpoint kinds emitted alongside a step routing signal.
