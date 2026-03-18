@@ -57,6 +57,7 @@ impl DelegationService {
     }
 
     /// Issue a bounded capability and its provenance chain.
+    #[allow(clippy::too_many_arguments)]
     pub fn issue_capability(
         &self,
         issuer: AuthorityPrincipal,
