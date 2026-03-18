@@ -1,7 +1,7 @@
 # MS-67 Restart-Resume Integration Proof
 
 Date: March 17, 2026
-Status: completed locally on `ms-67-restart-resume-proof`
+Status: completed locally on `ms-67-restart-resume-proof`; rework rerun passed on March 18, 2026
 
 ## Objective
 
@@ -51,7 +51,8 @@ That keeps the restart-resume evidence aligned with the currently landed real ru
 Optional overrides:
 
 - `MS67_TEST_ADMIN_DATABASE_URL` to point the harness at a different PostgreSQL admin database
-- `MS67_TEST_NATS_URL` to point the harness at a different NATS address
+- `MS67_TEST_NATS_URL` to point the harness at a different NATS address, including
+  authenticated, query-bearing, or clustered server URLs
 - `MISTER_SMITH_APP_BINARY` to point the harness at a non-default built binary path
 
 ## What The Harness Proves
@@ -64,8 +65,8 @@ The test performs one bounded end-to-end sequence:
    - `session_id`
    - `workflow_id`
    - `coordinator_agent_id`
-4. Kill the first runtime immediately after acceptance so the first workflow is left for
-   restart-time recovery.
+4. Wait until turn 1 leaves `queued` and reaches `running`, then kill the first runtime so the
+   proof exercises restart recovery for an in-flight workflow instead of a queued-only orphan.
 5. Start a second `mister-smith run` process against the same database and NATS.
 6. `GET /api/v1/sessions/{session_id}` until the runtime repairs the orphaned first turn and makes
    the session idle again.
@@ -81,6 +82,8 @@ Assertions:
 - turn 1 exposes `resume_provenance.recovered_after_restart = true`
 - turn 2 keeps the same `session_id` and `coordinator_agent_id`
 - turn 2 has a distinct `workflow_id`
+- the NATS readiness probe accepts the same authenticated or clustered override URLs that the
+  runtime itself can consume through `MS67_TEST_NATS_URL`
 - turn 2 exposes:
   - `resume_provenance.resumed_after_restart = true`
   - `resume_provenance.resumed_from_turn_index = 1`
@@ -107,6 +110,27 @@ Observed session state during the run:
   `last_completed_workflow_id`
 - after continue: the same session and coordinator accepted turn 2 with a distinct workflow ID
 - final inspect satisfied the resumed-lineage assertions and returned the session to an idle state
+
+## Rework Validation On March 18, 2026
+
+This rework pass tightened the proof harness in two places:
+
+- it now waits for turn 1 to reach `running` before killing the first runtime
+- it now parses authenticated, query-bearing, and clustered `MS67_TEST_NATS_URL` overrides into
+  socket targets for the readiness probe
+
+Commands:
+
+- `cargo test -p mister-smith-integration-tests --test conversation_restart_resume -- --nocapture`
+- `cargo test -p mister-smith-integration-tests live_restart_resume_http_roundtrip_recovers_idle_session_and_resumed_lineage -- --ignored --exact --nocapture`
+
+Observed result:
+
+- parser/unit tests: `ok` (`2 passed`, `1 ignored`)
+- live restart-resume rerun: `ok`
+- live rerun elapsed time: `104.43s`
+- second-runtime log captured resumed turn-2 workflow `bbbc5fb9-a194-4201-b593-ca77ba18f90f` on
+  `openai_chatgpt` / `gpt-5.4`
 
 ## Validation Boundary
 
