@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use mister_smith_core::{SemanticSignal, SemanticSignalKind};
 
+use crate::routing_signal::StepRoutingSignal;
 use crate::types::{StopReason, Usage};
 
 /// Canonical internal event type emitted by stream actors after converting raw
@@ -70,6 +71,7 @@ pub enum ModelEvent {
         model_id: String,
         tier: String,
         reason: String,
+        step_signal: StepRoutingSignal,
     },
 
     // -- Error (1) --
@@ -455,6 +457,16 @@ mod tests {
                 model_id: "m".into(),
                 tier: "t".into(),
                 reason: "r".into(),
+                step_signal: StepRoutingSignal {
+                    metadata: crate::routing_signal::StepRoutingMetadata {
+                        step_id: "completion.request".into(),
+                        step_index: None,
+                        step_kind: Some("completion".into()),
+                    },
+                    action: crate::routing_signal::StepRoutingAction::Continue,
+                    confidence: None,
+                    checkpoints: vec![],
+                },
             },
             ModelEvent::Error {
                 code: "E001".into(),

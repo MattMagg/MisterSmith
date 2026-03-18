@@ -13,7 +13,8 @@ use mister_smith_llm::{
     CascadePolicy, CascadeTier, CircuitBreakerConfig, CircuitState, CompletionRequest,
     CompletionResponse, ContentBlock, EmbeddingResponse, MockProvider, ModelCapabilities,
     ModelEvent, ModelProvider, ModelRouter, ProviderConfig, ProviderKind, RoutingHint,
-    RoutingPolicy, StopReason, Usage,
+    RoutingPolicy, StepRoutingAction, StepRoutingMetadata, StepVerificationCheckpointKind,
+    StepVerificationOutcome, StopReason, Usage,
 };
 
 fn mock_request() -> CompletionRequest {
@@ -259,6 +260,19 @@ fn budget_store_with_limit(limit_tokens: u64) -> SharedBudgetStore {
     SharedBudgetStore(Arc::new(inner))
 }
 
+fn budget_store_with_policy(policy: BudgetPolicy) -> SharedBudgetStore {
+    let inner = InMemoryBudgetStore::new();
+    inner.insert(BudgetNode {
+        key: "budget/test".to_string(),
+        limit_tokens: 50_000,
+        used_tokens: 0,
+        period: "test".to_string(),
+        policy,
+        revision: 1,
+    });
+    SharedBudgetStore(Arc::new(inner))
+}
+
 // --- Basic routing tests ---
 
 #[tokio::test]
@@ -330,6 +344,67 @@ async fn cost_optimized_selects_first_healthy() {
 
     let (_, decision) = router.route_completion(mock_request()).await.unwrap();
     assert_eq!(decision.provider_id, "cheap");
+}
+
+#[tokio::test]
+async fn routing_decision_carries_step_metadata_contract() {
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin);
+    let provider: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("step-aware"));
+
+    router
+        .add_provider(
+            mock_config("step-aware"),
+            provider,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let request = CompletionRequest {
+        routing_hint: Some(RoutingHint {
+            step_metadata: Some(StepRoutingMetadata {
+                step_id: "planner.step.3".to_string(),
+                step_index: Some(3),
+                step_kind: Some("planner_reasoning".to_string()),
+            }),
+            ..Default::default()
+        }),
+        ..mock_request()
+    };
+
+    let (_response, decision) = router.route_completion(request).await.unwrap();
+
+    assert_eq!(decision.step_signal.metadata.step_id, "planner.step.3");
+    assert_eq!(decision.step_signal.metadata.step_index, Some(3));
+    assert_eq!(
+        decision.step_signal.metadata.step_kind.as_deref(),
+        Some("planner_reasoning")
+    );
+    assert_eq!(decision.step_signal.action, StepRoutingAction::Continue);
+}
+
+#[tokio::test]
+async fn soft_cap_budget_marks_step_signal_for_downgrade() {
+    let store = budget_store_with_policy(BudgetPolicy::SoftCap);
+    let enforcer = BudgetEnforcer::new(Box::new(store));
+    let router = ModelRouter::new(RoutingPolicy::RoundRobin).with_budget(enforcer, "budget/test");
+    let provider: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("budget-aware"));
+
+    router
+        .add_provider(
+            mock_config("budget-aware"),
+            provider,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let (_response, decision) = router.route_completion(mock_request()).await.unwrap();
+
+    assert_eq!(decision.step_signal.action, StepRoutingAction::Downgrade);
+    assert!(decision.step_signal.confidence.is_some());
+    assert!(decision.step_signal.checkpoints.iter().any(|checkpoint| {
+        checkpoint.kind == StepVerificationCheckpointKind::BudgetPolicy
+            && checkpoint.outcome == StepVerificationOutcome::Triggered
+    }));
 }
 
 #[tokio::test]
@@ -566,6 +641,7 @@ async fn route_completion_strips_routing_hint_before_provider_dispatch() {
             preferred_tier: Some("fast".into()),
             max_cost_tokens: Some(5000),
             required_capabilities: vec!["completion".into()],
+            step_metadata: None,
         }),
         ..mock_request()
     };
@@ -1122,10 +1198,16 @@ mod cascade {
                 model_id,
                 tier,
                 reason,
+                step_signal,
             } => {
                 assert_eq!(model_id, "slm-model");
                 assert_eq!(tier, "slm-tier");
                 assert!(reason.contains("escalated"), "reason: {reason}");
+                assert_eq!(step_signal.action, StepRoutingAction::Escalate);
+                assert!(step_signal.checkpoints.iter().any(|checkpoint| {
+                    checkpoint.kind == StepVerificationCheckpointKind::ConfidenceReview
+                        && checkpoint.outcome == StepVerificationOutcome::Triggered
+                }));
             }
             other => panic!("expected RoutingDecision, got: {other:?}"),
         }
@@ -1136,10 +1218,12 @@ mod cascade {
                 model_id,
                 tier,
                 reason,
+                step_signal,
             } => {
                 assert_eq!(model_id, "llm-model");
                 assert_eq!(tier, "llm-tier");
                 assert!(reason.contains("accepted"), "reason: {reason}");
+                assert_eq!(step_signal.action, StepRoutingAction::Continue);
             }
             other => panic!("expected RoutingDecision, got: {other:?}"),
         }
@@ -1174,10 +1258,16 @@ mod cascade {
                 model_id,
                 tier,
                 reason,
+                step_signal,
             } => {
                 assert_eq!(model_id, "slm-failure");
                 assert_eq!(tier, "slm-tier");
                 assert!(reason.contains("failed"), "reason: {reason}");
+                assert_eq!(step_signal.action, StepRoutingAction::Fallback);
+                assert!(step_signal.checkpoints.iter().any(|checkpoint| {
+                    checkpoint.kind == StepVerificationCheckpointKind::ProviderFailure
+                        && checkpoint.outcome == StepVerificationOutcome::Triggered
+                }));
             }
             other => panic!("expected RoutingDecision, got: {other:?}"),
         }
@@ -1187,10 +1277,12 @@ mod cascade {
                 model_id,
                 tier,
                 reason,
+                step_signal,
             } => {
                 assert_eq!(model_id, "llm-model");
                 assert_eq!(tier, "llm-tier");
                 assert!(reason.contains("accepted"), "reason: {reason}");
+                assert_eq!(step_signal.action, StepRoutingAction::Continue);
             }
             other => panic!("expected RoutingDecision, got: {other:?}"),
         }

@@ -5,11 +5,16 @@ use mister_smith_core::LlmError;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::budget::{BudgetEnforcer, BudgetReservation};
+use crate::budget::{BudgetEnforcer, BudgetPolicy, BudgetReservation};
 use crate::config::ProviderConfig;
 use crate::health::{CircuitBreaker, CircuitBreakerConfig, HealthStatus};
 use crate::model_event::ModelEvent;
 use crate::provider::{CompletionStream, ModelProvider};
+pub use crate::routing_signal::ConfidenceSignal;
+use crate::routing_signal::{
+    StepRoutingAction, StepRoutingMetadata, StepRoutingSignal, StepVerificationCheckpoint,
+    StepVerificationCheckpointKind, StepVerificationOutcome,
+};
 use crate::types::{
     ChatMessage, CompletionRequest, CompletionResponse, EmbeddingResponse, ModelCapabilities,
     RoutingHint,
@@ -51,51 +56,6 @@ pub struct CascadeTier {
     pub label: String,
 }
 
-/// Routing confidence signal.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConfidenceSignal {
-    pub score: f32,
-    pub source: String,
-    #[serde(default)]
-    pub metadata: serde_json::Value,
-}
-
-impl ConfidenceSignal {
-    /// Heuristic confidence based on response properties.
-    pub fn from_response(response: &CompletionResponse) -> Self {
-        let mut score: f32 = 1.0;
-
-        // Penalize if stopped due to max tokens (likely truncated)
-        if response.stop_reason == crate::types::StopReason::MaxTokens {
-            score -= 0.3;
-        }
-
-        // Penalize very short responses (may indicate failure)
-        let total_text_len: usize = response
-            .content
-            .iter()
-            .map(|block| match block {
-                crate::types::ContentBlock::Text { text } => text.len(),
-                _ => 0,
-            })
-            .sum();
-        if total_text_len < 10 {
-            score -= 0.2;
-        }
-
-        // Penalize content filter
-        if response.stop_reason == crate::types::StopReason::ContentFilter {
-            score -= 0.5;
-        }
-
-        Self {
-            score: score.clamp(0.0, 1.0),
-            source: "heuristic".to_string(),
-            metadata: serde_json::json!({}),
-        }
-    }
-}
-
 /// A routing decision record for observability.
 #[derive(Debug, Clone)]
 pub struct RoutingDecision {
@@ -104,6 +64,7 @@ pub struct RoutingDecision {
     pub tier_label: Option<String>,
     pub reason: String,
     pub estimated_cost_tokens: Option<u64>,
+    pub step_signal: StepRoutingSignal,
 }
 
 /// Sink interface for router-emitted model events.
@@ -130,6 +91,7 @@ struct CascadeAttempt {
 struct BudgetReservationContext<'a> {
     enforcer: &'a BudgetEnforcer,
     reservation: BudgetReservation,
+    policy: BudgetPolicy,
 }
 
 impl<'a> BudgetReservationContext<'a> {
@@ -149,6 +111,8 @@ pub struct ModelRouter {
     round_robin_counter: std::sync::atomic::AtomicUsize,
     model_event_sink: Option<Arc<dyn ModelEventSink>>,
 }
+
+const ADVISORY_CONFIDENCE_THRESHOLD: f32 = 0.5;
 
 impl ModelRouter {
     /// Create a new router with the given policy.
@@ -176,12 +140,19 @@ impl ModelRouter {
         self
     }
 
-    fn emit_routing_event(&self, model_id: String, tier: String, reason: String) {
+    fn emit_routing_event(
+        &self,
+        model_id: String,
+        tier: String,
+        reason: String,
+        step_signal: StepRoutingSignal,
+    ) {
         if let Some(sink) = &self.model_event_sink {
             sink.publish(ModelEvent::RoutingDecision {
                 model_id,
                 tier,
                 reason,
+                step_signal,
             });
         }
     }
@@ -389,13 +360,157 @@ impl ModelRouter {
         estimated_tokens: u64,
     ) -> Result<Option<BudgetReservationContext<'_>>, LlmError> {
         if let (Some(enforcer), Some(root)) = (&self.budget_enforcer, &self.budget_root) {
+            let policy = enforcer
+                .get_budget(root)
+                .await?
+                .ok_or_else(|| LlmError::InvalidRequest(format!("Budget key '{root}' not found")))?
+                .policy;
             let reservation = enforcer.reserve(root, estimated_tokens).await?;
             Ok(Some(BudgetReservationContext {
                 enforcer,
                 reservation,
+                policy,
             }))
         } else {
             Ok(None)
+        }
+    }
+
+    fn default_step_metadata() -> StepRoutingMetadata {
+        StepRoutingMetadata {
+            step_id: "completion.request".to_string(),
+            step_index: None,
+            step_kind: Some("completion".to_string()),
+        }
+    }
+
+    fn request_step_metadata(request: &CompletionRequest) -> StepRoutingMetadata {
+        request
+            .routing_hint
+            .as_ref()
+            .and_then(|hint| hint.step_metadata.clone())
+            .unwrap_or_else(Self::default_step_metadata)
+    }
+
+    fn budget_policy_name(policy: BudgetPolicy) -> &'static str {
+        match policy {
+            BudgetPolicy::HardCap => "hard_cap",
+            BudgetPolicy::SoftCap => "soft_cap",
+            BudgetPolicy::Conditioned => "conditioned",
+        }
+    }
+
+    fn budget_checkpoint(
+        reservation: Option<&BudgetReservationContext<'_>>,
+    ) -> Option<StepVerificationCheckpoint> {
+        let ctx = reservation?;
+        match ctx.policy {
+            BudgetPolicy::HardCap => None,
+            BudgetPolicy::SoftCap | BudgetPolicy::Conditioned => Some(StepVerificationCheckpoint {
+                kind: StepVerificationCheckpointKind::BudgetPolicy,
+                outcome: StepVerificationOutcome::Triggered,
+                rationale: format!(
+                    "budget policy '{}' kept the request live but flagged the step for downgrade handling",
+                    Self::budget_policy_name(ctx.policy)
+                ),
+            }),
+        }
+    }
+
+    fn advisory_confidence_checkpoint(confidence: &ConfidenceSignal) -> StepVerificationCheckpoint {
+        let (outcome, rationale) = if confidence.score >= ADVISORY_CONFIDENCE_THRESHOLD {
+            (
+                StepVerificationOutcome::Satisfied,
+                format!(
+                    "heuristic confidence {:.2} satisfied the advisory checkpoint {:.2}",
+                    confidence.score, ADVISORY_CONFIDENCE_THRESHOLD
+                ),
+            )
+        } else {
+            (
+                StepVerificationOutcome::Triggered,
+                format!(
+                    "heuristic confidence {:.2} fell below the advisory checkpoint {:.2}",
+                    confidence.score, ADVISORY_CONFIDENCE_THRESHOLD
+                ),
+            )
+        };
+
+        StepVerificationCheckpoint {
+            kind: StepVerificationCheckpointKind::ConfidenceReview,
+            outcome,
+            rationale,
+        }
+    }
+
+    fn cascade_confidence_checkpoint(
+        confidence: &ConfidenceSignal,
+        threshold: f32,
+    ) -> StepVerificationCheckpoint {
+        let (outcome, rationale) = if confidence.score >= threshold {
+            (
+                StepVerificationOutcome::Satisfied,
+                format!(
+                    "heuristic confidence {:.2} satisfied the cascade threshold {:.2}",
+                    confidence.score, threshold
+                ),
+            )
+        } else {
+            (
+                StepVerificationOutcome::Triggered,
+                format!(
+                    "heuristic confidence {:.2} fell below the cascade threshold {:.2}",
+                    confidence.score, threshold
+                ),
+            )
+        };
+
+        StepVerificationCheckpoint {
+            kind: StepVerificationCheckpointKind::ConfidenceReview,
+            outcome,
+            rationale,
+        }
+    }
+
+    fn final_tier_checkpoint(
+        confidence: &ConfidenceSignal,
+        threshold: f32,
+    ) -> StepVerificationCheckpoint {
+        StepVerificationCheckpoint {
+            kind: StepVerificationCheckpointKind::FinalTierGuard,
+            outcome: StepVerificationOutcome::Triggered,
+            rationale: format!(
+                "accepted the terminal tier despite confidence {:.2} remaining below threshold {:.2}",
+                confidence.score, threshold
+            ),
+        }
+    }
+
+    fn provider_failure_checkpoint(err: &LlmError) -> StepVerificationCheckpoint {
+        StepVerificationCheckpoint {
+            kind: StepVerificationCheckpointKind::ProviderFailure,
+            outcome: StepVerificationOutcome::Triggered,
+            rationale: format!("provider attempt failed and required fallback: {err}"),
+        }
+    }
+
+    fn build_step_signal(
+        &self,
+        request: &CompletionRequest,
+        confidence: Option<ConfidenceSignal>,
+        action: StepRoutingAction,
+        mut checkpoints: Vec<StepVerificationCheckpoint>,
+        budget_checkpoint: Option<StepVerificationCheckpoint>,
+    ) -> StepRoutingSignal {
+        if let Some(budget_checkpoint) = budget_checkpoint {
+            checkpoints.push(budget_checkpoint);
+        }
+
+        StepRoutingSignal {
+            metadata: Self::request_step_metadata(request),
+            action,
+            confidence,
+            checkpoints,
         }
     }
 
@@ -446,6 +561,7 @@ impl ModelRouter {
 
         // Non-cascade path
         let reservation = self.reserve_budget(estimated).await?;
+        let budget_checkpoint = Self::budget_checkpoint(reservation.as_ref());
 
         let idx = match self.select_provider(hint, estimated).await {
             Ok(idx) => idx,
@@ -460,14 +576,8 @@ impl ModelRouter {
 
         let providers = self.providers.read().await;
         let entry = &providers[idx];
-
-        let decision = RoutingDecision {
-            provider_id: entry.config.model_id.clone(),
-            model_id: entry.provider.model_id().to_string(),
-            tier_label: None,
-            reason: format!("Selected via {:?}", self.routing_policy),
-            estimated_cost_tokens: Some(estimated),
-        };
+        let provider_id = entry.config.model_id.clone();
+        let model_id = entry.provider.model_id().to_string();
 
         let start = std::time::Instant::now();
         let result = entry
@@ -489,6 +599,27 @@ impl ModelRouter {
                 if let Some(ctx) = reservation {
                     ctx.reconcile(response.usage.total_tokens).await?;
                 }
+
+                let confidence = ConfidenceSignal::from_response(&response);
+                let step_signal = self.build_step_signal(
+                    &request,
+                    Some(confidence.clone()),
+                    if budget_checkpoint.is_some() {
+                        StepRoutingAction::Downgrade
+                    } else {
+                        StepRoutingAction::Continue
+                    },
+                    vec![Self::advisory_confidence_checkpoint(&confidence)],
+                    budget_checkpoint,
+                );
+                let decision = RoutingDecision {
+                    provider_id,
+                    model_id,
+                    tier_label: None,
+                    reason: format!("Selected via {:?}", self.routing_policy),
+                    estimated_cost_tokens: Some(estimated),
+                    step_signal,
+                };
 
                 Ok((response, decision))
             }
@@ -577,6 +708,7 @@ impl ModelRouter {
 
             let tier_label = attempt.tier_label.clone();
             let reservation = self.reserve_budget(estimated_tokens).await?;
+            let budget_checkpoint = Self::budget_checkpoint(reservation.as_ref());
 
             let start = std::time::Instant::now();
             let result = provider.complete(Self::provider_request(&request)).await;
@@ -599,6 +731,31 @@ impl ModelRouter {
 
                     let confidence = ConfidenceSignal::from_response(&response);
                     let is_last_tier = attempt_idx + 1 >= max_attempts;
+                    let action = if confidence.score < policy.escalation_threshold && !is_last_tier
+                    {
+                        StepRoutingAction::Escalate
+                    } else if budget_checkpoint.is_some() {
+                        StepRoutingAction::Downgrade
+                    } else {
+                        StepRoutingAction::Continue
+                    };
+                    let mut checkpoints = vec![Self::cascade_confidence_checkpoint(
+                        &confidence,
+                        policy.escalation_threshold,
+                    )];
+                    if is_last_tier && confidence.score < policy.escalation_threshold {
+                        checkpoints.push(Self::final_tier_checkpoint(
+                            &confidence,
+                            policy.escalation_threshold,
+                        ));
+                    }
+                    let step_signal = self.build_step_signal(
+                        &request,
+                        Some(confidence.clone()),
+                        action,
+                        checkpoints,
+                        budget_checkpoint.clone(),
+                    );
 
                     let decision = RoutingDecision {
                         provider_id: config_model_id,
@@ -616,6 +773,7 @@ impl ModelRouter {
                             )
                         },
                         estimated_cost_tokens: Some(estimated_tokens),
+                        step_signal: step_signal.clone(),
                     };
 
                     let accepted = confidence.score >= policy.escalation_threshold || is_last_tier;
@@ -630,7 +788,7 @@ impl ModelRouter {
                             confidence.score, policy.escalation_threshold
                         )
                     };
-                    self.emit_routing_event(model_id, tier_label, event_reason);
+                    self.emit_routing_event(model_id, tier_label, event_reason, step_signal);
 
                     if accepted {
                         return Ok((response, decision));
@@ -654,7 +812,19 @@ impl ModelRouter {
                         ctx.reconcile(0).await?;
                     }
 
-                    self.emit_routing_event(model_id, tier_label, format!("failed ({err})"));
+                    let step_signal = self.build_step_signal(
+                        &request,
+                        None,
+                        StepRoutingAction::Fallback,
+                        vec![Self::provider_failure_checkpoint(&err)],
+                        budget_checkpoint.clone(),
+                    );
+                    self.emit_routing_event(
+                        model_id,
+                        tier_label,
+                        format!("failed ({err})"),
+                        step_signal,
+                    );
 
                     // Continue to next tier on error
                 }
