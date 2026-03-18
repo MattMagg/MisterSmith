@@ -384,7 +384,7 @@ async fn build_session_view(
     let mut turn_summaries = Vec::with_capacity(turns.len());
     for turn in turns {
         let workflow_id = TaskId::from_uuid(turn.workflow_id);
-        let task = queries::find_task(&pool, turn.workflow_id)
+        let task = queries::find_task(pool, turn.workflow_id)
             .await
             .map_err(persistence_error)?;
         let resume_provenance = task
