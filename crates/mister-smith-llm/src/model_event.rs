@@ -515,7 +515,10 @@ mod tests {
                     step_signal.metadata.step_kind.as_deref(),
                     Some("completion")
                 );
-                assert_eq!(step_signal.action, crate::routing_signal::StepRoutingAction::Continue);
+                assert_eq!(
+                    step_signal.action,
+                    crate::routing_signal::StepRoutingAction::Continue
+                );
                 assert!(step_signal.confidence.is_none());
                 assert!(step_signal.checkpoints.is_empty());
             }
