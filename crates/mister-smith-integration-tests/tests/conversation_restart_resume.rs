@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
-use reqwest::{Client, StatusCode};
+use reqwest::{Client, StatusCode, Url};
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Executor;
@@ -94,7 +94,12 @@ async fn live_restart_resume_http_roundtrip_recovers_idle_session_and_resumed_li
         .expect("session create response should be JSON");
     let session_id = json_string(&accepted, "session_id");
     let first_workflow_id = json_string(&accepted, "workflow_id");
+    let first_workflow_uuid =
+        Uuid::parse_str(&first_workflow_id).expect("workflow_id should be a valid UUID");
     let coordinator_agent_id = json_string(&accepted, "coordinator_agent_id");
+    wait_for_workflow_running(&database_url, first_workflow_uuid)
+        .await
+        .expect("first workflow should leave queued and enter running before restart");
 
     first_runtime
         .kill()
@@ -449,29 +454,111 @@ async fn wait_for_postgres(admin_database_url: &str) -> Result<(), String> {
 }
 
 async fn wait_for_nats(nats_url: &str) -> Result<(), String> {
-    let target = nats_host_port(nats_url)?;
+    let targets = nats_server_targets(nats_url)?;
     let deadline = Instant::now() + INFRA_TIMEOUT;
     loop {
-        match TcpStream::connect(&target).await {
-            Ok(_) => return Ok(()),
-            Err(_) if Instant::now() < deadline => tokio::time::sleep(POLL_INTERVAL).await,
-            Err(error) => {
-                return Err(format!("nats at {target} did not become ready: {error}"));
+        let mut last_error = None;
+        for target in &targets {
+            match TcpStream::connect(target).await {
+                Ok(_) => return Ok(()),
+                Err(error) => {
+                    last_error = Some(format!("{target}: {error}"));
+                }
             }
         }
+
+        if Instant::now() >= deadline {
+            let detail =
+                last_error.unwrap_or_else(|| "no NATS server targets were reachable".to_string());
+            return Err(format!(
+                "nats at [{}] did not become ready: {detail}",
+                targets.join(", ")
+            ));
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
     }
 }
 
-fn nats_host_port(nats_url: &str) -> Result<String, String> {
-    let without_scheme = nats_url
-        .split_once("://")
-        .map(|(_, rest)| rest)
-        .unwrap_or(nats_url);
-    let host_port = without_scheme
+async fn wait_for_workflow_running(database_url: &str, workflow_id: Uuid) -> Result<(), String> {
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .acquire_timeout(Duration::from_secs(5))
+        .connect(database_url)
+        .await
+        .map_err(|error| {
+            format!("failed to connect while waiting for workflow {workflow_id}: {error}")
+        })?;
+    let deadline = Instant::now() + SESSION_TIMEOUT;
+    loop {
+        let status = sqlx::query_scalar::<_, String>(
+            r#"
+            SELECT status::TEXT
+            FROM tasks.records
+            WHERE task_id = $1
+            "#,
+        )
+        .bind(workflow_id)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|error| format!("failed to fetch workflow status for {workflow_id}: {error}"))?;
+
+        match status.as_deref() {
+            Some("running") => {
+                pool.close().await;
+                return Ok(());
+            }
+            Some("queued") | None => {}
+            Some(other @ ("completed" | "failed" | "cancelled")) => {
+                pool.close().await;
+                return Err(format!(
+                    "workflow {workflow_id} reached terminal status '{}' before restart proof began",
+                    other
+                ));
+            }
+            Some(other) => {
+                pool.close().await;
+                return Err(format!(
+                    "workflow {workflow_id} reached unexpected status '{other}' before restart proof began"
+                ));
+            }
+        }
+
+        if Instant::now() >= deadline {
+            pool.close().await;
+            return Err(format!(
+                "workflow {workflow_id} did not enter running before timeout"
+            ));
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+}
+
+fn nats_server_targets(nats_url: &str) -> Result<Vec<String>, String> {
+    let targets = nats_url
         .split(',')
-        .next()
-        .ok_or_else(|| format!("invalid NATS URL: {nats_url}"))?;
-    Ok(host_port.to_string())
+        .map(str::trim)
+        .filter(|candidate| !candidate.is_empty())
+        .map(nats_target_from_candidate)
+        .collect::<Result<Vec<_>, _>>()?;
+    if targets.is_empty() {
+        return Err(format!("invalid NATS URL: {nats_url}"));
+    }
+    Ok(targets)
+}
+
+fn nats_target_from_candidate(candidate: &str) -> Result<String, String> {
+    let candidate_url = if candidate.contains("://") {
+        candidate.to_string()
+    } else {
+        format!("nats://{candidate}")
+    };
+    let parsed = Url::parse(&candidate_url)
+        .map_err(|error| format!("invalid NATS URL '{candidate}': {error}"))?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| format!("NATS URL '{candidate}' is missing a host"))?;
+    let port = parsed.port().unwrap_or(4222);
+    Ok(format!("{host}:{port}"))
 }
 
 fn json_string(value: &Value, key: &str) -> String {
@@ -534,4 +621,26 @@ fn app_binary_path() -> PathBuf {
     } else {
         "mister-smith"
     })
+}
+
+#[test]
+fn nats_server_targets_accept_credentials_queries_and_clusters() {
+    let targets = nats_server_targets(
+        "nats://demo:secret@127.0.0.1:4222?tls_required=false,nats://127.0.0.2:4333",
+    )
+    .expect("clustered authenticated NATS URLs should parse");
+    assert_eq!(
+        targets,
+        vec!["127.0.0.1:4222".to_string(), "127.0.0.2:4333".to_string()]
+    );
+}
+
+#[test]
+fn nats_server_targets_default_missing_port_to_4222() {
+    let targets = nats_server_targets("nats://localhost,localhost:4333")
+        .expect("host-only NATS URLs should parse");
+    assert_eq!(
+        targets,
+        vec!["localhost:4222".to_string(), "localhost:4333".to_string()]
+    );
 }
