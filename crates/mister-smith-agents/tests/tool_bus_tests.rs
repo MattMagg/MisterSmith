@@ -343,6 +343,78 @@ async fn invoke_requires_valid_delegation_for_privileged_tools() {
 }
 
 #[tokio::test]
+async fn invoke_allows_legacy_descriptorless_delegation_for_privileged_tools() {
+    let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
+    let delegation_service = Arc::new(DelegationService::new());
+    let bus = ToolBus::with_security(
+        Some(Arc::new(PolicyEngine::new(&RbacConfig::default()))),
+        Some(audit.clone()),
+    )
+    .with_delegation_service(delegation_service.clone());
+    let agent_id = AgentId::new();
+    let (capability, provenance) = delegation_service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            agent_id,
+            DelegationScope::InvokeTool,
+            None,
+            Duration::from_secs(60),
+            None,
+            None,
+        )
+        .expect("legacy capability should issue");
+    let principal = mister_smith_agents::tool_bus::ToolPrincipal::new(
+        agent_id,
+        delegated_claims(
+            agent_id,
+            &["execute:tool:data"],
+            &ValidatedDelegation {
+                capability: capability.clone(),
+                provenance: provenance.clone(),
+                chain_depth: provenance.links.len(),
+            },
+        ),
+    )
+    .requiring_delegation(DelegationScope::InvokeTool);
+
+    bus.register_privileged_native_tool(
+        "echo",
+        "data",
+        agent_id,
+        "Echoes the payload",
+        json!({ "type": "object" }),
+        json!({ "type": "object" }),
+        DelegationScope::InvokeTool,
+        Arc::new(EchoTool { id: ToolId::new() }),
+    );
+
+    let result = bus
+        .invoke(
+            Some(&principal),
+            "data",
+            "echo",
+            json!({ "value": "legacy" }),
+            Some(Duration::from_millis(50)),
+        )
+        .await
+        .expect("legacy descriptorless delegation should remain valid");
+
+    assert_eq!(result, json!({ "echo": { "value": "legacy" } }));
+
+    let events = audit.recent_events(10);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, AuditEventType::Delegation);
+    assert_eq!(events[0].outcome, AuditOutcome::Success);
+    assert_eq!(
+        events[0]
+            .delegation
+            .as_ref()
+            .and_then(|delegation| delegation.descriptor_id.as_deref()),
+        None
+    );
+}
+
+#[tokio::test]
 async fn invoke_rejects_revoked_delegation_for_privileged_tools() {
     let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
     let delegation_service = Arc::new(DelegationService::new());
@@ -441,6 +513,70 @@ fn privileged_tool_registration_exposes_capability_descriptor() {
             .and_then(|action| action.required_scope),
         Some(DelegationScope::InvokeTool)
     );
+}
+
+#[tokio::test]
+async fn invoke_allows_unprivileged_tool_for_delegated_principal() {
+    let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
+    let delegation_service = Arc::new(DelegationService::new());
+    let bus = ToolBus::with_security(
+        Some(Arc::new(PolicyEngine::new(&RbacConfig::default()))),
+        Some(audit.clone()),
+    )
+    .with_delegation_service(delegation_service.clone());
+    let agent_id = AgentId::new();
+    let (capability, provenance) = delegation_service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            agent_id,
+            DelegationScope::InvokeTool,
+            Some("tool:data.secret".to_string()),
+            Duration::from_secs(60),
+            None,
+            None,
+        )
+        .expect("capability should issue");
+    let principal = mister_smith_agents::tool_bus::ToolPrincipal::new(
+        agent_id,
+        delegated_claims(
+            agent_id,
+            &["execute:tool:data"],
+            &ValidatedDelegation {
+                capability,
+                provenance,
+                chain_depth: 1,
+            },
+        ),
+    )
+    .requiring_delegation(DelegationScope::InvokeTool);
+
+    bus.register_native_tool(
+        "echo",
+        "data",
+        agent_id,
+        "Echoes the payload",
+        json!({ "type": "object" }),
+        json!({ "type": "object" }),
+        Arc::new(EchoTool { id: ToolId::new() }),
+    );
+
+    let result = bus
+        .invoke(
+            Some(&principal),
+            "data",
+            "echo",
+            json!({ "value": "helper" }),
+            Some(Duration::from_millis(50)),
+        )
+        .await
+        .expect("unprivileged helper tool should not require descriptor-bound delegation");
+
+    assert_eq!(result, json!({ "echo": { "value": "helper" } }));
+
+    let events = audit.recent_events(10);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].outcome, AuditOutcome::Success);
+    assert_eq!(events[0].delegation, None);
 }
 
 #[tokio::test]

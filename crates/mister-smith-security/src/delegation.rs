@@ -365,10 +365,8 @@ fn validate_descriptor_binding(
             "delegation descriptor '{descriptor_id}' does not authorize action descriptor '{}'",
             action.descriptor_id
         ))),
-        None => Err(DelegationError::InvalidChain(format!(
-            "delegation capability is not bound to required descriptor '{}'",
-            action.descriptor_id
-        ))),
+        // Preserve in-flight scope-bound capabilities that predate descriptor binding.
+        None => Ok(()),
     }
 }
 

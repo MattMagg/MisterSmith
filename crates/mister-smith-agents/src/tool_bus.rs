@@ -703,54 +703,27 @@ impl ToolBus {
         entry: &ToolEntry,
         principal: Option<&ToolPrincipal>,
     ) -> Result<Option<DelegatedAction>, AgentSystemError> {
-        let mut action = entry
+        let action = entry
             .capability_descriptor
             .action(CapabilityActionKind::Execute)
             .cloned();
 
-        let Some(required_scope) =
-            principal.and_then(|principal| principal.required_delegation_scope)
-        else {
-            return Ok(action);
+        let Some(existing_scope) = action.as_ref().and_then(|action| action.required_scope) else {
+            return Ok(None);
         };
 
-        match action.as_ref().and_then(|action| action.required_scope) {
-            Some(existing) if existing != required_scope => {
-                Err(AgentSystemError::PermissionDenied(format!(
+        if let Some(required_scope) =
+            principal.and_then(|principal| principal.required_delegation_scope)
+        {
+            if existing_scope != required_scope {
+                return Err(AgentSystemError::PermissionDenied(format!(
                     "tool '{}.{}' requires delegation scope {:?} but principal requested {:?}",
-                    entry.namespace, entry.name, existing, required_scope
-                )))
-            }
-            Some(_) => Ok(action),
-            None => {
-                if let Some(action) = action.as_mut() {
-                    action.required_scope = Some(required_scope);
-                    return Ok(action.clone().into());
-                }
-
-                Ok(Some(DelegatedAction {
-                    descriptor_id: entry.capability_descriptor.descriptor_id.clone(),
-                    action_id: format!("{}#execute", entry.capability_descriptor.descriptor_id),
-                    title: format!("execute {}.{}", entry.namespace, entry.name),
-                    description: format!(
-                        "execute access for tool {}.{}",
-                        entry.namespace, entry.name
-                    ),
-                    kind: CapabilityActionKind::Execute,
-                    policy: DelegatedActionPolicy {
-                        action: "execute".to_string(),
-                        resource: "tool".to_string(),
-                        scope: entry.namespace.clone(),
-                        resource_id: Some(format!("{}.{}", entry.namespace, entry.name)),
-                    },
-                    required_scope: Some(required_scope),
-                    revocation_key: format!(
-                        "{}#execute",
-                        entry.capability_descriptor.descriptor_id
-                    ),
-                }))
+                    entry.namespace, entry.name, existing_scope, required_scope
+                )));
             }
         }
+
+        Ok(action)
     }
 
     async fn publish_delegation_update(
