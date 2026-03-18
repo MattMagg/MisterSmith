@@ -1,7 +1,7 @@
 # MS-72 Step Routing Visibility And Evaluation
 
 Date: March 18, 2026
-Status: implemented and locally validated
+Status: implemented and locally revalidated
 
 ## Objective
 
@@ -12,6 +12,7 @@ semantics.
 ## Scope
 
 - project step-routing deltas into workflow-visible autonomy status
+- publish live planner and critic step-routing updates into orchestrator autonomy snapshots
 - persist step-routing history in workflow metadata during runtime planning
 - compare representative step bundles with and without carryover control
 
@@ -19,8 +20,8 @@ semantics.
 
 - `MS-70` already landed the raw `StepRoutingSignal` contract and carryover semantics
 - deterministic fixture proof is the correct validation level for this slice
-- workflow-visible state can be satisfied through persisted workflow metadata plus autonomy-status
-  rendering
+- workflow-visible state can be satisfied through live supervision snapshots plus persisted workflow
+  metadata recovery
 
 ## Constraints
 
@@ -47,7 +48,8 @@ The workflow-visible step-routing history now records, per step:
 - `change_rationale`
 
 The status renderer surfaces the new `step routing:` section beside the existing branch-routing
-history.
+history, and planner or critic supervision now refreshes that section immediately when routing
+control changes during live execution.
 
 ## Deterministic Harness
 
@@ -86,6 +88,8 @@ Metrics recorded:
 - Even in the matched case, the projected `change_rationale` remains useful because operators can
   inspect the step transition from `fallback` to `continue` instead of inferring it from raw router
   internals.
+- The follow-up live snapshot publication fix keeps the same rationale visible before persistence,
+  which closes the gap between in-flight supervision state and recovered workflow metadata.
 
 ## Validation
 
@@ -94,7 +98,9 @@ cargo test -p mister-smith-events --test autonomy_event_tests -- --nocapture
 cargo test -p mister-smith-app --test autonomy_status_tests -- --nocapture
 cargo test -p mister-smith-app \
   recover_persisted_autonomy_status_enriches_step_routing_history_from_metadata -- --nocapture
+cargo test -p mister-smith-agents --features llm --test gate9_tests -- --nocapture
 cargo test -p mister-smith-agents --features llm --test step_routing_benchmark_tests -- --nocapture
+cargo build --workspace
 ```
 
 ## Stop Conditions
