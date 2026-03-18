@@ -496,6 +496,9 @@ pub(crate) fn enrich_session_linkage(view: &mut AutonomyStatusView, metadata: &s
 }
 
 pub(crate) fn enrich_step_routing_history(view: &mut AutonomyStatusView, metadata: &Value) {
+    if !view.step_routing_history.is_empty() {
+        return;
+    }
     let Some(raw) = metadata.get("step_routing_history").cloned() else {
         return;
     };

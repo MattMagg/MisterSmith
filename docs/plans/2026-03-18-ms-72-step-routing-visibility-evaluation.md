@@ -22,6 +22,8 @@ semantics.
 - deterministic fixture proof is the correct validation level for this slice
 - workflow-visible state can be satisfied through live supervision snapshots plus persisted workflow
   metadata recovery
+- persisted metadata must remain fallback-only when a fresher live status snapshot already carries
+  step-routing history
 
 ## Constraints
 
@@ -50,6 +52,8 @@ The workflow-visible step-routing history now records, per step:
 The status renderer surfaces the new `step routing:` section beside the existing branch-routing
 history, and planner or critic supervision now refreshes that section immediately when routing
 control changes during live execution.
+The app-facing status path now treats `metadata.step_routing_history` as a recovery fallback
+instead of an unconditional overwrite, so live snapshots keep the freshest visible rationale.
 
 ## Deterministic Harness
 
@@ -90,6 +94,9 @@ Metrics recorded:
   internals.
 - The follow-up live snapshot publication fix keeps the same rationale visible before persistence,
   which closes the gap between in-flight supervision state and recovered workflow metadata.
+- The app-side fallback fix closes the last stale-overwrite path: status rendering and persisted
+  autonomy snapshots now preserve fresher live step-routing history and only use planning metadata
+  when the live view has no step-routing entries yet.
 
 ## Validation
 
@@ -98,6 +105,8 @@ cargo test -p mister-smith-events --test autonomy_event_tests -- --nocapture
 cargo test -p mister-smith-app --test autonomy_status_tests -- --nocapture
 cargo test -p mister-smith-app \
   recover_persisted_autonomy_status_enriches_step_routing_history_from_metadata -- --nocapture
+cargo test -p mister-smith-app \
+  recover_persisted_autonomy_status_preserves_fresher_snapshot_history -- --nocapture
 cargo test -p mister-smith-agents --features llm --test gate9_tests -- --nocapture
 cargo test -p mister-smith-agents --features llm --test step_routing_benchmark_tests -- --nocapture
 cargo build --workspace

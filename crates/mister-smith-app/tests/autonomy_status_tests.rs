@@ -223,6 +223,32 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
     (view, decision_id, branch_id)
 }
 
+fn sample_step_routing_history(
+    step_id: &str,
+    previous_step_id: Option<&str>,
+    action: &str,
+    action_changed: bool,
+) -> StepRoutingDecisionSummary {
+    StepRoutingDecisionSummary {
+        step_id: step_id.to_string(),
+        step_index: Some(2),
+        step_kind: Some("planner".to_string()),
+        model_id: "gpt-5.4".to_string(),
+        tier: "llm-tier".to_string(),
+        reason: "accepted at llm-tier after previous confidence review".to_string(),
+        previous_step_id: previous_step_id.map(str::to_string),
+        previous_action: Some("escalate".to_string()),
+        previous_tier: Some("slm-tier".to_string()),
+        action: action.to_string(),
+        action_changed,
+        preferred_tier_after: Some("llm-tier".to_string()),
+        estimated_cost_tokens: Some(128),
+        confidence_score: Some(0.92),
+        triggered_checkpoints: vec![],
+        change_rationale: vec![format!("action changed to {action}")],
+    }
+}
+
 #[test]
 fn render_status_surfaces_operator_rationale_and_history() {
     let (view, _, branch_id) = sample_view();
@@ -274,6 +300,22 @@ fn render_status_surfaces_restart_resume_provenance() {
     assert!(rendered.contains("resumed_from_turn=1"));
     assert!(rendered.contains(&format!("resumed_from_workflow={resumed_from_workflow_id}")));
     assert!(rendered.contains("runtime restart before session sync"));
+}
+
+#[test]
+fn enrich_step_routing_history_preserves_live_history_over_stale_metadata() {
+    let (mut view, _, _) = sample_view();
+    let live_history = view.step_routing_history.clone();
+    let metadata = serde_json::json!({
+        "step_routing_history": [
+            sample_step_routing_history("planner.step.1", None, "escalate", false)
+        ]
+    });
+
+    autonomy::enrich_step_routing_history(&mut view, &metadata);
+
+    assert_eq!(view.step_routing_history, live_history);
+    assert_eq!(view.step_routing_history[0].step_id, "planner.step.2");
 }
 
 #[test]

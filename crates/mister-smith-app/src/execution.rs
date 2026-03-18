@@ -1393,6 +1393,64 @@ mod tests {
     }
 
     #[test]
+    fn recover_persisted_autonomy_status_preserves_fresher_snapshot_history() {
+        let mut view = sample_autonomy_view();
+        view.step_routing_history = vec![StepRoutingDecisionSummary {
+            step_id: "planner.step.3".to_string(),
+            step_index: Some(3),
+            step_kind: Some("planner".to_string()),
+            model_id: "gpt-5.4".to_string(),
+            tier: "llm-tier".to_string(),
+            reason: "continued after live snapshot publication".to_string(),
+            previous_step_id: Some("planner.step.2".to_string()),
+            previous_action: Some("continue".to_string()),
+            previous_tier: Some("llm-tier".to_string()),
+            action: "continue".to_string(),
+            action_changed: false,
+            preferred_tier_after: Some("llm-tier".to_string()),
+            estimated_cost_tokens: Some(96),
+            confidence_score: Some(0.95),
+            triggered_checkpoints: vec![],
+            change_rationale: vec!["live snapshot already includes the latest step".to_string()],
+        }];
+
+        let mut metadata = json!({
+            "step_routing_history": [
+                {
+                    "step_id": "planner.step.1",
+                    "step_index": 1,
+                    "step_kind": "planner",
+                    "model_id": "gpt-5.4",
+                    "tier": "slm-tier",
+                    "reason": "stale planning-time metadata",
+                    "previous_step_id": null,
+                    "previous_action": null,
+                    "previous_tier": null,
+                    "action": "escalate",
+                    "action_changed": false,
+                    "preferred_tier_after": "slm-tier",
+                    "estimated_cost_tokens": 64,
+                    "confidence_score": 0.40,
+                    "triggered_checkpoints": ["confidence_review"],
+                    "change_rationale": ["initial metadata only"]
+                }
+            ]
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should preserve fresher live history");
+
+        assert_eq!(recovered.step_routing_history.len(), 1);
+        assert_eq!(recovered.step_routing_history[0].step_id, "planner.step.3");
+        assert_eq!(
+            recovered.step_routing_history[0].reason,
+            "continued after live snapshot publication"
+        );
+    }
+
+    #[test]
     fn recover_persisted_autonomy_status_rejects_invalid_payloads() {
         let record = sample_task_with_metadata(json!({
             AUTONOMY_STATUS_METADATA_KEY: "not-an-object"
