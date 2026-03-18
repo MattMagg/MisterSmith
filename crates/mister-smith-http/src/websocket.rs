@@ -76,7 +76,7 @@ async fn handle_ws_connection(
     let sender = Arc::new(tokio::sync::Mutex::new(sender));
 
     let mut event_rx = state.event_tx.subscribe();
-    let mut filters = initial_filters;
+    let filters = Arc::new(std::sync::Mutex::new(initial_filters));
 
     // Track whether we've received a pong for the current ping cycle.
     let pong_received = Arc::new(std::sync::atomic::AtomicBool::new(true));
@@ -111,9 +111,8 @@ async fn handle_ws_connection(
     // Spawn the event broadcast task.
     let event_sender = Arc::clone(&sender);
     let event_handle = tokio::spawn({
-        let filters = filters.clone();
+        let filters = Arc::clone(&filters);
         async move {
-            let filters = std::sync::Mutex::new(filters);
             loop {
                 match event_rx.recv().await {
                     Ok(event) => {
@@ -155,12 +154,16 @@ async fn handle_ws_connection(
                     match client_msg {
                         ClientMessage::Subscribe { event_types } => {
                             debug!(?event_types, "Client subscribed to events");
-                            filters.extend(event_types);
+                            if let Ok(mut f) = filters.lock() {
+                                f.extend(event_types);
+                            }
                         }
                         ClientMessage::Unsubscribe { event_types } => {
                             debug!(?event_types, "Client unsubscribed from events");
-                            for et in &event_types {
-                                filters.remove(et);
+                            if let Ok(mut f) = filters.lock() {
+                                for et in &event_types {
+                                    f.remove(et);
+                                }
                             }
                         }
                     }
