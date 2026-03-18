@@ -414,6 +414,7 @@ fn delegated_claims_carry_capability_and_provenance_when_agent_ids_are_uuid_back
             mister_smith_core::AuthorityPrincipal::Policy("operator".to_string()),
             mister_smith_core::AgentId::from_uuid(parent_agent),
             mister_smith_core::DelegationScope::InvokeTool,
+            Some("tool:data.echo".to_string()),
             Duration::from_secs(300),
             None,
             None,
@@ -441,6 +442,10 @@ fn delegated_claims_carry_capability_and_provenance_when_agent_ids_are_uuid_back
     assert_eq!(
         child_capability.parent_capability,
         Some(capability.capability_id)
+    );
+    assert_eq!(
+        child_capability.descriptor_id.as_deref(),
+        Some("tool:data.echo")
     );
     assert_eq!(
         child_capability.recipient.to_string(),

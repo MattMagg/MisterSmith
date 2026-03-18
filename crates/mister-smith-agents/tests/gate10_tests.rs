@@ -383,6 +383,7 @@ fn capability_summary(
     let issuer = AuthorityPrincipal::Policy("operator".to_string());
     CapabilitySummary {
         capability_id,
+        descriptor_id: None,
         issuer: issuer.clone(),
         recipient,
         scope,
@@ -397,6 +398,7 @@ fn capability_summary(
                 capability_id,
                 scope,
                 expires_at,
+                descriptor_id: None,
             }],
         },
         revocation_state,

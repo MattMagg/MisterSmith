@@ -8,8 +8,8 @@ use dashmap::DashMap;
 use uuid::Uuid;
 
 use mister_smith_core::{
-    AgentId, AuthorityPrincipal, CapabilityId, DelegationCapability, DelegationError,
-    DelegationScope, ProvenanceChain, ProvenanceLink, RevocationState,
+    AgentId, AuthorityPrincipal, CapabilityId, DelegatedAction, DelegationCapability,
+    DelegationError, DelegationScope, ProvenanceChain, ProvenanceLink, RevocationState,
 };
 
 use crate::jwt::{AgentClaims, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
@@ -29,6 +29,7 @@ pub struct ValidatedDelegation {
 #[derive(Debug)]
 pub struct DelegationService {
     revoked_capabilities: DashMap<CapabilityId, DateTime<Utc>>,
+    revoked_actions: DashMap<String, DateTime<Utc>>,
     max_delegation_chain_depth: usize,
 }
 
@@ -50,16 +51,19 @@ impl DelegationService {
     pub fn new_with_delegation_chain_max_depth(max_delegation_chain_depth: usize) -> Self {
         Self {
             revoked_capabilities: DashMap::new(),
+            revoked_actions: DashMap::new(),
             max_delegation_chain_depth,
         }
     }
 
     /// Issue a bounded capability and its provenance chain.
+    #[allow(clippy::too_many_arguments)]
     pub fn issue_capability(
         &self,
         issuer: AuthorityPrincipal,
         recipient: AgentId,
         scope: DelegationScope,
+        descriptor_id: Option<String>,
         ttl: Duration,
         parent: Option<&DelegationCapability>,
         parent_chain: Option<&ProvenanceChain>,
@@ -69,7 +73,7 @@ impl DelegationService {
         })?;
         let mut expires_at = Utc::now() + ttl;
 
-        let (root_issuer, mut links, parent_capability) = match parent {
+        let (root_issuer, mut links, parent_capability, descriptor_id) = match parent {
             Some(parent) => {
                 let parent_chain = parent_chain.ok_or_else(|| {
                     DelegationError::InvalidChain(
@@ -78,14 +82,30 @@ impl DelegationService {
                 })?;
                 let validated_parent =
                     self.validate_capability(parent, parent_chain, Some(parent.scope))?;
+                let descriptor_id = match (
+                    descriptor_id,
+                    validated_parent.capability.descriptor_id.clone(),
+                ) {
+                    (Some(candidate), Some(parent_descriptor)) => {
+                        if candidate != parent_descriptor {
+                            return Err(DelegationError::InvalidChain(format!(
+                                "delegation descriptor '{candidate}' does not match parent descriptor '{parent_descriptor}'"
+                            )));
+                        }
+                        Some(candidate)
+                    }
+                    (Some(candidate), None) => Some(candidate),
+                    (None, inherited) => inherited,
+                };
                 expires_at = expires_at.min(validated_parent.capability.expires_at);
                 (
                     validated_parent.provenance.root_issuer,
                     validated_parent.provenance.links,
                     Some(parent.capability_id),
+                    descriptor_id,
                 )
             }
-            None => (issuer.clone(), Vec::new(), None),
+            None => (issuer.clone(), Vec::new(), None, descriptor_id),
         };
 
         let capability = DelegationCapability {
@@ -94,6 +114,7 @@ impl DelegationService {
             recipient,
             scope,
             expires_at,
+            descriptor_id: descriptor_id.clone(),
             parent_capability,
             revocation_state: RevocationState::Active,
         };
@@ -104,6 +125,7 @@ impl DelegationService {
             capability_id: capability.capability_id,
             scope,
             expires_at,
+            descriptor_id,
         });
 
         let provenance = ProvenanceChain {
@@ -156,6 +178,19 @@ impl DelegationService {
         })
     }
 
+    /// Validate a capability for a typed delegated action.
+    pub fn validate_action(
+        &self,
+        capability: &DelegationCapability,
+        provenance: &ProvenanceChain,
+        action: &DelegatedAction,
+    ) -> Result<ValidatedDelegation, DelegationError> {
+        let validated = self.validate_capability(capability, provenance, action.required_scope)?;
+        validate_descriptor_binding(&validated.capability, action)?;
+        self.validate_action_revocation(action)?;
+        Ok(validated)
+    }
+
     /// Validate the delegation metadata embedded in agent claims.
     pub fn validate_claims(
         &self,
@@ -185,9 +220,44 @@ impl DelegationService {
         }
     }
 
+    /// Validate the delegation metadata in claims for a typed delegated action.
+    pub fn validate_claims_for_action(
+        &self,
+        claims: &AgentClaims,
+        action: &DelegatedAction,
+    ) -> Result<Option<ValidatedDelegation>, DelegationError> {
+        claims
+            .validate_delegation_chain(self.max_delegation_chain_depth)
+            .map_err(|error| DelegationError::InvalidChain(error.to_string()))?;
+
+        match (&claims.delegation_capability, &claims.provenance_chain) {
+            (None, None) => Ok(None),
+            (Some(_), None) | (None, Some(_)) => Err(DelegationError::InvalidChain(
+                "delegation capability and provenance chain must be present together".to_string(),
+            )),
+            (Some(capability), Some(provenance)) => {
+                if capability.recipient.to_string() != claims.agent_id {
+                    return Err(DelegationError::InvalidChain(format!(
+                        "delegation capability recipient '{}' does not match claims agent '{}'",
+                        capability.recipient, claims.agent_id
+                    )));
+                }
+
+                self.validate_action(capability, provenance, action)
+                    .map(Some)
+            }
+        }
+    }
+
     /// Explicitly revoke a capability.
     pub fn revoke_capability(&self, capability_id: CapabilityId) {
         self.revoked_capabilities.insert(capability_id, Utc::now());
+    }
+
+    /// Explicitly revoke a delegated action by its stable revocation key.
+    pub fn revoke_action(&self, revocation_key: impl Into<String>) {
+        self.revoked_actions
+            .insert(revocation_key.into(), Utc::now());
     }
 
     /// Return the current revocation state for a capability.
@@ -206,6 +276,16 @@ impl DelegationService {
         }
 
         RevocationState::Active
+    }
+
+    fn validate_action_revocation(&self, action: &DelegatedAction) -> Result<(), DelegationError> {
+        if self.revoked_actions.contains_key(&action.revocation_key) {
+            return Err(DelegationError::ActionRevoked {
+                revocation_key: action.revocation_key.clone(),
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -238,6 +318,7 @@ fn validate_provenance_chain(
         || last.recipient != capability.recipient
         || last.scope != capability.scope
         || last.expires_at != capability.expires_at
+        || last.descriptor_id != capability.descriptor_id
     {
         return Err(DelegationError::InvalidChain(
             "delegation provenance terminal link does not match capability".to_string(),
@@ -272,6 +353,21 @@ fn validate_provenance_chain(
     }
 
     Ok(())
+}
+
+fn validate_descriptor_binding(
+    capability: &DelegationCapability,
+    action: &DelegatedAction,
+) -> Result<(), DelegationError> {
+    match capability.descriptor_id.as_deref() {
+        Some(descriptor_id) if descriptor_id == action.descriptor_id => Ok(()),
+        Some(descriptor_id) => Err(DelegationError::InvalidChain(format!(
+            "delegation descriptor '{descriptor_id}' does not authorize action descriptor '{}'",
+            action.descriptor_id
+        ))),
+        // Preserve in-flight scope-bound capabilities that predate descriptor binding.
+        None => Ok(()),
+    }
 }
 
 pub(crate) fn authority_principal_for_agent_id(agent_id: &str) -> AuthorityPrincipal {

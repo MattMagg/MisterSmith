@@ -254,6 +254,62 @@ pub enum AuthorityPrincipal {
     Policy(String),
 }
 
+/// Typed privileged action that a capability descriptor can expose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CapabilityActionKind {
+    /// Discover that a capability surface exists.
+    Discover,
+    /// Execute a privileged action through the capability surface.
+    Execute,
+}
+
+impl CapabilityActionKind {
+    /// Return the canonical policy action string for this action kind.
+    #[must_use]
+    pub fn policy_action(self) -> &'static str {
+        match self {
+            Self::Discover => "discover",
+            Self::Execute => "execute",
+        }
+    }
+}
+
+/// Policy binding associated with a typed delegated action.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DelegatedActionPolicy {
+    /// Policy action string evaluated by the RBAC engine.
+    pub action: String,
+    /// Policy resource string evaluated by the RBAC engine.
+    pub resource: String,
+    /// Policy scope string evaluated by the RBAC engine.
+    pub scope: String,
+    /// Optional concrete resource identifier bound to the action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_id: Option<String>,
+}
+
+/// Typed delegated action bound to a capability descriptor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DelegatedAction {
+    /// Stable descriptor identifier this action belongs to.
+    pub descriptor_id: String,
+    /// Stable identifier for the action within the descriptor.
+    pub action_id: String,
+    /// Human-readable title for the action.
+    pub title: String,
+    /// Human-readable description for the action.
+    pub description: String,
+    /// Typed action kind.
+    pub kind: CapabilityActionKind,
+    /// Policy binding evaluated before execution.
+    pub policy: DelegatedActionPolicy,
+    /// Delegation scope required for privileged execution, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_scope: Option<DelegationScope>,
+    /// Stable revocation key for action-level revocation.
+    pub revocation_key: String,
+}
+
 /// Bounded unit of delegated authority for privileged autonomy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DelegationCapability {
@@ -267,6 +323,9 @@ pub struct DelegationCapability {
     pub scope: DelegationScope,
     /// Timestamp when the capability expires.
     pub expires_at: DateTime<Utc>,
+    /// Capability descriptor this authority is bound to, when narrowed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor_id: Option<String>,
     /// Parent capability in the provenance chain, when delegated downstream.
     pub parent_capability: Option<CapabilityId>,
     /// Current revocation state for the capability.
@@ -286,6 +345,9 @@ pub struct ProvenanceLink {
     pub scope: DelegationScope,
     /// Timestamp when this link expires.
     pub expires_at: DateTime<Utc>,
+    /// Capability descriptor this authority transfer is bound to, when narrowed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor_id: Option<String>,
 }
 
 /// Ordered chain of authority transfers attached to privileged execution.

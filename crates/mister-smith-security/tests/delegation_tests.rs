@@ -2,7 +2,10 @@
 
 use std::time::Duration;
 
-use mister_smith_core::{AuthorityPrincipal, DelegationScope, RevocationState, SecurityError};
+use mister_smith_core::{
+    AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
+    DelegationScope, RevocationState, SecurityError,
+};
 use mister_smith_security::config::{JwtConfig, KeySource};
 use mister_smith_security::delegation::DelegationService;
 use mister_smith_security::jwt::{AgentClaims, JwtManager, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
@@ -165,6 +168,7 @@ fn delegation_service_issues_provenance_and_validates_scope() {
             AuthorityPrincipal::Policy("operator".to_string()),
             recipient,
             DelegationScope::InvokeTool,
+            Some("tool:data.echo".to_string()),
             Duration::from_secs(300),
             None,
             None,
@@ -176,6 +180,10 @@ fn delegation_service_issues_provenance_and_validates_scope() {
         .expect("issued capability should validate");
 
     assert_eq!(validated.capability.scope, DelegationScope::InvokeTool);
+    assert_eq!(
+        validated.capability.descriptor_id.as_deref(),
+        Some("tool:data.echo")
+    );
     assert_eq!(validated.chain_depth, 1);
     assert_eq!(
         validated.provenance.terminal_capability,
@@ -192,6 +200,7 @@ fn delegation_service_rejects_revoked_capabilities() {
             AuthorityPrincipal::Policy("operator".to_string()),
             recipient,
             DelegationScope::InvokeTool,
+            Some("tool:data.echo".to_string()),
             Duration::from_secs(300),
             None,
             None,
@@ -208,4 +217,83 @@ fn delegation_service_rejects_revoked_capabilities() {
         service.revocation_state(&capability),
         RevocationState::Revoked
     );
+}
+
+#[test]
+fn delegation_service_rejects_revoked_actions() {
+    let service = DelegationService::new();
+    let recipient = mister_smith_core::AgentId::from_uuid(uuid::Uuid::new_v4());
+    let (capability, provenance) = service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            recipient,
+            DelegationScope::InvokeTool,
+            Some("tool:data.echo".to_string()),
+            Duration::from_secs(300),
+            None,
+            None,
+        )
+        .expect("capability should issue");
+    let action = DelegatedAction {
+        descriptor_id: "tool:data.echo".to_string(),
+        action_id: "tool:data.echo#execute".to_string(),
+        title: "execute data.echo".to_string(),
+        description: "execute access for tool data.echo".to_string(),
+        kind: CapabilityActionKind::Execute,
+        policy: DelegatedActionPolicy {
+            action: "execute".to_string(),
+            resource: "tool".to_string(),
+            scope: "data".to_string(),
+            resource_id: Some("data.echo".to_string()),
+        },
+        required_scope: Some(DelegationScope::InvokeTool),
+        revocation_key: "tool:data.echo#execute".to_string(),
+    };
+
+    service.revoke_action(action.revocation_key.clone());
+
+    assert!(matches!(
+        service.validate_action(&capability, &provenance, &action),
+        Err(mister_smith_core::DelegationError::ActionRevoked { revocation_key })
+            if revocation_key == "tool:data.echo#execute"
+    ));
+}
+
+#[test]
+fn delegation_service_allows_legacy_descriptorless_capability_for_actions() {
+    let service = DelegationService::new();
+    let recipient = mister_smith_core::AgentId::from_uuid(uuid::Uuid::new_v4());
+    let (capability, provenance) = service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            recipient,
+            DelegationScope::InvokeTool,
+            None,
+            Duration::from_secs(300),
+            None,
+            None,
+        )
+        .expect("legacy capability should issue");
+    let action = DelegatedAction {
+        descriptor_id: "tool:data.echo".to_string(),
+        action_id: "tool:data.echo#execute".to_string(),
+        title: "execute data.echo".to_string(),
+        description: "execute access for tool data.echo".to_string(),
+        kind: CapabilityActionKind::Execute,
+        policy: DelegatedActionPolicy {
+            action: "execute".to_string(),
+            resource: "tool".to_string(),
+            scope: "data".to_string(),
+            resource_id: Some("data.echo".to_string()),
+        },
+        required_scope: Some(DelegationScope::InvokeTool),
+        revocation_key: "tool:data.echo#execute".to_string(),
+    };
+
+    let validated = service
+        .validate_action(&capability, &provenance, &action)
+        .expect("legacy descriptorless capability should remain valid until expiry");
+
+    assert_eq!(validated.capability.scope, DelegationScope::InvokeTool);
+    assert_eq!(validated.capability.descriptor_id, None);
 }

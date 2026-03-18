@@ -35,6 +35,7 @@ fn sample_provenance(
             capability_id,
             scope,
             expires_at,
+            descriptor_id: None,
         }],
         terminal_capability: capability_id,
     }
@@ -432,6 +433,7 @@ fn capability_summary_preserves_policy_issuers() {
     let issuer = AuthorityPrincipal::Policy("bootstrap-policy".to_string());
     let summary = CapabilitySummary {
         capability_id,
+        descriptor_id: None,
         issuer: issuer.clone(),
         recipient,
         scope: DelegationScope::ApplyIntervention,
@@ -773,6 +775,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
                     let expires_at = chrono::Utc::now();
                     CapabilitySummary {
                         capability_id,
+                        descriptor_id: None,
                         issuer: issuer.clone(),
                         recipient,
                         scope: DelegationScope::ManageBranch,

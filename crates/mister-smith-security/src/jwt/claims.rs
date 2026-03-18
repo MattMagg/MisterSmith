@@ -125,6 +125,16 @@ impl AgentClaims {
                         "delegation provenance must contain at least one link".to_string(),
                     ));
                 }
+                if provenance
+                    .links
+                    .last()
+                    .and_then(|link| link.descriptor_id.clone())
+                    != capability.descriptor_id.clone()
+                {
+                    return Err(SecurityError::InvalidToken(
+                        "delegation provenance descriptor does not match claims".to_string(),
+                    ));
+                }
             }
         }
 
@@ -172,6 +182,7 @@ fn derive_child_capability(
         recipient: AgentId::from_uuid(child_agent_id),
         scope: parent_capability.scope,
         expires_at: inherited_expiry(parent_capability.expires_at, parent.exp),
+        descriptor_id: parent_capability.descriptor_id.clone(),
         parent_capability: Some(parent_capability.capability_id),
         revocation_state: RevocationState::Active,
     })
@@ -189,6 +200,7 @@ fn derive_child_provenance(
         capability_id: child_capability.capability_id,
         scope: child_capability.scope,
         expires_at: child_capability.expires_at,
+        descriptor_id: child_capability.descriptor_id.clone(),
     });
     provenance.terminal_capability = child_capability.capability_id;
     Some(provenance)
