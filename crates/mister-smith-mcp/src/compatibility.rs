@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 
 use crate::config::McpServerConfig;
 use crate::errors::McpError;
-use crate::server::{ExposedTool, McpServer, ToolHandler};
+use crate::server::{ExposedTool, McpServer, ToolCallRequest, ToolHandler};
 
 const DEFAULT_SERVER_NAME: &str = "smith";
 const DEFAULT_LINEAR_ENDPOINT: &str = "https://api.linear.app/graphql";
@@ -5705,9 +5705,9 @@ where
     F: Fn(Arc<SmithCompatibilityServer>, serde_json::Value) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<serde_json::Value, McpError>> + Send + 'static,
 {
-    Arc::new(move |params| {
+    Arc::new(move |request: ToolCallRequest| {
         let compatibility = compatibility.clone();
-        Box::pin(func(compatibility, params))
+        Box::pin(func(compatibility, request.params))
     })
 }
 

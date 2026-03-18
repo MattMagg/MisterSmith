@@ -10,9 +10,11 @@ use mister_smith_core::{
 use mister_smith_events::{AutonomyEvent, AutonomyEventEnvelope, CapabilitySummary, EventBus};
 use mister_smith_mcp::client::McpClient;
 use mister_smith_mcp::errors::McpError;
+use mister_smith_mcp::ToolCallRequest;
 use mister_smith_security::audit::{
     AuditEventType, AuditLogger, AuditOutcome, DelegationAuditContext, SecurityAuditEvent,
 };
+use mister_smith_security::delegation::external_delegation_envelope;
 use mister_smith_security::jwt::AgentClaims;
 use mister_smith_security::rbac::{AuthorizationRequest, PolicyDecision, PolicyEngine};
 use mister_smith_security::{DelegationService, ValidatedDelegation};
@@ -545,7 +547,22 @@ impl ToolBus {
                 }
             }
             ToolBackend::Mcp(client) => {
-                match tokio::time::timeout(deadline, client.call_tool(name, params)).await {
+                let request = delegation_validation
+                    .as_ref()
+                    .map(|validated| {
+                        let mut request = ToolCallRequest::new(params.clone());
+                        if let Some(action) = execute_action.as_ref() {
+                            request = request.with_delegation(external_delegation_envelope(
+                                validated,
+                                Some(action),
+                            ));
+                        }
+                        request
+                    })
+                    .unwrap_or_else(|| ToolCallRequest::new(params));
+
+                match tokio::time::timeout(deadline, client.call_tool_request(name, request)).await
+                {
                     Ok(inner) => inner.map_err(Self::map_mcp_error),
                     Err(_) => Err(AgentSystemError::Timeout(format!(
                         "tool '{namespace}.{name}' timed out after {deadline:?}"

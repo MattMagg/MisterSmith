@@ -10,11 +10,12 @@ use axum::http::{Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
+use crate::delegation::external_delegation_envelope;
 use crate::jwt::AgentClaims;
 use crate::middleware::SecurityLayer;
 #[cfg(feature = "rbac")]
 use crate::rbac::AuthorizationRequest;
-use mister_smith_core::SecurityError;
+use mister_smith_core::{ExternalDelegationEnvelope, SecurityError};
 
 /// Axum middleware that validates JWT Bearer tokens.
 ///
@@ -86,6 +87,32 @@ pub async fn auth_middleware(
     // Validate token
     match jwt.validate_token(&token) {
         Ok(claims) => {
+            let delegation_envelope = match security.delegation_service.as_ref() {
+                Some(delegation_service) => match delegation_service.validate_claims(&claims, None)
+                {
+                    Ok(validated) => validated
+                        .as_ref()
+                        .map(|validated| external_delegation_envelope(validated, None)),
+                    Err(error) => {
+                        #[cfg(feature = "audit")]
+                        {
+                            use crate::audit::events::AuditOutcome;
+                            if let Some(audit) = security.audit.as_ref() {
+                                audit.record_auth(
+                                    &claims.sub,
+                                    AuditOutcome::Failure,
+                                    [("reason".to_string(), error.to_string())]
+                                        .into_iter()
+                                        .collect(),
+                                );
+                            }
+                        }
+                        return unauthorized_response("invalid delegation envelope");
+                    }
+                },
+                None => None,
+            };
+
             #[cfg(feature = "audit")]
             {
                 use crate::audit::events::AuditOutcome;
@@ -127,6 +154,9 @@ pub async fn auth_middleware(
             }
 
             request.extensions_mut().insert(claims);
+            if let Some(envelope) = delegation_envelope {
+                request.extensions_mut().insert(envelope);
+            }
             next.run(request).await
         }
         Err(e) => {
@@ -213,6 +243,28 @@ where
             .cloned()
             .map(AuthenticatedAgent)
             .ok_or_else(|| unauthorized_response("not authenticated"))
+    }
+}
+
+/// Axum extractor for a validated external delegation envelope, when present.
+pub struct AuthenticatedDelegation(pub Option<ExternalDelegationEnvelope>);
+
+impl<S> axum::extract::FromRequestParts<S> for AuthenticatedDelegation
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(Self(
+            parts
+                .extensions
+                .get::<ExternalDelegationEnvelope>()
+                .cloned(),
+        ))
     }
 }
 

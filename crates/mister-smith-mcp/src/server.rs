@@ -8,6 +8,8 @@ use std::future::Future;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use mister_smith_core::ExternalDelegationEnvelope;
+use mister_smith_security::DelegationService;
 use rmcp::{
     model::{
         CallToolRequestParams, CallToolResult, ListToolsResult, PaginatedRequestParams, ServerInfo,
@@ -35,10 +37,82 @@ pub struct ExposedTool {
     pub namespace: String,
 }
 
+/// Reserved metadata wrapper for Smith-specific MCP transport context.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ToolCallContext {
+    /// Delegated authority preserved across the MCP boundary, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation: Option<ExternalDelegationEnvelope>,
+}
+
+impl ToolCallContext {
+    fn is_empty(&self) -> bool {
+        self.delegation.is_none()
+    }
+}
+
+/// Typed request delivered to MCP tool handlers.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct ToolCallRequest {
+    /// Original tool parameters supplied by the caller.
+    pub params: serde_json::Value,
+    /// Reserved Smith-specific transport context.
+    #[serde(
+        default,
+        rename = "_mister_smith",
+        skip_serializing_if = "ToolCallContext::is_empty"
+    )]
+    pub context: ToolCallContext,
+}
+
+impl ToolCallRequest {
+    /// Create a tool call request from plain JSON parameters.
+    #[must_use]
+    pub fn new(params: serde_json::Value) -> Self {
+        Self {
+            params,
+            context: ToolCallContext::default(),
+        }
+    }
+
+    /// Attach a delegation envelope to the tool call request.
+    #[must_use]
+    pub fn with_delegation(mut self, delegation: ExternalDelegationEnvelope) -> Self {
+        self.context.delegation = Some(delegation);
+        self
+    }
+
+    /// Decode raw wire parameters into a typed request, preserving legacy raw params.
+    pub fn from_wire_params(raw: serde_json::Value) -> Result<Self, McpError> {
+        match raw {
+            serde_json::Value::Object(map)
+                if map.contains_key("_mister_smith") && map.contains_key("params") =>
+            {
+                serde_json::from_value(serde_json::Value::Object(map))
+                    .map_err(|err| McpError::SerializationError(err.to_string()))
+            }
+            serde_json::Value::Object(map) => Ok(Self::new(serde_json::Value::Object(map))),
+            _ => Err(McpError::SerializationError(
+                "tool params must be a JSON object".into(),
+            )),
+        }
+    }
+
+    /// Encode the request for transport while preserving legacy raw params when possible.
+    #[must_use]
+    pub fn into_wire_params(self) -> serde_json::Value {
+        if self.context.is_empty() {
+            self.params
+        } else {
+            serde_json::to_value(self).unwrap_or_else(|_| serde_json::json!({}))
+        }
+    }
+}
+
 /// Handler result for tool invocations.
 pub type ToolHandler = Arc<
     dyn Fn(
-            serde_json::Value,
+            ToolCallRequest,
         ) -> futures::future::BoxFuture<'static, Result<serde_json::Value, McpError>>
         + Send
         + Sync,
@@ -51,6 +125,7 @@ pub struct McpServer {
     tools: Arc<RwLock<HashMap<String, ExposedTool>>>,
     /// Tool handlers keyed by namespaced name.
     handlers: Arc<RwLock<HashMap<String, ToolHandler>>>,
+    delegation_service: Option<Arc<DelegationService>>,
     /// Whether the server is running.
     running: Arc<RwLock<bool>>,
 }
@@ -62,8 +137,16 @@ impl McpServer {
             config,
             tools: Arc::new(RwLock::new(HashMap::new())),
             handlers: Arc::new(RwLock::new(HashMap::new())),
+            delegation_service: None,
             running: Arc::new(RwLock::new(false)),
         }
+    }
+
+    /// Attach the local delegation validator used for inbound MCP requests.
+    #[must_use]
+    pub fn with_delegation_service(mut self, delegation_service: Arc<DelegationService>) -> Self {
+        self.delegation_service = Some(delegation_service);
+        self
     }
 
     /// Get the bind address.
@@ -117,6 +200,22 @@ impl McpServer {
         tool_name: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
+        let request = ToolCallRequest::from_wire_params(params)?;
+        if let Some(envelope) = request.context.delegation.as_ref() {
+            let delegation_service = self.delegation_service.as_ref().ok_or_else(|| {
+                McpError::ToolCallFailed(
+                    "delegation envelope requires a configured delegation service".to_string(),
+                )
+            })?;
+            delegation_service
+                .validate_external_envelope(envelope)
+                .map_err(|err| {
+                    McpError::ToolCallFailed(format!(
+                        "delegation envelope rejected at MCP boundary: {err}"
+                    ))
+                })?;
+        }
+
         let handlers = self.handlers.read().await;
         let handler = handlers
             .get(tool_name)
@@ -125,7 +224,7 @@ impl McpServer {
         let handler = Arc::clone(handler);
         drop(handlers);
 
-        handler(params).await
+        handler(request).await
     }
 
     /// Start the MCP server.
@@ -263,12 +362,56 @@ impl ServerHandler for McpServerAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    use mister_smith_core::{
+        AgentId, AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
+        DelegationScope,
+    };
+    use mister_smith_security::DelegationService;
 
     fn test_config() -> McpServerConfig {
         McpServerConfig {
             bind_address: "0.0.0.0:8090".into(),
             namespace_views: vec!["agent".into()],
         }
+    }
+
+    fn sample_external_delegation() -> (Arc<DelegationService>, ExternalDelegationEnvelope) {
+        let service = Arc::new(DelegationService::new());
+        let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
+        let (capability, provenance) = service
+            .issue_capability(
+                AuthorityPrincipal::Policy("operator".to_string()),
+                recipient,
+                DelegationScope::InvokeTool,
+                Some("tool:agent.echo".to_string()),
+                Duration::from_secs(300),
+                None,
+                None,
+            )
+            .expect("delegation should issue");
+
+        let action = DelegatedAction {
+            descriptor_id: "tool:agent.echo".to_string(),
+            action_id: "tool:agent.echo#execute".to_string(),
+            title: "execute agent.echo".to_string(),
+            description: "execute access for tool agent.echo".to_string(),
+            kind: CapabilityActionKind::Execute,
+            policy: DelegatedActionPolicy {
+                action: "execute".to_string(),
+                resource: "tool".to_string(),
+                scope: "agent".to_string(),
+                resource_id: Some("agent.echo".to_string()),
+            },
+            required_scope: Some(DelegationScope::InvokeTool),
+            revocation_key: "tool:agent.echo#execute".to_string(),
+        };
+
+        (
+            service,
+            ExternalDelegationEnvelope::new(capability, provenance).with_action(action),
+        )
     }
 
     #[tokio::test]
@@ -335,8 +478,9 @@ mod tests {
             namespace: "agent".into(),
         };
 
-        let handler: ToolHandler =
-            Arc::new(|params| Box::pin(async move { Ok(serde_json::json!({"echo": params})) }));
+        let handler: ToolHandler = Arc::new(|request| {
+            Box::pin(async move { Ok(serde_json::json!({"echo": request.params})) })
+        });
 
         server.register_tool(tool, handler).await;
 
@@ -345,6 +489,80 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(result["echo"]["msg"], "hi");
+    }
+
+    #[tokio::test]
+    async fn wrapped_tool_call_preserves_delegation_context() {
+        let (service, delegation) = sample_external_delegation();
+        let server = McpServer::new(test_config()).with_delegation_service(service);
+
+        let tool = ExposedTool {
+            name: "echo".into(),
+            description: "Echo back".into(),
+            input_schema: serde_json::json!({}),
+            namespace: "agent".into(),
+        };
+
+        let handler: ToolHandler = Arc::new(|request| {
+            Box::pin(async move {
+                Ok(serde_json::json!({
+                    "descriptor_id": request
+                        .context
+                        .delegation
+                        .as_ref()
+                        .and_then(ExternalDelegationEnvelope::descriptor_id),
+                    "params": request.params,
+                }))
+            })
+        });
+
+        server.register_tool(tool, handler).await;
+
+        let result = server
+            .handle_tools_call(
+                "agent.echo",
+                ToolCallRequest::new(serde_json::json!({"msg": "hi"}))
+                    .with_delegation(delegation)
+                    .into_wire_params(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result["descriptor_id"], "tool:agent.echo");
+        assert_eq!(result["params"]["msg"], "hi");
+    }
+
+    #[tokio::test]
+    async fn revoked_delegation_is_rejected_before_handler_execution() {
+        let (service, delegation) = sample_external_delegation();
+        service.revoke_action("tool:agent.echo#execute");
+        let server = McpServer::new(test_config()).with_delegation_service(service);
+
+        let tool = ExposedTool {
+            name: "echo".into(),
+            description: "Echo back".into(),
+            input_schema: serde_json::json!({}),
+            namespace: "agent".into(),
+        };
+
+        let handler: ToolHandler =
+            Arc::new(|_| Box::pin(async move { Ok(serde_json::json!({"unexpected": true})) }));
+
+        server.register_tool(tool, handler).await;
+
+        let err = server
+            .handle_tools_call(
+                "agent.echo",
+                ToolCallRequest::new(serde_json::json!({"msg": "hi"}))
+                    .with_delegation(delegation)
+                    .into_wire_params(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, McpError::ToolCallFailed(message) if message.contains("rejected at MCP boundary"))
+        );
     }
 
     #[tokio::test]

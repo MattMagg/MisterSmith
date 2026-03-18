@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use crate::client::McpTool;
 use crate::errors::McpError;
+use crate::server::ToolCallRequest;
 use mister_smith_transport::{MessageEnvelope, Subscription, Transport, TransportError};
 
 /// Default timeout for bridge requests to remote nodes.
@@ -32,11 +33,6 @@ pub struct McpNatsBridge {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct RemoteToolsResponse {
     tools: Vec<McpTool>,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct RemoteToolCallRequest {
-    params: serde_json::Value,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -182,10 +178,19 @@ impl McpNatsBridge {
         tool_name: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
+        self.call_remote_tool_request(tool_name, ToolCallRequest::new(params))
+            .await
+    }
+
+    /// Forward a tool call with explicit Smith transport context to a remote node via NATS.
+    pub async fn call_remote_tool_request(
+        &self,
+        tool_name: &str,
+        request_payload: ToolCallRequest,
+    ) -> Result<serde_json::Value, McpError> {
         if !self.active {
             return Err(McpError::ConnectionFailed("bridge not active".into()));
         }
-        let request_payload = RemoteToolCallRequest { params };
         let request = MessageEnvelope::builder("mcp.bridge.tools.call.request")
             .payload_json(&request_payload)
             .map_err(|err| McpError::ToolCallFailed(format!("serialize tool call request: {err}")))?
@@ -238,10 +243,49 @@ fn map_transport_error(operation: &str, err: TransportError, timeout: Duration) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    use mister_smith_core::{
+        AgentId, AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
+        DelegationScope, ExternalDelegationEnvelope,
+    };
+    use mister_smith_security::DelegationService;
     use mister_smith_transport::InMemoryTransport;
 
     fn test_bridge(prefix: &str, transport: Arc<dyn Transport>) -> McpNatsBridge {
         McpNatsBridge::new(prefix, transport)
+    }
+
+    fn sample_external_delegation() -> ExternalDelegationEnvelope {
+        let service = DelegationService::new();
+        let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
+        let (capability, provenance) = service
+            .issue_capability(
+                AuthorityPrincipal::Policy("operator".to_string()),
+                recipient,
+                DelegationScope::InvokeTool,
+                Some("tool:test.tool".to_string()),
+                Duration::from_secs(300),
+                None,
+                None,
+            )
+            .expect("delegation should issue");
+
+        ExternalDelegationEnvelope::new(capability, provenance).with_action(DelegatedAction {
+            descriptor_id: "tool:test.tool".to_string(),
+            action_id: "tool:test.tool#execute".to_string(),
+            title: "execute test.tool".to_string(),
+            description: "execute access for tool test.tool".to_string(),
+            kind: CapabilityActionKind::Execute,
+            policy: DelegatedActionPolicy {
+                action: "execute".to_string(),
+                resource: "tool".to_string(),
+                scope: "test".to_string(),
+                resource_id: Some("test.tool".to_string()),
+            },
+            required_scope: Some(DelegationScope::InvokeTool),
+            revocation_key: "tool:test.tool#execute".to_string(),
+        })
     }
 
     #[test]
@@ -392,6 +436,57 @@ mod tests {
 
         let result = bridge
             .call_remote_tool("test.tool", serde_json::json!({"foo": "bar"}))
+            .await
+            .unwrap();
+        assert_eq!(result, serde_json::json!({"ok": true}));
+    }
+
+    #[tokio::test]
+    async fn call_remote_tool_request_preserves_delegation_context() {
+        let transport = Arc::new(InMemoryTransport::new());
+        let mut responder = transport
+            .subscribe("ms.mcp.tools.call.test.tool")
+            .await
+            .unwrap();
+
+        let t = transport.clone();
+        tokio::spawn(async move {
+            let msg = responder.next().await.unwrap();
+            let request: ToolCallRequest = msg
+                .envelope
+                .payload_as_json()
+                .expect("request payload should decode");
+            assert_eq!(request.params["foo"], "bar");
+            assert_eq!(
+                request
+                    .context
+                    .delegation
+                    .as_ref()
+                    .and_then(ExternalDelegationEnvelope::descriptor_id),
+                Some("tool:test.tool")
+            );
+
+            let mut response = MessageEnvelope::builder("mcp.bridge.tools.call.response")
+                .payload_json(&RemoteToolCallResponse {
+                    result: Some(serde_json::json!({"ok": true})),
+                    error: None,
+                })
+                .unwrap()
+                .build()
+                .unwrap();
+            response.correlation_id = msg.envelope.correlation_id;
+            t.publish("ignored", response).await.unwrap();
+        });
+
+        let mut bridge = test_bridge("ms.mcp", transport);
+        bridge.start().await.unwrap();
+
+        let result = bridge
+            .call_remote_tool_request(
+                "test.tool",
+                ToolCallRequest::new(serde_json::json!({"foo": "bar"}))
+                    .with_delegation(sample_external_delegation()),
+            )
             .await
             .unwrap();
         assert_eq!(result, serde_json::json!({"ok": true}));

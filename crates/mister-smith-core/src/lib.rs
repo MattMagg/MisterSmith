@@ -19,10 +19,10 @@ pub use ids::{
 // Shared autonomy value objects
 pub use autonomy::{
     AuthorityPrincipal, CapabilityActionKind, ContextBudget, DelegatedAction,
-    DelegatedActionPolicy, DelegationCapability, GuardDecision, GuardEvidence, GuardTarget,
-    InterventionRecord, MetricWindow, ProfileSnapshot, ProvenanceChain, ProvenanceLink,
-    SemanticSignal, TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyPlan,
-    TopologyRationale,
+    DelegatedActionPolicy, DelegationCapability, ExternalDelegationEnvelope, GuardDecision,
+    GuardEvidence, GuardTarget, InterventionRecord, MetricWindow, ProfileSnapshot, ProvenanceChain,
+    ProvenanceLink, SemanticSignal, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
+    TopologyPlan, TopologyRationale,
 };
 
 // Core enums

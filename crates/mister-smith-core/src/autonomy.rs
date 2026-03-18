@@ -332,6 +332,46 @@ pub struct DelegationCapability {
     pub revocation_state: RevocationState,
 }
 
+/// Transport-safe envelope for delegated authority crossing external boundaries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalDelegationEnvelope {
+    /// Capability used at the destination boundary.
+    pub capability: DelegationCapability,
+    /// Ordered authority lineage for the capability.
+    pub provenance: ProvenanceChain,
+    /// Specific delegated action carried across the boundary, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<DelegatedAction>,
+}
+
+impl ExternalDelegationEnvelope {
+    /// Create an external delegation envelope from a capability and provenance chain.
+    #[must_use]
+    pub fn new(capability: DelegationCapability, provenance: ProvenanceChain) -> Self {
+        Self {
+            capability,
+            provenance,
+            action: None,
+        }
+    }
+
+    /// Attach a delegated action to the envelope.
+    #[must_use]
+    pub fn with_action(mut self, action: DelegatedAction) -> Self {
+        self.action = Some(action);
+        self
+    }
+
+    /// Return the descriptor ID carried by the envelope, if any.
+    #[must_use]
+    pub fn descriptor_id(&self) -> Option<&str> {
+        self.action
+            .as_ref()
+            .map(|action| action.descriptor_id.as_str())
+            .or(self.capability.descriptor_id.as_deref())
+    }
+}
+
 /// One authority transfer in a delegation provenance chain.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProvenanceLink {
