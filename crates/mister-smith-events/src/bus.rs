@@ -22,7 +22,7 @@ use mister_smith_core::{
 use crate::autonomy::{
     AutonomyEvent, AutonomyStatusView, BranchSummary, CapabilitySummary, CheckpointRecordSummary,
     ContextPressureSummary, DelegationAlert, ExecutionGraphSummary, ResumeProvenanceSummary,
-    RoutingDecisionSummary, TopologyPlanSummary,
+    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 use crate::dead_letter::DeadLetterQueue;
 use crate::error::EventBusError;
@@ -46,6 +46,7 @@ struct AutonomyStatusAccumulator {
     checkpoint_lineage: HashMap<CheckpointId, CheckpointRecordSummary>,
     memory_pressure: HashMap<ContextBudgetId, ContextPressureSummary>,
     routing_history: Vec<RoutingDecisionSummary>,
+    step_routing_history: Vec<StepRoutingDecisionSummary>,
     interventions: HashMap<InterventionRecordId, InterventionRecord>,
     delegation_capabilities: HashMap<mister_smith_core::CapabilityId, CapabilitySummary>,
     delegation_alerts: HashMap<String, DelegationAlert>,
@@ -187,6 +188,7 @@ impl AutonomyStatusAccumulator {
             checkpoint_lineage,
             memory_pressure,
             routing_history: self.routing_history.clone(),
+            step_routing_history: self.step_routing_history.clone(),
             interventions,
             delegation_capabilities,
             delegation_alerts,
@@ -222,6 +224,7 @@ impl AutonomyStatusAccumulator {
                 .insert(pressure.budget_id, pressure);
         }
         accumulator.routing_history = view.routing_history;
+        accumulator.step_routing_history = view.step_routing_history;
         for record in view.interventions {
             accumulator.interventions.insert(record.record_id, record);
         }

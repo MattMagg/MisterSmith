@@ -5,6 +5,7 @@
 #![cfg(feature = "llm")]
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::stream;
@@ -21,6 +22,7 @@ use mister_smith_agents::Orchestrator;
 use mister_smith_core::{
     Actor, AgentId, FailureClass, GuardTarget, InterventionType, LlmError, TaskId,
 };
+use mister_smith_events::EventBus;
 use mister_smith_llm::budget::{BudgetEnforcer, BudgetNode, BudgetPolicy, InMemoryBudgetStore};
 use mister_smith_llm::{
     CascadePolicy, CascadeTier, CircuitBreakerConfig, CompletionRequest, CompletionResponse,
@@ -29,6 +31,7 @@ use mister_smith_llm::{
     StreamChunk, ToolCall, Usage,
 };
 use std::sync::Mutex;
+use tokio::time::timeout;
 
 async fn mock_router() -> Arc<ModelRouter> {
     let router = ModelRouter::new(RoutingPolicy::RoundRobin);
@@ -375,6 +378,26 @@ fn supervision_graph(
     (graph, branch_id, TaskId::from_uuid(*node.as_ref()))
 }
 
+async fn wait_for_step_routing_status(
+    event_bus: &EventBus,
+    workflow_id: &TaskId,
+    expected_history_len: usize,
+) -> mister_smith_events::AutonomyStatusView {
+    timeout(Duration::from_millis(500), async {
+        loop {
+            if let Some(status) = event_bus.autonomy_status(workflow_id).await {
+                if status.step_routing_history.len() == expected_history_len {
+                    return status;
+                }
+            }
+
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("shared event bus autonomy status should include step routing history")
+}
+
 #[tokio::test]
 async fn planner_produces_plan_via_mock_provider() {
     let router = mock_router().await;
@@ -503,6 +526,102 @@ async fn planner_carries_forward_escalated_tier_to_the_next_step() {
         second_system.contains("Confidence review is active"),
         "planner escalation carryover should preserve the triggered confidence checkpoint: {second_system}"
     );
+}
+
+#[tokio::test]
+async fn planner_supervision_publishes_step_routing_history_in_status_snapshots() {
+    let slm_requests = Arc::new(Mutex::new(Vec::new()));
+    let llm_requests = Arc::new(Mutex::new(Vec::new()));
+    let event_bus = Arc::new(EventBus::default());
+    let scheduler = Arc::new(TaskScheduler::new());
+    let orchestrator = Arc::new(
+        Orchestrator::new(
+            Arc::new(IdentityDecomposer),
+            Arc::new(ArrayAggregator),
+            scheduler,
+        )
+        .with_event_bus(event_bus.clone()),
+    );
+    let workflow_id = TaskId::new();
+    let (graph, branch_id, _) = supervision_graph(workflow_id);
+    orchestrator.register_execution_graph(graph);
+
+    let router = ModelRouter::new(RoutingPolicy::Cascade(cascade_policy(0.9, 1)));
+    let slm: Arc<dyn ModelProvider> = Arc::new(RecordingResponseProvider::new(
+        "slm-model",
+        planner_response("{}"),
+        slm_requests,
+    ));
+    let llm: Arc<dyn ModelProvider> = Arc::new(RecordingResponseProvider::new(
+        "llm-model",
+        planner_response(
+            r#"{"goal":"deploy service","steps":[{"step":1,"action":"analyze","description":"deploy service"}],"context":{"env":"staging"}}"#,
+        ),
+        llm_requests,
+    ));
+
+    router
+        .add_provider(
+            mock_config_with_tier("slm", "slm-tier"),
+            slm,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+    router
+        .add_provider(
+            mock_config_with_tier("llm", "llm-tier"),
+            llm,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let supervision = LlmSupervision::new(
+        orchestrator.clone(),
+        workflow_id,
+        LlmSupervisionConfig::new(GuardTarget::Branch(branch_id)),
+    );
+    let mut planner =
+        PlannerAgent::with_router_and_supervision(AgentId::new(), Arc::new(router), supervision);
+    let mut state = PlannerState::default();
+
+    planner
+        .handle_message(
+            PlannerMessage::PlanGoal {
+                goal: "deploy service".into(),
+                context: serde_json::json!({"env": "staging"}),
+                managed_context: None,
+            },
+            &mut state,
+        )
+        .await
+        .unwrap();
+    planner
+        .handle_message(
+            PlannerMessage::PlanGoal {
+                goal: "verify deploy".into(),
+                context: serde_json::json!({"env": "staging"}),
+                managed_context: None,
+            },
+            &mut state,
+        )
+        .await
+        .unwrap();
+
+    let status = orchestrator
+        .autonomy_status(&workflow_id)
+        .expect("autonomy status should exist");
+    assert_eq!(status.step_routing_history.len(), 2);
+    assert_eq!(status.step_routing_history[0].step_id, "planner.step.1");
+    assert_eq!(status.step_routing_history[1].step_id, "planner.step.2");
+    assert_eq!(
+        status.step_routing_history[1].previous_step_id.as_deref(),
+        Some("planner.step.1")
+    );
+
+    let bus_status = wait_for_step_routing_status(&event_bus, &workflow_id, 2).await;
+    assert_eq!(bus_status.step_routing_history.len(), 2);
+    assert_eq!(bus_status.step_routing_history[0].step_id, "planner.step.1");
+    assert_eq!(bus_status.step_routing_history[1].step_id, "planner.step.2");
 }
 
 #[tokio::test]

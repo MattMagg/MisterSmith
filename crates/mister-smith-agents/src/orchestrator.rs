@@ -30,7 +30,7 @@ use crate::topology::{TopologyCompiler, TopologySignals};
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, Event, EventBus, ExecutionGraphSummary,
-    RoutingDecisionSummary, TopologyPlanSummary,
+    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 
 #[cfg(feature = "llm")]
@@ -65,6 +65,7 @@ pub struct Orchestrator {
     adaptive_team_plans: DashMap<TaskId, AdaptiveTeamPlan>,
     workflow_coordinators: DashMap<TaskId, AgentId>,
     autonomy_events: DashMap<TaskId, Vec<AutonomyEvent>>,
+    step_routing_histories: DashMap<TaskId, Vec<StepRoutingDecisionSummary>>,
     autonomy_event_tx: Option<mpsc::Sender<Event>>,
     monitor_states: DashMap<TaskId, MonitorState>,
     supervisor_states: DashMap<TaskId, SupervisorState>,
@@ -172,6 +173,7 @@ impl Orchestrator {
             adaptive_team_plans: DashMap::new(),
             workflow_coordinators: DashMap::new(),
             autonomy_events: DashMap::new(),
+            step_routing_histories: DashMap::new(),
             autonomy_event_tx: None,
             monitor_states: DashMap::new(),
             supervisor_states: DashMap::new(),
@@ -677,6 +679,11 @@ impl Orchestrator {
                 _ => None,
             })
             .collect::<Vec<_>>();
+        let step_routing_history = self
+            .step_routing_histories
+            .get(workflow_id)
+            .map(|history| history.value().clone())
+            .unwrap_or_default();
         let mut delegation_capabilities = HashMap::new();
         for capability in self
             .autonomy_events(workflow_id)
@@ -766,6 +773,7 @@ impl Orchestrator {
                 .collect(),
             memory_pressure: Vec::<ContextPressureSummary>::new(),
             routing_history,
+            step_routing_history,
             interventions,
             delegation_capabilities,
             delegation_alerts,
@@ -1410,6 +1418,16 @@ impl Orchestrator {
         );
     }
 
+    fn update_step_routing_history(
+        &self,
+        workflow_id: &TaskId,
+        history: &[StepRoutingDecisionSummary],
+    ) {
+        self.step_routing_histories
+            .insert(*workflow_id, history.to_vec());
+        self.record_status_update(workflow_id);
+    }
+
     fn record_monitor_message(&self, workflow_id: &TaskId, message: &MonitorMessage) {
         let mut state = self.monitor_states.entry(*workflow_id).or_default();
         state.value_mut().apply(message);
@@ -1876,6 +1894,11 @@ impl LlmSupervision {
         self.observe_model_event(&event).await
     }
 
+    pub fn sync_step_routing_history(&self, history: &[StepRoutingDecisionSummary]) {
+        self.orchestrator
+            .update_step_routing_history(&self.workflow_id, history);
+    }
+
     /// Feed a canonical model event through the stream monitor and trigger Guard
     /// supervision when the event yields degradation signals.
     pub async fn observe_model_event(
@@ -1926,6 +1949,8 @@ pub struct StepRoutingControl {
     pub verification_checkpoints: Vec<StepVerificationCheckpoint>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_signal: Option<StepRoutingSignal>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<StepRoutingDecisionSummary>,
 }
 
 #[cfg(feature = "llm")]
@@ -2001,6 +2026,8 @@ impl StepRoutingControl {
     }
 
     pub fn apply_routing_decision(&mut self, decision: &RoutingDecision) {
+        let previous_entry = self.history.last().cloned();
+        let previous_preferred_tier = self.next_preferred_tier.clone();
         self.last_signal = Some(decision.carryover_signal.clone());
         self.verification_checkpoints = decision.carryover_signal.checkpoints.clone();
 
@@ -2022,6 +2049,120 @@ impl StepRoutingControl {
                 }
             }
         }
+
+        self.history.push(build_step_routing_summary(
+            decision,
+            previous_entry.as_ref(),
+            previous_preferred_tier,
+            self.next_preferred_tier.clone(),
+        ));
+    }
+}
+
+#[cfg(feature = "llm")]
+fn step_routing_action_label(action: StepRoutingAction) -> &'static str {
+    match action {
+        StepRoutingAction::Continue => "continue",
+        StepRoutingAction::Escalate => "escalate",
+        StepRoutingAction::Downgrade => "downgrade",
+        StepRoutingAction::Fallback => "fallback",
+    }
+}
+
+#[cfg(feature = "llm")]
+fn step_checkpoint_label(kind: StepVerificationCheckpointKind) -> &'static str {
+    match kind {
+        StepVerificationCheckpointKind::ConfidenceReview => "confidence_review",
+        StepVerificationCheckpointKind::BudgetPolicy => "budget_policy",
+        StepVerificationCheckpointKind::ProviderFailure => "provider_failure",
+        StepVerificationCheckpointKind::FinalTierGuard => "final_tier_guard",
+    }
+}
+
+#[cfg(feature = "llm")]
+fn build_step_routing_summary(
+    decision: &RoutingDecision,
+    previous_entry: Option<&StepRoutingDecisionSummary>,
+    preferred_tier_before: Option<String>,
+    preferred_tier_after: Option<String>,
+) -> StepRoutingDecisionSummary {
+    let action = step_routing_action_label(decision.carryover_signal.action).to_string();
+    let previous_action = previous_entry.map(|entry| entry.action.clone());
+    let action_changed = previous_action
+        .as_deref()
+        .map(|prior| prior != action.as_str())
+        .unwrap_or(false);
+    let tier = decision
+        .tier_label
+        .clone()
+        .unwrap_or_else(|| "direct".to_string());
+    let triggered_checkpoints = decision
+        .carryover_signal
+        .checkpoints
+        .iter()
+        .filter(|checkpoint| {
+            checkpoint.outcome == mister_smith_llm::StepVerificationOutcome::Triggered
+        })
+        .map(|checkpoint| step_checkpoint_label(checkpoint.kind).to_string())
+        .collect::<Vec<_>>();
+
+    let mut change_rationale = Vec::new();
+    match previous_entry {
+        Some(previous) => {
+            change_rationale.push(format!(
+                "previous step {} ended with action={} tier={}",
+                previous.step_id, previous.action, previous.tier
+            ));
+            if action_changed {
+                change_rationale.push(format!(
+                    "action changed from {} to {}",
+                    previous.action, action
+                ));
+            }
+            if previous.tier != tier {
+                change_rationale.push(format!("tier changed from {} to {}", previous.tier, tier));
+            }
+        }
+        None => change_rationale
+            .push("initial step routing decision for workflow-visible control state".to_string()),
+    }
+
+    if preferred_tier_before != preferred_tier_after {
+        change_rationale.push(format!(
+            "preferred tier updated from {} to {}",
+            preferred_tier_before.as_deref().unwrap_or("none"),
+            preferred_tier_after.as_deref().unwrap_or("none")
+        ));
+    }
+
+    if !triggered_checkpoints.is_empty() {
+        change_rationale.push(format!(
+            "triggered checkpoints: {}",
+            triggered_checkpoints.join(", ")
+        ));
+    }
+
+    StepRoutingDecisionSummary {
+        step_id: decision.carryover_signal.metadata.step_id.clone(),
+        step_index: decision.carryover_signal.metadata.step_index,
+        step_kind: decision.carryover_signal.metadata.step_kind.clone(),
+        model_id: decision.model_id.clone(),
+        tier,
+        reason: decision.reason.clone(),
+        previous_step_id: previous_entry.map(|entry| entry.step_id.clone()),
+        previous_action,
+        previous_tier: previous_entry.map(|entry| entry.tier.clone()),
+        action,
+        action_changed,
+        preferred_tier_after,
+        estimated_cost_tokens: decision.estimated_cost_tokens,
+        confidence_score: decision
+            .carryover_signal
+            .confidence
+            .as_ref()
+            .map(|signal| signal.score),
+        triggered_checkpoints,
+        change_rationale,
     }
 }
 

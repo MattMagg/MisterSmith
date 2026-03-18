@@ -10,7 +10,9 @@ use axum::Json;
 use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{AgentId, SessionId, TaskId};
-use mister_smith_events::{AutonomyStatusView, EventBus, ResumeProvenanceSummary};
+use mister_smith_events::{
+    AutonomyStatusView, EventBus, ResumeProvenanceSummary, StepRoutingDecisionSummary,
+};
 use mister_smith_persistence::postgres::queries;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -187,6 +189,7 @@ pub async fn status_from_bus_with_session_linkage(
         })?
     {
         enrich_session_linkage(&mut view, &record.metadata);
+        enrich_step_routing_history(&mut view, &record.metadata);
     }
     Ok(view)
 }
@@ -312,6 +315,58 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let step_routing_summary = view
+        .step_routing_history
+        .iter()
+        .map(|routing| {
+            let previous_action = routing
+                .previous_action
+                .clone()
+                .unwrap_or_else(|| "none".to_string());
+            let confidence = routing
+                .confidence_score
+                .map(|score| format!("{score:.2}"))
+                .unwrap_or_else(|| "none".to_string());
+            let preferred_tier = routing
+                .preferred_tier_after
+                .clone()
+                .unwrap_or_else(|| "none".to_string());
+            let estimated_cost = routing
+                .estimated_cost_tokens
+                .map(|tokens| tokens.to_string())
+                .unwrap_or_else(|| "none".to_string());
+            let checkpoints = if routing.triggered_checkpoints.is_empty() {
+                "none".to_string()
+            } else {
+                routing.triggered_checkpoints.join(" | ")
+            };
+            let delta = if routing.change_rationale.is_empty() {
+                "none".to_string()
+            } else {
+                routing.change_rationale.join(" | ")
+            };
+            format!(
+                "{}#{} kind={} action={} previous={} changed={} tier={} preferred={} cost={} confidence={} checkpoints={} reason={} delta={}",
+                routing.step_id,
+                routing
+                    .step_index
+                    .map(|index| index.to_string())
+                    .unwrap_or_else(|| "none".to_string()),
+                routing.step_kind.as_deref().unwrap_or("none"),
+                routing.action,
+                previous_action,
+                routing.action_changed,
+                routing.tier,
+                preferred_tier,
+                estimated_cost,
+                confidence,
+                checkpoints,
+                routing.reason,
+                delta
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     let intervention_summary = view
         .interventions
         .iter()
@@ -368,7 +423,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -386,6 +441,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         if branch_summary.is_empty() { "none".to_string() } else { branch_summary },
         if checkpoint_summary.is_empty() { "none".to_string() } else { checkpoint_summary },
         if routing_summary.is_empty() { "none".to_string() } else { routing_summary },
+        if step_routing_summary.is_empty() { "none".to_string() } else { step_routing_summary },
         if intervention_summary.is_empty() {
             "none".to_string()
         } else {
@@ -436,6 +492,18 @@ pub(crate) fn enrich_session_linkage(view: &mut AutonomyStatusView, metadata: &s
                 resumed_from_workflow_id: details.resumed_from_workflow_id,
                 resumed_from_turn_index: details.resumed_from_turn_index,
             });
+    }
+}
+
+pub(crate) fn enrich_step_routing_history(view: &mut AutonomyStatusView, metadata: &Value) {
+    if !view.step_routing_history.is_empty() {
+        return;
+    }
+    let Some(raw) = metadata.get("step_routing_history").cloned() else {
+        return;
+    };
+    if let Ok(history) = serde_json::from_value::<Vec<StepRoutingDecisionSummary>>(raw) {
+        view.step_routing_history = history;
     }
 }
 

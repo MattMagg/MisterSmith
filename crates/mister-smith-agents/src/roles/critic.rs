@@ -313,6 +313,9 @@ impl Actor for CriticAgent {
                         }
 
                         state.routing_control.apply_routing_decision(&decision);
+                        if let Some(supervision) = self.supervision.as_ref() {
+                            supervision.sync_step_routing_history(&state.routing_control.history);
+                        }
                         Ok(eval)
                     }
                     .await;

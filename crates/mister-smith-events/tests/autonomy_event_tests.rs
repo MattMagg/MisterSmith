@@ -10,7 +10,7 @@ use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
     CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, EventBus,
     EventType, ExecutionGraphSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
-    TopologyPlanSummary,
+    StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 use serde::de::DeserializeOwned;
 
@@ -105,6 +105,7 @@ fn autonomy_event_surfaces_compile_with_shared_trait_bounds() {
     assert_event_traits::<ContextPressureSummary>();
     assert_event_traits::<CapabilitySummary>();
     assert_event_traits::<DelegationAlert>();
+    assert_event_traits::<StepRoutingDecisionSummary>();
     assert_event_traits::<AutonomyStatusView>();
     assert_event_traits::<AutonomyEventEnvelope<ExecutionGraphSummary>>();
     assert_event_traits::<AutonomyEvent>();
@@ -241,6 +242,24 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             health_state: HealthState::Degraded,
             profile_id: Some(ProfileSnapshotId::new()),
             rationale: vec!["checkpoint resume preserved completed siblings".to_string()],
+        }],
+        step_routing_history: vec![StepRoutingDecisionSummary {
+            step_id: "critic.step.2".to_string(),
+            step_index: Some(2),
+            step_kind: Some("critic".to_string()),
+            model_id: "gpt-5.4".to_string(),
+            tier: "llm-tier".to_string(),
+            reason: "accepted at llm-tier after provider fallback".to_string(),
+            previous_step_id: Some("critic.step.1".to_string()),
+            previous_action: Some("fallback".to_string()),
+            previous_tier: Some("slm-tier".to_string()),
+            action: "continue".to_string(),
+            action_changed: true,
+            preferred_tier_after: Some("llm-tier".to_string()),
+            estimated_cost_tokens: Some(96),
+            confidence_score: Some(0.88),
+            triggered_checkpoints: vec![],
+            change_rationale: vec!["action changed from fallback to continue".to_string()],
         }],
         interventions: vec![mister_smith_core::InterventionRecord {
             record_id: InterventionRecordId::new(),
@@ -383,6 +402,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
             profile_id: None,
             rationale: vec!["sequential routing avoided restart blast radius".to_string()],
         }],
+        step_routing_history: vec![],
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
@@ -710,6 +730,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         checkpoint_lineage: vec![],
         memory_pressure: vec![],
         routing_history: vec![],
+        step_routing_history: vec![],
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![DelegationAlert {
