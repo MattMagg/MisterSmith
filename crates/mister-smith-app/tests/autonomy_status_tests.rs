@@ -16,7 +16,8 @@ use mister_smith_core::{
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
-    ResumeProvenanceSummary, RoutingDecisionSummary, TopologyPlanSummary,
+    ResumeProvenanceSummary, RoutingDecisionSummary, StepRoutingDecisionSummary,
+    TopologyPlanSummary,
 };
 
 fn sample_task_shape(kind: TaskShapeKind) -> TaskShapeClassification {
@@ -131,6 +132,28 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             profile_id: Some(ProfileSnapshotId::new()),
             rationale: vec!["checkpoint scope narrowed resume".to_string()],
         }],
+        step_routing_history: vec![StepRoutingDecisionSummary {
+            step_id: "planner.step.2".to_string(),
+            step_index: Some(2),
+            step_kind: Some("planner".to_string()),
+            model_id: "gpt-5.4".to_string(),
+            tier: "llm-tier".to_string(),
+            reason: "accepted at llm-tier after previous confidence review".to_string(),
+            previous_step_id: Some("planner.step.1".to_string()),
+            previous_action: Some("escalate".to_string()),
+            previous_tier: Some("slm-tier".to_string()),
+            action: "continue".to_string(),
+            action_changed: true,
+            preferred_tier_after: Some("llm-tier".to_string()),
+            estimated_cost_tokens: Some(128),
+            confidence_score: Some(0.92),
+            triggered_checkpoints: vec![],
+            change_rationale: vec![
+                "previous step planner.step.1 ended with action=escalate tier=slm-tier".to_string(),
+                "action changed from escalate to continue".to_string(),
+                "preferred tier updated from slm-tier to llm-tier".to_string(),
+            ],
+        }],
         interventions: vec![InterventionRecord {
             record_id: InterventionRecordId::new(),
             decision_id,
@@ -214,6 +237,10 @@ fn render_status_surfaces_operator_rationale_and_history() {
     assert!(rendered.contains("task shape strict-chain with frontier width 1"));
     assert!(rendered.contains(&branch_id.to_string()));
     assert!(rendered.contains("checkpoint scope narrowed resume"));
+    assert!(rendered.contains("step routing:"));
+    assert!(rendered.contains("planner.step.2#2"));
+    assert!(rendered.contains("action changed from escalate to continue"));
+    assert!(rendered.contains("preferred=llm-tier"));
     assert!(rendered.contains("applied retry for targeted recovery"));
     assert!(rendered.contains("delegation:"));
     assert!(rendered.contains("lineage="));

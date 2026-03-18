@@ -127,6 +127,54 @@ pub struct RoutingDecisionSummary {
     pub rationale: Vec<String>,
 }
 
+/// Summary of one step-level routing decision carried between workflow steps.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StepRoutingDecisionSummary {
+    /// Stable step identifier from the routing metadata.
+    pub step_id: String,
+    /// Monotonic step index when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_index: Option<u32>,
+    /// Semantic step kind such as planner or critic when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_kind: Option<String>,
+    /// Model selected for the routed step.
+    pub model_id: String,
+    /// Tier label exposed by the router for the selected model.
+    pub tier: String,
+    /// Router-provided explanation for the decision.
+    pub reason: String,
+    /// Prior step identifier when this entry is compared against a previous step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_step_id: Option<String>,
+    /// Prior step action when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_action: Option<String>,
+    /// Prior selected tier when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_tier: Option<String>,
+    /// Action that the next step should inherit from this decision.
+    pub action: String,
+    /// Whether the carryover action changed relative to the prior step.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub action_changed: bool,
+    /// Preferred tier that the workflow should carry into the next step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_tier_after: Option<String>,
+    /// Estimated token cost reported by the router when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_cost_tokens: Option<u64>,
+    /// Confidence score surfaced for the step when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence_score: Option<f32>,
+    /// Triggered verification checkpoints that shaped the step decision.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub triggered_checkpoints: Vec<String>,
+    /// Operator-visible explanation of why the decision changed relative to the prior step.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub change_rationale: Vec<String>,
+}
+
 /// Summary of context-pressure state for a budget.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContextPressureSummary {
@@ -241,6 +289,9 @@ pub struct AutonomyStatusView {
     pub memory_pressure: Vec<ContextPressureSummary>,
     /// Routing history visible to operators.
     pub routing_history: Vec<RoutingDecisionSummary>,
+    /// Step-level routing history projected from workflow metadata when available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub step_routing_history: Vec<StepRoutingDecisionSummary>,
     /// Applied intervention records visible to operators.
     pub interventions: Vec<InterventionRecord>,
     /// Active or recently rejected delegation capabilities.

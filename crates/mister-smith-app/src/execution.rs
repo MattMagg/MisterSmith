@@ -188,6 +188,7 @@ impl RuntimeTaskService {
         if let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id) {
             if let Ok(Some(record)) = queries::find_task(&self.pool, *workflow_id.as_ref()).await {
                 crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
+                crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
             }
             return Some(view);
         }
@@ -352,6 +353,11 @@ impl RuntimeTaskService {
             &request.description,
             &planning_context,
             planner_output.clone(),
+        );
+        put_metadata(
+            &mut metadata,
+            "step_routing_history",
+            serde_json::to_value(&planner_state.routing_control.history).unwrap_or(Value::Null),
         );
         put_metadata(&mut metadata, "planner_output", planner_output.clone());
         put_metadata(&mut metadata, "execution_plan", execution_plan.clone());
@@ -979,6 +985,7 @@ impl RuntimeTaskService {
             return;
         };
         crate::autonomy::enrich_session_linkage(&mut view, metadata);
+        crate::autonomy::enrich_step_routing_history(&mut view, metadata);
         persist_autonomy_status(metadata, &view);
     }
 
@@ -1074,6 +1081,7 @@ fn initial_metadata(
         "planner_output": Value::Null,
         "execution_plan": Value::Null,
         "routing_history": [],
+        "step_routing_history": [],
         "team_sizing": Value::Null,
         "step_results": [],
     });
@@ -1102,6 +1110,7 @@ fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStat
     let raw = record.metadata.get(AUTONOMY_STATUS_METADATA_KEY)?.clone();
     let mut view = serde_json::from_value::<AutonomyStatusView>(raw).ok()?;
     crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
+    crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
     Some(view)
 }
 
@@ -1189,7 +1198,9 @@ mod tests {
         ExecutionGraphId, GraphState, SessionId, TaskShapeClassification, TaskShapeKind,
         TopologyKind, TopologyRationale,
     };
-    use mister_smith_events::{BranchSummary, ExecutionGraphSummary, TopologyPlanSummary};
+    use mister_smith_events::{
+        BranchSummary, ExecutionGraphSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
+    };
 
     fn sample_autonomy_view() -> AutonomyStatusView {
         sample_autonomy_view_with_states(GraphState::Completed, BranchState::Completed)
@@ -1249,6 +1260,7 @@ mod tests {
             checkpoint_lineage: vec![],
             memory_pressure: vec![],
             routing_history: vec![],
+            step_routing_history: vec![],
             interventions: vec![],
             delegation_capabilities: vec![],
             delegation_alerts: vec![],
@@ -1343,6 +1355,41 @@ mod tests {
             provenance.resumed_from_workflow_id,
             Some(resumed_from_workflow_id)
         );
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_enriches_step_routing_history_from_metadata() {
+        let view = sample_autonomy_view();
+        let step_history = vec![StepRoutingDecisionSummary {
+            step_id: "planner.step.2".to_string(),
+            step_index: Some(2),
+            step_kind: Some("planner".to_string()),
+            model_id: "gpt-5.4".to_string(),
+            tier: "llm-tier".to_string(),
+            reason: "accepted at llm-tier after confidence review".to_string(),
+            previous_step_id: Some("planner.step.1".to_string()),
+            previous_action: Some("escalate".to_string()),
+            previous_tier: Some("slm-tier".to_string()),
+            action: "continue".to_string(),
+            action_changed: true,
+            preferred_tier_after: Some("llm-tier".to_string()),
+            estimated_cost_tokens: Some(128),
+            confidence_score: Some(0.92),
+            triggered_checkpoints: vec![],
+            change_rationale: vec!["action changed from escalate to continue".to_string()],
+        }];
+        let mut metadata = json!({
+            "step_routing_history": step_history,
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should expose step routing history");
+
+        assert_eq!(recovered.step_routing_history.len(), 1);
+        assert_eq!(recovered.step_routing_history[0].action, "continue");
+        assert!(recovered.step_routing_history[0].action_changed);
     }
 
     #[test]
