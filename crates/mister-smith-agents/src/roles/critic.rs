@@ -274,7 +274,7 @@ impl Actor for CriticAgent {
                                         .clone()
                                         .unwrap_or_else(|| "direct".to_string()),
                                     reason: decision.reason.clone(),
-                                    step_signal: decision.step_signal.clone(),
+                                    step_signal: decision.carryover_signal.clone(),
                                 })
                                 .await
                                 .map_err(|error| CriticError::Internal(error.to_string()))?;
