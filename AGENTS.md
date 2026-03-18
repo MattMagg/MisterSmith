@@ -24,9 +24,47 @@ implementation phase.
 Treat `docs/plans/2026-03-16-frontier-direction.md` as the current forward-direction note
 when the task is about what should happen next after the March 16 recovery landings.
 
+## Current Repository State
+
+- `main` is the only durable development branch.
+- The March 16 recovery reconciliation is landed on `main`.
+- The Rust workspace is the product: Mister Smith is the orchestration operating system implemented
+  in `crates/`, surfaced through the runtime, HTTP, autonomy, conversation, persistence, security,
+  transport, and deployment layers in this repository.
+- The runtime-backed task path is live on `main` through `mister-smith run`,
+  `POST /api/v1/tasks`, `GET /api/v1/tasks/{task_id}`, and the autonomy inspection surfaces.
+- The bounded same-agent session slice is live on `main` through the session HTTP and CLI
+  surfaces.
+- The current forward direction is the post-recovery operating-system program in
+  `docs/plans/2026-03-16-frontier-direction.md`.
+- `MS-45` through `MS-48` are the current validated backlog epics and should remain outside the
+  watched queue until explicitly staged.
+- An empty watched queue is currently the correct state unless a bounded runnable slice has been
+  deliberately staged into `Todo`.
+
+## Product Boundary
+
+Treat the Mister Smith OS and the repo-development workflow as different layers.
+
+- Mister Smith OS: the Rust workspace, runtime process, task/session/autonomy operator surfaces,
+  NATS and persistence integration, security model, deploy assets, and the architecture captured in
+  `spec/` and implemented in `crates/`.
+- Development tooling and workflow around Mister Smith: Smith MCP, Linear, Symphony, Ralph,
+  SpecKit, repo workpads, PR flow, and watched-queue orchestration.
+- Linear and Symphony are not part of the Mister Smith operating system. They are external
+  development tools and workflow machinery used to plan, stage, execute, review, and land changes
+  to Mister Smith.
+- Do not describe the product as if Linear state, Symphony queue execution, or other repo workflow
+  control-plane helpers are runtime subsystems of the shipped OS.
+- When a task is about the product, prioritize repo/runtime truth first. When a task is about the
+  development workflow, use the control-plane docs and tools deliberately without collapsing that
+  workflow into the OS architecture.
+
 ## Smith-First Workflow Posture
 
-For Mister Smith development work, treat Smith MCP as the default control-plane entrypoint.
+For Mister Smith development work, treat Smith MCP as the default control-plane entrypoint. This
+section is about how the repository is developed, not about what the Mister Smith OS contains at
+runtime.
 
 - Start broad workflow requests with `route_workflow_request`.
 - Pull current state with `get_control_plane_snapshot` or `get_issue_execution_snapshot` before
@@ -40,8 +78,9 @@ For Mister Smith development work, treat Smith MCP as the default control-plane 
 - Treat `docs/plans/2026-03-16-smith-first-development-system.md` as the high-level operating
   model and `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current implemented
   workflow-family surface.
-- Keep Linear as the durable source of truth, Symphony as the watched-queue executor, Ralph as the
-  loop runner, and SpecKit as the upstream spec/task-pack scaffold.
+- For repo development workflow only, keep Linear as the durable source of truth, Symphony as the
+  watched-queue executor, Ralph as the loop runner, and SpecKit as the upstream spec/task-pack
+  scaffold.
 
 ## Subagent Orchestration
 
