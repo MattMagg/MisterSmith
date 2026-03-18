@@ -1,5 +1,6 @@
 //! Durable multi-turn conversation service and CLI helpers.
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
@@ -381,15 +382,22 @@ async fn build_session_view(
     turns: Vec<SessionTurnRecord>,
     pool: &PgPool,
 ) -> Result<ConversationSessionView, ConversationServiceError> {
+    let task_ids = turns
+        .iter()
+        .map(|turn| turn.workflow_id)
+        .collect::<Vec<_>>();
+    let task_metadata_by_workflow = queries::find_tasks_by_ids(pool, &task_ids)
+        .await
+        .map_err(persistence_error)?
+        .into_iter()
+        .map(|record| (record.task_id, record.metadata))
+        .collect::<HashMap<_, _>>();
     let mut turn_summaries = Vec::with_capacity(turns.len());
     for turn in turns {
         let workflow_id = TaskId::from_uuid(turn.workflow_id);
-        let task = queries::find_task(pool, turn.workflow_id)
-            .await
-            .map_err(persistence_error)?;
-        let resume_provenance = task
-            .as_ref()
-            .and_then(|record| resume_provenance_from_metadata(&record.metadata))
+        let resume_provenance = task_metadata_by_workflow
+            .get(&turn.workflow_id)
+            .and_then(resume_provenance_from_metadata)
             .map(|details| ConversationResumeProvenanceView {
                 recovered_after_restart: details.recovered_after_restart,
                 resumed_after_restart: details.resumed_after_restart,
