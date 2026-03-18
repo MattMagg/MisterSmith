@@ -13,6 +13,15 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 
 > **NEVER run `cargo test --workspace` unless the user explicitly asks for it.** The workspace has 20 crates and 1115+ tests — a full run takes minutes and is almost never necessary. Use `cargo test -p <crate>` for targeted testing after changes. Use `cargo build --workspace` (~8s) to check cross-crate compilation. Do not run workspace tests "just to check status" — the test count is tracked in MEMORY.md.
 
+## Start Here
+
+Use `docs/current-state.md` as the stable repo-wide state summary and document router.
+
+- `docs/current-state.md`: current repo and OS state
+- `docs/plans/2026-03-16-frontier-direction.md`: current forward direction
+- `WORKFLOW.md` and `docs/linear/LINEAR.md`: development workflow contract
+- `ROADMAP.md`: architectural build map
+
 ## Implementation Status
 
 | Phase | Status | Crates |
@@ -31,6 +40,9 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 
 ## Current Control Plane Sources
 
+These are development workflow and control-plane sources, not the same thing as the Mister Smith OS
+runtime.
+
 - Smith-first development workflow system:
   `docs/plans/2026-03-16-smith-first-development-system.md`
 - Current Smith workflow-family implementation note:
@@ -38,6 +50,7 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 - Runtime contract: `WORKFLOW.md`
 - Linear operating model: `docs/linear/LINEAR.md`
 - Current operating-system direction: `docs/plans/2026-03-16-frontier-direction.md`
+- Current repo-wide overview and document router: `docs/current-state.md`
 - Phase 10 artifact set and gate evidence: `specs/012-phase10-frontier-autonomy/`,
   `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`
 - Active control-plane recovery and queue-governance plans:
@@ -60,6 +73,13 @@ real gap.
    - `prepare_speckit_context` and `translate_speckit_tasks`
 4. Fall back to raw Linear, shell, or one-off repo glue only when Smith does not yet model the
    operation.
+
+## State Semantics
+
+Phase completion in this repo means the relevant substrate and validation artifacts are landed. It
+does not automatically mean every advanced seam is already wired into the default live runtime
+path. Use `docs/current-state.md` when you need the honest distinction between "landed in repo",
+"live default runtime path", and "planned next".
 
 ## Workspace Crate Dependencies
 
@@ -90,10 +110,10 @@ mister-smith-core (foundation types, traits, errors)
 
 | Directory | Contents |
 |-----------|----------|
-| `crates/` | Rust workspace — 20 crates (Phase 1-9.1: foundation, runtime/async, actor/supervision, transport, security, persistence, agents, operations, LLM providers, security hardening) |
+| `crates/` | Rust workspace — 20 crates across landed phases 1-10 |
 | `spec/` | Canonical architecture specifications — 65+ files across 8 domains (the system contract) |
 | `specs/` | SpecKit implementation artifacts — per-phase spec, plan, and task files (the build instructions) |
-| `ROADMAP.md` | 9-phase build roadmap — dependency-aware implementation order |
+| `ROADMAP.md` | 10-phase build roadmap — dependency-aware implementation order |
 | `plans/` | Implementation plans — batch 1 (core architecture) 7 of 8 agents complete, batch 2 partial |
 | `archive/` | Completed validation work, historical operations, and research |
 | `deploy/` | Deployment artifacts — Dockerfile, docker-compose, Kubernetes manifests, Grafana dashboards, Prometheus alerts |
@@ -109,7 +129,7 @@ mister-smith-core (foundation types, traits, errors)
 
 Start here when reading the system:
 
-1. **Build roadmap**: `ROADMAP.md` — 9-phase implementation order with gate criteria
+1. **Build roadmap**: `ROADMAP.md` — 10-phase implementation order with gate criteria
 2. **Architecture overview**: `spec/core-architecture/system-architecture.md`
 3. **Component design**: `spec/core-architecture/component-architecture.md`
 4. **Agent types and orchestration**: `spec/data-management/agent-orchestration.md`

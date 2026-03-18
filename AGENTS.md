@@ -16,7 +16,8 @@ validated through Phase 10 plus the March 16 runtime and session recovery slices
 - `nats.rs/`: Vendored upstream Rust NATS workspace used as API reference
 - `scripts/`: Utility scripts for control-plane bootstrap, validation, and local runtime support
 
-Use `README.md`, `ROADMAP.md`, and `CLAUDE.md` as orientation entry points.
+Use `docs/current-state.md` as the repo-wide current-state overview and document router.
+Use `README.md`, `ROADMAP.md`, and `CLAUDE.md` as supporting orientation entry points.
 Treat `WORKFLOW.md` and `docs/linear/LINEAR.md` as the live control-plane contract.
 Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the current runtime-proof
 direction when the task is about proving real end-to-end execution rather than adding another

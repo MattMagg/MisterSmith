@@ -15,6 +15,8 @@ frontier-autonomy artifact set spans
 [`WORKFLOW.md`](WORKFLOW.md), [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md), and the dated
 plans under [`docs/plans/`](docs/plans/). The current post-Phase-10 direction lives in
 [`docs/plans/2026-03-16-frontier-direction.md`](docs/plans/2026-03-16-frontier-direction.md).
+For a current whole-repo overview, including what is live in the default runtime path versus what
+is landed but not yet fully wired, use [`docs/current-state.md`](docs/current-state.md).
 
 ## How to Read This
 

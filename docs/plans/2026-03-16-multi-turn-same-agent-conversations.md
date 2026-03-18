@@ -1,7 +1,8 @@
 # Multi-Turn Same-Agent Conversations — Ralph Loop And Symphony Handoff
 
-Status: bounded session slice landed on `main`; use
-`docs/plans/2026-03-16-frontier-direction.md` for the next operating-system direction.
+Status: bounded session slice landed on `main`; use `docs/current-state.md` for the current
+repo-wide state and `docs/plans/2026-03-16-frontier-direction.md` for the next operating-system
+direction.
 
 Date: March 16, 2026
 

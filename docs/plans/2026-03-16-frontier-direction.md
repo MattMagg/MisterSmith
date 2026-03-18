@@ -3,6 +3,9 @@
 Date: March 16, 2026
 Status: Active
 
+Use `docs/current-state.md` for the current whole-repo overview. This note is the forward-direction
+artifact, not the general repo-state document.
+
 ## Objective
 
 Define the post-recovery mainline direction for Mister Smith, update the repo's durable planning

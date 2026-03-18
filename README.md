@@ -22,7 +22,23 @@ supervision trees. Model-agnostic and designed for supervised, stateful, multi-a
 reflects completed build phases through Phase 10. Treat exact test totals and warning counts as
 CI-validated state, not a static README guarantee.
 
+## Start Here
+
+Use [`docs/current-state.md`](docs/current-state.md) as the stable repo-wide overview and document
+router.
+
+Document roles in brief:
+
+- `docs/current-state.md`: current repo and OS state
+- `docs/plans/2026-03-16-frontier-direction.md`: current forward direction and next epics
+- `WORKFLOW.md` and `docs/linear/LINEAR.md`: development control-plane contract
+- `ROADMAP.md`: architectural build map
+- `spec/` and `specs/`: architecture and implementation packet truth
+
 ## Current Control Plane
+
+This section is about the development control plane around the repo. It is not the same thing as
+the Mister Smith OS runtime.
 
 - Smith-first development workflow system:
   [`docs/plans/2026-03-16-smith-first-development-system.md`](docs/plans/2026-03-16-smith-first-development-system.md)
@@ -75,6 +91,8 @@ Phase 10 gate evidence on 2026-03-15:
 - `cargo build --workspace`
 
 ## Current Operator Surfaces
+
+These are OS runtime surfaces, not Symphony or Linear development workflow surfaces.
 
 The repo now has two real runtime-backed operator paths validated against `openai_chatgpt` /
 `gpt-5.4` on March 16, 2026:
@@ -180,6 +198,10 @@ mister-smith-core          Foundation types, traits, error hierarchy
 | tracing | 0.1 | Structured logging |
 
 ## LLM Integration (Phase 9)
+
+This section describes landed repo substrate, not a claim that every capability below is already
+wired into the default live runtime path. Use [`docs/current-state.md`](docs/current-state.md) for
+that distinction.
 
 - **5 providers**: MockProvider (deterministic testing), AnthropicProvider, OpenAiProvider, OpenAiChatGptProvider, ClaudeSubscriptionProvider
 - **Model routing**: Round-robin, cost-optimized, capability-matched, and cascade (SLM-default/LLM-fallback with confidence-based escalation)
