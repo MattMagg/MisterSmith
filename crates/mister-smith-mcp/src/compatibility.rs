@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use mister_smith_security::DelegationService;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::process::Command;
 use tokio::sync::RwLock;
@@ -5214,10 +5215,13 @@ pub async fn build_smith_compatibility_server(
     options: SmithCompatibilityOptions,
 ) -> Result<Arc<McpServer>, McpError> {
     let compatibility = Arc::new(SmithCompatibilityServer::new(options));
-    let server = Arc::new(McpServer::new(McpServerConfig {
-        bind_address: "stdio://smith".to_string(),
-        namespace_views: Vec::new(),
-    }));
+    let server = Arc::new(
+        McpServer::new(McpServerConfig {
+            bind_address: "stdio://smith".to_string(),
+            namespace_views: Vec::new(),
+        })
+        .with_delegation_service(Arc::new(DelegationService::new())),
+    );
 
     register_compatibility_tool(
         &server,
@@ -7169,6 +7173,13 @@ fn find_phase_spec_dir(specs_root: &Path, phase: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    use mister_smith_core::{
+        AgentId, AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
+        DelegationScope, ExternalDelegationEnvelope,
+    };
+    use mister_smith_security::DelegationService;
     use rmcp::{
         model::{CallToolRequestParams, ClientInfo},
         serve_server, ClientHandler, ServiceExt,
@@ -7190,6 +7201,40 @@ mod tests {
             "mister-smith-mcp-{name}-{}",
             COUNTER.fetch_add(1, Ordering::Relaxed)
         ))
+    }
+
+    fn sample_external_delegation(descriptor_id: &str) -> ExternalDelegationEnvelope {
+        let service = DelegationService::new();
+        let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
+        let (capability, provenance) = service
+            .issue_capability(
+                AuthorityPrincipal::Policy("operator".to_string()),
+                recipient,
+                DelegationScope::InvokeTool,
+                Some(descriptor_id.to_string()),
+                Duration::from_secs(300),
+                None,
+                None,
+            )
+            .expect("delegation should issue");
+        let resource_id = descriptor_id.trim_start_matches("tool:").to_string();
+        let action_id = format!("{descriptor_id}#execute");
+
+        ExternalDelegationEnvelope::new(capability, provenance).with_action(DelegatedAction {
+            descriptor_id: descriptor_id.to_string(),
+            action_id: action_id.clone(),
+            title: format!("execute {resource_id}"),
+            description: format!("execute access for tool {resource_id}"),
+            kind: CapabilityActionKind::Execute,
+            policy: DelegatedActionPolicy {
+                action: "execute".to_string(),
+                resource: "tool".to_string(),
+                scope: "compatibility".to_string(),
+                resource_id: Some(resource_id),
+            },
+            required_scope: Some(DelegationScope::InvokeTool),
+            revocation_key: action_id,
+        })
     }
 
     fn write_fixture_repo(root: &Path) {
@@ -7687,6 +7732,55 @@ apps = true
         assert_eq!(
             result["data"]["preferred_tool"],
             serde_json::Value::String("review_merge_dispatch_cycle".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn compatibility_server_accepts_valid_delegated_request() {
+        let repo_root = temp_path("delegated-route-request");
+        write_fixture_repo(&repo_root);
+        let symphony_checkout = temp_path("symphony-delegated-route-request");
+        let workspace_root = temp_path("workspaces-delegated-route-request");
+        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
+        fs::create_dir_all(&workspace_root).unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout,
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(workspace_root),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                ToolCallRequest::new(serde_json::json!({
+                    "request": "Prepare a Smith-first development workflow operating model and Ralph prompt chain for Mister Smith"
+                }))
+                .with_delegation(sample_external_delegation("tool:route_workflow_request"))
+                .into_wire_params(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("development_workflow".to_string())
         );
     }
 

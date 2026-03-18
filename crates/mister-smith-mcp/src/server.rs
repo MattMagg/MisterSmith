@@ -207,13 +207,27 @@ impl McpServer {
                     "delegation envelope requires a configured delegation service".to_string(),
                 )
             })?;
-            delegation_service
+            let validated = delegation_service
                 .validate_external_envelope(envelope)
                 .map_err(|err| {
                     McpError::ToolCallFailed(format!(
                         "delegation envelope rejected at MCP boundary: {err}"
                     ))
                 })?;
+            let expected_descriptor = tool_descriptor_id(tool_name);
+            match validated.capability.descriptor_id.as_deref() {
+                Some(descriptor_id) if descriptor_id == expected_descriptor => {}
+                Some(descriptor_id) => {
+                    return Err(McpError::ToolCallFailed(format!(
+                        "delegation descriptor '{descriptor_id}' does not authorize MCP tool '{tool_name}'"
+                    )));
+                }
+                None => {
+                    return Err(McpError::ToolCallFailed(format!(
+                        "delegation descriptor missing for MCP tool '{tool_name}'"
+                    )));
+                }
+            }
         }
 
         let handlers = self.handlers.read().await;
@@ -293,6 +307,10 @@ impl ExposedTool {
             format!("{}.{}", self.namespace, self.name)
         }
     }
+}
+
+fn tool_descriptor_id(tool_name: &str) -> String {
+    format!("tool:{tool_name}")
 }
 
 #[derive(Clone)]
@@ -377,7 +395,9 @@ mod tests {
         }
     }
 
-    fn sample_external_delegation() -> (Arc<DelegationService>, ExternalDelegationEnvelope) {
+    fn sample_external_delegation(
+        descriptor_id: &str,
+    ) -> (Arc<DelegationService>, ExternalDelegationEnvelope) {
         let service = Arc::new(DelegationService::new());
         let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
         let (capability, provenance) = service
@@ -385,27 +405,29 @@ mod tests {
                 AuthorityPrincipal::Policy("operator".to_string()),
                 recipient,
                 DelegationScope::InvokeTool,
-                Some("tool:agent.echo".to_string()),
+                Some(descriptor_id.to_string()),
                 Duration::from_secs(300),
                 None,
                 None,
             )
             .expect("delegation should issue");
+        let resource_id = descriptor_id.trim_start_matches("tool:").to_string();
+        let action_id = format!("{descriptor_id}#execute");
 
         let action = DelegatedAction {
-            descriptor_id: "tool:agent.echo".to_string(),
-            action_id: "tool:agent.echo#execute".to_string(),
-            title: "execute agent.echo".to_string(),
-            description: "execute access for tool agent.echo".to_string(),
+            descriptor_id: descriptor_id.to_string(),
+            action_id: action_id.clone(),
+            title: format!("execute {resource_id}"),
+            description: format!("execute access for tool {resource_id}"),
             kind: CapabilityActionKind::Execute,
             policy: DelegatedActionPolicy {
                 action: "execute".to_string(),
                 resource: "tool".to_string(),
                 scope: "agent".to_string(),
-                resource_id: Some("agent.echo".to_string()),
+                resource_id: Some(resource_id.clone()),
             },
             required_scope: Some(DelegationScope::InvokeTool),
-            revocation_key: "tool:agent.echo#execute".to_string(),
+            revocation_key: action_id,
         };
 
         (
@@ -493,7 +515,7 @@ mod tests {
 
     #[tokio::test]
     async fn wrapped_tool_call_preserves_delegation_context() {
-        let (service, delegation) = sample_external_delegation();
+        let (service, delegation) = sample_external_delegation("tool:agent.echo");
         let server = McpServer::new(test_config()).with_delegation_service(service);
 
         let tool = ExposedTool {
@@ -534,7 +556,7 @@ mod tests {
 
     #[tokio::test]
     async fn revoked_delegation_is_rejected_before_handler_execution() {
-        let (service, delegation) = sample_external_delegation();
+        let (service, delegation) = sample_external_delegation("tool:agent.echo");
         service.revoke_action("tool:agent.echo#execute");
         let server = McpServer::new(test_config()).with_delegation_service(service);
 
@@ -563,6 +585,40 @@ mod tests {
         assert!(
             matches!(err, McpError::ToolCallFailed(message) if message.contains("rejected at MCP boundary"))
         );
+    }
+
+    #[tokio::test]
+    async fn mismatched_delegation_descriptor_is_rejected_before_handler_execution() {
+        let (service, delegation) = sample_external_delegation("tool:agent.other");
+        let server = McpServer::new(test_config()).with_delegation_service(service);
+
+        let tool = ExposedTool {
+            name: "echo".into(),
+            description: "Echo back".into(),
+            input_schema: serde_json::json!({}),
+            namespace: "agent".into(),
+        };
+
+        let handler: ToolHandler =
+            Arc::new(|_| Box::pin(async move { Ok(serde_json::json!({"unexpected": true})) }));
+
+        server.register_tool(tool, handler).await;
+
+        let err = server
+            .handle_tools_call(
+                "agent.echo",
+                ToolCallRequest::new(serde_json::json!({"msg": "hi"}))
+                    .with_delegation(delegation)
+                    .into_wire_params(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            err,
+            McpError::ToolCallFailed(message)
+                if message.contains("does not authorize MCP tool 'agent.echo'")
+        ));
     }
 
     #[tokio::test]

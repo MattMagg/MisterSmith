@@ -529,20 +529,29 @@ mod tests {
     }
 
     #[cfg(feature = "security")]
+    fn http_delegation_descriptor(method: &str, route: &str) -> String {
+        format!("http:{}:{route}", method.to_ascii_lowercase())
+    }
+
+    #[cfg(feature = "security")]
     fn delegated_bearer_token(
         security: &Arc<SecurityLayer>,
-    ) -> (String, mister_smith_core::CapabilityId) {
+        method: &str,
+        route: &str,
+    ) -> (String, mister_smith_core::CapabilityId, String) {
         let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
         let delegation_service = security
             .delegation_service
             .as_ref()
             .expect("delegation service should be configured");
+        let descriptor_id = http_delegation_descriptor(method, route);
+        let permission = format!("{}:{route}:{route}", method.to_ascii_lowercase());
         let (capability, provenance) = delegation_service
             .issue_capability(
                 AuthorityPrincipal::Policy("operator".to_string()),
                 recipient,
                 DelegationScope::InvokeTool,
-                Some("http:agents.list".to_string()),
+                Some(descriptor_id.clone()),
                 Duration::from_secs(300),
                 None,
                 None,
@@ -555,6 +564,7 @@ mod tests {
             aud: vec!["http-tests".to_string()],
             agent_id: recipient.to_string(),
             agent_type: "worker".to_string(),
+            permissions: vec![permission],
             delegation_capability: Some(capability.clone()),
             provenance_chain: Some(provenance),
             ..Default::default()
@@ -568,7 +578,11 @@ mod tests {
             .expect("token generation should succeed")
             .access_token;
 
-        (token, capability.capability_id)
+        (
+            token,
+            capability.capability_id,
+            format!("{descriptor_id}#execute"),
+        )
     }
 
     #[test]
@@ -730,12 +744,59 @@ mod tests {
         let config = HttpTransportConfig::default();
         let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40127);
         let security = delegation_test_security_layer();
-        let (token, capability_id) = delegated_bearer_token(&security);
+        let (token, capability_id, _) = delegated_bearer_token(&security, "GET", "/api/v1/agents");
         security
             .delegation_service
             .as_ref()
             .expect("delegation service should be configured")
             .revoke_capability(capability_id);
+
+        let app = build_router(&config, AppState::new().with_security(security));
+
+        let request = Request::builder()
+            .uri("/api/v1/agents")
+            .header("authorization", format!("Bearer {token}"))
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn build_router_rejects_delegation_bound_to_different_route() {
+        let config = HttpTransportConfig::default();
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40128);
+        let security = delegation_test_security_layer();
+        let (token, _, _) = delegated_bearer_token(&security, "POST", "/api/v1/tasks");
+
+        let app = build_router(&config, AppState::new().with_security(security));
+
+        let request = Request::builder()
+            .uri("/api/v1/agents")
+            .header("authorization", format!("Bearer {token}"))
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn build_router_rejects_revoked_delegation_action_for_route() {
+        let config = HttpTransportConfig::default();
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40129);
+        let security = delegation_test_security_layer();
+        let (token, _, revocation_key) = delegated_bearer_token(&security, "GET", "/api/v1/agents");
+        security
+            .delegation_service
+            .as_ref()
+            .expect("delegation service should be configured")
+            .revoke_action(&revocation_key);
 
         let app = build_router(&config, AppState::new().with_security(security));
 
