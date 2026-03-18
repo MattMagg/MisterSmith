@@ -17,6 +17,7 @@ pub mod model_event;
 mod provider;
 mod providers;
 pub mod router;
+pub mod routing_signal;
 pub mod stream_monitor;
 mod streaming;
 mod tool_schema;
@@ -40,8 +41,10 @@ pub use provider::{CompletionStream, ModelProvider};
     feature = "claude-subscription"
 ))]
 pub use providers::*;
-pub use router::{
-    CascadePolicy, CascadeTier, ConfidenceSignal, ModelRouter, RoutingDecision, RoutingPolicy,
+pub use router::{CascadePolicy, CascadeTier, ModelRouter, RoutingDecision, RoutingPolicy};
+pub use routing_signal::{
+    ConfidenceSignal, StepRoutingAction, StepRoutingMetadata, StepRoutingSignal,
+    StepVerificationCheckpoint, StepVerificationCheckpointKind, StepVerificationOutcome,
 };
 pub use stream_monitor::{StreamMonitor, StreamMonitorConfig, StreamObservation};
 pub use streaming::{ChunkDelta, StreamChunk};

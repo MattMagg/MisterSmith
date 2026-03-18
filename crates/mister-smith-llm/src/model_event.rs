@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use mister_smith_core::{SemanticSignal, SemanticSignalKind};
 
+use crate::routing_signal::StepRoutingSignal;
 use crate::types::{StopReason, Usage};
 
 /// Canonical internal event type emitted by stream actors after converting raw
@@ -70,6 +71,8 @@ pub enum ModelEvent {
         model_id: String,
         tier: String,
         reason: String,
+        #[serde(default)]
+        step_signal: StepRoutingSignal,
     },
 
     // -- Error (1) --
@@ -455,6 +458,16 @@ mod tests {
                 model_id: "m".into(),
                 tier: "t".into(),
                 reason: "r".into(),
+                step_signal: StepRoutingSignal {
+                    metadata: crate::routing_signal::StepRoutingMetadata {
+                        step_id: "completion.request".into(),
+                        step_index: None,
+                        step_kind: Some("completion".into()),
+                    },
+                    action: crate::routing_signal::StepRoutingAction::Continue,
+                    confidence: None,
+                    checkpoints: vec![],
+                },
             },
             ModelEvent::Error {
                 code: "E001".into(),
@@ -473,6 +486,43 @@ mod tests {
                 let round_tripped: ModelEvent = serde_json::from_str(&json).unwrap();
                 assert_eq!(variant, &round_tripped, "Round-trip failed for: {json}");
             }
+        }
+    }
+
+    #[test]
+    fn routing_decision_deserializes_legacy_payload_without_step_signal() {
+        let legacy = serde_json::json!({
+            "event_type": "routing_decision",
+            "model_id": "legacy-model",
+            "tier": "direct",
+            "reason": "legacy payload"
+        });
+
+        let event: ModelEvent = serde_json::from_value(legacy).unwrap();
+
+        match event {
+            ModelEvent::RoutingDecision {
+                model_id,
+                tier,
+                reason,
+                step_signal,
+            } => {
+                assert_eq!(model_id, "legacy-model");
+                assert_eq!(tier, "direct");
+                assert_eq!(reason, "legacy payload");
+                assert_eq!(step_signal.metadata.step_id, "completion.request");
+                assert_eq!(
+                    step_signal.metadata.step_kind.as_deref(),
+                    Some("completion")
+                );
+                assert_eq!(
+                    step_signal.action,
+                    crate::routing_signal::StepRoutingAction::Continue
+                );
+                assert!(step_signal.confidence.is_none());
+                assert!(step_signal.checkpoints.is_empty());
+            }
+            other => panic!("expected RoutingDecision, got: {other:?}"),
         }
     }
 }

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::routing_signal::StepRoutingMetadata;
 use crate::tool_schema::{ToolCall, ToolDefinition, ToolResult};
 
 /// Caller-provided routing preferences consumed and stripped at the routing boundary.
@@ -11,6 +12,8 @@ pub struct RoutingHint {
     pub max_cost_tokens: Option<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub required_capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_metadata: Option<StepRoutingMetadata>,
 }
 
 /// Provider-neutral completion request.
