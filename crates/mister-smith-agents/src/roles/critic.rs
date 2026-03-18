@@ -4,9 +4,7 @@ use crate::context_manager::{
     resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
 };
 #[cfg(feature = "llm")]
-use crate::orchestrator::LlmSupervision;
-#[cfg(feature = "llm")]
-use crate::roles::llm_bridge::complete_with_optional_supervision;
+use crate::orchestrator::{LlmSupervision, StepRoutingControl};
 use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
 use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
@@ -40,6 +38,9 @@ pub enum CriticMessage {
 pub struct CriticState {
     /// Number of evaluations performed.
     pub evaluations_completed: u64,
+    /// Step-level routing carryover to apply at the next critic boundary.
+    #[cfg(feature = "llm")]
+    pub routing_control: StepRoutingControl,
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +167,20 @@ impl CriticAgent {
     }
 }
 
+#[cfg(feature = "llm")]
+fn critic_system_prompt(routing_control: &StepRoutingControl) -> String {
+    let mut prompt = "You are a quality evaluation agent. Given an output and criteria, \
+                      evaluate whether the output meets the criteria. Return a JSON object \
+                      with 'evaluation' (pass/fail), 'confidence' (0.0-1.0), 'suggestions' \
+                      (array of strings), and 'reasoning' (string)."
+        .to_string();
+    if let Some(guidance) = routing_control.verification_guidance() {
+        prompt.push_str("\n\n");
+        prompt.push_str(&guidance);
+    }
+    prompt
+}
+
 #[async_trait::async_trait]
 impl Actor for CriticAgent {
     type Message = CriticMessage;
@@ -206,28 +221,68 @@ impl Actor for CriticAgent {
                 #[cfg(feature = "llm")]
                 if let Some(router) = &self.router {
                     let result: Result<serde_json::Value, CriticError> = async {
-                        use mister_smith_llm::{ChatMessage, CompletionRequest, ContentBlock};
+                        use mister_smith_llm::{
+                            ChatMessage, CompletionRequest, ContentBlock, ModelEvent, ModelProvider,
+                        };
+
+                        let step_index =
+                            u32::try_from(state.evaluations_completed).unwrap_or(u32::MAX);
 
                         let request = CompletionRequest {
-                            system: Some(
-                                "You are a quality evaluation agent. Given an output and criteria, \
-                                 evaluate whether the output meets the criteria. Return a JSON object \
-                                 with 'evaluation' (pass/fail), 'confidence' (0.0-1.0), 'suggestions' \
-                                 (array of strings), and 'reasoning' (string)."
-                                    .to_string(),
-                            ),
+                            system: Some(critic_system_prompt(&state.routing_control)),
                             messages: vec![ChatMessage::User {
                                 content: serde_json::json!({
                                     "output": output,
                                     "criteria": criteria,
                                 }),
                             }],
+                            routing_hint: Some(state.routing_control.request_hint(
+                                format!("critic.step.{}", state.evaluations_completed),
+                                Some(step_index),
+                                "critic",
+                            )),
                             ..CompletionRequest::default()
                         };
-                        let response =
-                            complete_with_optional_supervision(router, request, self.supervision.as_ref())
+
+                        if let Some(supervision) = self.supervision.as_ref() {
+                            supervision
+                                .request_started(router.model_id())
                                 .await
                                 .map_err(|error| CriticError::Internal(error.to_string()))?;
+                        }
+
+                        let (response, decision) = match router.route_completion(request).await {
+                            Ok(result) => result,
+                            Err(error) => {
+                                if let Some(supervision) = self.supervision.as_ref() {
+                                    supervision.completion_failed(&error).await.map_err(
+                                        |supervision_error| {
+                                            CriticError::Internal(supervision_error.to_string())
+                                        },
+                                    )?;
+                                }
+                                return Err(CriticError::Internal(error.to_string()));
+                            }
+                        };
+
+                        if let Some(supervision) = self.supervision.as_ref() {
+                            supervision
+                                .observe_model_event(&ModelEvent::RoutingDecision {
+                                    model_id: decision.model_id.clone(),
+                                    tier: decision
+                                        .tier_label
+                                        .clone()
+                                        .unwrap_or_else(|| "direct".to_string()),
+                                    reason: decision.reason.clone(),
+                                    step_signal: decision.carryover_signal.clone(),
+                                })
+                                .await
+                                .map_err(|error| CriticError::Internal(error.to_string()))?;
+                            supervision
+                                .completion_succeeded(&response)
+                                .await
+                                .map_err(|error| CriticError::Internal(error.to_string()))?;
+                        }
 
                         // Extract text from the first text content block.
                         let text = response
@@ -257,6 +312,7 @@ impl Actor for CriticAgent {
                             );
                         }
 
+                        state.routing_control.apply_routing_decision(&decision);
                         Ok(eval)
                     }
                     .await;

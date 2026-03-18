@@ -21,11 +21,14 @@ use mister_smith_agents::Orchestrator;
 use mister_smith_core::{
     Actor, AgentId, FailureClass, GuardTarget, InterventionType, LlmError, TaskId,
 };
+use mister_smith_llm::budget::{BudgetEnforcer, BudgetNode, BudgetPolicy, InMemoryBudgetStore};
 use mister_smith_llm::{
-    CircuitBreakerConfig, CompletionRequest, CompletionResponse, CompletionStream,
-    EmbeddingResponse, MockProvider, ModelCapabilities, ModelProvider, ModelRouter, ProviderConfig,
-    ProviderKind, RoutingPolicy, StopReason, StreamChunk, ToolCall,
+    CascadePolicy, CascadeTier, CircuitBreakerConfig, CompletionRequest, CompletionResponse,
+    CompletionStream, ContentBlock, EmbeddingResponse, MockProvider, ModelCapabilities,
+    ModelProvider, ModelRouter, ProviderConfig, ProviderKind, RoutingPolicy, StopReason,
+    StreamChunk, ToolCall, Usage,
 };
+use std::sync::Mutex;
 
 async fn mock_router() -> Arc<ModelRouter> {
     let router = ModelRouter::new(RoutingPolicy::RoundRobin);
@@ -167,6 +170,180 @@ async fn repetitive_stream_router() -> Arc<ModelRouter> {
     Arc::new(router)
 }
 
+fn mock_config_with_tier(model_id: &str, tier: &str) -> ProviderConfig {
+    ProviderConfig {
+        provider_kind: ProviderKind::Mock,
+        model_id: model_id.to_string(),
+        metadata: serde_json::json!({ "tier": tier }),
+        ..Default::default()
+    }
+}
+
+fn cascade_policy(threshold: f32, max_escalations: u32) -> CascadePolicy {
+    CascadePolicy {
+        tiers: vec![
+            CascadeTier {
+                provider_config: mock_config_with_tier("slm", "slm-tier"),
+                label: "slm-tier".to_string(),
+            },
+            CascadeTier {
+                provider_config: mock_config_with_tier("llm", "llm-tier"),
+                label: "llm-tier".to_string(),
+            },
+        ],
+        escalation_threshold: threshold,
+        max_escalations,
+    }
+}
+
+fn soft_cap_budget_store() -> InMemoryBudgetStore {
+    let store = InMemoryBudgetStore::default();
+    store.insert(BudgetNode {
+        key: "budget/agents".to_string(),
+        limit_tokens: 10_000,
+        used_tokens: 0,
+        period: "session".to_string(),
+        policy: BudgetPolicy::SoftCap,
+        revision: 0,
+    });
+    store
+}
+
+fn planner_response(text: &str) -> CompletionResponse {
+    CompletionResponse {
+        content: vec![ContentBlock::Text {
+            text: text.to_string(),
+        }],
+        model_id: "scenario".to_string(),
+        usage: Usage::new(16, 12),
+        stop_reason: StopReason::Completed,
+        tool_calls: Vec::new(),
+    }
+}
+
+fn critic_response(text: &str) -> CompletionResponse {
+    CompletionResponse {
+        content: vec![ContentBlock::Text {
+            text: text.to_string(),
+        }],
+        model_id: "scenario".to_string(),
+        usage: Usage::new(14, 10),
+        stop_reason: StopReason::Completed,
+        tool_calls: Vec::new(),
+    }
+}
+
+#[derive(Debug)]
+struct RecordingResponseProvider {
+    model_id: String,
+    response: CompletionResponse,
+    observed_requests: Arc<Mutex<Vec<CompletionRequest>>>,
+}
+
+impl RecordingResponseProvider {
+    fn new(
+        model_id: impl Into<String>,
+        response: CompletionResponse,
+        observed_requests: Arc<Mutex<Vec<CompletionRequest>>>,
+    ) -> Self {
+        Self {
+            model_id: model_id.into(),
+            response,
+            observed_requests,
+        }
+    }
+}
+
+#[async_trait]
+impl ModelProvider for RecordingResponseProvider {
+    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, LlmError> {
+        self.observed_requests.lock().unwrap().push(request);
+        Ok(self.response.clone())
+    }
+
+    fn stream(&self, _request: CompletionRequest) -> CompletionStream {
+        let text = self
+            .response
+            .content
+            .iter()
+            .find_map(|block| match block {
+                ContentBlock::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        Box::pin(stream::iter(vec![
+            Ok(StreamChunk {
+                index: 0,
+                delta: mister_smith_llm::ChunkDelta::Text { text },
+            }),
+            Ok(StreamChunk::stop(1, self.response.stop_reason.clone())),
+        ]))
+    }
+
+    async fn embed(&self, _input: Vec<String>) -> Result<EmbeddingResponse, LlmError> {
+        Err(LlmError::UnsupportedCapability {
+            capability: "embeddings".to_string(),
+            model: self.model_id.clone(),
+        })
+    }
+
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    fn capabilities(&self) -> ModelCapabilities {
+        ModelCapabilities::all()
+    }
+}
+
+#[derive(Debug)]
+struct RecordingFailingProvider {
+    model_id: String,
+    observed_requests: Arc<Mutex<Vec<CompletionRequest>>>,
+}
+
+impl RecordingFailingProvider {
+    fn new(
+        model_id: impl Into<String>,
+        observed_requests: Arc<Mutex<Vec<CompletionRequest>>>,
+    ) -> Self {
+        Self {
+            model_id: model_id.into(),
+            observed_requests,
+        }
+    }
+}
+
+#[async_trait]
+impl ModelProvider for RecordingFailingProvider {
+    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, LlmError> {
+        self.observed_requests.lock().unwrap().push(request);
+        Err(LlmError::Network("simulated provider failure".to_string()))
+    }
+
+    fn stream(&self, request: CompletionRequest) -> CompletionStream {
+        self.observed_requests.lock().unwrap().push(request);
+        Box::pin(stream::once(async {
+            Err(LlmError::Network("simulated provider failure".to_string()))
+        }))
+    }
+
+    async fn embed(&self, _input: Vec<String>) -> Result<EmbeddingResponse, LlmError> {
+        Err(LlmError::UnsupportedCapability {
+            capability: "embeddings".to_string(),
+            model: self.model_id.clone(),
+        })
+    }
+
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    fn capabilities(&self) -> ModelCapabilities {
+        ModelCapabilities::all()
+    }
+}
+
 fn supervision_graph(
     workflow_id: TaskId,
 ) -> (
@@ -240,6 +417,246 @@ async fn critic_evaluates_via_mock_provider() {
 
     assert!(result.is_object());
     assert_eq!(state.evaluations_completed, 1);
+}
+
+#[tokio::test]
+async fn planner_carries_forward_escalated_tier_to_the_next_step() {
+    let slm_requests = Arc::new(Mutex::new(Vec::new()));
+    let llm_requests = Arc::new(Mutex::new(Vec::new()));
+
+    let router = ModelRouter::new(RoutingPolicy::Cascade(cascade_policy(0.9, 1)));
+    let slm: Arc<dyn ModelProvider> = Arc::new(RecordingResponseProvider::new(
+        "slm-model",
+        planner_response("{}"),
+        slm_requests.clone(),
+    ));
+    let llm: Arc<dyn ModelProvider> = Arc::new(RecordingResponseProvider::new(
+        "llm-model",
+        planner_response(
+            r#"{"goal":"deploy service","steps":[{"step":1,"action":"analyze","description":"deploy service"}],"context":{"env":"staging"}}"#,
+        ),
+        llm_requests.clone(),
+    ));
+
+    router
+        .add_provider(
+            mock_config_with_tier("slm", "slm-tier"),
+            slm,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+    router
+        .add_provider(
+            mock_config_with_tier("llm", "llm-tier"),
+            llm,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let mut planner = PlannerAgent::with_router(AgentId::new(), Arc::new(router));
+    let mut state = PlannerState::default();
+
+    planner
+        .handle_message(
+            PlannerMessage::PlanGoal {
+                goal: "deploy service".into(),
+                context: serde_json::json!({"env": "staging"}),
+                managed_context: None,
+            },
+            &mut state,
+        )
+        .await
+        .unwrap();
+    planner
+        .handle_message(
+            PlannerMessage::PlanGoal {
+                goal: "verify deploy".into(),
+                context: serde_json::json!({"env": "staging"}),
+                managed_context: None,
+            },
+            &mut state,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        slm_requests.lock().unwrap().len(),
+        1,
+        "the second planner step should not restart from the low-confidence SLM tier"
+    );
+    let llm_requests = llm_requests.lock().unwrap();
+    assert_eq!(llm_requests.len(), 2);
+    assert!(
+        llm_requests[0]
+            .system
+            .as_deref()
+            .unwrap()
+            .contains("task planning agent"),
+        "baseline planner prompt should remain intact"
+    );
+    let second_system = llm_requests[1].system.as_deref().unwrap();
+    assert!(
+        second_system.contains("Routing carryover: keep the stronger reasoning tier active"),
+        "planner escalation carryover should persist the action hint into the next step: {second_system}"
+    );
+    assert!(
+        second_system.contains("Confidence review is active"),
+        "planner escalation carryover should preserve the triggered confidence checkpoint: {second_system}"
+    );
+}
+
+#[tokio::test]
+async fn critic_carries_forward_fallback_tier_to_the_next_step() {
+    let slm_requests = Arc::new(Mutex::new(Vec::new()));
+    let llm_requests = Arc::new(Mutex::new(Vec::new()));
+
+    let router = ModelRouter::new(RoutingPolicy::Cascade(cascade_policy(0.9, 1)));
+    let slm: Arc<dyn ModelProvider> = Arc::new(RecordingFailingProvider::new(
+        "slm-model",
+        slm_requests.clone(),
+    ));
+    let llm: Arc<dyn ModelProvider> = Arc::new(RecordingResponseProvider::new(
+        "llm-model",
+        critic_response(
+            r#"{"evaluation":"pass","confidence":0.99,"suggestions":["none"],"reasoning":"fallback accepted"}"#,
+        ),
+        llm_requests.clone(),
+    ));
+
+    router
+        .add_provider(
+            mock_config_with_tier("slm", "slm-tier"),
+            slm,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+    router
+        .add_provider(
+            mock_config_with_tier("llm", "llm-tier"),
+            llm,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let mut critic = CriticAgent::with_router(AgentId::new(), Arc::new(router));
+    let mut state = CriticState::default();
+
+    critic
+        .handle_message(
+            CriticMessage::Evaluate {
+                output: serde_json::json!("draft-1"),
+                criteria: serde_json::json!(["accuracy"]),
+                managed_context: None,
+            },
+            &mut state,
+        )
+        .await
+        .unwrap();
+    critic
+        .handle_message(
+            CriticMessage::Evaluate {
+                output: serde_json::json!("draft-2"),
+                criteria: serde_json::json!(["accuracy"]),
+                managed_context: None,
+            },
+            &mut state,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        slm_requests.lock().unwrap().len(),
+        1,
+        "fallback carryover should prevent the second critic step from retrying the failed tier first"
+    );
+    let llm_requests = llm_requests.lock().unwrap();
+    assert_eq!(llm_requests.len(), 2);
+    let second_system = llm_requests[1].system.as_deref().unwrap();
+    assert!(
+        second_system.contains("Routing carryover: prefer resilient assumptions"),
+        "critic fallback carryover should persist the fallback action hint into the next step: {second_system}"
+    );
+    assert!(
+        second_system.contains("Provider failure fallback is active"),
+        "critic fallback carryover should preserve the provider failure checkpoint: {second_system}"
+    );
+}
+
+#[tokio::test]
+async fn critic_downgrade_resets_preferred_tier_and_updates_verification_guidance() {
+    let slm_requests = Arc::new(Mutex::new(Vec::new()));
+    let llm_requests = Arc::new(Mutex::new(Vec::new()));
+    let budget_store = soft_cap_budget_store();
+    let budget_enforcer = BudgetEnforcer::new(Box::new(budget_store));
+
+    let router = ModelRouter::new(RoutingPolicy::Cascade(cascade_policy(0.9, 1)))
+        .with_budget(budget_enforcer, "budget/agents");
+    let slm: Arc<dyn ModelProvider> = Arc::new(RecordingResponseProvider::new(
+        "slm-model",
+        critic_response("{}"),
+        slm_requests.clone(),
+    ));
+    let llm: Arc<dyn ModelProvider> = Arc::new(RecordingResponseProvider::new(
+        "llm-model",
+        critic_response(
+            r#"{"evaluation":"pass","confidence":0.99,"suggestions":["none"],"reasoning":"budget accepted"}"#,
+        ),
+        llm_requests.clone(),
+    ));
+
+    router
+        .add_provider(
+            mock_config_with_tier("slm", "slm-tier"),
+            slm,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+    router
+        .add_provider(
+            mock_config_with_tier("llm", "llm-tier"),
+            llm,
+            CircuitBreakerConfig::default(),
+        )
+        .await;
+
+    let mut critic = CriticAgent::with_router(AgentId::new(), Arc::new(router));
+    let mut state = CriticState::default();
+
+    critic
+        .handle_message(
+            CriticMessage::Evaluate {
+                output: serde_json::json!("draft-1"),
+                criteria: serde_json::json!(["accuracy"]),
+                managed_context: None,
+            },
+            &mut state,
+        )
+        .await
+        .unwrap();
+    critic
+        .handle_message(
+            CriticMessage::Evaluate {
+                output: serde_json::json!("draft-2"),
+                criteria: serde_json::json!(["accuracy"]),
+                managed_context: None,
+            },
+            &mut state,
+        )
+        .await
+        .unwrap();
+
+    let slm_requests = slm_requests.lock().unwrap();
+    assert_eq!(
+        slm_requests.len(),
+        2,
+        "a downgrade should clear the prior llm-tier preference so the next critic step starts from the baseline tier again"
+    );
+    let second_system = slm_requests[1].system.as_deref().unwrap();
+    assert!(
+        second_system.contains("Budget policy is active"),
+        "downgrade guidance should be carried into the next critic step: {second_system}"
+    );
+    assert_eq!(llm_requests.lock().unwrap().len(), 2);
 }
 
 #[tokio::test]

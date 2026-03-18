@@ -291,6 +291,23 @@ impl ModelEventSink for RecordingSink {
     }
 }
 
+fn carryover_cascade_policy(threshold: f32, max_escalations: u32) -> CascadePolicy {
+    CascadePolicy {
+        tiers: vec![
+            CascadeTier {
+                provider_config: mock_config("slm"),
+                label: "slm-tier".to_string(),
+            },
+            CascadeTier {
+                provider_config: mock_config("llm"),
+                label: "llm-tier".to_string(),
+            },
+        ],
+        escalation_threshold: threshold,
+        max_escalations,
+    }
+}
+
 // --- Basic routing tests ---
 
 #[tokio::test]
@@ -446,6 +463,76 @@ async fn direct_complete_emits_routing_event_with_step_signal() {
         }
         other => panic!("expected RoutingDecision, got: {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn cascade_returned_decision_preserves_escalation_carryover_signal() {
+    let policy = carryover_cascade_policy(1.1, 1);
+    let router = ModelRouter::new(RoutingPolicy::Cascade(policy));
+
+    let slm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("slm-model"));
+    let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
+
+    router
+        .add_provider(mock_config("slm"), slm, CircuitBreakerConfig::default())
+        .await;
+    router
+        .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+        .await;
+
+    let (_response, decision) = router.route_completion(mock_request()).await.unwrap();
+
+    assert_eq!(decision.step_signal.action, StepRoutingAction::Continue);
+    assert_eq!(
+        decision.carryover_signal.action,
+        StepRoutingAction::Escalate
+    );
+    assert!(
+        decision
+            .carryover_signal
+            .checkpoints
+            .iter()
+            .any(|checkpoint| {
+                checkpoint.kind == StepVerificationCheckpointKind::ConfidenceReview
+                    && checkpoint.outcome == StepVerificationOutcome::Triggered
+            }),
+        "carryover signal should retain the triggered escalation checkpoint"
+    );
+}
+
+#[tokio::test]
+async fn cascade_returned_decision_preserves_fallback_carryover_signal() {
+    let policy = carryover_cascade_policy(0.3, 1);
+    let router = ModelRouter::new(RoutingPolicy::Cascade(policy));
+
+    let failing: Arc<dyn ModelProvider> = Arc::new(FailingProvider::new("slm-failure"));
+    let llm: Arc<dyn ModelProvider> = Arc::new(MockProvider::new("llm-model"));
+
+    router
+        .add_provider(mock_config("slm"), failing, CircuitBreakerConfig::default())
+        .await;
+    router
+        .add_provider(mock_config("llm"), llm, CircuitBreakerConfig::default())
+        .await;
+
+    let (_response, decision) = router.route_completion(mock_request()).await.unwrap();
+
+    assert_eq!(decision.step_signal.action, StepRoutingAction::Continue);
+    assert_eq!(
+        decision.carryover_signal.action,
+        StepRoutingAction::Fallback
+    );
+    assert!(
+        decision
+            .carryover_signal
+            .checkpoints
+            .iter()
+            .any(|checkpoint| {
+                checkpoint.kind == StepVerificationCheckpointKind::ProviderFailure
+                    && checkpoint.outcome == StepVerificationOutcome::Triggered
+            }),
+        "carryover signal should retain the triggered provider failure checkpoint"
+    );
 }
 
 #[tokio::test]
