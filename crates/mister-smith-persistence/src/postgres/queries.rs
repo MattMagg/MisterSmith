@@ -674,6 +674,24 @@ pub async fn find_tasks_by_correlation(
     .map_err(from_sqlx_error)
 }
 
+/// List workflow identifiers that carry a persisted autonomy snapshot.
+pub async fn list_workflows_with_persisted_autonomy_status(
+    pool: &PgPool,
+) -> Result<Vec<Uuid>, PersistenceError> {
+    sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT task_id
+        FROM tasks.records
+        WHERE task_type = 'workflow'
+          AND metadata ? 'autonomy_status'
+        ORDER BY created_at ASC, task_id ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
 // ---------------------------------------------------------------------------
 // Conversation session CRUD
 // ---------------------------------------------------------------------------

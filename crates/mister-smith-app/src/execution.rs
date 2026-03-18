@@ -45,6 +45,7 @@ pub(crate) const PROVIDER_KIND_NAME: &str = "openai_chatgpt";
 pub(crate) const MODEL_ID: &str = "gpt-5.4";
 const WORKFLOW_STREAM: &str = "mister_smith_workflows";
 const WORKFLOW_SUBJECT_PATTERN: &str = "workflow.>";
+const AUTONOMY_STATUS_METADATA_KEY: &str = "autonomy_status";
 
 struct PreparedDecisionExecution {
     tasks: Vec<PreparedTaskExecution>,
@@ -79,6 +80,7 @@ pub(crate) struct RuntimeTaskService {
     jetstream: Arc<JetStreamManager>,
     router: Arc<ModelRouter>,
     orchestrator: Arc<Orchestrator>,
+    boot_started_at: chrono::DateTime<Utc>,
     default_coordinator_id: AgentId,
     worker_ids: Vec<AgentId>,
 }
@@ -88,6 +90,7 @@ impl RuntimeTaskService {
         event_bus: Arc<EventBus>,
         nats_transport: Option<Arc<NatsTransport>>,
     ) -> Result<Arc<Self>, String> {
+        let boot_started_at = Utc::now();
         let database_url = env::var("DATABASE_URL")
             .map_err(|_| "DATABASE_URL must be set for runtime task execution".to_string())?;
         let postgres = PostgresConnection::connect(&database_url)
@@ -171,6 +174,7 @@ impl RuntimeTaskService {
             jetstream,
             router,
             orchestrator,
+            boot_started_at,
             default_coordinator_id: AgentId::new(),
             worker_ids: vec![AgentId::new(), AgentId::new()],
         }))
@@ -181,15 +185,87 @@ impl RuntimeTaskService {
     }
 
     pub(crate) async fn autonomy_status(&self, workflow_id: TaskId) -> Option<AutonomyStatusView> {
-        let mut view = self.orchestrator.autonomy_status(&workflow_id)?;
-        if let Ok(Some(record)) = queries::find_task(&self.pool, *workflow_id.as_ref()).await {
-            crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
+        if let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id) {
+            if let Ok(Some(record)) = queries::find_task(&self.pool, *workflow_id.as_ref()).await {
+                crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
+            }
+            return Some(view);
         }
-        Some(view)
+
+        let record = queries::find_task(&self.pool, *workflow_id.as_ref())
+            .await
+            .ok()
+            .flatten()?;
+        recover_persisted_autonomy_status(&record)
     }
 
     pub(crate) fn autonomy_workflows(&self) -> Vec<TaskId> {
         self.orchestrator.autonomy_workflow_ids()
+    }
+
+    pub(crate) async fn persisted_autonomy_workflows(&self) -> Vec<TaskId> {
+        queries::list_workflows_with_persisted_autonomy_status(&self.pool)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(TaskId::from_uuid)
+            .collect()
+    }
+
+    pub(crate) async fn recover_orphaned_workflow(
+        &self,
+        workflow_id: TaskId,
+    ) -> Result<Option<TaskRecord>, String> {
+        let Some(record) = queries::find_task(&self.pool, *workflow_id.as_ref())
+            .await
+            .map_err(|error| format!("failed to load workflow record {workflow_id}: {error}"))?
+        else {
+            return Ok(None);
+        };
+
+        if !should_recover_orphaned_workflow(
+            &record,
+            self.boot_started_at,
+            self.orchestrator.execution_graph(&workflow_id).is_some(),
+        ) {
+            return Ok(Some(record));
+        }
+
+        let failed_at = Utc::now();
+        let mut metadata = record.metadata.clone();
+        let message = "workflow interrupted by runtime restart before session sync";
+        put_metadata(
+            &mut metadata,
+            "restart_recovery",
+            json!({
+                "reason": message,
+                "recovered_at": failed_at,
+            }),
+        );
+        put_metadata(&mut metadata, "failure", json!({ "message": message }));
+        mark_persisted_autonomy_status_failed(&mut metadata);
+
+        let result = json!({
+            "workflow_id": workflow_id,
+            "provider_kind": PROVIDER_KIND_NAME,
+            "model_id": MODEL_ID,
+            "error": message,
+            "recovered_after_restart": true,
+        });
+
+        self.update_root_record(
+            workflow_id,
+            "failed",
+            metadata,
+            Some(result),
+            record.started_at.or(Some(record.created_at)),
+            Some(failed_at),
+        )
+        .await?;
+
+        queries::find_task(&self.pool, *workflow_id.as_ref())
+            .await
+            .map_err(|error| format!("failed to reload workflow record {workflow_id}: {error}"))
     }
 
     async fn run_workflow(
@@ -306,6 +382,9 @@ impl RuntimeTaskService {
             .map_err(|error| format!("execution graph compile failed: {error}"))?;
         graph.state = GraphState::Running;
         self.orchestrator.register_execution_graph(graph.clone());
+        self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
+        self.update_task_metadata(workflow_id, metadata.clone())
+            .await?;
 
         for node in &graph.nodes {
             self.orchestrator
@@ -358,6 +437,7 @@ impl RuntimeTaskService {
                 .collect::<Vec<_>>();
             routing_history.extend(decision_payload.clone());
             put_metadata(&mut metadata, "routing_history", json!(routing_history));
+            self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
             self.update_task_metadata(workflow_id, metadata.clone())
                 .await?;
             self.publish_event(
@@ -509,6 +589,7 @@ impl RuntimeTaskService {
 
         put_metadata(&mut metadata, "final_result", final_result.clone());
         self.transition_workflow_complete(workflow_id);
+        self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
         self.update_root_record(
             workflow_id,
             "completed",
@@ -665,7 +746,7 @@ impl RuntimeTaskService {
     }
 
     async fn fail_workflow(&self, workflow_id: TaskId, message: String) {
-        let metadata = match self.find_task_record(workflow_id).await {
+        let mut metadata = match self.find_task_record(workflow_id).await {
             Ok(Some(record)) => {
                 let mut metadata = record.metadata;
                 put_metadata(&mut metadata, "failure", json!({ "message": message }));
@@ -673,6 +754,7 @@ impl RuntimeTaskService {
             }
             _ => json!({ "failure": { "message": message } }),
         };
+        self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
         let coordinator_id =
             coordinator_id_from_metadata(&metadata).unwrap_or(self.default_coordinator_id);
         let _ = self
@@ -761,6 +843,7 @@ impl RuntimeTaskService {
             "step_results",
             json!(step_results.values().cloned().collect::<Vec<_>>()),
         );
+        self.capture_autonomy_status_metadata(workflow_id, metadata);
         self.update_task_metadata(workflow_id, metadata.clone())
             .await?;
         self.publish_event(
@@ -795,6 +878,7 @@ impl RuntimeTaskService {
             "last_step_failure",
             json!(failed_step.message.clone()),
         );
+        self.capture_autonomy_status_metadata(workflow_id, metadata);
         self.update_task_metadata(workflow_id, metadata.clone())
             .await?;
         self.publish_event(
@@ -888,6 +972,14 @@ impl RuntimeTaskService {
         }
         graph.state = GraphState::Completed;
         self.orchestrator.register_execution_graph(graph);
+    }
+
+    fn capture_autonomy_status_metadata(&self, workflow_id: TaskId, metadata: &mut Value) {
+        let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id) else {
+            return;
+        };
+        crate::autonomy::enrich_session_linkage(&mut view, metadata);
+        persist_autonomy_status(metadata, &view);
     }
 
     fn spawn_workflow_runner(
@@ -999,6 +1091,38 @@ fn initial_metadata(
     metadata
 }
 
+fn persist_autonomy_status(metadata: &mut Value, view: &AutonomyStatusView) {
+    let Ok(value) = serde_json::to_value(view) else {
+        return;
+    };
+    put_metadata(metadata, AUTONOMY_STATUS_METADATA_KEY, value);
+}
+
+fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStatusView> {
+    let raw = record.metadata.get(AUTONOMY_STATUS_METADATA_KEY)?.clone();
+    let mut view = serde_json::from_value::<AutonomyStatusView>(raw).ok()?;
+    crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
+    Some(view)
+}
+
+fn mark_persisted_autonomy_status_failed(metadata: &mut Value) {
+    let Some(raw) = metadata.get(AUTONOMY_STATUS_METADATA_KEY).cloned() else {
+        return;
+    };
+    let Ok(mut view) = serde_json::from_value::<AutonomyStatusView>(raw) else {
+        return;
+    };
+
+    view.graph.state = GraphState::Failed;
+    for branch in &mut view.branches {
+        if !matches!(branch.state, BranchState::Completed | BranchState::Failed) {
+            branch.state = BranchState::Failed;
+        }
+    }
+
+    persist_autonomy_status(metadata, &view);
+}
+
 fn put_metadata(metadata: &mut Value, key: &str, value: Value) {
     if let Some(object) = metadata.as_object_mut() {
         object.insert(key.to_string(), value);
@@ -1021,6 +1145,25 @@ fn priority_rank(priority: Option<&str>) -> i32 {
     }
 }
 
+fn should_recover_orphaned_workflow(
+    record: &TaskRecord,
+    boot_started_at: chrono::DateTime<Utc>,
+    has_in_memory_graph: bool,
+) -> bool {
+    if has_in_memory_graph || !matches_inflight_status(&record.status) {
+        return false;
+    }
+
+    record.started_at.unwrap_or(record.created_at) < boot_started_at
+}
+
+fn matches_inflight_status(status: &str) -> bool {
+    matches!(
+        status.trim().to_ascii_lowercase().as_str(),
+        "queued" | "running"
+    )
+}
+
 fn coordinator_id_for_request(request: &TaskSubmissionRequest, fallback: AgentId) -> AgentId {
     request
         .conversation
@@ -1035,6 +1178,186 @@ fn coordinator_id_from_metadata(metadata: &Value) -> Option<AgentId> {
         .and_then(Value::as_str)
         .and_then(|raw| Uuid::parse_str(raw).ok())
         .map(AgentId::from_uuid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use mister_smith_core::{
+        BranchRecoveryStrategy, BranchState, CoordinationPolicy, ExecutionBranchId,
+        ExecutionGraphId, GraphState, SessionId, TaskShapeClassification, TaskShapeKind,
+        TopologyKind, TopologyRationale,
+    };
+    use mister_smith_events::{BranchSummary, ExecutionGraphSummary, TopologyPlanSummary};
+
+    fn sample_autonomy_view() -> AutonomyStatusView {
+        sample_autonomy_view_with_states(GraphState::Completed, BranchState::Completed)
+    }
+
+    fn sample_autonomy_view_with_states(
+        graph_state: GraphState,
+        branch_state: BranchState,
+    ) -> AutonomyStatusView {
+        let workflow_id = TaskId::new();
+        let graph_id = ExecutionGraphId::new();
+        let branch_id = ExecutionBranchId::new();
+        AutonomyStatusView {
+            session_id: None,
+            turn_index: None,
+            coordinator_agent_id: None,
+            graph: ExecutionGraphSummary {
+                graph_id,
+                workflow_id,
+                state: graph_state,
+                branch_count: 1,
+                node_count: 3,
+                active_topology: Some(TopologyKind::Sequential),
+            },
+            topology: TopologyPlanSummary {
+                graph_id,
+                topology_kind: TopologyKind::Sequential,
+                parallelism_width: 1,
+                task_shape: TaskShapeClassification {
+                    kind: TaskShapeKind::StrictChain,
+                    root_count: 1,
+                    max_parallel_width: 1,
+                    max_depth: 2,
+                    has_join: false,
+                    has_fanout: false,
+                    structural_signals: vec!["roots:1".to_string()],
+                },
+                coordination_policy: CoordinationPolicy::Barrier,
+                rationale: TopologyRationale {
+                    dependency_shape: "single branch".to_string(),
+                    operational_signals: vec!["restart-safe".to_string()],
+                    selected_for: "preserve recovery context".to_string(),
+                    fallback_reason: None,
+                },
+                fallback_topology: Some(TopologyKind::Sequential),
+            },
+            team_sizing: None,
+            branches: vec![BranchSummary {
+                branch_id,
+                graph_id,
+                state: branch_state,
+                assigned_agents: vec![],
+                checkpoint_id: None,
+                recovery_strategy: BranchRecoveryStrategy::Resume,
+            }],
+            checkpoint_lineage: vec![],
+            memory_pressure: vec![],
+            routing_history: vec![],
+            interventions: vec![],
+            delegation_capabilities: vec![],
+            delegation_alerts: vec![],
+            profiles: vec![],
+            guard_decisions: vec![],
+            conservative_reasons: vec!["restart-safe recovery".to_string()],
+        }
+    }
+
+    fn sample_task_with_metadata(metadata: Value) -> TaskRecord {
+        TaskRecord {
+            task_id: Uuid::new_v4(),
+            task_type: "workflow".to_string(),
+            agent_id: None,
+            payload: json!({ "description": "resume session" }),
+            result: Some(json!({ "status": "completed" })),
+            metadata,
+            status: "completed".to_string(),
+            priority: 1,
+            correlation_id: None,
+            parent_task_id: None,
+            created_at: Utc::now(),
+            started_at: Some(Utc::now()),
+            completed_at: Some(Utc::now()),
+            expires_at: None,
+        }
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_restores_session_linkage() {
+        let session_id = SessionId::new();
+        let coordinator_agent_id = AgentId::new();
+        let view = sample_autonomy_view();
+        let workflow_id = view.graph.workflow_id;
+        let mut metadata = json!({
+            "session_id": session_id,
+            "turn_index": 2,
+            "coordinator_agent_id": coordinator_agent_id,
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should round-trip");
+
+        assert_eq!(recovered.graph.workflow_id, workflow_id);
+        assert_eq!(recovered.session_id, Some(session_id));
+        assert_eq!(recovered.turn_index, Some(2));
+        assert_eq!(recovered.coordinator_agent_id, Some(coordinator_agent_id));
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_rejects_invalid_payloads() {
+        let record = sample_task_with_metadata(json!({
+            AUTONOMY_STATUS_METADATA_KEY: "not-an-object"
+        }));
+
+        assert!(recover_persisted_autonomy_status(&record).is_none());
+    }
+
+    #[test]
+    fn mark_persisted_autonomy_status_failed_rewrites_running_projection() {
+        let mut metadata = json!({});
+        let view = sample_autonomy_view_with_states(GraphState::Running, BranchState::Running);
+        persist_autonomy_status(&mut metadata, &view);
+
+        mark_persisted_autonomy_status_failed(&mut metadata);
+
+        let record = sample_task_with_metadata(metadata);
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("rewritten autonomy snapshot should still deserialize");
+
+        assert_eq!(recovered.graph.state, GraphState::Failed);
+        assert_eq!(recovered.branches.len(), 1);
+        assert_eq!(recovered.branches[0].state, BranchState::Failed);
+    }
+
+    #[test]
+    fn should_recover_orphaned_workflow_when_previous_process_left_it_running() {
+        let mut record = sample_task_with_metadata(json!({}));
+        record.status = "running".to_string();
+        record.created_at = Utc::now() - chrono::Duration::minutes(5);
+        record.started_at = Some(Utc::now() - chrono::Duration::minutes(4));
+
+        assert!(should_recover_orphaned_workflow(&record, Utc::now(), false,));
+    }
+
+    #[test]
+    fn should_not_recover_current_process_workflow_without_graph_yet() {
+        let mut record = sample_task_with_metadata(json!({}));
+        record.status = "queued".to_string();
+        record.created_at = Utc::now();
+        record.started_at = None;
+
+        assert!(!should_recover_orphaned_workflow(
+            &record,
+            Utc::now() - chrono::Duration::seconds(1),
+            false,
+        ));
+    }
+
+    #[test]
+    fn should_not_recover_workflow_that_is_still_live_in_memory() {
+        let mut record = sample_task_with_metadata(json!({}));
+        record.status = "running".to_string();
+        record.created_at = Utc::now() - chrono::Duration::minutes(5);
+        record.started_at = Some(Utc::now() - chrono::Duration::minutes(4));
+
+        assert!(!should_recover_orphaned_workflow(&record, Utc::now(), true,));
+    }
 }
 
 fn normalize_runtime_plan(goal: &str, context: &Value, raw_plan: Value) -> Value {
