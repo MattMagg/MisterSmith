@@ -197,6 +197,9 @@ pub struct ContextPressureSummary {
 pub struct CapabilitySummary {
     /// Capability identifier.
     pub capability_id: CapabilityId,
+    /// Capability descriptor identifier bound to the capability, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor_id: Option<String>,
     /// Principal that issued or currently owns the capability.
     pub issuer: AuthorityPrincipal,
     /// Agent that received the capability.

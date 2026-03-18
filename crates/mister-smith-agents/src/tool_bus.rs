@@ -3,7 +3,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
-use mister_smith_core::{AgentId, DelegationScope, ExecutionBranchId, TaskId, Tool, ToolError};
+use mister_smith_core::{
+    AgentId, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy, DelegationScope,
+    ExecutionBranchId, TaskId, Tool, ToolError,
+};
 use mister_smith_events::{AutonomyEvent, AutonomyEventEnvelope, CapabilitySummary, EventBus};
 use mister_smith_mcp::client::McpClient;
 use mister_smith_mcp::errors::McpError;
@@ -56,6 +59,74 @@ impl ToolPrincipal {
     }
 }
 
+/// Discoverable descriptor for a local or remote tool capability surface.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CapabilityDescriptor {
+    /// Stable capability descriptor identifier.
+    pub descriptor_id: String,
+    /// Human-readable title for the surface.
+    pub title: String,
+    /// Human-readable description for the surface.
+    pub description: String,
+    /// Local backing agent for the surface, when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_agent_id: Option<AgentId>,
+    /// Typed actions available through the capability surface.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<DelegatedAction>,
+}
+
+impl CapabilityDescriptor {
+    fn for_tool(
+        namespace: &str,
+        name: &str,
+        local_agent_id: Option<AgentId>,
+        required_scope: Option<DelegationScope>,
+    ) -> Self {
+        let descriptor_id = format!("tool:{namespace}.{name}");
+        let descriptor_key = descriptor_id.clone();
+        let resource_id = format!("{namespace}.{name}");
+        let title = resource_id.clone();
+        let description = match local_agent_id {
+            Some(agent_id) => {
+                format!("Local tool capability for {resource_id} owned by {agent_id}")
+            }
+            None => format!("Tool capability for {resource_id}"),
+        };
+
+        let action = |kind: CapabilityActionKind, required_scope| DelegatedAction {
+            descriptor_id: descriptor_key.clone(),
+            action_id: format!("{descriptor_key}#{}", kind.policy_action()),
+            title: format!("{} {resource_id}", kind.policy_action()),
+            description: format!("{} access for tool {resource_id}", kind.policy_action()),
+            kind,
+            policy: DelegatedActionPolicy {
+                action: kind.policy_action().to_string(),
+                resource: "tool".to_string(),
+                scope: namespace.to_string(),
+                resource_id: Some(resource_id.clone()),
+            },
+            required_scope,
+            revocation_key: format!("{descriptor_key}#{}", kind.policy_action()),
+        };
+
+        Self {
+            descriptor_id,
+            title,
+            description,
+            local_agent_id,
+            actions: vec![
+                action(CapabilityActionKind::Discover, None),
+                action(CapabilityActionKind::Execute, required_scope),
+            ],
+        }
+    }
+
+    fn action(&self, kind: CapabilityActionKind) -> Option<&DelegatedAction> {
+        self.actions.iter().find(|action| action.kind == kind)
+    }
+}
+
 #[derive(Clone)]
 enum ToolBackend {
     Native(Arc<dyn Tool>),
@@ -72,6 +143,8 @@ pub struct ToolEntry {
     pub output_schema: serde_json::Value,
     pub agent_id: Option<AgentId>,
     pub mcp_session: Option<String>,
+    #[serde(default)]
+    pub capability_descriptor: CapabilityDescriptor,
     pub registered_at: chrono::DateTime<chrono::Utc>,
     #[serde(with = "crate::config::humantime_serde")]
     pub timeout: Duration,
@@ -153,6 +226,7 @@ impl ToolBus {
             input_schema,
             output_schema,
             None,
+            None,
         );
     }
 
@@ -177,6 +251,37 @@ impl ToolBus {
             input_schema,
             output_schema,
             Some(ToolBackend::Native(tool)),
+            None,
+        );
+    }
+
+    /// Register an invocable native tool that requires a privileged delegation scope.
+    #[allow(clippy::too_many_arguments)]
+    pub fn register_privileged_native_tool(
+        &self,
+        name: impl Into<String>,
+        namespace: impl Into<String>,
+        agent_id: AgentId,
+        description: impl Into<String>,
+        input_schema: serde_json::Value,
+        output_schema: serde_json::Value,
+        required_scope: DelegationScope,
+        tool: Arc<dyn Tool>,
+    ) {
+        let name = name.into();
+        let namespace = namespace.into();
+        let capability_descriptor =
+            CapabilityDescriptor::for_tool(&namespace, &name, Some(agent_id), Some(required_scope));
+        self.insert_entry(
+            name,
+            namespace,
+            Some(agent_id),
+            None,
+            description.into(),
+            input_schema,
+            output_schema,
+            Some(ToolBackend::Native(tool)),
+            Some(capability_descriptor),
         );
     }
 
@@ -198,6 +303,7 @@ impl ToolBus {
             description.into(),
             input_schema,
             output_schema,
+            None,
             None,
         );
     }
@@ -223,6 +329,38 @@ impl ToolBus {
             input_schema,
             output_schema,
             Some(ToolBackend::Mcp(client)),
+            None,
+        );
+    }
+
+    /// Register an invocable MCP-backed tool that requires a privileged delegation scope.
+    #[allow(clippy::too_many_arguments)]
+    pub fn register_privileged_mcp_tool(
+        &self,
+        name: impl Into<String>,
+        namespace: impl Into<String>,
+        mcp_session: impl Into<String>,
+        description: impl Into<String>,
+        input_schema: serde_json::Value,
+        output_schema: serde_json::Value,
+        required_scope: DelegationScope,
+        client: Arc<McpClient>,
+    ) {
+        let name = name.into();
+        let namespace = namespace.into();
+        let mcp_session = mcp_session.into();
+        let capability_descriptor =
+            CapabilityDescriptor::for_tool(&namespace, &name, None, Some(required_scope));
+        self.insert_entry(
+            name,
+            namespace,
+            None,
+            Some(mcp_session),
+            description.into(),
+            input_schema,
+            output_schema,
+            Some(ToolBackend::Mcp(client)),
+            Some(capability_descriptor),
         );
     }
 
@@ -237,8 +375,11 @@ impl ToolBus {
         input_schema: serde_json::Value,
         output_schema: serde_json::Value,
         backend: Option<ToolBackend>,
+        capability_descriptor: Option<CapabilityDescriptor>,
     ) {
         let key = (namespace.clone(), name.clone());
+        let capability_descriptor = capability_descriptor
+            .unwrap_or_else(|| CapabilityDescriptor::for_tool(&namespace, &name, agent_id, None));
         self.tools.insert(
             key.clone(),
             ToolEntry {
@@ -249,6 +390,7 @@ impl ToolBus {
                 output_schema,
                 agent_id,
                 mcp_session,
+                capability_descriptor,
                 registered_at: chrono::Utc::now(),
                 timeout: Duration::from_secs(30),
             },
@@ -284,12 +426,19 @@ impl ToolBus {
                 continue;
             }
 
-            let decision = self.evaluate_authorization(
-                principal,
-                "discover",
-                &tool.namespace,
-                Some(&tool.name),
-            )?;
+            let decision = if let Some(action) = tool
+                .capability_descriptor
+                .action(CapabilityActionKind::Discover)
+            {
+                self.evaluate_authorization_for_action(principal, action)?
+            } else {
+                self.evaluate_authorization(
+                    principal,
+                    "discover",
+                    &tool.namespace,
+                    Some(&tool.name),
+                )?
+            };
             if decision
                 .as_ref()
                 .map(|decision| decision.allowed)
@@ -326,9 +475,12 @@ impl ToolBus {
                 AgentSystemError::Tool(ToolError::NotFound(format!("{namespace}.{name}")))
             })?;
 
-        if let Some(decision) =
+        let execute_action = self.resolve_execute_action(&entry, principal)?;
+        if let Some(decision) = if let Some(action) = execute_action.as_ref() {
+            self.evaluate_authorization_for_action(principal, action)?
+        } else {
             self.evaluate_authorization(principal, "execute", namespace, Some(name))?
-        {
+        } {
             if !decision.allowed {
                 self.record_audit_event(
                     principal,
@@ -344,7 +496,10 @@ impl ToolBus {
             }
         }
 
-        let delegation_validation = match self.validate_delegation(principal).await {
+        let delegation_validation = match self
+            .validate_delegation(principal, execute_action.as_ref())
+            .await
+        {
             Ok(validation) => validation,
             Err((error, summary)) => {
                 let delegation_context = summary.as_ref().map(delegation_audit_context);
@@ -468,9 +623,40 @@ impl ToolBus {
         })))
     }
 
+    fn evaluate_authorization_for_action(
+        &self,
+        principal: Option<&ToolPrincipal>,
+        action: &DelegatedAction,
+    ) -> Result<Option<PolicyDecision>, AgentSystemError> {
+        let Some(policy_engine) = &self.policy_engine else {
+            return Ok(None);
+        };
+
+        let principal = principal.ok_or_else(|| {
+            AgentSystemError::PermissionDenied(format!(
+                "authenticated principal required for tool {}",
+                action.policy.action
+            ))
+        })?;
+
+        let mut context = HashMap::new();
+        context.insert("scope".to_string(), action.policy.scope.clone());
+        context.insert("descriptor_id".to_string(), action.descriptor_id.clone());
+        context.insert("action_id".to_string(), action.action_id.clone());
+
+        Ok(Some(policy_engine.evaluate(&AuthorizationRequest {
+            principal: principal.claims.clone(),
+            action: action.policy.action.clone(),
+            resource: action.policy.resource.clone(),
+            resource_id: action.policy.resource_id.clone(),
+            context,
+        })))
+    }
+
     async fn validate_delegation(
         &self,
         principal: Option<&ToolPrincipal>,
+        delegated_action: Option<&DelegatedAction>,
     ) -> Result<
         Option<ValidatedDelegation>,
         (
@@ -481,7 +667,10 @@ impl ToolBus {
         let Some(principal) = principal else {
             return Ok(None);
         };
-        let Some(required_scope) = principal.required_delegation_scope else {
+        let Some(delegated_action) = delegated_action else {
+            return Ok(None);
+        };
+        let Some(_required_scope) = delegated_action.required_scope else {
             return Ok(None);
         };
         let Some(delegation_service) = &self.delegation_service else {
@@ -493,7 +682,7 @@ impl ToolBus {
             ));
         };
 
-        match delegation_service.validate_claims(&principal.claims, Some(required_scope)) {
+        match delegation_service.validate_claims_for_action(&principal.claims, delegated_action) {
             Ok(Some(validated)) => Ok(Some(validated)),
             Ok(None) => Err((
                 mister_smith_core::DelegationError::InvalidChain(
@@ -505,6 +694,61 @@ impl ToolBus {
             Err(error) => {
                 let summary = capability_summary_from_claims_error(&principal.claims, &error);
                 Err((error, summary))
+            }
+        }
+    }
+
+    fn resolve_execute_action(
+        &self,
+        entry: &ToolEntry,
+        principal: Option<&ToolPrincipal>,
+    ) -> Result<Option<DelegatedAction>, AgentSystemError> {
+        let mut action = entry
+            .capability_descriptor
+            .action(CapabilityActionKind::Execute)
+            .cloned();
+
+        let Some(required_scope) =
+            principal.and_then(|principal| principal.required_delegation_scope)
+        else {
+            return Ok(action);
+        };
+
+        match action.as_ref().and_then(|action| action.required_scope) {
+            Some(existing) if existing != required_scope => {
+                Err(AgentSystemError::PermissionDenied(format!(
+                    "tool '{}.{}' requires delegation scope {:?} but principal requested {:?}",
+                    entry.namespace, entry.name, existing, required_scope
+                )))
+            }
+            Some(_) => Ok(action),
+            None => {
+                if let Some(action) = action.as_mut() {
+                    action.required_scope = Some(required_scope);
+                    return Ok(action.clone().into());
+                }
+
+                Ok(Some(DelegatedAction {
+                    descriptor_id: entry.capability_descriptor.descriptor_id.clone(),
+                    action_id: format!("{}#execute", entry.capability_descriptor.descriptor_id),
+                    title: format!("execute {}.{}", entry.namespace, entry.name),
+                    description: format!(
+                        "execute access for tool {}.{}",
+                        entry.namespace, entry.name
+                    ),
+                    kind: CapabilityActionKind::Execute,
+                    policy: DelegatedActionPolicy {
+                        action: "execute".to_string(),
+                        resource: "tool".to_string(),
+                        scope: entry.namespace.clone(),
+                        resource_id: Some(format!("{}.{}", entry.namespace, entry.name)),
+                    },
+                    required_scope: Some(required_scope),
+                    revocation_key: format!(
+                        "{}#execute",
+                        entry.capability_descriptor.descriptor_id
+                    ),
+                }))
             }
         }
     }
@@ -694,6 +938,7 @@ fn capability_summary(
 ) -> CapabilitySummary {
     CapabilitySummary {
         capability_id: validated.capability.capability_id,
+        descriptor_id: validated.capability.descriptor_id.clone(),
         issuer: validated.capability.issuer.clone(),
         recipient: validated.capability.recipient,
         scope: validated.capability.scope,
@@ -723,6 +968,7 @@ fn capability_summary_from_claims_error(
 
     Some(CapabilitySummary {
         capability_id: capability.capability_id,
+        descriptor_id: capability.descriptor_id.clone(),
         issuer: capability.issuer,
         recipient: capability.recipient,
         scope: capability.scope,
@@ -737,6 +983,7 @@ fn capability_summary_from_claims_error(
 fn delegation_audit_context(summary: &CapabilitySummary) -> DelegationAuditContext {
     DelegationAuditContext {
         capability_id: Some(summary.capability_id),
+        descriptor_id: summary.descriptor_id.clone(),
         parent_capability: summary.parent_capability,
         issuer: Some(summary.issuer.clone()),
         recipient: Some(summary.recipient.to_string()),

@@ -456,6 +456,12 @@ pub enum DelegationError {
         /// Optional capability identifier.
         capability_id: Option<CapabilityId>,
     },
+    /// Privileged action is no longer valid because it was explicitly revoked.
+    #[error("Delegated action revoked: {revocation_key}")]
+    ActionRevoked {
+        /// Stable revocation key for the denied action.
+        revocation_key: String,
+    },
     /// Provenance chain is invalid or incomplete.
     #[error("Invalid delegation chain: {0}")]
     InvalidChain(String),

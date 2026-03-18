@@ -88,6 +88,8 @@ pub enum AuditOutcome {
 pub struct DelegationAuditContext {
     /// Capability involved in the decision, when available.
     pub capability_id: Option<CapabilityId>,
+    /// Capability descriptor involved in the decision, when available.
+    pub descriptor_id: Option<String>,
     /// Parent capability in the delegation chain, when available.
     pub parent_capability: Option<CapabilityId>,
     /// Authority that issued the capability.

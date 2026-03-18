@@ -164,6 +164,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
         }],
         delegation_capabilities: vec![CapabilitySummary {
             capability_id,
+            descriptor_id: None,
             issuer: mister_smith_core::AuthorityPrincipal::Policy("operator".to_string()),
             recipient: AgentId::new(),
             scope: mister_smith_core::DelegationScope::InvokeTool,
@@ -178,6 +179,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
                     capability_id,
                     scope: mister_smith_core::DelegationScope::InvokeTool,
                     expires_at: chrono::Utc::now(),
+                    descriptor_id: None,
                 }],
             },
             revocation_state: RevocationState::Active,
