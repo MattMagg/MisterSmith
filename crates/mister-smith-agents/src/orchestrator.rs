@@ -65,6 +65,7 @@ pub struct Orchestrator {
     adaptive_team_plans: DashMap<TaskId, AdaptiveTeamPlan>,
     workflow_coordinators: DashMap<TaskId, AgentId>,
     autonomy_events: DashMap<TaskId, Vec<AutonomyEvent>>,
+    step_routing_histories: DashMap<TaskId, Vec<StepRoutingDecisionSummary>>,
     autonomy_event_tx: Option<mpsc::Sender<Event>>,
     monitor_states: DashMap<TaskId, MonitorState>,
     supervisor_states: DashMap<TaskId, SupervisorState>,
@@ -172,6 +173,7 @@ impl Orchestrator {
             adaptive_team_plans: DashMap::new(),
             workflow_coordinators: DashMap::new(),
             autonomy_events: DashMap::new(),
+            step_routing_histories: DashMap::new(),
             autonomy_event_tx: None,
             monitor_states: DashMap::new(),
             supervisor_states: DashMap::new(),
@@ -677,6 +679,11 @@ impl Orchestrator {
                 _ => None,
             })
             .collect::<Vec<_>>();
+        let step_routing_history = self
+            .step_routing_histories
+            .get(workflow_id)
+            .map(|history| history.value().clone())
+            .unwrap_or_default();
         let mut delegation_capabilities = HashMap::new();
         for capability in self
             .autonomy_events(workflow_id)
@@ -766,7 +773,7 @@ impl Orchestrator {
                 .collect(),
             memory_pressure: Vec::<ContextPressureSummary>::new(),
             routing_history,
-            step_routing_history: vec![],
+            step_routing_history,
             interventions,
             delegation_capabilities,
             delegation_alerts,
@@ -1411,6 +1418,16 @@ impl Orchestrator {
         );
     }
 
+    fn update_step_routing_history(
+        &self,
+        workflow_id: &TaskId,
+        history: &[StepRoutingDecisionSummary],
+    ) {
+        self.step_routing_histories
+            .insert(*workflow_id, history.to_vec());
+        self.record_status_update(workflow_id);
+    }
+
     fn record_monitor_message(&self, workflow_id: &TaskId, message: &MonitorMessage) {
         let mut state = self.monitor_states.entry(*workflow_id).or_default();
         state.value_mut().apply(message);
@@ -1875,6 +1892,11 @@ impl LlmSupervision {
     ) -> Result<Option<(GuardDecision, InterventionRecord)>, AgentSystemError> {
         let event = model_event_for_error(error);
         self.observe_model_event(&event).await
+    }
+
+    pub fn sync_step_routing_history(&self, history: &[StepRoutingDecisionSummary]) {
+        self.orchestrator
+            .update_step_routing_history(&self.workflow_id, history);
     }
 
     /// Feed a canonical model event through the stream monitor and trigger Guard
