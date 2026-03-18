@@ -22,6 +22,12 @@ pub enum StepRoutingAction {
     Fallback,
 }
 
+impl Default for StepRoutingAction {
+    fn default() -> Self {
+        Self::Continue
+    }
+}
+
 /// Bounded checkpoint kinds emitted alongside a step routing signal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -100,4 +106,19 @@ pub struct StepRoutingSignal {
     pub confidence: Option<ConfidenceSignal>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checkpoints: Vec<StepVerificationCheckpoint>,
+}
+
+impl Default for StepRoutingSignal {
+    fn default() -> Self {
+        Self {
+            metadata: StepRoutingMetadata {
+                step_id: "completion.request".to_string(),
+                step_index: None,
+                step_kind: Some("completion".to_string()),
+            },
+            action: StepRoutingAction::Continue,
+            confidence: None,
+            checkpoints: vec![],
+        }
+    }
 }

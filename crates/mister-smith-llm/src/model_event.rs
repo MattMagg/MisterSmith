@@ -71,6 +71,7 @@ pub enum ModelEvent {
         model_id: String,
         tier: String,
         reason: String,
+        #[serde(default)]
         step_signal: StepRoutingSignal,
     },
 
