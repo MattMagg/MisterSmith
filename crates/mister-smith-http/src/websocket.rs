@@ -21,6 +21,8 @@ use crate::server::AppState;
 /// Default keepalive ping interval.
 const DEFAULT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 
+type SharedFilters = Arc<std::sync::Mutex<HashSet<String>>>;
+
 /// Query parameters for WebSocket event filtering.
 #[derive(Debug, Deserialize, Default)]
 pub struct WsQuery {
@@ -52,6 +54,28 @@ enum ClientMessage {
     Unsubscribe { event_types: Vec<String> },
 }
 
+fn new_shared_filters(initial_filters: HashSet<String>) -> SharedFilters {
+    Arc::new(std::sync::Mutex::new(initial_filters))
+}
+
+fn snapshot_filters(filters: &SharedFilters) -> HashSet<String> {
+    filters.lock().unwrap().clone()
+}
+
+fn subscribe_filters(filters: &SharedFilters, event_types: Vec<String>) {
+    if let Ok(mut current_filters) = filters.lock() {
+        current_filters.extend(event_types);
+    }
+}
+
+fn unsubscribe_filters(filters: &SharedFilters, event_types: &[String]) {
+    if let Ok(mut current_filters) = filters.lock() {
+        for event_type in event_types {
+            current_filters.remove(event_type);
+        }
+    }
+}
+
 /// WebSocket upgrade handler, routed with `any()` for HTTP/1.1 + HTTP/2 compatibility.
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -76,7 +100,7 @@ async fn handle_ws_connection(
     let sender = Arc::new(tokio::sync::Mutex::new(sender));
 
     let mut event_rx = state.event_tx.subscribe();
-    let filters = Arc::new(std::sync::Mutex::new(initial_filters));
+    let filters = new_shared_filters(initial_filters);
 
     // Track whether we've received a pong for the current ping cycle.
     let pong_received = Arc::new(std::sync::atomic::AtomicBool::new(true));
@@ -116,7 +140,7 @@ async fn handle_ws_connection(
             loop {
                 match event_rx.recv().await {
                     Ok(event) => {
-                        let current_filters = filters.lock().unwrap().clone();
+                        let current_filters = snapshot_filters(&filters);
                         // Apply filter: if filters are empty, send all events.
                         if !current_filters.is_empty()
                             && !current_filters.contains(&event.event_type)
@@ -154,17 +178,11 @@ async fn handle_ws_connection(
                     match client_msg {
                         ClientMessage::Subscribe { event_types } => {
                             debug!(?event_types, "Client subscribed to events");
-                            if let Ok(mut f) = filters.lock() {
-                                f.extend(event_types);
-                            }
+                            subscribe_filters(&filters, event_types);
                         }
                         ClientMessage::Unsubscribe { event_types } => {
                             debug!(?event_types, "Client unsubscribed from events");
-                            if let Ok(mut f) = filters.lock() {
-                                for et in &event_types {
-                                    f.remove(et);
-                                }
-                            }
+                            unsubscribe_filters(&filters, &event_types);
                         }
                     }
                 }
@@ -303,5 +321,22 @@ mod tests {
         assert!(filters.contains("agent_status"));
         assert!(filters.contains("task_progress"));
         assert!(filters.contains("system_event"));
+    }
+
+    #[test]
+    fn filter_updates_are_visible_across_shared_clones() {
+        let filters = new_shared_filters(HashSet::from([String::from("agent_status")]));
+        let broadcast_filters = Arc::clone(&filters);
+
+        subscribe_filters(&filters, vec![String::from("task_progress")]);
+        let current_filters = snapshot_filters(&broadcast_filters);
+        assert!(current_filters.contains("agent_status"));
+        assert!(current_filters.contains("task_progress"));
+
+        let unsubscribe = vec![String::from("agent_status")];
+        unsubscribe_filters(&filters, &unsubscribe);
+        let current_filters = snapshot_filters(&broadcast_filters);
+        assert!(!current_filters.contains("agent_status"));
+        assert!(current_filters.contains("task_progress"));
     }
 }
