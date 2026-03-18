@@ -65,6 +65,7 @@ pub struct RoutingDecision {
     pub reason: String,
     pub estimated_cost_tokens: Option<u64>,
     pub step_signal: StepRoutingSignal,
+    pub carryover_signal: StepRoutingSignal,
 }
 
 /// Sink interface for router-emitted model events.
@@ -167,6 +168,31 @@ impl ModelRouter {
             decision.reason.clone(),
             decision.step_signal.clone(),
         );
+    }
+
+    fn extend_unique_checkpoints(
+        target: &mut Vec<StepVerificationCheckpoint>,
+        checkpoints: &[StepVerificationCheckpoint],
+    ) {
+        for checkpoint in checkpoints {
+            if target.iter().all(|existing| existing != checkpoint) {
+                target.push(checkpoint.clone());
+            }
+        }
+    }
+
+    fn carryover_signal(
+        base_signal: &StepRoutingSignal,
+        carryover_action: StepRoutingAction,
+        carryover_checkpoints: &[StepVerificationCheckpoint],
+    ) -> StepRoutingSignal {
+        let mut signal = base_signal.clone();
+        if carryover_action != StepRoutingAction::Continue {
+            signal.action = carryover_action;
+        }
+        signal.checkpoints.clear();
+        Self::extend_unique_checkpoints(&mut signal.checkpoints, carryover_checkpoints);
+        signal
     }
 
     /// Register a provider.
@@ -630,7 +656,8 @@ impl ModelRouter {
                     tier_label: None,
                     reason: format!("Selected via {:?}", self.routing_policy),
                     estimated_cost_tokens: Some(estimated),
-                    step_signal,
+                    step_signal: step_signal.clone(),
+                    carryover_signal: step_signal,
                 };
                 self.emit_routing_decision(&decision);
 
@@ -687,6 +714,8 @@ impl ModelRouter {
         let max_attempts = attempt_indices
             .len()
             .min(policy.max_escalations as usize + 1);
+        let mut carryover_action = StepRoutingAction::Continue;
+        let mut carryover_checkpoints = Vec::new();
 
         for (attempt_idx, plan_idx) in attempt_indices.into_iter().take(max_attempts).enumerate() {
             let attempt = &attempt_plan[plan_idx];
@@ -769,6 +798,18 @@ impl ModelRouter {
                         checkpoints,
                         budget_checkpoint.clone(),
                     );
+                    Self::extend_unique_checkpoints(
+                        &mut carryover_checkpoints,
+                        &step_signal.checkpoints,
+                    );
+                    if step_signal.action != StepRoutingAction::Continue {
+                        carryover_action = step_signal.action;
+                    }
+                    let carryover_signal = Self::carryover_signal(
+                        &step_signal,
+                        carryover_action,
+                        &carryover_checkpoints,
+                    );
 
                     let decision = RoutingDecision {
                         provider_id: config_model_id,
@@ -787,6 +828,7 @@ impl ModelRouter {
                         },
                         estimated_cost_tokens: Some(estimated_tokens),
                         step_signal: step_signal.clone(),
+                        carryover_signal,
                     };
 
                     let accepted = confidence.score >= policy.escalation_threshold || is_last_tier;
@@ -832,6 +874,11 @@ impl ModelRouter {
                         vec![Self::provider_failure_checkpoint(&err)],
                         budget_checkpoint.clone(),
                     );
+                    Self::extend_unique_checkpoints(
+                        &mut carryover_checkpoints,
+                        &step_signal.checkpoints,
+                    );
+                    carryover_action = step_signal.action;
                     self.emit_routing_event(
                         model_id,
                         tier_label,

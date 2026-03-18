@@ -2001,10 +2001,10 @@ impl StepRoutingControl {
     }
 
     pub fn apply_routing_decision(&mut self, decision: &RoutingDecision) {
-        self.last_signal = Some(decision.step_signal.clone());
-        self.verification_checkpoints = decision.step_signal.checkpoints.clone();
+        self.last_signal = Some(decision.carryover_signal.clone());
+        self.verification_checkpoints = decision.carryover_signal.checkpoints.clone();
 
-        match decision.step_signal.action {
+        match decision.carryover_signal.action {
             StepRoutingAction::Downgrade => {
                 self.next_preferred_tier = None;
             }

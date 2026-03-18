@@ -494,6 +494,15 @@ async fn planner_carries_forward_escalated_tier_to_the_next_step() {
             .contains("task planning agent"),
         "baseline planner prompt should remain intact"
     );
+    let second_system = llm_requests[1].system.as_deref().unwrap();
+    assert!(
+        second_system.contains("Routing carryover: keep the stronger reasoning tier active"),
+        "planner escalation carryover should persist the action hint into the next step: {second_system}"
+    );
+    assert!(
+        second_system.contains("Confidence review is active"),
+        "planner escalation carryover should preserve the triggered confidence checkpoint: {second_system}"
+    );
 }
 
 #[tokio::test]
@@ -560,7 +569,17 @@ async fn critic_carries_forward_fallback_tier_to_the_next_step() {
         1,
         "fallback carryover should prevent the second critic step from retrying the failed tier first"
     );
-    assert_eq!(llm_requests.lock().unwrap().len(), 2);
+    let llm_requests = llm_requests.lock().unwrap();
+    assert_eq!(llm_requests.len(), 2);
+    let second_system = llm_requests[1].system.as_deref().unwrap();
+    assert!(
+        second_system.contains("Routing carryover: prefer resilient assumptions"),
+        "critic fallback carryover should persist the fallback action hint into the next step: {second_system}"
+    );
+    assert!(
+        second_system.contains("Provider failure fallback is active"),
+        "critic fallback carryover should preserve the provider failure checkpoint: {second_system}"
+    );
 }
 
 #[tokio::test]
