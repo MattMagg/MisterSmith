@@ -860,13 +860,7 @@ impl Orchestrator {
         &self,
         parent_task_id: &TaskId,
     ) -> Result<serde_json::Value, AgentSystemError> {
-        let subtasks = self.scheduler.subtasks(parent_task_id);
-        let results: Vec<serde_json::Value> = subtasks
-            .into_iter()
-            .filter(|t| t.state == TaskState::Completed)
-            .filter_map(|t| t.output)
-            .collect();
-
+        let results = self.scheduler.completed_subtask_outputs(parent_task_id);
         self.aggregator.aggregate(results).await
     }
 
@@ -1463,6 +1457,7 @@ impl Orchestrator {
         );
     }
 
+    #[allow(dead_code)]
     fn update_step_routing_history(
         &self,
         workflow_id: &TaskId,
