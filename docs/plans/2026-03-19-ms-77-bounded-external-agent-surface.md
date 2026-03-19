@@ -25,6 +25,7 @@ Reason:
 - `crates/mister-smith-mcp/src/server.rs`
   - exposed a typed `ExternalCapabilityDescriptor` for MCP tools
   - published descriptor metadata for each listed tool
+  - published the full boundary action and explicit delegation gating in that metadata
   - tightened invocation enforcement from descriptor-only validation to exact delegated action
     matching at the MCP boundary
 - `crates/mister-smith-mcp/src/client.rs`
@@ -46,7 +47,9 @@ For each listed MCP tool, the server now publishes a stable capability descripti
 - descriptor id
 - action id
 - required scope
+- delegation required
 - namespace
+- full boundary action
 - revocation key
 
 This keeps discovery and execution aligned:

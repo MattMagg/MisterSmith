@@ -370,8 +370,10 @@ impl ExposedTool {
                 .required_scope
                 .map(|scope| format!("{scope:?}"))
                 .unwrap_or_else(|| "none".to_string()),
+            delegation_required: self.required_boundary_action.is_some(),
             namespace: self.namespace.clone(),
             resource_id: Some(self.name.clone()),
+            boundary_action: boundary_action.clone(),
             revocation_key: boundary_action.revocation_key.clone(),
         }
     }
@@ -602,12 +604,50 @@ mod tests {
         assert_eq!(capability.boundary, "mcp.tool");
         assert_eq!(capability.external_name, "agent.greet");
         assert_eq!(capability.descriptor_id, "tool:agent.greet");
+        assert!(!capability.delegation_required);
+        assert_eq!(
+            capability.boundary_action.action_id,
+            "tool:agent.greet#execute"
+        );
         let meta = tools[0]
             .capability_meta()
             .expect("listed tool should reconstruct Smith capability meta");
         assert_eq!(
             meta.0["mister_smith_capability"]["descriptor_id"],
             serde_json::json!("tool:agent.greet")
+        );
+    }
+
+    #[tokio::test]
+    async fn required_boundary_action_metadata_advertises_delegation_requirement() {
+        let server = McpServer::new(test_config());
+        let tool = ExposedTool {
+            name: "describe".into(),
+            description: "Describe capabilities".into(),
+            input_schema: serde_json::json!({}),
+            namespace: "agent".into(),
+            required_boundary_action: Some(tool_boundary_action(
+                "agent.describe",
+                "agent",
+                CapabilityActionKind::Discover,
+            )),
+        };
+
+        let handler: ToolHandler =
+            Arc::new(|_| Box::pin(async move { Ok(serde_json::json!({"ok": true})) }));
+
+        server.register_tool(tool, handler).await;
+
+        let tools = server.handle_tools_list(None).await.unwrap();
+        let capability = tools[0]
+            .capability_descriptor
+            .as_ref()
+            .expect("listed tools should publish bounded capability metadata");
+        assert!(capability.delegation_required);
+        assert_eq!(capability.required_scope, "none");
+        assert_eq!(
+            capability.boundary_action.action_id,
+            "tool:agent.describe#discover"
         );
     }
 

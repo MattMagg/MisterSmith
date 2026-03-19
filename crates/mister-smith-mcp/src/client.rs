@@ -7,6 +7,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
+use mister_smith_core::DelegatedAction;
 use rmcp::{
     model::{CallToolRequestParams, ClientInfo, Meta},
     service::{Peer, RoleClient, RunningService},
@@ -36,11 +37,15 @@ pub struct ExternalCapabilityDescriptor {
     pub action_id: String,
     /// Scope required to invoke the surface.
     pub required_scope: String,
+    /// Whether the surface rejects anonymous invocation.
+    pub delegation_required: bool,
     /// Namespace within the external boundary.
     pub namespace: String,
     /// Boundary-local resource identifier.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resource_id: Option<String>,
+    /// Full delegated boundary action required at execution time.
+    pub boundary_action: DelegatedAction,
     /// Revocation key checked before execution.
     pub revocation_key: String,
 }
@@ -669,8 +674,24 @@ mod tests {
                 descriptor_id: "tool:echo".to_string(),
                 action_id: "tool:echo#execute".to_string(),
                 required_scope: "InvokeTool".to_string(),
+                delegation_required: false,
                 namespace: "test".to_string(),
                 resource_id: Some("echo".to_string()),
+                boundary_action: DelegatedAction {
+                    descriptor_id: "tool:echo".to_string(),
+                    action_id: "tool:echo#execute".to_string(),
+                    title: "execute echo".to_string(),
+                    description: "execute access for tool echo".to_string(),
+                    kind: CapabilityActionKind::Execute,
+                    policy: DelegatedActionPolicy {
+                        action: "execute".to_string(),
+                        resource: "tool".to_string(),
+                        scope: "test".to_string(),
+                        resource_id: Some("echo".to_string()),
+                    },
+                    required_scope: Some(DelegationScope::InvokeTool),
+                    revocation_key: "tool:echo#execute".to_string(),
+                },
                 revocation_key: "tool:echo#execute".to_string(),
             }
             .into_meta_value(),
@@ -688,6 +709,8 @@ mod tests {
         assert_eq!(capability.boundary, "mcp.tool");
         assert_eq!(capability.external_name, "echo");
         assert_eq!(capability.descriptor_id, "tool:echo");
+        assert!(!capability.delegation_required);
+        assert_eq!(capability.boundary_action.action_id, "tool:echo#execute");
     }
 
     #[tokio::test]
