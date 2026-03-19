@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Closure"
+  short_description: "Finish Mister Smith git work cleanly end to end."
+  default_prompt: "Use $mister-smith-git-closure to finish and clean up the current Mister Smith git workflow."
