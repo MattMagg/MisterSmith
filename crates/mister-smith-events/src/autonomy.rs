@@ -457,8 +457,8 @@ pub enum AutonomyEvent {
 pub fn infer_proof_outcome_from_projection(
     graph: &ExecutionGraphSummary,
     topology: &TopologyPlanSummary,
-    branches: &[BranchSummary],
-    routing_history: &[RoutingDecisionSummary],
+    _branches: &[BranchSummary],
+    _routing_history: &[RoutingDecisionSummary],
 ) -> Option<ProofOutcomeClassification> {
     match graph.state {
         GraphState::Completed => {
@@ -471,9 +471,7 @@ pub fn infer_proof_outcome_from_projection(
             })
         }
         GraphState::Failed | GraphState::Aborted => {
-            let formed_visible_graph =
-                projection_has_visible_graph(graph, branches, routing_history);
-            (!formed_visible_graph).then_some(ProofOutcomeClassification::FailedBeforeGraph)
+            Some(ProofOutcomeClassification::FailedBeforeGraph)
         }
         GraphState::Pending | GraphState::Running | GraphState::Checkpointed => None,
     }
@@ -485,18 +483,6 @@ fn projection_collapsed_to_sequential(topology: &TopologyPlanSummary) -> bool {
         && topology.parallelism_width <= 1
         && (topology.task_shape.max_parallel_width > 1
             || !matches!(topology.task_shape.kind, TaskShapeKind::StrictChain))
-}
-
-#[must_use]
-fn projection_has_visible_graph(
-    graph: &ExecutionGraphSummary,
-    branches: &[BranchSummary],
-    routing_history: &[RoutingDecisionSummary],
-) -> bool {
-    graph.branch_count > 1
-        || graph.node_count > 1
-        || !branches.is_empty()
-        || !routing_history.is_empty()
 }
 
 /// Derive a bounded operator-facing result preview from a typed autonomy projection.

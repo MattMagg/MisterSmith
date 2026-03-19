@@ -45,22 +45,19 @@ This note is the durable reference for the only allowed packet-level proof outco
 
 ### `failed_before_graph`
 
-- Use when the workflow failed or aborted before usable graph evidence existed.
-- Minimum stored evidence: terminal failure plus no visible graph evidence such as branch, node,
-  or routing history.
+- Use when the workflow failed or aborted before a usable graph outcome existed.
+- Minimum stored evidence: terminal failure. Partial graph evidence may exist, but the run still
+  ended without a usable completed graph outcome.
 - Representative March 19 source:
   `docs/plans/2026-03-19-framework-comparison-stress-test.md` heavy benchmark
 
 ## Boundary Rules
 
-1. This slice freezes the packet proof matrix only. It does not claim to classify every possible
-   runtime failure.
-2. `failed_before_graph` is reserved for failures where stored evidence does not show usable graph
-   formation.
-3. A run that already exposed a visible graph and then failed remains outside this matrix for now.
-   Later runtime-proof work may define how to surface that case, but it must not invent a fourth
-   packet-level proof outcome during this checkpoint.
-4. `collapsed_to_sequential` still counts as a completed workflow. It is distinct from both full
+1. This slice freezes the packet proof matrix to one shared three-label contract across task,
+   session, and operator result surfaces.
+2. `failed_before_graph` remains the single frozen failure class for this packet. Visible graph
+   evidence does not invent a fourth packet-level outcome during this checkpoint.
+3. `collapsed_to_sequential` still counts as a completed workflow. It is distinct from both full
    graph success and planner-time failure.
 
 ## Operator-Facing Interpretation
@@ -69,16 +66,16 @@ This note is the durable reference for the only allowed packet-level proof outco
   terminal completion.
 - `collapsed_to_sequential` means the system completed, but the proof packet must treat the run as
   a visible collapse rather than a frontier multi-agent success.
-- `failed_before_graph` means the proof packet captured an honest planner-time or pre-graph
-  failure boundary.
+- `failed_before_graph` means the proof packet captured the frozen failure class for runs that did
+  not reach a usable graph outcome.
 
 ## Expected Code Contract
 
 - `crates/mister-smith-core/src/autonomy.rs` is the source of truth for the frozen enum labels.
 - `crates/mister-smith-events/src/autonomy.rs` may infer one of the three classes only when the
   typed autonomy projection matches the matrix rules above.
-- `crates/mister-smith-events/tests/autonomy_event_tests.rs` must cover all three matrix outcomes
-  and the intentional out-of-matrix visible-graph failure boundary.
+- `crates/mister-smith-events/tests/autonomy_event_tests.rs` must cover all three matrix outcomes,
+  including failed runs that already expose graph structure.
 
 ## Stop Conditions
 

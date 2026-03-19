@@ -1143,7 +1143,7 @@ async fn event_bus_aggregates_the_frozen_proof_outcome_matrix() {
 }
 
 #[tokio::test]
-async fn event_bus_leaves_failed_runs_with_visible_graphs_outside_the_matrix() {
+async fn event_bus_keeps_failed_visible_graph_runs_in_the_frozen_failure_class() {
     let event_bus = EventBus::default();
     let workflow_id = TaskId::new();
     let graph_id = ExecutionGraphId::new();
@@ -1174,9 +1174,19 @@ async fn event_bus_leaves_failed_runs_with_visible_graphs_outside_the_matrix() {
             &view.branches,
             &view.routing_history,
         ),
-        None
+        Some(ProofOutcomeClassification::FailedBeforeGraph)
     );
-    assert_eq!(view.result_preview, None);
+    let preview = view
+        .result_preview
+        .expect("failed visible-graph runs should stay in the frozen failure class");
+    assert_eq!(
+        preview.proof_outcome,
+        ProofOutcomeClassification::FailedBeforeGraph
+    );
+    assert_eq!(
+        preview.preview_text.as_deref(),
+        Some("workflow failed before graph formation")
+    );
 }
 
 #[tokio::test]
