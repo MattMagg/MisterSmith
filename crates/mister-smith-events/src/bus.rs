@@ -14,17 +14,16 @@ use tokio::sync::{broadcast, RwLock};
 use tracing;
 
 use mister_smith_core::{
-    CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, GraphState, GuardDecision,
+    CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, GuardDecision,
     GuardDecisionId, InterventionRecord, InterventionRecordId, OperatorResultPreview,
-    ProfileSnapshot, ProfileSnapshotId, ProofOutcomeClassification, SystemEvent, TaskId,
-    TeamSizingDecision,
+    ProfileSnapshot, ProfileSnapshotId, SystemEvent, TaskId, TeamSizingDecision,
 };
 
 use crate::autonomy::{
-    AutonomyEvent, AutonomyStatusView, BranchSummary, CapabilitySummary, CheckpointRecordSummary,
-    ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
-    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
-    StepRoutingDecisionSummary, TopologyPlanSummary,
+    infer_result_preview_from_projection, AutonomyEvent, AutonomyStatusView, BranchSummary,
+    CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert,
+    ExecutionGraphSummary, ExternalCapabilityDecisionSummary, ResumeProvenanceSummary,
+    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 use crate::dead_letter::DeadLetterQueue;
 use crate::error::EventBusError;
@@ -392,85 +391,6 @@ fn infer_team_sizing_from_projection(
         rationale_lines,
         decided_at: chrono::DateTime::<chrono::Utc>::from(SystemTime::UNIX_EPOCH),
     })
-}
-
-fn infer_result_preview_from_projection(
-    graph: &ExecutionGraphSummary,
-    topology: &TopologyPlanSummary,
-    branches: &[BranchSummary],
-    routing_history: &[RoutingDecisionSummary],
-) -> Option<OperatorResultPreview> {
-    let proof_outcome =
-        infer_proof_outcome_from_projection(graph, topology, branches, routing_history)?;
-
-    let preview_text = match proof_outcome {
-        ProofOutcomeClassification::GraphFormedAndCompleted => Some(format!(
-            "graph completed with {} branch(es) across {} node(s)",
-            graph.branch_count, graph.node_count
-        )),
-        ProofOutcomeClassification::CollapsedToSequential => {
-            Some("completed with a sequential execution path".to_string())
-        }
-        ProofOutcomeClassification::FailedBeforeGraph => {
-            Some("workflow failed before graph formation".to_string())
-        }
-    };
-
-    let mut provenance_lines = vec![
-        "canonical result stored in metadata.final_result".to_string(),
-        "aggregated payload nested under metadata.aggregated_result".to_string(),
-        "full payload remains recoverable from task.result".to_string(),
-    ];
-    provenance_lines.push(format!(
-        "projection observed graph state {:?} with topology {:?}",
-        graph.state, topology.topology_kind
-    ));
-    if !routing_history.is_empty() {
-        provenance_lines.push(format!(
-            "routing history retained {} decision(s)",
-            routing_history.len()
-        ));
-    }
-
-    Some(OperatorResultPreview {
-        workflow_id: graph.workflow_id,
-        proof_outcome,
-        preview_text,
-        payload_location: "task.result".to_string(),
-        provenance_lines,
-    })
-}
-
-fn infer_proof_outcome_from_projection(
-    graph: &ExecutionGraphSummary,
-    topology: &TopologyPlanSummary,
-    branches: &[BranchSummary],
-    routing_history: &[RoutingDecisionSummary],
-) -> Option<ProofOutcomeClassification> {
-    match graph.state {
-        GraphState::Completed => {
-            let collapsed_to_sequential = graph.branch_count <= 1
-                && topology.parallelism_width <= 1
-                && matches!(
-                    topology.task_shape.kind,
-                    mister_smith_core::TaskShapeKind::StrictChain
-                );
-
-            Some(if collapsed_to_sequential {
-                ProofOutcomeClassification::CollapsedToSequential
-            } else {
-                ProofOutcomeClassification::GraphFormedAndCompleted
-            })
-        }
-        GraphState::Failed | GraphState::Aborted => {
-            let formed_visible_graph = graph.branch_count > 1
-                || graph.node_count > 1
-                || !branches.is_empty()
-                || !routing_history.is_empty();
-            (!formed_visible_graph).then_some(ProofOutcomeClassification::FailedBeforeGraph)
-        }
-        GraphState::Pending | GraphState::Running | GraphState::Checkpointed => None,
-    }
 }
 
 fn delegation_alert_key(alert: &DelegationAlert) -> String {

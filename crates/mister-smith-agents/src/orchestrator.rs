@@ -27,6 +27,7 @@ use crate::roles::supervisor::{SupervisorMessage, SupervisorState};
 use crate::scheduler::{ResultAggregator, TaskAssignment, TaskDecomposer, TaskScheduler};
 use crate::team::{plan_adaptive_team, AdaptiveTeamPlan, AdaptiveTeamSizingInputs};
 use crate::topology::{TopologyCompiler, TopologySignals};
+use mister_smith_events::autonomy::infer_result_preview_from_projection;
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, Event, EventBus, ExecutionGraphSummary,
@@ -751,44 +752,54 @@ impl Orchestrator {
                 baseline_team_sizing_decision(&graph, &routing_history, &conservative_reasons)
             });
 
+        let graph_summary = ExecutionGraphSummary {
+            graph_id: graph.graph_id,
+            workflow_id: graph.workflow_id,
+            state: graph.state,
+            branch_count: graph.branches.len(),
+            node_count: graph.nodes.len(),
+            active_topology: Some(graph.topology_plan.topology_kind),
+        };
+        let topology_summary = TopologyPlanSummary {
+            graph_id: graph.graph_id,
+            topology_kind: graph.topology_plan.topology_kind,
+            parallelism_width: graph.topology_plan.parallelism_width,
+            task_shape: graph.topology_plan.task_shape.clone(),
+            coordination_policy: graph.topology_plan.coordination_policy,
+            rationale: graph.topology_plan.rationale.clone(),
+            fallback_topology: graph.topology_plan.fallback_topology,
+        };
+        let branches = graph
+            .branches
+            .iter()
+            .map(|branch| BranchSummary {
+                branch_id: branch.branch_id,
+                graph_id: branch.graph_id,
+                state: branch.state,
+                assigned_agents: branch.assigned_agents.clone(),
+                checkpoint_id: graph
+                    .latest_checkpoint(&branch.branch_id)
+                    .map(|checkpoint| checkpoint.checkpoint_id),
+                recovery_strategy: branch.recovery_strategy,
+            })
+            .collect::<Vec<_>>();
+        let result_preview = infer_result_preview_from_projection(
+            &graph_summary,
+            &topology_summary,
+            &branches,
+            &routing_history,
+        );
+
         Some(AutonomyStatusView {
             session_id: None,
             turn_index: None,
             coordinator_agent_id: None,
             resume_provenance: None,
-            result_preview: None,
-            graph: ExecutionGraphSummary {
-                graph_id: graph.graph_id,
-                workflow_id: graph.workflow_id,
-                state: graph.state,
-                branch_count: graph.branches.len(),
-                node_count: graph.nodes.len(),
-                active_topology: Some(graph.topology_plan.topology_kind),
-            },
-            topology: TopologyPlanSummary {
-                graph_id: graph.graph_id,
-                topology_kind: graph.topology_plan.topology_kind,
-                parallelism_width: graph.topology_plan.parallelism_width,
-                task_shape: graph.topology_plan.task_shape.clone(),
-                coordination_policy: graph.topology_plan.coordination_policy,
-                rationale: graph.topology_plan.rationale.clone(),
-                fallback_topology: graph.topology_plan.fallback_topology,
-            },
+            result_preview,
+            graph: graph_summary,
+            topology: topology_summary,
             team_sizing: Some(team_sizing),
-            branches: graph
-                .branches
-                .iter()
-                .map(|branch| BranchSummary {
-                    branch_id: branch.branch_id,
-                    graph_id: branch.graph_id,
-                    state: branch.state,
-                    assigned_agents: branch.assigned_agents.clone(),
-                    checkpoint_id: graph
-                        .latest_checkpoint(&branch.branch_id)
-                        .map(|checkpoint| checkpoint.checkpoint_id),
-                    recovery_strategy: branch.recovery_strategy,
-                })
-                .collect(),
+            branches,
             checkpoint_lineage: graph
                 .checkpoint_lineage
                 .iter()

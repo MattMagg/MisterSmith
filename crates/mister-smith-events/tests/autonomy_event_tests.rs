@@ -850,12 +850,12 @@ async fn event_bus_derives_collapsed_sequential_result_preview_from_completed_pr
                     graph_id,
                     topology_kind: TopologyKind::Sequential,
                     parallelism_width: 1,
-                    task_shape: sample_task_shape(TaskShapeKind::StrictChain),
+                    task_shape: sample_task_shape(TaskShapeKind::ParallelFanout),
                     coordination_policy: CoordinationPolicy::StrictSequence,
                     rationale: TopologyRationale {
-                        dependency_shape: "single branch".to_string(),
-                        operational_signals: vec!["stable checkpoint".to_string()],
-                        selected_for: "preserve recovery context".to_string(),
+                        dependency_shape: "collapsed fanout".to_string(),
+                        operational_signals: vec!["budget cap".to_string()],
+                        selected_for: "degrade parallel plan to sequential fallback".to_string(),
                         fallback_reason: None,
                     },
                     fallback_topology: Some(TopologyKind::Sequential),
@@ -908,6 +908,96 @@ async fn event_bus_derives_collapsed_sequential_result_preview_from_completed_pr
         .provenance_lines
         .iter()
         .any(|line| line.contains("metadata.final_result")));
+}
+
+#[tokio::test]
+async fn event_bus_keeps_planned_strict_chain_as_graph_formed_completion() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch_id = ExecutionBranchId::new();
+
+    event_bus
+        .publish(
+            AutonomyEvent::GraphUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: ExecutionGraphSummary {
+                    graph_id,
+                    workflow_id,
+                    state: GraphState::Completed,
+                    branch_count: 1,
+                    node_count: 3,
+                    active_topology: Some(TopologyKind::Sequential),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::TopologySelected(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: TopologyPlanSummary {
+                    graph_id,
+                    topology_kind: TopologyKind::Sequential,
+                    parallelism_width: 1,
+                    task_shape: sample_task_shape(TaskShapeKind::StrictChain),
+                    coordination_policy: CoordinationPolicy::StrictSequence,
+                    rationale: TopologyRationale {
+                        dependency_shape: "single branch".to_string(),
+                        operational_signals: vec!["stable checkpoint".to_string()],
+                        selected_for: "preserve recovery context".to_string(),
+                        fallback_reason: None,
+                    },
+                    fallback_topology: Some(TopologyKind::Sequential),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: BranchSummary {
+                    branch_id,
+                    graph_id,
+                    state: BranchState::Completed,
+                    assigned_agents: vec![AgentId::new()],
+                    checkpoint_id: None,
+                    recovery_strategy: BranchRecoveryStrategy::Resume,
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+
+    let preview = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .and_then(|view| view.result_preview)
+        .expect("strict chain completion should still expose a result preview");
+
+    assert_eq!(
+        preview.proof_outcome,
+        ProofOutcomeClassification::GraphFormedAndCompleted
+    );
+    assert_eq!(
+        preview.preview_text.as_deref(),
+        Some("workflow completed with 1 branch(es) across 3 node(s)")
+    );
 }
 
 #[tokio::test]

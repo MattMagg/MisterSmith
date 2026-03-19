@@ -20,7 +20,8 @@ use mister_smith_agents::scheduler::{
 use mister_smith_agents::{AgentConfig, Orchestrator, ToolBus, TopologyCompiler, TopologySignals};
 use mister_smith_core::{
     AgentId, AgentType, BranchState, EscalationPolicy, GraphState, GuardTarget, NodeState,
-    SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema,
+    ProofOutcomeClassification, SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError,
+    ToolId, ToolSchema, UnifiedResultEnvelope,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -689,20 +690,24 @@ impl RuntimeTaskService {
             .aggregate(&workflow_id)
             .await
             .map_err(|error| format!("result aggregation failed: {error}"))?;
-        let final_result = json!({
-            "workflow_id": workflow_id,
-            "provider_kind": PROVIDER_KIND_NAME,
-            "model_id": MODEL_ID,
-            "description": request.description,
-            "runtime_execution_mode": runtime_execution_mode(),
-            "planner_output": metadata.get("planner_output").cloned().unwrap_or(Value::Null),
-            "execution_plan": metadata.get("execution_plan").cloned().unwrap_or(Value::Null),
-            "step_results": step_results.values().cloned().collect::<Vec<_>>(),
-            "aggregated_result": aggregated_result,
-        });
+        self.transition_workflow_complete(workflow_id);
+        let proof_outcome = self
+            .orchestrator
+            .autonomy_status(&workflow_id)
+            .and_then(|view| view.result_preview.map(|preview| preview.proof_outcome))
+            .ok_or_else(|| {
+                format!("proof outcome missing for workflow {workflow_id} after completion")
+            })?;
+        let final_result = build_final_result(
+            workflow_id,
+            &request.description,
+            &metadata,
+            &step_results,
+            aggregated_result,
+            proof_outcome,
+        );
 
         put_metadata(&mut metadata, "final_result", final_result.clone());
-        self.transition_workflow_complete(workflow_id);
         self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
         self.update_root_record(
             workflow_id,
@@ -1359,6 +1364,35 @@ fn persist_autonomy_status(metadata: &mut Value, view: &AutonomyStatusView) {
     put_metadata(metadata, AUTONOMY_STATUS_METADATA_KEY, value);
 }
 
+fn build_final_result(
+    workflow_id: TaskId,
+    description: &str,
+    metadata: &Value,
+    step_results: &BTreeMap<String, Value>,
+    aggregated_result: Value,
+    proof_outcome: ProofOutcomeClassification,
+) -> Value {
+    serde_json::to_value(UnifiedResultEnvelope {
+        workflow_id,
+        provider_kind: PROVIDER_KIND_NAME.to_string(),
+        model_id: MODEL_ID.to_string(),
+        description: description.to_string(),
+        runtime_execution_mode: runtime_execution_mode(),
+        planner_output: metadata
+            .get("planner_output")
+            .cloned()
+            .unwrap_or(Value::Null),
+        execution_plan: metadata
+            .get("execution_plan")
+            .cloned()
+            .unwrap_or(Value::Null),
+        step_results: step_results.values().cloned().collect(),
+        aggregated_result,
+        proof_outcome,
+    })
+    .expect("canonical result envelope should serialize")
+}
+
 fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStatusView> {
     let raw = record.metadata.get(AUTONOMY_STATUS_METADATA_KEY)?.clone();
     let mut view = serde_json::from_value::<AutonomyStatusView>(raw).ok()?;
@@ -1450,8 +1484,8 @@ mod tests {
         AuthorityPrincipal, BranchRecoveryStrategy, BranchState, CapabilityActionKind,
         CapabilityId, CoordinationPolicy, DelegatedAction, DelegatedActionPolicy, DelegationScope,
         ExecutionBranchId, ExecutionGraphId, ExternalDelegationEnvelope, GraphState,
-        RevocationState, SessionId, TaskShapeClassification, TaskShapeKind, TopologyKind,
-        TopologyRationale,
+        OperatorResultPreview, ProofOutcomeClassification, RevocationState, SessionId,
+        TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale,
     };
     use mister_smith_events::{
         BranchSummary, ExecutionGraphSummary, ExternalCapabilityDecisionOutcome,
@@ -1470,12 +1504,23 @@ mod tests {
         let workflow_id = TaskId::new();
         let graph_id = ExecutionGraphId::new();
         let branch_id = ExecutionBranchId::new();
+        let result_preview =
+            matches!(graph_state, GraphState::Completed).then_some(OperatorResultPreview {
+                workflow_id,
+                proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+                preview_text: Some("workflow completed with 1 branch(es) across 3 node(s)".into()),
+                payload_location: "task.result".to_string(),
+                provenance_lines: vec![
+                    "canonical result stored in metadata.final_result".to_string(),
+                    "aggregated payload nested under metadata.aggregated_result".to_string(),
+                ],
+            });
         AutonomyStatusView {
             session_id: None,
             turn_index: None,
             coordinator_agent_id: None,
             resume_provenance: None,
-            result_preview: None,
+            result_preview,
             graph: ExecutionGraphSummary {
                 graph_id,
                 workflow_id,
@@ -1601,6 +1646,41 @@ mod tests {
         assert_eq!(recovered.session_id, Some(session_id));
         assert_eq!(recovered.turn_index, Some(2));
         assert_eq!(recovered.coordinator_agent_id, Some(coordinator_agent_id));
+        assert_eq!(
+            recovered
+                .result_preview
+                .as_ref()
+                .map(|preview| preview.proof_outcome),
+            Some(ProofOutcomeClassification::GraphFormedAndCompleted)
+        );
+    }
+
+    #[test]
+    fn build_final_result_embeds_required_proof_outcome() {
+        let workflow_id = TaskId::new();
+        let metadata = json!({
+            "planner_output": { "plan": "ready" },
+            "execution_plan": { "steps": ["analyze"] },
+        });
+        let step_results = BTreeMap::from([("1".to_string(), json!({ "status": "ok" }))]);
+
+        let final_result = build_final_result(
+            workflow_id,
+            "Analyze an incident packet",
+            &metadata,
+            &step_results,
+            json!({ "summary": "bounded final payload" }),
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        );
+
+        assert_eq!(
+            final_result.get("proof_outcome"),
+            Some(&json!("graph_formed_and_completed"))
+        );
+        assert_eq!(
+            final_result.get("aggregated_result"),
+            Some(&json!({ "summary": "bounded final payload" }))
+        );
     }
 
     #[test]
