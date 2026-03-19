@@ -8,7 +8,9 @@ use async_trait::async_trait;
 use axum::middleware as axum_mw;
 use axum::Router;
 use chrono::{DateTime, Utc};
-use mister_smith_core::{AgentId, AgentType, SessionId, SessionStatus, TaskId};
+use mister_smith_core::{
+    AgentId, AgentType, ExternalDelegationEnvelope, SessionId, SessionStatus, TaskId,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
@@ -43,6 +45,8 @@ pub struct TaskSubmissionRequest {
     pub priority: Option<String>,
     /// Optional retained same-agent conversation context.
     pub conversation: Option<ConversationTurnContext>,
+    /// Delegated authority preserved from the external transport boundary, when any.
+    pub delegation: Option<ExternalDelegationEnvelope>,
 }
 
 /// Submission response returned by the runtime task service.
@@ -100,6 +104,8 @@ pub struct ConversationCreateRequest {
     pub message: String,
     /// Optional priority label for the turn workflow.
     pub priority: Option<String>,
+    /// Delegated authority preserved from the external transport boundary, when any.
+    pub delegation: Option<ExternalDelegationEnvelope>,
 }
 
 /// Continue-session request passed from HTTP handlers into the runtime session service.
@@ -111,6 +117,8 @@ pub struct ConversationContinueRequest {
     pub message: String,
     /// Optional priority label for the new turn workflow.
     pub priority: Option<String>,
+    /// Delegated authority preserved from the external transport boundary, when any.
+    pub delegation: Option<ExternalDelegationEnvelope>,
 }
 
 /// Accepted conversation turn returned by create and continue operations.
@@ -456,7 +464,11 @@ mod tests {
     use std::time::Duration;
 
     #[cfg(feature = "security")]
+    use mister_smith_core::{AuthorityPrincipal, DelegationScope};
+    #[cfg(feature = "security")]
     use mister_smith_security::config::{AuditConfig, JwtConfig, KeySource, RbacConfig};
+    #[cfg(feature = "security")]
+    use mister_smith_security::jwt::AgentClaims;
     #[cfg(feature = "security")]
     use mister_smith_security::middleware::{SecurityLayer, SecurityLayerConfig};
 
@@ -485,6 +497,91 @@ mod tests {
                 tls_config: None,
             })
             .expect("test security layer should initialize"),
+        )
+    }
+
+    #[cfg(feature = "security")]
+    fn delegation_test_security_layer() -> Arc<SecurityLayer> {
+        Arc::new(
+            SecurityLayer::new(SecurityLayerConfig {
+                enabled: true,
+                auth_enabled: true,
+                authz_enabled: false,
+                audit_enabled: true,
+                tls_enabled: false,
+                jwt_config: Some(JwtConfig {
+                    algorithm: "HS256".to_string(),
+                    access_token_ttl: Duration::from_secs(300),
+                    refresh_token_ttl: Duration::from_secs(3_600),
+                    issuer: Some("mister-smith-http-tests".to_string()),
+                    audience: vec!["http-tests".to_string()],
+                    delegation_chain_max_depth: 5,
+                    key_source: KeySource::Hmac {
+                        secret: b"http-server-delegation-test-secret-key-32-bytes!".to_vec(),
+                    },
+                }),
+                rbac_config: Some(RbacConfig::default()),
+                audit_config: Some(AuditConfig::default()),
+                tls_config: None,
+            })
+            .expect("delegation security layer should initialize"),
+        )
+    }
+
+    #[cfg(feature = "security")]
+    fn http_delegation_descriptor(method: &str, route: &str) -> String {
+        format!("http:{}:{route}", method.to_ascii_lowercase())
+    }
+
+    #[cfg(feature = "security")]
+    fn delegated_bearer_token(
+        security: &Arc<SecurityLayer>,
+        method: &str,
+        route: &str,
+    ) -> (String, mister_smith_core::CapabilityId, String) {
+        let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
+        let delegation_service = security
+            .delegation_service
+            .as_ref()
+            .expect("delegation service should be configured");
+        let descriptor_id = http_delegation_descriptor(method, route);
+        let permission = format!("{}:{route}:{route}", method.to_ascii_lowercase());
+        let (capability, provenance) = delegation_service
+            .issue_capability(
+                AuthorityPrincipal::Policy("operator".to_string()),
+                recipient,
+                DelegationScope::InvokeTool,
+                Some(descriptor_id.clone()),
+                Duration::from_secs(300),
+                None,
+                None,
+            )
+            .expect("delegation should issue");
+
+        let claims = AgentClaims {
+            iss: Some("mister-smith-http-tests".to_string()),
+            sub: recipient.to_string(),
+            aud: vec!["http-tests".to_string()],
+            agent_id: recipient.to_string(),
+            agent_type: "worker".to_string(),
+            permissions: vec![permission],
+            delegation_capability: Some(capability.clone()),
+            provenance_chain: Some(provenance),
+            ..Default::default()
+        };
+
+        let token = security
+            .jwt
+            .as_ref()
+            .expect("jwt manager should be configured")
+            .generate_token_pair(&claims)
+            .expect("token generation should succeed")
+            .access_token;
+
+        (
+            token,
+            capability.capability_id,
+            format!("{descriptor_id}#execute"),
         )
     }
 
@@ -639,5 +736,78 @@ mod tests {
             .unwrap();
         let agents_response = app.oneshot(agents_request).await.unwrap();
         assert_eq!(agents_response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn build_router_rejects_revoked_delegation_capability() {
+        let config = HttpTransportConfig::default();
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40127);
+        let security = delegation_test_security_layer();
+        let (token, capability_id, _) = delegated_bearer_token(&security, "GET", "/api/v1/agents");
+        security
+            .delegation_service
+            .as_ref()
+            .expect("delegation service should be configured")
+            .revoke_capability(capability_id);
+
+        let app = build_router(&config, AppState::new().with_security(security));
+
+        let request = Request::builder()
+            .uri("/api/v1/agents")
+            .header("authorization", format!("Bearer {token}"))
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn build_router_rejects_delegation_bound_to_different_route() {
+        let config = HttpTransportConfig::default();
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40128);
+        let security = delegation_test_security_layer();
+        let (token, _, _) = delegated_bearer_token(&security, "POST", "/api/v1/tasks");
+
+        let app = build_router(&config, AppState::new().with_security(security));
+
+        let request = Request::builder()
+            .uri("/api/v1/agents")
+            .header("authorization", format!("Bearer {token}"))
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn build_router_rejects_revoked_delegation_action_for_route() {
+        let config = HttpTransportConfig::default();
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40129);
+        let security = delegation_test_security_layer();
+        let (token, _, revocation_key) = delegated_bearer_token(&security, "GET", "/api/v1/agents");
+        security
+            .delegation_service
+            .as_ref()
+            .expect("delegation service should be configured")
+            .revoke_action(&revocation_key);
+
+        let app = build_router(&config, AppState::new().with_security(security));
+
+        let request = Request::builder()
+            .uri("/api/v1/agents")
+            .header("authorization", format!("Bearer {token}"))
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

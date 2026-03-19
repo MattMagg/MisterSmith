@@ -5,7 +5,9 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use mister_smith_core::{AgentAvailability, AgentId, AgentType, SessionId, TaskId};
+use mister_smith_core::{
+    AgentAvailability, AgentId, AgentType, ExternalDelegationEnvelope, SessionId, TaskId,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -19,6 +21,28 @@ use crate::server::{
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+/// Optional external delegation envelope attached by transport auth middleware.
+pub struct ExternalDelegationBoundary(pub Option<ExternalDelegationEnvelope>);
+
+impl<S> axum::extract::FromRequestParts<S> for ExternalDelegationBoundary
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(Self(
+            parts
+                .extensions
+                .get::<ExternalDelegationEnvelope>()
+                .cloned(),
+        ))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +373,7 @@ pub async fn get_agent(
 /// `POST /api/v1/tasks` — Submit a task, returns 202 Accepted.
 pub async fn create_task(
     State(state): State<AppState>,
+    ExternalDelegationBoundary(delegation): ExternalDelegationBoundary,
     Json(request): Json<CreateTaskRequest>,
 ) -> Result<(StatusCode, Json<CreateTaskResponse>), HttpError> {
     let task_service = state
@@ -362,6 +387,7 @@ pub async fn create_task(
             agent_type: request.agent_type,
             priority: request.priority,
             conversation: None,
+            delegation,
         })
         .await
         .map_err(HttpError::InternalError)?;
@@ -379,6 +405,7 @@ pub async fn create_task(
 /// `POST /api/v1/sessions` — Create a session and accept the first turn.
 pub async fn create_session(
     State(state): State<AppState>,
+    ExternalDelegationBoundary(delegation): ExternalDelegationBoundary,
     Json(request): Json<CreateSessionRequest>,
 ) -> Result<(StatusCode, Json<SessionTurnAcceptedResponse>), HttpError> {
     let conversation_service = state.conversation_service.as_ref().ok_or_else(|| {
@@ -389,6 +416,7 @@ pub async fn create_session(
         .create_session(ConversationCreateRequest {
             message: request.message,
             priority: request.priority,
+            delegation,
         })
         .await
         .map_err(map_conversation_error)?;
@@ -408,6 +436,7 @@ pub async fn create_session(
 /// `POST /api/v1/sessions/{session_id}/turns` — Continue one existing session.
 pub async fn continue_session(
     State(state): State<AppState>,
+    ExternalDelegationBoundary(delegation): ExternalDelegationBoundary,
     Path(session_id): Path<String>,
     Json(request): Json<ContinueSessionRequest>,
 ) -> Result<(StatusCode, Json<SessionTurnAcceptedResponse>), HttpError> {
@@ -421,6 +450,7 @@ pub async fn continue_session(
             session_id,
             message: request.message,
             priority: request.priority,
+            delegation,
         })
         .await
         .map_err(map_conversation_error)?;
@@ -629,7 +659,11 @@ mod tests {
         AppState, ConversationContinueRequest, ConversationEndView,
         ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionService,
         ConversationSessionView, ConversationTurnAccepted, ConversationTurnSummaryView,
-        NatsHealthCheck,
+        NatsHealthCheck, TaskExecutionService, TaskStatusView, TaskSubmissionResponse,
+    };
+    use mister_smith_core::{
+        AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
+        DelegationScope, ExternalDelegationEnvelope,
     };
 
     #[derive(Clone)]
@@ -678,8 +712,74 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Default)]
+    struct RecordingTaskService {
+        last_request: Arc<tokio::sync::Mutex<Option<TaskSubmissionRequest>>>,
+    }
+
+    impl RecordingTaskService {
+        async fn last_request(&self) -> TaskSubmissionRequest {
+            self.last_request
+                .lock()
+                .await
+                .clone()
+                .expect("task request should be recorded")
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl TaskExecutionService for RecordingTaskService {
+        async fn submit_task(
+            &self,
+            request: TaskSubmissionRequest,
+        ) -> Result<TaskSubmissionResponse, String> {
+            *self.last_request.lock().await = Some(request);
+            Ok(TaskSubmissionResponse {
+                task_id: TaskId::new(),
+                assigned_agent_id: AgentId::new(),
+                status: "queued".to_string(),
+            })
+        }
+
+        async fn get_task(&self, _task_id: TaskId) -> Result<Option<TaskStatusView>, String> {
+            Ok(None)
+        }
+    }
+
     fn test_state() -> AppState {
         AppState::new()
+    }
+
+    fn sample_external_delegation() -> ExternalDelegationEnvelope {
+        let service = mister_smith_security::DelegationService::new();
+        let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
+        let (capability, provenance) = service
+            .issue_capability(
+                AuthorityPrincipal::Policy("operator".to_string()),
+                recipient,
+                DelegationScope::InvokeTool,
+                Some("tool:http.submit".to_string()),
+                std::time::Duration::from_secs(300),
+                None,
+                None,
+            )
+            .expect("delegation should issue");
+
+        ExternalDelegationEnvelope::new(capability, provenance).with_action(DelegatedAction {
+            descriptor_id: "tool:http.submit".to_string(),
+            action_id: "tool:http.submit#execute".to_string(),
+            title: "execute http.submit".to_string(),
+            description: "execute access for http.submit".to_string(),
+            kind: CapabilityActionKind::Execute,
+            policy: DelegatedActionPolicy {
+                action: "execute".to_string(),
+                resource: "http".to_string(),
+                scope: "api".to_string(),
+                resource_id: Some("tasks.create".to_string()),
+            },
+            required_scope: Some(DelegationScope::InvokeTool),
+            revocation_key: "tool:http.submit#execute".to_string(),
+        })
     }
 
     #[tokio::test]
@@ -770,8 +870,40 @@ mod tests {
             agent_type: None,
             priority: None,
         };
-        let result = create_task(State(state), Json(request)).await;
+        let result = create_task(
+            State(state),
+            ExternalDelegationBoundary(None),
+            Json(request),
+        )
+        .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn create_task_forwards_external_delegation_to_runtime_service() {
+        let service = RecordingTaskService::default();
+        let state = test_state().with_task_service(Arc::new(service.clone()));
+        let delegation = sample_external_delegation();
+
+        let request = CreateTaskRequest {
+            description: "Delegated task".to_string(),
+            agent_type: None,
+            priority: Some("high".to_string()),
+        };
+
+        let (status, _response) = create_task(
+            State(state),
+            ExternalDelegationBoundary(Some(delegation.clone())),
+            Json(request),
+        )
+        .await
+        .expect("task creation should succeed");
+
+        assert_eq!(status, StatusCode::ACCEPTED);
+
+        let recorded = service.last_request().await;
+        assert_eq!(recorded.description, "Delegated task");
+        assert_eq!(recorded.delegation, Some(delegation));
     }
 
     #[tokio::test]

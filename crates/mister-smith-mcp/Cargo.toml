@@ -10,6 +10,7 @@ description = "MCP integration for bidirectional tool discovery and invocation"
 mister-smith-core = { workspace = true }
 mister-smith-transport = { workspace = true }
 mister-smith-nats = { workspace = true }
+mister-smith-security = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -18,6 +19,7 @@ tokio = { workspace = true }
 futures = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }
+uuid = { workspace = true }
 reqwest = { workspace = true }
 toml = { workspace = true }
 rmcp = { version = "1.2.0", default-features = false, features = ["client", "server", "transport-child-process", "transport-io", "transport-streamable-http-client-reqwest"] }

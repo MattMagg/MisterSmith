@@ -18,6 +18,7 @@ use tokio::sync::{watch, RwLock};
 
 use crate::config::{McpClientConfig, McpTransportType};
 use crate::errors::McpError;
+use crate::server::ToolCallRequest;
 
 const TOOL_CALL_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -263,6 +264,16 @@ impl McpClient {
         tool_name: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
+        self.call_tool_request(tool_name, ToolCallRequest::new(params))
+            .await
+    }
+
+    /// Invoke a tool with explicit Smith transport context.
+    pub async fn call_tool_request(
+        &self,
+        tool_name: &str,
+        request: ToolCallRequest,
+    ) -> Result<serde_json::Value, McpError> {
         if !*self.connected.read().await {
             return Err(McpError::ConnectionFailed("not connected".into()));
         }
@@ -274,7 +285,7 @@ impl McpClient {
         let _tool = self.get_tool(&namespaced).await?;
 
         let peer = self.peer().await?;
-        let args = match params {
+        let args = match request.into_wire_params() {
             serde_json::Value::Object(obj) => obj,
             _ => {
                 return Err(McpError::SerializationError(
@@ -368,6 +379,14 @@ fn wildcard_match(pattern: &str, input: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
+
+    use crate::server::ToolCallRequest;
+    use mister_smith_core::{
+        AgentId, AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
+        DelegationScope, ExternalDelegationEnvelope,
+    };
+    use mister_smith_security::DelegationService;
     use rmcp::{model::*, serve_server, ServerHandler};
 
     fn test_config() -> McpClientConfig {
@@ -456,6 +475,38 @@ mod tests {
         )
     }
 
+    fn sample_external_delegation() -> ExternalDelegationEnvelope {
+        let service = DelegationService::new();
+        let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
+        let (capability, provenance) = service
+            .issue_capability(
+                AuthorityPrincipal::Policy("operator".to_string()),
+                recipient,
+                DelegationScope::InvokeTool,
+                Some("tool:test.echo".to_string()),
+                Duration::from_secs(300),
+                None,
+                None,
+            )
+            .expect("delegation should issue");
+
+        ExternalDelegationEnvelope::new(capability, provenance).with_action(DelegatedAction {
+            descriptor_id: "tool:test.echo".to_string(),
+            action_id: "tool:test.echo#execute".to_string(),
+            title: "execute test.echo".to_string(),
+            description: "execute access for tool test.echo".to_string(),
+            kind: CapabilityActionKind::Execute,
+            policy: DelegatedActionPolicy {
+                action: "execute".to_string(),
+                resource: "tool".to_string(),
+                scope: "test".to_string(),
+                resource_id: Some("test.echo".to_string()),
+            },
+            required_scope: Some(DelegationScope::InvokeTool),
+            revocation_key: "tool:test.echo#execute".to_string(),
+        })
+    }
+
     async fn connected_client_with_server(
         cfg: McpClientConfig,
         server: TestServer,
@@ -512,6 +563,31 @@ mod tests {
             .unwrap();
         assert_eq!(result["name"], "echo");
         assert_eq!(server.call_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn call_tool_request_wraps_delegation_context_on_wire() {
+        let server = TestServer::new(vec![mk_tool("echo")]);
+        let client = connected_client_with_server(test_config(), server)
+            .await
+            .unwrap();
+
+        client.discover_tools().await.unwrap();
+
+        let result = client
+            .call_tool_request(
+                "echo",
+                ToolCallRequest::new(serde_json::json!({"x": 1}))
+                    .with_delegation(sample_external_delegation()),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result["args"]["params"]["x"], 1);
+        assert_eq!(
+            result["args"]["_mister_smith"]["delegation"]["action"]["descriptor_id"],
+            "tool:test.echo"
+        );
     }
 
     #[tokio::test]

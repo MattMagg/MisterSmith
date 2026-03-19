@@ -174,6 +174,7 @@ impl ConversationSessionService for ConversationRuntimeService {
                 coordinator_agent_id,
                 retained_context: retained_context.clone(),
             }),
+            delegation: request.delegation.clone(),
         };
 
         self.runtime_task_service
@@ -267,6 +268,7 @@ impl ConversationSessionService for ConversationRuntimeService {
                 coordinator_agent_id,
                 retained_context: session.retained_context.clone(),
             }),
+            delegation: request.delegation.clone(),
         };
 
         self.runtime_task_service

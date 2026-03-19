@@ -17,7 +17,9 @@ use std::sync::Arc;
 #[cfg(feature = "audit")]
 use crate::audit::AuditLogger;
 #[cfg(feature = "jwt")]
-use crate::jwt::JwtManager;
+use crate::delegation::DelegationService;
+#[cfg(feature = "jwt")]
+use crate::jwt::{JwtManager, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
 #[cfg(feature = "rbac")]
 use crate::rbac::PolicyEngine;
 #[cfg(feature = "tls")]
@@ -36,6 +38,9 @@ pub struct SecurityLayer {
     /// JWT token manager.
     #[cfg(feature = "jwt")]
     pub jwt: Option<Arc<JwtManager>>,
+    /// Delegation validation service for transport-bound capability checks.
+    #[cfg(feature = "jwt")]
+    pub delegation_service: Option<Arc<DelegationService>>,
     /// RBAC policy engine.
     #[cfg(feature = "rbac")]
     pub policy: Option<Arc<PolicyEngine>>,
@@ -111,6 +116,20 @@ impl SecurityLayer {
             None
         };
 
+        #[cfg(feature = "jwt")]
+        let delegation_service = if config.enabled && config.auth_enabled {
+            let max_depth = config
+                .jwt_config
+                .as_ref()
+                .map(|cfg| cfg.delegation_chain_max_depth)
+                .unwrap_or(DEFAULT_MAX_DELEGATION_CHAIN_DEPTH);
+            Some(Arc::new(
+                DelegationService::new_with_delegation_chain_max_depth(max_depth),
+            ))
+        } else {
+            None
+        };
+
         #[cfg(feature = "rbac")]
         let policy = if config.enabled && config.authz_enabled {
             config
@@ -148,6 +167,8 @@ impl SecurityLayer {
         Ok(Self {
             #[cfg(feature = "jwt")]
             jwt,
+            #[cfg(feature = "jwt")]
+            delegation_service,
             #[cfg(feature = "rbac")]
             policy,
             #[cfg(feature = "audit")]

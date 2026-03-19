@@ -10,11 +10,15 @@ use axum::http::{Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
+use crate::delegation::external_delegation_envelope;
 use crate::jwt::AgentClaims;
 use crate::middleware::SecurityLayer;
 #[cfg(feature = "rbac")]
 use crate::rbac::AuthorizationRequest;
-use mister_smith_core::SecurityError;
+use mister_smith_core::{
+    CapabilityActionKind, DelegatedAction, DelegatedActionPolicy, DelegationScope,
+    ExternalDelegationEnvelope, SecurityError,
+};
 
 /// Axum middleware that validates JWT Bearer tokens.
 ///
@@ -86,6 +90,68 @@ pub async fn auth_middleware(
     // Validate token
     match jwt.validate_token(&token) {
         Ok(claims) => {
+            let delegation_envelope = match security.delegation_service.as_ref() {
+                Some(delegation_service) => {
+                    let boundary_action = build_http_delegated_action(&request);
+                    let expected_descriptor = boundary_action.descriptor_id.clone();
+                    match delegation_service.validate_claims_for_action(&claims, &boundary_action) {
+                        Ok(validated) => match validated {
+                            Some(validated)
+                                if validated.capability.descriptor_id.as_deref()
+                                    == Some(expected_descriptor.as_str()) =>
+                            {
+                                Some(external_delegation_envelope(
+                                    &validated,
+                                    Some(&boundary_action),
+                                ))
+                            }
+                            Some(validated) => {
+                                let reason = match validated.capability.descriptor_id.as_deref() {
+                                    Some(descriptor_id) => format!(
+                                        "delegation descriptor '{descriptor_id}' does not authorize HTTP boundary '{expected_descriptor}'"
+                                    ),
+                                    None => format!(
+                                        "delegation descriptor missing for HTTP boundary '{expected_descriptor}'"
+                                    ),
+                                };
+                                #[cfg(feature = "audit")]
+                                {
+                                    use crate::audit::events::AuditOutcome;
+                                    if let Some(audit) = security.audit.as_ref() {
+                                        audit.record_auth(
+                                            &claims.sub,
+                                            AuditOutcome::Failure,
+                                            [("reason".to_string(), reason.clone())]
+                                                .into_iter()
+                                                .collect(),
+                                        );
+                                    }
+                                }
+                                return unauthorized_response("invalid delegation envelope");
+                            }
+                            None => None,
+                        },
+                        Err(error) => {
+                            #[cfg(feature = "audit")]
+                            {
+                                use crate::audit::events::AuditOutcome;
+                                if let Some(audit) = security.audit.as_ref() {
+                                    audit.record_auth(
+                                        &claims.sub,
+                                        AuditOutcome::Failure,
+                                        [("reason".to_string(), error.to_string())]
+                                            .into_iter()
+                                            .collect(),
+                                    );
+                                }
+                            }
+                            return unauthorized_response("invalid delegation envelope");
+                        }
+                    }
+                }
+                None => None,
+            };
+
             #[cfg(feature = "audit")]
             {
                 use crate::audit::events::AuditOutcome;
@@ -127,6 +193,9 @@ pub async fn auth_middleware(
             }
 
             request.extensions_mut().insert(claims);
+            if let Some(envelope) = delegation_envelope {
+                request.extensions_mut().insert(envelope);
+            }
             next.run(request).await
         }
         Err(e) => {
@@ -148,25 +217,53 @@ pub async fn auth_middleware(
     }
 }
 
+fn matched_route<B>(request: &Request<B>) -> String {
+    request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(axum::extract::MatchedPath::as_str)
+        .unwrap_or_else(|| request.uri().path())
+        .to_string()
+}
+
+fn build_http_delegated_action<B>(request: &Request<B>) -> DelegatedAction {
+    let route = matched_route(request);
+    let method = request.method().as_str().to_ascii_lowercase();
+    let descriptor_id = format!("http:{method}:{route}");
+    let action_id = format!("{descriptor_id}#execute");
+
+    DelegatedAction {
+        descriptor_id,
+        action_id: action_id.clone(),
+        title: format!("execute {method} {route}"),
+        description: format!("execute access for {method} {route}"),
+        kind: CapabilityActionKind::Execute,
+        policy: DelegatedActionPolicy {
+            action: method,
+            resource: "http".to_string(),
+            scope: route.clone(),
+            resource_id: Some(route),
+        },
+        required_scope: Some(DelegationScope::InvokeTool),
+        revocation_key: action_id,
+    }
+}
+
 #[cfg(feature = "rbac")]
 fn build_http_authorization_request<B>(
     request: &Request<B>,
     claims: &AgentClaims,
 ) -> AuthorizationRequest {
-    let route = request
-        .extensions()
-        .get::<axum::extract::MatchedPath>()
-        .map(axum::extract::MatchedPath::as_str)
-        .unwrap_or_else(|| request.uri().path());
+    let route = matched_route(request);
     let action = request.method().as_str().to_ascii_lowercase();
 
     AuthorizationRequest {
         principal: claims.clone(),
         action,
-        resource: route.to_string(),
-        resource_id: Some(route.to_string()),
+        resource: route.clone(),
+        resource_id: Some(route.clone()),
         context: [
-            ("scope".to_string(), route.to_string()),
+            ("scope".to_string(), route),
             (
                 "http_method".to_string(),
                 request.method().as_str().to_string(),
@@ -213,6 +310,28 @@ where
             .cloned()
             .map(AuthenticatedAgent)
             .ok_or_else(|| unauthorized_response("not authenticated"))
+    }
+}
+
+/// Axum extractor for a validated external delegation envelope, when present.
+pub struct AuthenticatedDelegation(pub Option<ExternalDelegationEnvelope>);
+
+impl<S> axum::extract::FromRequestParts<S> for AuthenticatedDelegation
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(Self(
+            parts
+                .extensions
+                .get::<ExternalDelegationEnvelope>()
+                .cloned(),
+        ))
     }
 }
 

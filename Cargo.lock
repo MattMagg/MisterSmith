@@ -2027,6 +2027,7 @@ dependencies = [
  "futures",
  "mister-smith-core",
  "mister-smith-nats",
+ "mister-smith-security",
  "mister-smith-transport",
  "reqwest 0.12.28",
  "rmcp",
@@ -2036,6 +2037,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

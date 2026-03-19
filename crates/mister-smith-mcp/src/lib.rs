@@ -20,5 +20,5 @@ pub use compatibility::{
 pub use config::{McpClientConfig, McpConfig, McpServerConfig, McpTransportType};
 pub use errors::McpError;
 pub use resources::{McpResource, ResourceRegistry};
-pub use server::{ExposedTool, McpServer};
+pub use server::{ExposedTool, McpServer, ToolCallContext, ToolCallRequest};
 pub use session::{McpSessionManager, SessionState};

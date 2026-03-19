@@ -7,7 +7,7 @@ use mister_smith_core::{
     DelegationScope, RevocationState, SecurityError,
 };
 use mister_smith_security::config::{JwtConfig, KeySource};
-use mister_smith_security::delegation::DelegationService;
+use mister_smith_security::delegation::{external_delegation_envelope, DelegationService};
 use mister_smith_security::jwt::{AgentClaims, JwtManager, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
 
 struct DelegationHarness {
@@ -257,6 +257,55 @@ fn delegation_service_rejects_revoked_actions() {
         Err(mister_smith_core::DelegationError::ActionRevoked { revocation_key })
             if revocation_key == "tool:data.echo#execute"
     ));
+}
+
+#[test]
+fn delegation_service_validates_external_envelope_after_transport_serialization() {
+    let service = DelegationService::new();
+    let recipient = mister_smith_core::AgentId::from_uuid(uuid::Uuid::new_v4());
+    let (capability, provenance) = service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            recipient,
+            DelegationScope::InvokeTool,
+            Some("tool:data.echo".to_string()),
+            Duration::from_secs(300),
+            None,
+            None,
+        )
+        .expect("capability should issue");
+    let action = DelegatedAction {
+        descriptor_id: "tool:data.echo".to_string(),
+        action_id: "tool:data.echo#execute".to_string(),
+        title: "execute data.echo".to_string(),
+        description: "execute access for tool data.echo".to_string(),
+        kind: CapabilityActionKind::Execute,
+        policy: DelegatedActionPolicy {
+            action: "execute".to_string(),
+            resource: "tool".to_string(),
+            scope: "data".to_string(),
+            resource_id: Some("data.echo".to_string()),
+        },
+        required_scope: Some(DelegationScope::InvokeTool),
+        revocation_key: "tool:data.echo#execute".to_string(),
+    };
+
+    let validated = service
+        .validate_action(&capability, &provenance, &action)
+        .expect("action should validate locally");
+    let encoded = serde_json::to_value(external_delegation_envelope(&validated, Some(&action)))
+        .expect("envelope should serialize");
+    let decoded = serde_json::from_value(encoded).expect("envelope should deserialize");
+
+    let validated_after_transport = service
+        .validate_external_envelope(&decoded)
+        .expect("envelope should validate after transport");
+
+    assert_eq!(
+        validated_after_transport.capability.capability_id,
+        capability.capability_id
+    );
+    assert_eq!(validated_after_transport.chain_depth, 1);
 }
 
 #[test]

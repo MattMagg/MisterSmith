@@ -305,6 +305,7 @@ impl RuntimeTaskService {
             "submission_path": if request.conversation.is_some() { "session" } else { "http" },
             "provider_kind": PROVIDER_KIND_NAME,
             "model_id": MODEL_ID,
+            "external_delegation": request.delegation,
             "conversation": request.conversation.as_ref().map(|conversation| {
                 json!({
                     "session_id": conversation.session_id,
@@ -639,6 +640,7 @@ impl RuntimeTaskService {
                 "priority": request.priority,
                 "provider_kind": PROVIDER_KIND_NAME,
                 "model_id": MODEL_ID,
+                "external_delegation": request.delegation,
             }),
             result: None,
             metadata: initial_metadata(request, coordinator_id, &self.worker_ids, "queued"),
@@ -1096,6 +1098,14 @@ fn initial_metadata(
         );
     }
 
+    if let Some(delegation) = &request.delegation {
+        put_metadata(
+            &mut metadata,
+            "external_delegation",
+            serde_json::to_value(delegation).unwrap_or(Value::Null),
+        );
+    }
+
     metadata
 }
 
@@ -1194,13 +1204,15 @@ mod tests {
     use super::*;
     use chrono::Utc;
     use mister_smith_core::{
-        BranchRecoveryStrategy, BranchState, CoordinationPolicy, ExecutionBranchId,
-        ExecutionGraphId, GraphState, SessionId, TaskShapeClassification, TaskShapeKind,
-        TopologyKind, TopologyRationale,
+        AuthorityPrincipal, BranchRecoveryStrategy, BranchState, CapabilityActionKind,
+        CoordinationPolicy, DelegatedAction, DelegatedActionPolicy, DelegationScope,
+        ExecutionBranchId, ExecutionGraphId, ExternalDelegationEnvelope, GraphState, SessionId,
+        TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale,
     };
     use mister_smith_events::{
         BranchSummary, ExecutionGraphSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
     };
+    use mister_smith_security::DelegationService;
 
     fn sample_autonomy_view() -> AutonomyStatusView {
         sample_autonomy_view_with_states(GraphState::Completed, BranchState::Completed)
@@ -1270,6 +1282,38 @@ mod tests {
         }
     }
 
+    fn sample_external_delegation() -> ExternalDelegationEnvelope {
+        let service = DelegationService::new();
+        let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
+        let (capability, provenance) = service
+            .issue_capability(
+                AuthorityPrincipal::Policy("operator".to_string()),
+                recipient,
+                DelegationScope::InvokeTool,
+                Some("tool:app.workflow".to_string()),
+                std::time::Duration::from_secs(300),
+                None,
+                None,
+            )
+            .expect("delegation should issue");
+
+        ExternalDelegationEnvelope::new(capability, provenance).with_action(DelegatedAction {
+            descriptor_id: "tool:app.workflow".to_string(),
+            action_id: "tool:app.workflow#execute".to_string(),
+            title: "execute app.workflow".to_string(),
+            description: "execute access for app.workflow".to_string(),
+            kind: CapabilityActionKind::Execute,
+            policy: DelegatedActionPolicy {
+                action: "execute".to_string(),
+                resource: "workflow".to_string(),
+                scope: "app".to_string(),
+                resource_id: Some("workflow.submit".to_string()),
+            },
+            required_scope: Some(DelegationScope::InvokeTool),
+            revocation_key: "tool:app.workflow#execute".to_string(),
+        })
+    }
+
     fn sample_task_with_metadata(metadata: Value) -> TaskRecord {
         TaskRecord {
             task_id: Uuid::new_v4(),
@@ -1310,6 +1354,29 @@ mod tests {
         assert_eq!(recovered.session_id, Some(session_id));
         assert_eq!(recovered.turn_index, Some(2));
         assert_eq!(recovered.coordinator_agent_id, Some(coordinator_agent_id));
+    }
+
+    #[test]
+    fn initial_metadata_persists_external_delegation_context() {
+        let delegation = sample_external_delegation();
+        let request = TaskSubmissionRequest {
+            description: "delegated workflow".to_string(),
+            agent_type: None,
+            priority: Some("high".to_string()),
+            conversation: None,
+            delegation: Some(delegation.clone()),
+        };
+
+        let metadata = initial_metadata(&request, AgentId::new(), &[], "queued");
+
+        assert_eq!(
+            metadata["external_delegation"]["capability"]["descriptor_id"],
+            "tool:app.workflow"
+        );
+        assert_eq!(
+            metadata["external_delegation"]["action"]["revocation_key"],
+            "tool:app.workflow#execute"
+        );
     }
 
     #[test]

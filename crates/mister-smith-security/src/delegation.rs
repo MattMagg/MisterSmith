@@ -9,7 +9,8 @@ use uuid::Uuid;
 
 use mister_smith_core::{
     AgentId, AuthorityPrincipal, CapabilityId, DelegatedAction, DelegationCapability,
-    DelegationError, DelegationScope, ProvenanceChain, ProvenanceLink, RevocationState,
+    DelegationError, DelegationScope, ExternalDelegationEnvelope, ProvenanceChain, ProvenanceLink,
+    RevocationState,
 };
 
 use crate::jwt::{AgentClaims, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
@@ -189,6 +190,19 @@ impl DelegationService {
         validate_descriptor_binding(&validated.capability, action)?;
         self.validate_action_revocation(action)?;
         Ok(validated)
+    }
+
+    /// Validate delegated authority that was serialized across an external boundary.
+    pub fn validate_external_envelope(
+        &self,
+        envelope: &ExternalDelegationEnvelope,
+    ) -> Result<ValidatedDelegation, DelegationError> {
+        match &envelope.action {
+            Some(action) => {
+                self.validate_action(&envelope.capability, &envelope.provenance, action)
+            }
+            None => self.validate_capability(&envelope.capability, &envelope.provenance, None),
+        }
     }
 
     /// Validate the delegation metadata embedded in agent claims.
@@ -375,4 +389,19 @@ pub(crate) fn authority_principal_for_agent_id(agent_id: &str) -> AuthorityPrinc
         .map(AgentId::from_uuid)
         .map(AuthorityPrincipal::Agent)
         .unwrap_or_else(|_| AuthorityPrincipal::Policy(format!("agent:{agent_id}")))
+}
+
+/// Build a transport-safe delegation envelope from validated local policy state.
+#[must_use]
+pub fn external_delegation_envelope(
+    validated: &ValidatedDelegation,
+    action: Option<&DelegatedAction>,
+) -> ExternalDelegationEnvelope {
+    let envelope =
+        ExternalDelegationEnvelope::new(validated.capability.clone(), validated.provenance.clone());
+
+    match action {
+        Some(action) => envelope.with_action(action.clone()),
+        None => envelope,
+    }
 }
