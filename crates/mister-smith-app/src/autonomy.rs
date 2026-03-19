@@ -9,7 +9,10 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
-use mister_smith_core::{AgentId, SessionId, TaskId};
+use mister_smith_core::{
+    AgentId, OperatorResultPreview, ProofOutcomeClassification, ResultProvenanceSummary, SessionId,
+    SessionRetainedResultView, TaskId, TaskResultView, UnifiedResultEnvelope,
+};
 use mister_smith_events::{
     AutonomyStatusView, EventBus, ExternalCapabilityDecisionOutcome,
     ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, StepRoutingDecisionSummary,
@@ -17,9 +20,11 @@ use mister_smith_events::{
 use mister_smith_persistence::postgres::queries;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
+
+const RESULT_PREVIEW_MAX_CHARS: usize = 160;
 
 /// Serializable list of workflow IDs with autonomy status projections.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,6 +196,7 @@ pub async fn status_from_bus_with_session_linkage(
     {
         enrich_session_linkage(&mut view, &record.metadata);
         enrich_step_routing_history(&mut view, &record.metadata);
+        enrich_result_preview(&mut view, &record.metadata, record.result.as_ref());
     }
     Ok(view)
 }
@@ -368,6 +374,11 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let result_preview_summary = view
+        .result_preview
+        .as_ref()
+        .map(render_result_preview)
+        .unwrap_or_else(|| "none".to_string());
     let intervention_summary = view
         .interventions
         .iter()
@@ -430,7 +441,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nresult preview: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -449,6 +460,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         if checkpoint_summary.is_empty() { "none".to_string() } else { checkpoint_summary },
         if routing_summary.is_empty() { "none".to_string() } else { routing_summary },
         if step_routing_summary.is_empty() { "none".to_string() } else { step_routing_summary },
+        result_preview_summary,
         if intervention_summary.is_empty() {
             "none".to_string()
         } else {
@@ -516,6 +528,321 @@ pub(crate) fn enrich_step_routing_history(view: &mut AutonomyStatusView, metadat
     };
     if let Ok(history) = serde_json::from_value::<Vec<StepRoutingDecisionSummary>>(raw) {
         view.step_routing_history = history;
+    }
+}
+
+pub(crate) fn build_canonical_result_envelope(
+    workflow_id: TaskId,
+    provider_kind: &str,
+    model_id: &str,
+    description: &str,
+    runtime_execution_mode: Value,
+    planner_output: Value,
+    execution_plan: Value,
+    step_results: Vec<Value>,
+    aggregated_result: Value,
+    status: &str,
+) -> UnifiedResultEnvelope {
+    let proof_outcome =
+        classify_proof_outcome(status, Some(&execution_plan), Some(step_results.as_slice()));
+    UnifiedResultEnvelope {
+        workflow_id,
+        provider_kind: provider_kind.to_string(),
+        model_id: model_id.to_string(),
+        description: description.to_string(),
+        runtime_execution_mode,
+        planner_output,
+        execution_plan,
+        step_results,
+        aggregated_result,
+        proof_outcome,
+    }
+}
+
+pub(crate) fn build_task_result_view(
+    status: &str,
+    canonical_result: UnifiedResultEnvelope,
+) -> TaskResultView {
+    TaskResultView {
+        workflow_id: canonical_result.workflow_id,
+        status: status.to_string(),
+        proof_outcome: canonical_result.proof_outcome,
+        result: canonical_result,
+    }
+}
+
+pub(crate) fn classify_proof_outcome(
+    status: &str,
+    execution_plan: Option<&Value>,
+    step_results: Option<&[Value]>,
+) -> ProofOutcomeClassification {
+    if !status.eq_ignore_ascii_case("completed") {
+        return ProofOutcomeClassification::FailedBeforeGraph;
+    }
+
+    let collapsed_from_plan = execution_plan
+        .and_then(|plan| plan.get("steps"))
+        .and_then(Value::as_array)
+        .map(|steps| steps.len() <= 1);
+    let collapsed_from_steps = step_results
+        .filter(|results| !results.is_empty())
+        .map(|results| results.len() <= 1);
+
+    if collapsed_from_plan
+        .or(collapsed_from_steps)
+        .unwrap_or(false)
+    {
+        ProofOutcomeClassification::CollapsedToSequential
+    } else {
+        ProofOutcomeClassification::GraphFormedAndCompleted
+    }
+}
+
+pub(crate) fn enrich_result_preview(
+    view: &mut AutonomyStatusView,
+    metadata: &Value,
+    task_result: Option<&Value>,
+) {
+    let status_hint = status_hint_from_graph_state(&view.graph.state);
+    let payload_preview = task_result
+        .and_then(|value| {
+            canonical_result_from_value(value, Some(status_hint))
+                .map(|result| operator_result_preview(&result, "task.result"))
+        })
+        .or_else(|| {
+            metadata.get("final_result").and_then(|value| {
+                canonical_result_from_value(value, Some(status_hint))
+                    .map(|result| operator_result_preview(&result, "metadata.final_result"))
+            })
+        });
+
+    if let Some(preview) = payload_preview {
+        view.result_preview = Some(preview);
+    }
+}
+
+pub(crate) fn retained_assistant_result(
+    task_result: &Value,
+    turn_index: u32,
+    status: &str,
+) -> Option<Value> {
+    build_session_retained_result(task_result, turn_index, status)
+        .map(|projection| projection.assistant_result)
+}
+
+fn build_session_retained_result(
+    task_result: &Value,
+    turn_index: u32,
+    status: &str,
+) -> Option<SessionRetainedResultView> {
+    let canonical_result = canonical_result_from_value(task_result, Some(status))?;
+    let preview = preview_text(&canonical_result.aggregated_result);
+    let assistant_result = assistant_result_payload(&canonical_result, preview.clone());
+
+    Some(SessionRetainedResultView {
+        workflow_id: canonical_result.workflow_id,
+        turn_index,
+        status: status.to_string(),
+        assistant_result,
+        preview,
+        provenance: result_provenance(&canonical_result, None, None),
+    })
+}
+
+fn operator_result_preview(
+    canonical_result: &UnifiedResultEnvelope,
+    payload_location: &str,
+) -> OperatorResultPreview {
+    OperatorResultPreview {
+        workflow_id: canonical_result.workflow_id,
+        proof_outcome: canonical_result.proof_outcome,
+        preview_text: preview_text(&canonical_result.aggregated_result),
+        payload_location: payload_location.to_string(),
+        provenance_lines: result_preview_provenance(canonical_result.proof_outcome),
+    }
+}
+
+fn assistant_result_payload(
+    canonical_result: &UnifiedResultEnvelope,
+    preview: Option<String>,
+) -> Value {
+    let mut payload = Map::new();
+    if let Some(preview_text) = preview {
+        payload.insert("preview".to_string(), Value::String(preview_text));
+    }
+    payload.insert(
+        "aggregated_result".to_string(),
+        canonical_result.aggregated_result.clone(),
+    );
+    payload.insert(
+        "proof_outcome".to_string(),
+        Value::String(canonical_result.proof_outcome.as_str().to_string()),
+    );
+
+    if let Some(recovered_after_restart) = canonical_result
+        .aggregated_result
+        .get("recovered_after_restart")
+        .and_then(Value::as_bool)
+    {
+        payload.insert(
+            "recovered_after_restart".to_string(),
+            Value::Bool(recovered_after_restart),
+        );
+    }
+
+    Value::Object(payload)
+}
+
+fn result_provenance(
+    canonical_result: &UnifiedResultEnvelope,
+    graph_state: Option<String>,
+    graph_id: Option<String>,
+) -> ResultProvenanceSummary {
+    ResultProvenanceSummary {
+        runtime_execution_mode: canonical_result.runtime_execution_mode.clone(),
+        graph_state,
+        graph_id,
+        source_fields: vec![
+            "metadata.final_result".to_string(),
+            "metadata.aggregated_result".to_string(),
+        ],
+    }
+}
+
+fn result_preview_provenance(proof_outcome: ProofOutcomeClassification) -> Vec<String> {
+    let outcome_line = match proof_outcome {
+        ProofOutcomeClassification::GraphFormedAndCompleted => {
+            "graph formed and completed before final result publication"
+        }
+        ProofOutcomeClassification::CollapsedToSequential => "planner emitted one sequential step",
+        ProofOutcomeClassification::FailedBeforeGraph => {
+            "workflow failed before usable graph formation"
+        }
+    };
+
+    vec![
+        outcome_line.to_string(),
+        "canonical result stored in metadata.final_result".to_string(),
+        "aggregated payload nested under metadata.aggregated_result".to_string(),
+        "session assistant_result derives from the canonical result object".to_string(),
+    ]
+}
+
+fn canonical_result_from_value(
+    value: &Value,
+    status_hint: Option<&str>,
+) -> Option<UnifiedResultEnvelope> {
+    let object = value.as_object()?;
+
+    if let Some(inner_result) = object.get("result") {
+        let nested_status_hint = object.get("status").and_then(Value::as_str).or(status_hint);
+        return canonical_result_from_value(inner_result, nested_status_hint);
+    }
+
+    if let Ok(canonical_result) = serde_json::from_value::<UnifiedResultEnvelope>(value.clone()) {
+        return Some(canonical_result);
+    }
+
+    let workflow_id = object
+        .get("workflow_id")
+        .and_then(Value::as_str)
+        .and_then(parse_task_id)?;
+    let provider_kind = object
+        .get("provider_kind")
+        .and_then(Value::as_str)?
+        .to_string();
+    let model_id = object.get("model_id").and_then(Value::as_str)?.to_string();
+    let description = object
+        .get("description")
+        .and_then(Value::as_str)?
+        .to_string();
+    let execution_plan = object.get("execution_plan").cloned().unwrap_or(Value::Null);
+    let step_results = object
+        .get("step_results")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let proof_outcome = object
+        .get("proof_outcome")
+        .cloned()
+        .and_then(|raw| serde_json::from_value::<ProofOutcomeClassification>(raw).ok())
+        .unwrap_or_else(|| {
+            classify_proof_outcome(
+                status_hint.unwrap_or("completed"),
+                Some(&execution_plan),
+                Some(step_results.as_slice()),
+            )
+        });
+
+    Some(UnifiedResultEnvelope {
+        workflow_id,
+        provider_kind,
+        model_id,
+        description,
+        runtime_execution_mode: object
+            .get("runtime_execution_mode")
+            .cloned()
+            .unwrap_or(Value::Null),
+        planner_output: object.get("planner_output").cloned().unwrap_or(Value::Null),
+        execution_plan,
+        step_results,
+        aggregated_result: object
+            .get("aggregated_result")
+            .cloned()
+            .unwrap_or(Value::Null),
+        proof_outcome,
+    })
+}
+
+fn preview_text(value: &Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::String(raw) => Some(compact_preview(raw)),
+        Value::Bool(raw) => Some(raw.to_string()),
+        Value::Number(raw) => Some(raw.to_string()),
+        Value::Array(entries) => {
+            if entries.is_empty() {
+                None
+            } else {
+                serde_json::to_string(entries)
+                    .ok()
+                    .map(|raw| compact_preview(&raw))
+            }
+        }
+        Value::Object(object) => {
+            for field in [
+                "preview", "summary", "message", "error", "content", "result",
+            ] {
+                if let Some(raw) = object.get(field).and_then(Value::as_str) {
+                    return Some(compact_preview(raw));
+                }
+            }
+
+            serde_json::to_string(object)
+                .ok()
+                .map(|raw| compact_preview(&raw))
+        }
+    }
+}
+
+fn compact_preview(raw: &str) -> String {
+    let compact = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.chars().count() <= RESULT_PREVIEW_MAX_CHARS {
+        compact
+    } else {
+        let mut truncated = compact
+            .chars()
+            .take(RESULT_PREVIEW_MAX_CHARS.saturating_sub(3))
+            .collect::<String>();
+        truncated.push_str("...");
+        truncated
+    }
+}
+
+fn status_hint_from_graph_state(state: &mister_smith_core::GraphState) -> &'static str {
+    match state {
+        mister_smith_core::GraphState::Completed => "completed",
+        _ => "failed",
     }
 }
 
@@ -606,6 +933,26 @@ fn render_resume_provenance(summary: &ResumeProvenanceSummary) -> String {
     } else {
         parts.join(" ")
     }
+}
+
+fn render_result_preview(summary: &OperatorResultPreview) -> String {
+    let preview_text = summary
+        .preview_text
+        .clone()
+        .unwrap_or_else(|| "none".to_string());
+    let provenance = if summary.provenance_lines.is_empty() {
+        "none".to_string()
+    } else {
+        summary.provenance_lines.join(" | ")
+    };
+
+    format!(
+        "proof={} location={} preview={} provenance={}",
+        summary.proof_outcome.as_str(),
+        summary.payload_location,
+        preview_text,
+        provenance
+    )
 }
 
 fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSummary) -> String {

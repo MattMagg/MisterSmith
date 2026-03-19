@@ -10,8 +10,8 @@ use mister_smith_core::{
     CoordinationPolicy, ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState,
     GuardDecision, GuardDecisionId, GuardEvidence, HealthState, InterventionRecord,
     InterventionRecordId, InterventionType, MemorySnapshotId, ProfileSnapshotId, ProfileTarget,
-    ProvenanceChain, ProvenanceLink, RevocationState, TaskId, TaskShapeClassification,
-    TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
+    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RevocationState, TaskId,
+    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
@@ -274,6 +274,49 @@ fn sample_step_routing_history(
     }
 }
 
+fn sample_task_result_view(
+    workflow_id: TaskId,
+    proof_outcome: ProofOutcomeClassification,
+) -> serde_json::Value {
+    serde_json::json!({
+        "workflow_id": workflow_id,
+        "status": "completed",
+        "proof_outcome": proof_outcome.as_str(),
+        "result": {
+            "workflow_id": workflow_id,
+            "provider_kind": "openai_chatgpt",
+            "model_id": "gpt-5.4",
+            "description": "freeze the result contract",
+            "runtime_execution_mode": {
+                "execution_boundary": "tool_bus",
+                "workflow_runner": "tokio_task"
+            },
+            "planner_output": {
+                "steps": 1
+            },
+            "execution_plan": {
+                "steps": [
+                    {
+                        "id": "step-1"
+                    }
+                ]
+            },
+            "step_results": [
+                {
+                    "task_id": TaskId::new(),
+                    "result": {
+                        "summary": "bounded answer preview"
+                    }
+                }
+            ],
+            "aggregated_result": {
+                "summary": "bounded answer preview"
+            },
+            "proof_outcome": proof_outcome.as_str()
+        }
+    })
+}
+
 #[test]
 fn render_status_surfaces_operator_rationale_and_history() {
     let (view, _, branch_id) = sample_view();
@@ -302,6 +345,61 @@ fn render_status_surfaces_operator_rationale_and_history() {
     assert!(rendered.contains("tool:agent.echo#execute"));
     assert!(rendered.contains("required scope InvokeTool matched capability scope InvokeTool"));
     assert!(rendered.contains("control-plane state unavailable"));
+}
+
+#[test]
+fn enrich_result_preview_prefers_task_result_projection() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    let task_result = sample_task_result_view(
+        view.graph.workflow_id,
+        ProofOutcomeClassification::CollapsedToSequential,
+    );
+    let metadata = serde_json::json!({
+        "final_result": task_result["result"].clone(),
+    });
+
+    autonomy::enrich_result_preview(&mut view, &metadata, Some(&task_result));
+
+    let preview = view
+        .result_preview
+        .expect("task result should produce an operator preview");
+    assert_eq!(preview.payload_location, "task.result");
+    assert_eq!(
+        preview.proof_outcome,
+        ProofOutcomeClassification::CollapsedToSequential
+    );
+    assert_eq!(
+        preview.preview_text.as_deref(),
+        Some("bounded answer preview")
+    );
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("planner emitted one sequential step")));
+}
+
+#[test]
+fn render_status_surfaces_result_preview_block() {
+    let (mut view, _, _) = sample_view();
+    view.result_preview = Some(mister_smith_core::OperatorResultPreview {
+        workflow_id: view.graph.workflow_id,
+        proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+        preview_text: Some("bounded answer preview".to_string()),
+        payload_location: "task.result".to_string(),
+        provenance_lines: vec![
+            "graph formed and completed before final result publication".to_string(),
+            "canonical result stored in metadata.final_result".to_string(),
+        ],
+    });
+
+    let rendered = autonomy::render_status(&view);
+
+    assert!(rendered.contains("result preview:"));
+    assert!(rendered.contains("proof=graph_formed_and_completed"));
+    assert!(rendered.contains("location=task.result"));
+    assert!(rendered.contains("preview=bounded answer preview"));
+    assert!(rendered.contains("canonical result stored in metadata.final_result"));
 }
 
 #[test]
