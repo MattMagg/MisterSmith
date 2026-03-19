@@ -1,6 +1,6 @@
 # Frontier Direction
 
-Date: March 16, 2026
+Date: March 19, 2026
 Status: Active
 
 Use `docs/current-state.md` for the current whole-repo overview. This note is the forward-direction
@@ -8,25 +8,26 @@ artifact, not the general repo-state document.
 
 ## Objective
 
-Define the post-recovery mainline direction for Mister Smith, update the repo's durable planning
-surfaces to match what is now true on `main`, and identify the next frontier epics that should
-feed Symphony once they are explicitly staged.
+Refresh the frontier direction after the post-recovery backlog landed on `main`, update the repo's
+durable planning surfaces to match what is now true, and identify the next honest bounded slice
+instead of treating already-complete epics as future work.
 
-This note captures the next operating-system direction after the March 16 recovery: turn Mister
-Smith from a validated multi-agent substrate into a clearly differentiated orchestration operating
-system.
+This note now captures the direction after `MS-45`, `MS-46`, `MS-47`, `MS-75`, and `MS-76`
+landed: keep Mister Smith on the operating-system path, but only stage the remaining gaps that are
+still real on `main`.
 
 ## Scope
 
 - current mainline truth after the March 16 recovery reconciliation
 - the frontier mandate that should govern the next phase of development
-- one recommended primary epic plus additional validated backlog epics
-- future Symphony staging posture, including what can later be split across parallel agents
+- the completed frontier epics and the remaining open frontier gap
+- future Symphony staging posture for the next bounded slice only
 
 ## Assumptions
 
 - `main` is now the only durable development branch that matters
 - the recovered runtime-backed task path and bounded session path are both landed on `main`
+- the runtime wiring pass from `MS-76` is landed on `main`
 - Symphony's watched queue should remain empty until new work is explicitly staged
 - future work should be judged by operating-system leverage, not by framework feature parity
 
@@ -50,12 +51,14 @@ system.
 - the first real provider-backed proof was completed locally on `openai_chatgpt` with `gpt-5.4`
 - the first bounded same-agent session slice is live on `main` through the session HTTP and CLI
   surfaces
+- the default runtime path now uses supervised planner and executor lifecycles, a Tokio workflow
+  runner, and a ToolBus-backed execution boundary
+- `MS-45`, `MS-46`, and `MS-47` are complete in Smith and on `main`
+- `MS-48` is partially complete on `main` through `MS-73`, `MS-74`, and `MS-75`
 - the watched Symphony queue is currently empty, which is correct because no new runnable slice has
   been staged into `Todo`
-- Linear now tracks `MS-45` through `MS-48` as the next backlog epics after `MS-43` and `MS-44`
-  closed against the March 16 landed work
-- the repo and Linear still needed a narrative refresh because several canonical docs and backlog
-  artifacts still described Mister Smith as a framework or still described March 16 work as future
+- the remaining open frontier gap is the additive external-agent interoperability surface inside
+  `MS-48`
 
 ## Directional Mandate
 
@@ -74,100 +77,41 @@ That direction follows the accepted mandate in
 - routing must become budget-aware, capability-aware, and step-aware
 - operator visibility and revocable authority remain mandatory runtime properties
 
-## Recommended Main Epic
+## Completed Frontier Epics
 
-### Epic 1: Task-Shape-Aware Orchestration and Dynamic Team Sizing (`MS-45`)
+### `MS-45` Task-Shape-Aware Orchestration And Dynamic Team Sizing
 
-This should be the next primary epic.
+This epic is complete on `main`.
 
-Why this is first:
+Delivered outcome:
 
-- the research corpus says topology now matters more than model choice for system-level advantage
-- the repo already has the Phase 10 execution-graph and topology substrate, so this epic extends a
-  real control-plane seam instead of starting from zero
-- dynamic team sizing is the clearest way to make Mister Smith feel like an operating system rather
-  than a static agent runtime
+- topology and team size now adapt to task structure instead of staying fixed
+- operator-visible autonomy status explains the topology and sizing choice
+- the evaluation harness for representative parallel versus sequential workloads is landed
 
-Primary repo surfaces:
+### `MS-46` Session Restart-Resume And Distributed Operating State
 
-- `crates/mister-smith-agents/src/orchestrator.rs`
-- `crates/mister-smith-agents/src/execution_graph.rs`
-- `crates/mister-smith-agents/src/topology.rs`
-- `crates/mister-smith-agents/src/team.rs`
-- `crates/mister-smith-agents/src/scheduler.rs`
-- `crates/mister-smith-app/src/autonomy.rs`
-- `crates/mister-smith-events/src/autonomy.rs`
+This epic is complete on `main`.
 
-Acceptance shape:
+Delivered outcome:
 
-- planner output is classified by dependency shape before dispatch
-- the runtime selects a topology and team size that match the task instead of defaulting to static
-  role fan-out
-- operator-visible autonomy surfaces show why the topology and team size were chosen
-- validation demonstrates improvement on at least one task class where parallel structure matters
+- a restarted runtime can continue the same idle session
+- `session_id` and `coordinator_agent_id` remain stable across the resumed turn
+- resume provenance is operator-visible in status surfaces
 
-Parallelizable slices once this epic is staged:
+### `MS-47` Step-Level Intelligence And Model Routing Control Loop
 
-1. **Task-shape classification and topology signals**
-   - dependency-shape heuristics
-   - task structure scoring
-   - explicit topology rationale output
-2. **Dynamic team sizing and lifecycle integration**
-   - spawn fewer or more workers based on branch width and dependency depth
-   - keep supervision and scheduler behavior coherent under variable team size
-3. **Observability and evaluation harness**
-   - expose topology and team-size decisions in autonomy status
-   - add a repeatable benchmark harness for sequential versus parallel task classes
+This epic is complete on `main`.
 
-## Additional Validated Backlog Epics
+Delivered outcome:
 
-### Epic 2: Session Restart-Resume and Distributed Operating State (`MS-46`)
+- routing decisions can change at step boundaries based on live signals
+- operators can inspect why routing changed
+- the benchmark and validation evidence for routing control landed on `main`
 
-Why it matters:
+## Remaining Open Frontier Epic
 
-- the current session slice proves bounded same-agent turns, but the remaining frontier value is
-  restart-safe continuation and stronger distributed operating-state recovery
-- this is the most direct path from "session feature" to "operating-system state continuity"
-
-Primary surfaces:
-
-- `crates/mister-smith-app/src/conversation.rs`
-- `crates/mister-smith-app/src/execution.rs`
-- `crates/mister-smith-persistence/src/repository/session.rs`
-- `crates/mister-smith-persistence/src/postgres/queries.rs`
-- `crates/mister-smith-events/src/autonomy.rs`
-
-Acceptance shape:
-
-- stop and restart the runtime between accepted turns and continue the same idle session
-- recover session-linked workflow state without manual repair
-- expose restart and resume provenance through operator-visible status
-
-### Epic 3: Step-Level Intelligence and Model Routing Control Loop (`MS-47`)
-
-Why it matters:
-
-- the current runtime can run a real provider-backed workflow, but it still lacks the
-  step-granular control loop that would let the operating system adjust model choice, verification,
-  and cost posture mid-flight
-- this is how Mister Smith turns routing into a live operating-system primitive instead of a static
-  config choice
-
-Primary surfaces:
-
-- `crates/mister-smith-llm/src/router.rs`
-- `crates/mister-smith-llm/src/model_router.rs`
-- `crates/mister-smith-agents/src/orchestrator.rs`
-- `crates/mister-smith-agents/src/roles/planner.rs`
-- `crates/mister-smith-agents/src/roles/critic.rs`
-
-Acceptance shape:
-
-- per-step verification or confidence scoring can trigger escalation, fallback, or downgrade
-- routing decisions become visible in workflow state rather than being hidden inside provider calls
-- validation shows reduced cost or improved reliability on at least one representative task bundle
-
-### Epic 4: Capability Kernel and External Agent Interoperability (`MS-48`)
+### `MS-48` Capability Kernel And External Agent Interoperability
 
 Why it matters:
 
@@ -185,7 +129,20 @@ Primary surfaces:
 - `crates/mister-smith-agents/src/tool_bus.rs`
 - `crates/mister-smith-app/src/autonomy.rs`
 
-Acceptance shape:
+What is already landed on `main`:
+
+- capability descriptors and revocation checks for privileged delegation (`MS-73`)
+- external delegation envelopes that preserve provenance and policy (`MS-74`)
+- operator-visible allow/reject boundary decisions plus deterministic proof (`MS-75`)
+
+What is still missing:
+
+- a first-class external-agent interoperability surface on top of the zero-trust substrate
+- additive capability discovery for external agents without ambient trust
+- a bounded proof that this external surface preserves local policy, provenance, and operator
+  control end to end
+
+Acceptance shape for the remaining gap:
 
 - capability descriptions are discoverable and enforceable
 - external delegation surfaces preserve provenance and local policy
@@ -193,14 +150,12 @@ Acceptance shape:
 
 ## Recommended Staging Posture
 
-- keep `MS-45`, `MS-46`, `MS-47`, and `MS-48` in `MisterSmith Validated Backlog` with state
-  `Backlog`
-- do not move them into `Todo` during this refresh pass
-- when the next execution cycle starts, stage only one primary epic into the watched queue at a
-  time
-- if the primary epic is `Task-Shape-Aware Orchestration and Dynamic Team Sizing`, split it into
-  the three bounded slices listed above so Symphony can later run multiple agents in parallel
-  without creating overlapping write sets
+- treat `MS-45`, `MS-46`, and `MS-47` as complete backlog history, not as current frontier work
+- keep `MS-48` in `MisterSmith Validated Backlog` until the remaining external-agent surface is
+  split into one bounded runnable slice
+- do not move new work into `Todo` during this refresh pass
+- when the next execution cycle starts, stage only that bounded `MS-48` follow-up instead of
+  reopening already-complete frontier epics
 
 ## Decision Rule For Future Work
 
