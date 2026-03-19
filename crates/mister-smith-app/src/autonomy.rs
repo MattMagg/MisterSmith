@@ -9,7 +9,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
-use mister_smith_core::{AgentId, ExternalDelegationEnvelope, RevocationState, SessionId, TaskId};
+use mister_smith_core::{AgentId, SessionId, TaskId};
 use mister_smith_events::{
     AutonomyStatusView, EventBus, ExternalCapabilityDecisionOutcome,
     ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, StepRoutingDecisionSummary,
@@ -191,7 +191,6 @@ pub async fn status_from_bus_with_session_linkage(
     {
         enrich_session_linkage(&mut view, &record.metadata);
         enrich_step_routing_history(&mut view, &record.metadata);
-        enrich_external_capability_decisions(&mut view, &record.metadata);
     }
     Ok(view)
 }
@@ -520,23 +519,6 @@ pub(crate) fn enrich_step_routing_history(view: &mut AutonomyStatusView, metadat
     }
 }
 
-pub(crate) fn enrich_external_capability_decisions(
-    view: &mut AutonomyStatusView,
-    metadata: &Value,
-) {
-    if !view.external_capability_decisions.is_empty() {
-        return;
-    }
-    let Some(raw) = metadata.get("external_delegation").cloned() else {
-        return;
-    };
-    let Ok(envelope) = serde_json::from_value::<ExternalDelegationEnvelope>(raw) else {
-        return;
-    };
-    view.external_capability_decisions
-        .push(external_capability_decision_summary(view, &envelope));
-}
-
 pub(crate) fn resume_provenance_from_metadata(metadata: &Value) -> Option<ResumeProvenanceDetails> {
     let restart_recovery = metadata.get("restart_recovery").and_then(Value::as_object);
     let recovered_after_restart = restart_recovery.is_some();
@@ -623,158 +605,6 @@ fn render_resume_provenance(summary: &ResumeProvenanceSummary) -> String {
         "none".to_string()
     } else {
         parts.join(" ")
-    }
-}
-
-fn external_capability_decision_summary(
-    view: &AutonomyStatusView,
-    envelope: &ExternalDelegationEnvelope,
-) -> ExternalCapabilityDecisionSummary {
-    let capability = view
-        .delegation_capabilities
-        .iter()
-        .find(|summary| summary.capability_id == envelope.capability.capability_id);
-    let alert = view
-        .delegation_alerts
-        .iter()
-        .find(|candidate| candidate.capability_id == Some(envelope.capability.capability_id));
-    let effective_descriptor_id = capability
-        .and_then(|summary| summary.descriptor_id.clone())
-        .or_else(|| envelope.capability.descriptor_id.clone());
-    let effective_scope = capability
-        .map(|summary| summary.scope)
-        .unwrap_or(envelope.capability.scope);
-    let effective_revocation_state = capability
-        .map(|summary| summary.revocation_state)
-        .unwrap_or(envelope.capability.revocation_state);
-    let chain_depth = capability
-        .map(|summary| summary.chain_depth())
-        .unwrap_or_else(|| envelope.provenance.links.len());
-
-    let rejection_reason = capability
-        .and_then(|summary| summary.rejection_reason.clone())
-        .or_else(|| alert.and_then(|candidate| candidate.rejection_reason.clone()))
-        .or_else(|| {
-            envelope.action.as_ref().and_then(|action| {
-                if let Some(required_scope) = action.required_scope {
-                    if required_scope != effective_scope {
-                        return Some(format!(
-                            "capability scope {:?} does not satisfy required external scope {:?}",
-                            effective_scope, required_scope
-                        ));
-                    }
-                }
-                match effective_descriptor_id.as_deref() {
-                    Some(descriptor_id) if descriptor_id != action.descriptor_id => Some(format!(
-                        "delegation descriptor '{descriptor_id}' does not authorize action descriptor '{}'",
-                        action.descriptor_id
-                    )),
-                    _ => None,
-                }
-            })
-        })
-        .or_else(|| match effective_revocation_state {
-            RevocationState::Revoked => {
-                Some("capability was revoked before the external boundary call".to_string())
-            }
-            RevocationState::Expired => {
-                Some("capability expired before the external boundary call".to_string())
-            }
-            RevocationState::Active => None,
-        });
-
-    let outcome = if rejection_reason.is_some() {
-        ExternalCapabilityDecisionOutcome::Rejected
-    } else {
-        ExternalCapabilityDecisionOutcome::Allowed
-    };
-
-    let mut rationale = Vec::new();
-    if let Some(action) = envelope.action.as_ref() {
-        match effective_descriptor_id.as_deref() {
-            Some(descriptor_id) if descriptor_id == action.descriptor_id => rationale.push(
-                format!("descriptor '{descriptor_id}' matched the requested external action"),
-            ),
-            Some(descriptor_id) => rationale.push(format!(
-                "descriptor '{descriptor_id}' was compared against requested action descriptor '{}'",
-                action.descriptor_id
-            )),
-            None => rationale.push(format!(
-                "legacy scope-bound capability allowed action descriptor '{}'",
-                action.descriptor_id
-            )),
-        }
-
-        if let Some(required_scope) = action.required_scope {
-            if required_scope == effective_scope {
-                rationale.push(format!(
-                    "required scope {:?} matched capability scope {:?}",
-                    required_scope, effective_scope
-                ));
-            } else {
-                rationale.push(format!(
-                    "required scope {:?} did not match capability scope {:?}",
-                    required_scope, effective_scope
-                ));
-            }
-        } else {
-            rationale
-                .push("typed action did not request an additional delegated scope".to_string());
-        }
-    } else {
-        rationale.push(
-            "external delegation envelope carried capability provenance without a typed action"
-                .to_string(),
-        );
-    }
-
-    rationale.push(format!(
-        "capability state {:?} at chain depth {}",
-        effective_revocation_state, chain_depth
-    ));
-    if let Some(reason) = rejection_reason {
-        rationale.insert(0, reason);
-    }
-
-    ExternalCapabilityDecisionSummary {
-        branch_id: None,
-        capability_id: Some(envelope.capability.capability_id),
-        capability_descriptor_id: effective_descriptor_id,
-        action_descriptor_id: envelope
-            .action
-            .as_ref()
-            .map(|action| action.descriptor_id.clone()),
-        action_id: envelope
-            .action
-            .as_ref()
-            .map(|action| action.action_id.clone()),
-        action_title: envelope.action.as_ref().map(|action| action.title.clone()),
-        scope: Some(effective_scope),
-        required_scope: envelope
-            .action
-            .as_ref()
-            .and_then(|action| action.required_scope),
-        policy_action: envelope
-            .action
-            .as_ref()
-            .map(|action| action.policy.action.clone()),
-        policy_resource: envelope
-            .action
-            .as_ref()
-            .map(|action| action.policy.resource.clone()),
-        policy_scope: envelope
-            .action
-            .as_ref()
-            .map(|action| action.policy.scope.clone()),
-        policy_resource_id: envelope
-            .action
-            .as_ref()
-            .and_then(|action| action.policy.resource_id.clone()),
-        revocation_state: Some(effective_revocation_state),
-        chain_depth,
-        outcome,
-        observed_at: None,
-        rationale,
     }
 }
 
