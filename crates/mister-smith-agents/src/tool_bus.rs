@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use chrono::Utc;
 use dashmap::DashMap;
 use mister_smith_core::{
     AgentId, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy, DelegationScope,
@@ -499,8 +500,9 @@ impl ToolBus {
                     None,
                 );
                 if let Some(summary) = principal.and_then(|principal| {
-                    execute_action.as_ref().and_then(|action| {
+                    execute_action.as_ref().map(|action| {
                         external_capability_decision_from_claims(
+                            principal.branch_id,
                             &principal.claims,
                             action,
                             ExternalCapabilityDecisionOutcome::Rejected,
@@ -538,27 +540,27 @@ impl ToolBus {
                     self.publish_delegation_update(principal, summary).await;
                 }
                 if let Some(summary) = principal.and_then(|principal| {
-                    execute_action.as_ref().and_then(|action| {
+                    execute_action.as_ref().map(|action| {
                         external_capability_decision_from_claims(
+                            principal.branch_id,
                             &principal.claims,
                             action,
                             ExternalCapabilityDecisionOutcome::Rejected,
                             authorization_decision.as_ref(),
                             &error.to_string(),
-                            Some(match &error {
+                            match &error {
                                 mister_smith_core::DelegationError::Revoked { .. } => {
-                                    RevocationState::Revoked
+                                    Some(RevocationState::Revoked)
                                 }
                                 mister_smith_core::DelegationError::Expired { .. } => {
-                                    RevocationState::Expired
+                                    Some(RevocationState::Expired)
                                 }
                                 _ => principal
                                     .claims
                                     .delegation_capability
                                     .as_ref()
-                                    .map(|capability| capability.revocation_state)
-                                    .unwrap_or(RevocationState::Active),
-                            }),
+                                    .map(|capability| capability.revocation_state),
+                            },
                         )
                     })
                 }) {
@@ -578,6 +580,7 @@ impl ToolBus {
         if let Some(summary) = delegation_validation.as_ref().and_then(|validated| {
             execute_action.as_ref().map(|action| {
                 external_capability_decision_from_validated(
+                    principal.and_then(|principal| principal.branch_id),
                     validated,
                     action,
                     authorization_decision.as_ref(),
@@ -1034,6 +1037,7 @@ fn capability_summary(
 }
 
 fn external_capability_decision_from_validated(
+    branch_id: Option<ExecutionBranchId>,
     validated: &ValidatedDelegation,
     action: &DelegatedAction,
     policy_decision: Option<&PolicyDecision>,
@@ -1061,20 +1065,22 @@ fn external_capability_decision_from_validated(
     ));
 
     ExternalCapabilityDecisionSummary {
-        capability_id: capability.capability_id,
+        branch_id,
+        capability_id: Some(capability.capability_id),
         capability_descriptor_id: capability.descriptor_id.clone(),
         action_descriptor_id: Some(action.descriptor_id.clone()),
         action_id: Some(action.action_id.clone()),
         action_title: Some(action.title.clone()),
-        scope: capability.scope,
+        scope: Some(capability.scope),
         required_scope: action.required_scope,
         policy_action: Some(action.policy.action.clone()),
         policy_resource: Some(action.policy.resource.clone()),
         policy_scope: Some(action.policy.scope.clone()),
         policy_resource_id: action.policy.resource_id.clone(),
-        revocation_state: capability.revocation_state,
+        revocation_state: Some(capability.revocation_state),
         chain_depth: validated.provenance.links.len(),
         outcome: ExternalCapabilityDecisionOutcome::Allowed,
+        observed_at: Some(Utc::now()),
         rationale,
     }
 }
@@ -1110,26 +1116,34 @@ fn capability_summary_from_claims_error(
 }
 
 fn external_capability_decision_from_claims(
+    branch_id: Option<ExecutionBranchId>,
     claims: &AgentClaims,
     action: &DelegatedAction,
     outcome: ExternalCapabilityDecisionOutcome,
     policy_decision: Option<&PolicyDecision>,
     reason: &str,
     revocation_state_override: Option<RevocationState>,
-) -> Option<ExternalCapabilityDecisionSummary> {
-    let capability = claims.delegation_capability.clone()?;
+) -> ExternalCapabilityDecisionSummary {
+    let capability = claims.delegation_capability.as_ref();
     let chain_depth = claims
         .provenance_chain
         .as_ref()
         .map(|provenance| provenance.links.len())
         .unwrap_or_default();
-    let revocation_state = revocation_state_override.unwrap_or(capability.revocation_state);
+    let revocation_state =
+        revocation_state_override.or(capability.map(|capability| capability.revocation_state));
 
     let mut rationale = vec![reason.to_string()];
-    if let Some(descriptor_id) = capability.descriptor_id.as_deref() {
+    if let Some(descriptor_id) =
+        capability.and_then(|capability| capability.descriptor_id.as_deref())
+    {
         rationale.push(format!(
             "capability descriptor at the boundary was '{descriptor_id}'"
         ));
+    } else {
+        rationale.push(
+            "no bounded delegation capability was present at the external boundary".to_string(),
+        );
     }
     rationale.push(format!(
         "external action requested descriptor '{}'",
@@ -1138,20 +1152,23 @@ fn external_capability_decision_from_claims(
     if let Some(required_scope) = action.required_scope {
         rationale.push(format!(
             "external action required scope {:?} while the capability carried {:?}",
-            required_scope, capability.scope
+            required_scope,
+            capability.map(|capability| capability.scope)
         ));
     }
     if let Some(decision) = policy_decision {
         rationale.push(format!("policy engine reason: {}", decision.reason));
     }
 
-    Some(ExternalCapabilityDecisionSummary {
-        capability_id: capability.capability_id,
-        capability_descriptor_id: capability.descriptor_id.clone(),
+    ExternalCapabilityDecisionSummary {
+        branch_id,
+        capability_id: capability.map(|capability| capability.capability_id),
+        capability_descriptor_id: capability
+            .and_then(|capability| capability.descriptor_id.clone()),
         action_descriptor_id: Some(action.descriptor_id.clone()),
         action_id: Some(action.action_id.clone()),
         action_title: Some(action.title.clone()),
-        scope: capability.scope,
+        scope: capability.map(|capability| capability.scope),
         required_scope: action.required_scope,
         policy_action: Some(action.policy.action.clone()),
         policy_resource: Some(action.policy.resource.clone()),
@@ -1160,8 +1177,9 @@ fn external_capability_decision_from_claims(
         revocation_state,
         chain_depth,
         outcome,
+        observed_at: Some(Utc::now()),
         rationale,
-    })
+    }
 }
 
 fn delegation_audit_context(summary: &CapabilitySummary) -> DelegationAuditContext {

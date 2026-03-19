@@ -80,6 +80,9 @@ Representative proof outcomes:
 - rejected case:
   - metadata recovery derives `outcome = Rejected`
   - rationale includes the descriptor mismatch rejection string used at the boundary
+- rejected-without-capability case:
+  - privileged-tool rejection still emits an operator-visible `Rejected` boundary decision
+  - rationale records that no bounded delegation capability was present at the external boundary
 - rendered operator view:
   - status output includes `external capability decisions:`
   - rendered line includes outcome, descriptor/action identifiers, policy binding, and rationale

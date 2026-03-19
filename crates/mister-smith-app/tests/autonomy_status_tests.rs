@@ -196,20 +196,22 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             message: "operator review required".to_string(),
         }],
         external_capability_decisions: vec![ExternalCapabilityDecisionSummary {
-            capability_id,
+            branch_id: Some(branch_id),
+            capability_id: Some(capability_id),
             capability_descriptor_id: Some("tool:agent.echo".to_string()),
             action_descriptor_id: Some("tool:agent.echo".to_string()),
             action_id: Some("tool:agent.echo#execute".to_string()),
             action_title: Some("execute agent.echo".to_string()),
-            scope: mister_smith_core::DelegationScope::InvokeTool,
+            scope: Some(mister_smith_core::DelegationScope::InvokeTool),
             required_scope: Some(mister_smith_core::DelegationScope::InvokeTool),
             policy_action: Some("execute".to_string()),
             policy_resource: Some("echo".to_string()),
             policy_scope: Some("agent".to_string()),
             policy_resource_id: Some("agent.echo".to_string()),
-            revocation_state: RevocationState::Active,
+            revocation_state: Some(RevocationState::Active),
             chain_depth: 1,
             outcome: ExternalCapabilityDecisionOutcome::Allowed,
+            observed_at: None,
             rationale: vec![
                 "descriptor 'tool:agent.echo' matched the requested external action".to_string(),
                 "required scope InvokeTool matched capability scope InvokeTool".to_string(),
@@ -295,6 +297,7 @@ fn render_status_surfaces_operator_rationale_and_history() {
     assert!(rendered.contains("delegation revoked before tool execution"));
     assert!(rendered.contains("external capability decisions:"));
     assert!(rendered.contains("outcome=allowed"));
+    assert!(rendered.contains(&format!("branch={branch_id}")));
     assert!(rendered.contains("tool:agent.echo#execute"));
     assert!(rendered.contains("required scope InvokeTool matched capability scope InvokeTool"));
     assert!(rendered.contains("control-plane state unavailable"));

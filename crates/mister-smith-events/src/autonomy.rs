@@ -240,7 +240,7 @@ pub struct DelegationAlert {
 }
 
 /// Operator-facing outcome for an external capability boundary decision.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ExternalCapabilityDecisionOutcome {
     /// The external capability call remained authorized at the boundary.
     Allowed,
@@ -251,8 +251,12 @@ pub enum ExternalCapabilityDecisionOutcome {
 /// Operator-visible explanation of one external capability boundary decision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalCapabilityDecisionSummary {
-    /// Capability used for the external boundary call.
-    pub capability_id: CapabilityId,
+    /// Branch that exercised the external capability boundary, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_id: Option<ExecutionBranchId>,
+    /// Capability used for the external boundary call, when one was present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_id: Option<CapabilityId>,
     /// Descriptor bound to the capability, when any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capability_descriptor_id: Option<String>,
@@ -265,8 +269,9 @@ pub struct ExternalCapabilityDecisionSummary {
     /// Human-readable delegated action title, when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action_title: Option<String>,
-    /// Scope carried by the capability at the boundary.
-    pub scope: DelegationScope,
+    /// Scope carried by the capability at the boundary, when one was present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<DelegationScope>,
     /// Required scope requested by the external action, when any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_scope: Option<DelegationScope>,
@@ -282,12 +287,16 @@ pub struct ExternalCapabilityDecisionSummary {
     /// Optional concrete policy resource identifier at the boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_resource_id: Option<String>,
-    /// Effective revocation state observed for the capability.
-    pub revocation_state: RevocationState,
+    /// Effective revocation state observed for the capability, when one was present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revocation_state: Option<RevocationState>,
     /// Depth of the authority chain used for the boundary call.
     pub chain_depth: usize,
     /// Final operator-facing decision outcome.
     pub outcome: ExternalCapabilityDecisionOutcome,
+    /// Time when the boundary decision was observed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_at: Option<DateTime<Utc>>,
     /// Operator-visible explanation of why the decision was allowed or rejected.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rationale: Vec<String>,

@@ -693,9 +693,7 @@ fn external_capability_decision_summary(
     if let Some(action) = envelope.action.as_ref() {
         match effective_descriptor_id.as_deref() {
             Some(descriptor_id) if descriptor_id == action.descriptor_id => rationale.push(
-                format!(
-                    "descriptor '{descriptor_id}' matched the requested external action"
-                ),
+                format!("descriptor '{descriptor_id}' matched the requested external action"),
             ),
             Some(descriptor_id) => rationale.push(format!(
                 "descriptor '{descriptor_id}' was compared against requested action descriptor '{}'",
@@ -739,7 +737,8 @@ fn external_capability_decision_summary(
     }
 
     ExternalCapabilityDecisionSummary {
-        capability_id: envelope.capability.capability_id,
+        branch_id: None,
+        capability_id: Some(envelope.capability.capability_id),
         capability_descriptor_id: effective_descriptor_id,
         action_descriptor_id: envelope
             .action
@@ -750,7 +749,7 @@ fn external_capability_decision_summary(
             .as_ref()
             .map(|action| action.action_id.clone()),
         action_title: envelope.action.as_ref().map(|action| action.title.clone()),
-        scope: effective_scope,
+        scope: Some(effective_scope),
         required_scope: envelope
             .action
             .as_ref()
@@ -771,9 +770,10 @@ fn external_capability_decision_summary(
             .action
             .as_ref()
             .and_then(|action| action.policy.resource_id.clone()),
-        revocation_state: effective_revocation_state,
+        revocation_state: Some(effective_revocation_state),
         chain_depth,
         outcome,
+        observed_at: None,
         rationale,
     }
 }
@@ -783,6 +783,14 @@ fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSumma
         ExternalCapabilityDecisionOutcome::Allowed => "allowed",
         ExternalCapabilityDecisionOutcome::Rejected => "rejected",
     };
+    let branch_id = summary
+        .branch_id
+        .map(|branch_id| branch_id.to_string())
+        .unwrap_or_else(|| "none".to_string());
+    let capability_id = summary
+        .capability_id
+        .map(|capability_id| capability_id.to_string())
+        .unwrap_or_else(|| "none".to_string());
     let capability_descriptor = summary
         .capability_descriptor_id
         .as_deref()
@@ -794,6 +802,14 @@ fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSumma
         .required_scope
         .map(|scope| format!("{scope:?}"))
         .unwrap_or_else(|| "none".to_string());
+    let scope = summary
+        .scope
+        .map(|scope| format!("{scope:?}"))
+        .unwrap_or_else(|| "none".to_string());
+    let revocation_state = summary
+        .revocation_state
+        .map(|state| format!("{state:?}"))
+        .unwrap_or_else(|| "none".to_string());
     let policy = match (
         summary.policy_action.as_deref(),
         summary.policy_scope.as_deref(),
@@ -803,6 +819,10 @@ fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSumma
         _ => "none".to_string(),
     };
     let resource_id = summary.policy_resource_id.as_deref().unwrap_or("none");
+    let observed_at = summary
+        .observed_at
+        .map(|timestamp| timestamp.to_rfc3339())
+        .unwrap_or_else(|| "none".to_string());
     let rationale = if summary.rationale.is_empty() {
         "none".to_string()
     } else {
@@ -810,16 +830,18 @@ fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSumma
     };
 
     format!(
-        "{} outcome={} capability_descriptor={} action_descriptor={} action_id={} title={} scope={:?} required_scope={} state={:?} depth={} policy={} resource_id={} rationale={}",
-        summary.capability_id,
+        "{} branch={} observed_at={} outcome={} capability_descriptor={} action_descriptor={} action_id={} title={} scope={} required_scope={} state={} depth={} policy={} resource_id={} rationale={}",
+        capability_id,
+        branch_id,
+        observed_at,
         outcome,
         capability_descriptor,
         action_descriptor,
         action_id,
         action_title,
-        summary.scope,
+        scope,
         required_scope,
-        summary.revocation_state,
+        revocation_state,
         summary.chain_depth,
         policy,
         resource_id,

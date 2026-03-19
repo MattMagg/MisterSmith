@@ -30,8 +30,7 @@ use crate::topology::{TopologyCompiler, TopologySignals};
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, Event, EventBus, ExecutionGraphSummary,
-    ExternalCapabilityDecisionSummary, RoutingDecisionSummary, StepRoutingDecisionSummary,
-    TopologyPlanSummary,
+    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 
 #[cfg(feature = "llm")]
@@ -715,33 +714,32 @@ impl Orchestrator {
                 AutonomyEvent::DelegationDecisionRecorded(envelope) => Some(envelope.payload),
                 _ => None,
             })
-            .fold(
-                HashMap::<
-                    (
-                        mister_smith_core::CapabilityId,
-                        Option<String>,
-                        Option<String>,
-                    ),
-                    ExternalCapabilityDecisionSummary,
-                >::new(),
-                |mut decisions, summary| {
-                    decisions.insert(
-                        (
-                            summary.capability_id,
-                            summary.action_id.clone(),
-                            summary.action_descriptor_id.clone(),
-                        ),
-                        summary,
-                    );
-                    decisions
-                },
-            )
-            .into_values()
             .collect::<Vec<_>>();
         external_capability_decisions.sort_by(|left, right| {
-            left.capability_id
-                .to_string()
-                .cmp(&right.capability_id.to_string())
+            left.observed_at
+                .cmp(&right.observed_at)
+                .then_with(|| {
+                    left.branch_id
+                        .map(|branch_id| branch_id.to_string())
+                        .unwrap_or_else(|| "none".to_string())
+                        .cmp(
+                            &right
+                                .branch_id
+                                .map(|branch_id| branch_id.to_string())
+                                .unwrap_or_else(|| "none".to_string()),
+                        )
+                })
+                .then_with(|| {
+                    left.capability_id
+                        .map(|capability_id| capability_id.to_string())
+                        .unwrap_or_else(|| "none".to_string())
+                        .cmp(
+                            &right
+                                .capability_id
+                                .map(|capability_id| capability_id.to_string())
+                                .unwrap_or_else(|| "none".to_string()),
+                        )
+                })
                 .then_with(|| left.action_id.cmp(&right.action_id))
                 .then_with(|| left.action_descriptor_id.cmp(&right.action_descriptor_id))
         });

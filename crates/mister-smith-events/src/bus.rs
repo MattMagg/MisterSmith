@@ -167,7 +167,9 @@ impl AutonomyStatusAccumulator {
 
         let mut external_capability_decisions = self.external_capability_decisions.clone();
         external_capability_decisions.sort_by(|left, right| {
-            external_capability_decision_key(left).cmp(&external_capability_decision_key(right))
+            left.observed_at.cmp(&right.observed_at).then_with(|| {
+                external_capability_decision_key(left).cmp(&external_capability_decision_key(right))
+            })
         });
 
         let mut profiles = self.profiles.values().cloned().collect::<Vec<_>>();
@@ -275,14 +277,7 @@ impl AutonomyStatusAccumulator {
     }
 
     fn update_external_capability_decision(&mut self, decision: ExternalCapabilityDecisionSummary) {
-        let key = external_capability_decision_key(&decision);
-        if let Some(existing) = self
-            .external_capability_decisions
-            .iter_mut()
-            .find(|existing| external_capability_decision_key(existing) == key)
-        {
-            *existing = decision;
-        } else {
+        if !self.external_capability_decisions.contains(&decision) {
             self.external_capability_decisions.push(decision);
         }
     }
@@ -404,10 +399,21 @@ fn delegation_capability_key(capability: &CapabilitySummary) -> String {
 
 fn external_capability_decision_key(decision: &ExternalCapabilityDecisionSummary) -> String {
     format!(
-        "{}:{}:{}",
-        decision.capability_id,
+        "{}:{}:{}:{}:{}",
+        decision
+            .branch_id
+            .map(|branch_id| branch_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        decision
+            .capability_id
+            .map(|capability_id| capability_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
         decision.action_id.as_deref().unwrap_or("none"),
-        decision.action_descriptor_id.as_deref().unwrap_or("none")
+        decision.action_descriptor_id.as_deref().unwrap_or("none"),
+        match decision.outcome {
+            crate::autonomy::ExternalCapabilityDecisionOutcome::Allowed => "allowed",
+            crate::autonomy::ExternalCapabilityDecisionOutcome::Rejected => "rejected",
+        }
     )
 }
 

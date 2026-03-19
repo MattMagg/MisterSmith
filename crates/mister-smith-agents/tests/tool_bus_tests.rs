@@ -611,6 +611,7 @@ async fn invoke_publishes_allowed_external_capability_decision_for_privileged_to
     .with_event_bus(event_bus);
     let agent_id = AgentId::new();
     let workflow_id = mister_smith_core::TaskId::new();
+    let branch_id = mister_smith_core::ExecutionBranchId::new();
     let (capability, provenance) = delegation_service
         .issue_capability(
             AuthorityPrincipal::Policy("operator".to_string()),
@@ -635,6 +636,7 @@ async fn invoke_publishes_allowed_external_capability_decision_for_privileged_to
         ),
     )
     .with_workflow(workflow_id)
+    .with_branch(branch_id)
     .requiring_delegation(DelegationScope::InvokeTool);
 
     bus.register_privileged_native_tool(
@@ -663,6 +665,8 @@ async fn invoke_publishes_allowed_external_capability_decision_for_privileged_to
 
     let decision = recv_external_capability_decision(&mut rx).await;
     assert_eq!(decision.outcome, ExternalCapabilityDecisionOutcome::Allowed);
+    assert_eq!(decision.branch_id, Some(branch_id));
+    assert!(decision.observed_at.is_some());
     assert_eq!(
         decision.capability_descriptor_id.as_deref(),
         Some("tool:data.echo")
@@ -698,6 +702,7 @@ async fn invoke_rejects_descriptor_mismatch_for_privileged_tools() {
     .with_event_bus(event_bus);
     let agent_id = AgentId::new();
     let workflow_id = mister_smith_core::TaskId::new();
+    let branch_id = mister_smith_core::ExecutionBranchId::new();
     let (capability, provenance) = delegation_service
         .issue_capability(
             AuthorityPrincipal::Policy("operator".to_string()),
@@ -722,6 +727,7 @@ async fn invoke_rejects_descriptor_mismatch_for_privileged_tools() {
         ),
     )
     .with_workflow(workflow_id)
+    .with_branch(branch_id)
     .requiring_delegation(DelegationScope::InvokeTool);
 
     bus.register_privileged_native_tool(
@@ -763,6 +769,8 @@ async fn invoke_rejects_descriptor_mismatch_for_privileged_tools() {
         decision.outcome,
         ExternalCapabilityDecisionOutcome::Rejected
     );
+    assert_eq!(decision.branch_id, Some(branch_id));
+    assert!(decision.observed_at.is_some());
     assert_eq!(
         decision.action_descriptor_id.as_deref(),
         Some("tool:data.echo")
@@ -771,4 +779,69 @@ async fn invoke_rejects_descriptor_mismatch_for_privileged_tools() {
         .rationale
         .iter()
         .any(|line| line.contains("does not authorize action descriptor")));
+}
+
+#[tokio::test]
+async fn invoke_records_rejected_external_decision_when_capability_is_missing() {
+    let event_bus = Arc::new(EventBus::default());
+    let mut rx = event_bus.subscribe_broadcast();
+    let delegation_service = Arc::new(DelegationService::new());
+    let bus = ToolBus::with_security(
+        Some(Arc::new(PolicyEngine::new(&RbacConfig::default()))),
+        None,
+    )
+    .with_delegation_service(delegation_service)
+    .with_event_bus(event_bus);
+    let agent_id = AgentId::new();
+    let workflow_id = mister_smith_core::TaskId::new();
+    let branch_id = mister_smith_core::ExecutionBranchId::new();
+    let principal = mister_smith_agents::tool_bus::ToolPrincipal::new(
+        agent_id,
+        claims(agent_id, &["execute:tool:data"]),
+    )
+    .with_workflow(workflow_id)
+    .with_branch(branch_id)
+    .requiring_delegation(DelegationScope::InvokeTool);
+
+    bus.register_privileged_native_tool(
+        "echo",
+        "data",
+        agent_id,
+        "Echoes the payload",
+        json!({ "type": "object" }),
+        json!({ "type": "object" }),
+        DelegationScope::InvokeTool,
+        Arc::new(EchoTool { id: ToolId::new() }),
+    );
+
+    let err = bus
+        .invoke(
+            Some(&principal),
+            "data",
+            "echo",
+            json!({ "value": "blocked" }),
+            Some(Duration::from_millis(50)),
+        )
+        .await
+        .expect_err("missing delegation capability should be rejected");
+
+    assert!(matches!(err, AgentSystemError::PermissionDenied(_)));
+
+    let decision = recv_external_capability_decision(&mut rx).await;
+    assert_eq!(
+        decision.outcome,
+        ExternalCapabilityDecisionOutcome::Rejected
+    );
+    assert_eq!(decision.branch_id, Some(branch_id));
+    assert!(decision.observed_at.is_some());
+    assert_eq!(decision.capability_id, None);
+    assert_eq!(decision.scope, None);
+    assert_eq!(decision.revocation_state, None);
+    assert_eq!(
+        decision.action_descriptor_id.as_deref(),
+        Some("tool:data.echo")
+    );
+    assert!(decision.rationale.iter().any(|line| {
+        line.contains("no bounded delegation capability was present at the external boundary")
+    }));
 }
