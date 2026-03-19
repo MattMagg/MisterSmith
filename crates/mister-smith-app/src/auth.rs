@@ -92,10 +92,11 @@ fn open_browser(url: &str) -> Result<(), LlmError> {
 mod tests {
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::OnceLock;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
+    use tokio::sync::Mutex;
 
     fn env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -237,7 +238,7 @@ for raw in sys.stdin:
 
     #[tokio::test]
     async fn login_flow_opens_browser_and_returns_status() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         let script_path = write_fake_codex_script(true, true, LoginNotificationMode::Completed);
         std::env::set_var("MISTER_SMITH_CODEX_BIN", &script_path);
 
@@ -260,7 +261,7 @@ for raw in sys.stdin:
 
     #[tokio::test]
     async fn status_reports_missing_login() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         let script_path = write_fake_codex_script(false, true, LoginNotificationMode::Completed);
         std::env::set_var("MISTER_SMITH_CODEX_BIN", &script_path);
 
@@ -278,7 +279,7 @@ for raw in sys.stdin:
 
     #[tokio::test]
     async fn login_flow_accepts_account_updated_notification() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         let script_path = write_fake_codex_script(true, true, LoginNotificationMode::UpdatedOnly);
         std::env::set_var("MISTER_SMITH_CODEX_BIN", &script_path);
 
@@ -294,7 +295,7 @@ for raw in sys.stdin:
 
     #[tokio::test]
     async fn status_reports_authenticated_chatgpt_when_openai_auth_is_required() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         let script_path = write_fake_codex_script(true, true, LoginNotificationMode::Completed);
         std::env::set_var("MISTER_SMITH_CODEX_BIN", &script_path);
 
@@ -347,7 +348,7 @@ for raw in sys.stdin:
 
     #[tokio::test]
     async fn login_flow_ignores_mismatched_login_completion_notifications() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         let script_path =
             write_fake_codex_script(true, true, LoginNotificationMode::MismatchedThenCompleted);
         std::env::set_var("MISTER_SMITH_CODEX_BIN", &script_path);
@@ -364,7 +365,7 @@ for raw in sys.stdin:
 
     #[tokio::test]
     async fn login_flow_continues_when_browser_open_fails() {
-        let _guard = env_lock().lock().unwrap();
+        let _guard = env_lock().lock().await;
         let script_path = write_fake_codex_script(true, true, LoginNotificationMode::Completed);
         std::env::set_var("MISTER_SMITH_CODEX_BIN", &script_path);
 

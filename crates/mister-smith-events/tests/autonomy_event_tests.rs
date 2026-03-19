@@ -2,9 +2,10 @@ use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
-    GuardEvidence, HealthState, InterventionRecordId, InterventionType, ProfileSnapshot,
-    ProfileSnapshotId, ProfileTarget, ProvenanceChain, ProvenanceLink, RevocationState, TaskId,
-    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
+    GuardEvidence, HealthState, InterventionRecordId, InterventionType, OperatorResultPreview,
+    ProfileSnapshot, ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification, ProvenanceChain,
+    ProvenanceLink, ResultProvenanceSummary, RevocationState, TaskId, TaskShapeClassification,
+    TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
@@ -127,8 +128,26 @@ fn sample_external_capability_decision(
     }
 }
 
+fn sample_result_preview(
+    workflow_id: TaskId,
+    proof_outcome: ProofOutcomeClassification,
+) -> OperatorResultPreview {
+    OperatorResultPreview {
+        workflow_id,
+        proof_outcome,
+        preview_text: Some("bounded answer preview".to_string()),
+        payload_location: "task.result".to_string(),
+        provenance_lines: vec![
+            "canonical result stored in metadata.final_result".to_string(),
+            "aggregated payload nested under metadata.aggregated_result".to_string(),
+            "session assistant_result derives from the canonical result object".to_string(),
+        ],
+    }
+}
+
 #[test]
 fn autonomy_event_surfaces_compile_with_shared_trait_bounds() {
+    assert_event_traits::<OperatorResultPreview>();
     assert_event_traits::<ExecutionGraphSummary>();
     assert_event_traits::<TopologyPlanSummary>();
     assert_event_traits::<BranchSummary>();
@@ -291,6 +310,10 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             triggered_checkpoints: vec![],
             change_rationale: vec!["action changed from fallback to continue".to_string()],
         }],
+        result_preview: Some(sample_result_preview(
+            workflow_id,
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        )),
         interventions: vec![mister_smith_core::InterventionRecord {
             record_id: InterventionRecordId::new(),
             decision_id: GuardDecisionId::new(),
@@ -437,6 +460,10 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
             rationale: vec!["sequential routing avoided restart blast radius".to_string()],
         }],
         step_routing_history: vec![],
+        result_preview: Some(sample_result_preview(
+            workflow_id,
+            ProofOutcomeClassification::CollapsedToSequential,
+        )),
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
@@ -835,6 +862,10 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         memory_pressure: vec![],
         routing_history: vec![],
         step_routing_history: vec![],
+        result_preview: Some(sample_result_preview(
+            workflow_id,
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        )),
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
@@ -892,6 +923,15 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
             .unwrap();
     }
 
+    let view = event_bus.autonomy_status(&workflow_id).await.unwrap();
+    assert_eq!(
+        view.result_preview,
+        Some(sample_result_preview(
+            workflow_id,
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        ))
+    );
+
     let view = event_bus
         .autonomy_status(&workflow_id)
         .await
@@ -917,6 +957,34 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         .iter()
         .any(|decision| decision.branch_id == Some(branch_a)
             && decision.outcome == ExternalCapabilityDecisionOutcome::Rejected));
+}
+
+#[test]
+fn operator_result_preview_roundtrips_with_shared_contract_fields() {
+    let workflow_id = TaskId::new();
+    let preview = sample_result_preview(
+        workflow_id,
+        ProofOutcomeClassification::GraphFormedAndCompleted,
+    );
+    let provenance = ResultProvenanceSummary {
+        runtime_execution_mode: serde_json::json!({"execution_boundary": "tool_bus"}),
+        graph_state: Some("completed".to_string()),
+        graph_id: Some(ExecutionGraphId::new().to_string()),
+        source_fields: vec![
+            "metadata.final_result".to_string(),
+            "metadata.aggregated_result".to_string(),
+        ],
+    };
+
+    let preview_json = serde_json::to_string(&preview).unwrap();
+    let preview_roundtrip: OperatorResultPreview = serde_json::from_str(&preview_json).unwrap();
+
+    let provenance_json = serde_json::to_string(&provenance).unwrap();
+    let provenance_roundtrip: ResultProvenanceSummary =
+        serde_json::from_str(&provenance_json).unwrap();
+
+    assert_eq!(preview_roundtrip, preview);
+    assert_eq!(provenance_roundtrip, provenance);
 }
 
 #[tokio::test]
@@ -971,6 +1039,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         memory_pressure: vec![],
         routing_history: vec![],
         step_routing_history: vec![],
+        result_preview: None,
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![DelegationAlert {

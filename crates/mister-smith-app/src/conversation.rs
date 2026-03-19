@@ -493,7 +493,15 @@ fn retained_context_after_turn(
         return updated;
     }
 
-    let assistant_result = result_summary.unwrap_or_else(|| json!({ "status": turn.status }));
+    let assistant_result = result_summary
+        .as_ref()
+        .and_then(|value| {
+            u32::try_from(turn.turn_index).ok().and_then(|turn_index| {
+                crate::autonomy::retained_assistant_result(value, turn_index, &turn.status)
+            })
+        })
+        .or(result_summary)
+        .unwrap_or_else(|| json!({ "status": turn.status }));
     let summary_entry = json!({
         "turn_index": turn.turn_index,
         "workflow_id": workflow_id,
@@ -856,6 +864,118 @@ mod tests {
 
         assert_eq!(transcript.len(), 1);
         assert_eq!(second["latest_workflow_id"], workflow_id.to_string());
+    }
+
+    #[test]
+    fn retained_context_after_turn_projects_canonical_task_result_into_assistant_result() {
+        let workflow_id = TaskId::new();
+        let turn = SessionTurnRecord {
+            turn_id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
+            turn_index: 2,
+            workflow_id: *workflow_id.as_ref(),
+            user_message: "Summarize the runtime proof".to_string(),
+            result_summary: None,
+            status: "completed".to_string(),
+            created_at: Utc::now(),
+            completed_at: Some(Utc::now()),
+        };
+
+        let retained = retained_context_after_turn(
+            &empty_retained_context(),
+            &turn,
+            workflow_id,
+            Some(json!({
+                "workflow_id": workflow_id,
+                "status": "completed",
+                "proof_outcome": "graph_formed_and_completed",
+                "result": {
+                    "workflow_id": workflow_id,
+                    "provider_kind": "openai_chatgpt",
+                    "model_id": "gpt-5.4",
+                    "description": "freeze the result contract",
+                    "runtime_execution_mode": {
+                        "execution_boundary": "tool_bus"
+                    },
+                    "planner_output": {
+                        "steps": 2
+                    },
+                    "execution_plan": {
+                        "steps": [{"id": "step-1"}, {"id": "step-2"}]
+                    },
+                    "step_results": [],
+                    "aggregated_result": {
+                        "summary": "bounded answer preview"
+                    },
+                    "proof_outcome": "graph_formed_and_completed"
+                }
+            })),
+        );
+
+        let assistant_result = retained["transcript_summary"][0]["assistant_result"].clone();
+        assert_eq!(assistant_result["preview"], json!("bounded answer preview"));
+        assert_eq!(
+            assistant_result["proof_outcome"],
+            json!("graph_formed_and_completed")
+        );
+        assert_eq!(
+            assistant_result["aggregated_result"]["summary"],
+            json!("bounded answer preview")
+        );
+        assert!(assistant_result.get("result").is_none());
+    }
+
+    #[test]
+    fn retained_context_after_turn_preserves_restart_recovery_flag_in_projection() {
+        let workflow_id = TaskId::new();
+        let turn = SessionTurnRecord {
+            turn_id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
+            turn_index: 1,
+            workflow_id: *workflow_id.as_ref(),
+            user_message: "Resume the interrupted workflow".to_string(),
+            result_summary: None,
+            status: "failed".to_string(),
+            created_at: Utc::now(),
+            completed_at: Some(Utc::now()),
+        };
+
+        let retained = retained_context_after_turn(
+            &empty_retained_context(),
+            &turn,
+            workflow_id,
+            Some(json!({
+                "workflow_id": workflow_id,
+                "status": "failed",
+                "proof_outcome": "failed_before_graph",
+                "result": {
+                    "workflow_id": workflow_id,
+                    "provider_kind": "openai_chatgpt",
+                    "model_id": "gpt-5.4",
+                    "description": "resume the interrupted workflow",
+                    "runtime_execution_mode": {
+                        "execution_boundary": "tool_bus"
+                    },
+                    "planner_output": null,
+                    "execution_plan": null,
+                    "step_results": [],
+                    "aggregated_result": {
+                        "error": "workflow interrupted by runtime restart before session sync",
+                        "recovered_after_restart": true
+                    },
+                    "proof_outcome": "failed_before_graph"
+                }
+            })),
+        );
+
+        assert_eq!(
+            retained["last_assistant_result"]["recovered_after_restart"],
+            json!(true)
+        );
+        assert_eq!(
+            retained["last_assistant_result"]["proof_outcome"],
+            json!("failed_before_graph")
+        );
     }
 
     #[test]

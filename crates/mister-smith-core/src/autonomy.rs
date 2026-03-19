@@ -127,6 +127,116 @@ pub struct TeamSizingDecision {
     pub decided_at: DateTime<Utc>,
 }
 
+/// Stable proof classification shared across task, session, and operator result surfaces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProofOutcomeClassification {
+    /// A real graph formed and completed successfully.
+    GraphFormedAndCompleted,
+    /// The workflow completed, but the planner collapsed it to a trivial sequential path.
+    CollapsedToSequential,
+    /// The workflow failed before a usable graph outcome existed.
+    FailedBeforeGraph,
+}
+
+impl ProofOutcomeClassification {
+    /// Return the stable contract label for this proof classification.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GraphFormedAndCompleted => "graph_formed_and_completed",
+            Self::CollapsedToSequential => "collapsed_to_sequential",
+            Self::FailedBeforeGraph => "failed_before_graph",
+        }
+    }
+}
+
+/// Canonical runtime result contract rooted at metadata `final_result`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnifiedResultEnvelope {
+    /// Workflow that produced the result.
+    pub workflow_id: TaskId,
+    /// Provider path used for the run.
+    pub provider_kind: String,
+    /// Model used for the run.
+    pub model_id: String,
+    /// Workflow request summary or description.
+    pub description: String,
+    /// Existing runtime execution markers such as supervised actor and tool bus.
+    pub runtime_execution_mode: Value,
+    /// Existing planner output captured by the runtime.
+    pub planner_output: Value,
+    /// Existing normalized execution plan captured by the runtime.
+    pub execution_plan: Value,
+    /// Existing per-step results captured by the runtime.
+    pub step_results: Vec<Value>,
+    /// Execution-produced payload nested inside the canonical result object.
+    pub aggregated_result: Value,
+    /// Proof outcome classification for the run.
+    pub proof_outcome: ProofOutcomeClassification,
+}
+
+/// Task-facing result envelope exposed through `task.result`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskResultView {
+    /// Workflow identifier shown on the task surface.
+    pub workflow_id: TaskId,
+    /// Terminal workflow status.
+    pub status: String,
+    /// Canonical result envelope exposed by the task surface.
+    pub result: UnifiedResultEnvelope,
+    /// Task-facing outcome classification.
+    pub proof_outcome: ProofOutcomeClassification,
+}
+
+/// Shared provenance summary reused by session and operator result projections.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResultProvenanceSummary {
+    /// Execution-mode summary from the canonical result object.
+    pub runtime_execution_mode: Value,
+    /// Graph state if a graph was formed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_state: Option<String>,
+    /// Graph identifier when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<String>,
+    /// Canonical fields used to derive the projection.
+    pub source_fields: Vec<String>,
+}
+
+/// Retained session-facing projection stored as `assistant_result`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionRetainedResultView {
+    /// Workflow linked to the retained turn.
+    pub workflow_id: TaskId,
+    /// Session turn that owns the projection.
+    pub turn_index: u32,
+    /// Turn or workflow status.
+    pub status: String,
+    /// Session-facing projection derived from the canonical result object.
+    pub assistant_result: Value,
+    /// Compact preview extracted from the canonical result object when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
+    /// Bounded provenance summary for retained context.
+    pub provenance: ResultProvenanceSummary,
+}
+
+/// Compact operator-facing result preview rendered alongside autonomy status.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperatorResultPreview {
+    /// Workflow being inspected.
+    pub workflow_id: TaskId,
+    /// Outcome classification visible to operators.
+    pub proof_outcome: ProofOutcomeClassification,
+    /// Bounded result preview, omitted when not safe or available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_text: Option<String>,
+    /// Where the full result comes from, for example `task.result`.
+    pub payload_location: String,
+    /// Compact explanation of how the result was produced and classified.
+    pub provenance_lines: Vec<String>,
+}
+
 /// Bounded context allowance for a workflow scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContextBudget {

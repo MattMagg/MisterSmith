@@ -20,9 +20,11 @@ pub use ids::{
 pub use autonomy::{
     AuthorityPrincipal, CapabilityActionKind, ContextBudget, DelegatedAction,
     DelegatedActionPolicy, DelegationCapability, ExternalDelegationEnvelope, GuardDecision,
-    GuardEvidence, GuardTarget, InterventionRecord, MetricWindow, ProfileSnapshot, ProvenanceChain,
-    ProvenanceLink, SemanticSignal, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
-    TopologyPlan, TopologyRationale,
+    GuardEvidence, GuardTarget, InterventionRecord, MetricWindow, OperatorResultPreview,
+    ProfileSnapshot, ProofOutcomeClassification, ProvenanceChain, ProvenanceLink,
+    ResultProvenanceSummary, SemanticSignal, SessionRetainedResultView, TaskResultView,
+    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyPlan, TopologyRationale,
+    UnifiedResultEnvelope,
 };
 
 // Core enums

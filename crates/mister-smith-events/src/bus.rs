@@ -15,8 +15,8 @@ use tracing;
 
 use mister_smith_core::{
     CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, GuardDecision,
-    GuardDecisionId, InterventionRecord, InterventionRecordId, ProfileSnapshot, ProfileSnapshotId,
-    SystemEvent, TaskId, TeamSizingDecision,
+    GuardDecisionId, InterventionRecord, InterventionRecordId, OperatorResultPreview,
+    ProfileSnapshot, ProfileSnapshotId, SystemEvent, TaskId, TeamSizingDecision,
 };
 
 use crate::autonomy::{
@@ -48,6 +48,7 @@ struct AutonomyStatusAccumulator {
     memory_pressure: HashMap<ContextBudgetId, ContextPressureSummary>,
     routing_history: Vec<RoutingDecisionSummary>,
     step_routing_history: Vec<StepRoutingDecisionSummary>,
+    result_preview: Option<OperatorResultPreview>,
     interventions: HashMap<InterventionRecordId, InterventionRecord>,
     delegation_capabilities: HashMap<mister_smith_core::CapabilityId, CapabilitySummary>,
     delegation_alerts: HashMap<String, DelegationAlert>,
@@ -201,6 +202,7 @@ impl AutonomyStatusAccumulator {
             memory_pressure,
             routing_history: self.routing_history.clone(),
             step_routing_history: self.step_routing_history.clone(),
+            result_preview: self.result_preview.clone(),
             interventions,
             delegation_capabilities,
             delegation_alerts,
@@ -220,6 +222,7 @@ impl AutonomyStatusAccumulator {
             graph: Some(view.graph),
             topology: Some(view.topology),
             team_sizing: view.team_sizing,
+            result_preview: view.result_preview,
             ..Self::default()
         };
 
