@@ -1,0 +1,4 @@
+http_port=62695
+grpc_port=62696
+database_url=postgres://mistersmith:mistersmith_dev@127.0.0.1:5432/mistersmith_manual_rr_20260319
+nats_url=nats://127.0.0.1:4222

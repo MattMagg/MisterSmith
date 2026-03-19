@@ -1,7 +1,11 @@
 # Frontier Direction
 
 Date: March 19, 2026
-Status: Active
+Status: Historical
+
+Use `docs/plans/2026-03-19-central-development-checkpoint.md` for the current repo-wide
+forward-development authority. This note is now the March 19 frontier-recovery direction snapshot
+that led into that checkpoint.
 
 Use `docs/current-state.md` for the current whole-repo overview. This note is the forward-direction
 artifact, not the general repo-state document.

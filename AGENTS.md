@@ -22,8 +22,8 @@ Treat `WORKFLOW.md` and `docs/linear/LINEAR.md` as the live control-plane contra
 Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the current runtime-proof
 direction when the task is about proving real end-to-end execution rather than adding another
 implementation phase.
-Treat `docs/plans/2026-03-16-frontier-direction.md` as the current forward-direction note
-when the task is about what should happen next after the March 16 recovery landings.
+Treat `docs/plans/2026-03-19-central-development-checkpoint.md` as the current forward-development
+authority when the task is about what should happen next.
 
 ## Product Boundary
 
@@ -60,9 +60,10 @@ runtime.
   - `resolve_issue_lifecycle`
   - `prepare_ralph_packet`, `record_ralph_outcome`
   - `prepare_speckit_context`, `translate_speckit_tasks`
-- Treat `docs/plans/2026-03-16-smith-first-development-system.md` as the high-level operating
-  model and `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current implemented
-  workflow-family surface.
+- Treat `docs/plans/2026-03-19-central-development-checkpoint.md` as the forward-development
+  authority, `docs/plans/2026-03-16-smith-first-development-system.md` as historical control-plane
+  background, and `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current
+  implemented workflow-family surface.
 - For repo development workflow only, keep Linear as the durable source of truth, Symphony as the
   watched-queue executor, Ralph as the loop runner, and SpecKit as the upstream spec/task-pack
   scaffold.

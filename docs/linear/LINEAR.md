@@ -18,21 +18,23 @@ Initiative (strategic goal)
 ### Initiatives
 
 Use initiatives as the strategic layer, not as Symphony's dispatch boundary. Historical initiatives
-remain useful for reporting and status updates, but the current forward direction is the
-post-recovery operating-system work captured in `docs/plans/2026-03-16-frontier-direction.md`.
+remain useful for reporting and status updates, but the current forward-development authority is
+`docs/plans/2026-03-19-central-development-checkpoint.md`.
 
 ### Current Strategy
 
 - `MS-45`, `MS-46`, and `MS-47` are complete post-recovery operating-system epics; treat them as
   backlog history rather than current runnable direction.
-- `MS-48` remains the only open post-recovery frontier epic, and it should stay in `Backlog`
-  until its remaining external-agent-surface gap is split into one bounded slice.
+- the historical `Smith MCP Development` project is archived and should not be reopened as a
+  separate forward program
+- the next active planning move is one bounded SpecKit packet from the central checkpoint, not a
+  restart of the Smith-first control-plane backlog
 - `MisterSmith Validated Backlog` should hold only genuinely open frontier work in `Backlog` until
   it is explicitly staged.
 - Do not move these issues into the watched queue just to keep Symphony busy. Stage only the next
   bounded runnable slice.
 - The current repo-owned direction note is
-  `docs/plans/2026-03-16-frontier-direction.md`.
+  `docs/plans/2026-03-19-central-development-checkpoint.md`.
 
 ### Projects
 
@@ -53,6 +55,7 @@ kept in a separate backlog project, and cross-cutting docs live in a neutral doc
 | MisterSmith Validated Backlog | Validated Backlog | Backlog | Curated repo-validated future work outside the live queue until explicitly staged |
 | MisterSmith Workspace Docs | Docs Hub | Backlog | Visible home for architecture, workflow, and Linear operating docs |
 | Archived historical phases | Historical Phase | Completed | Completed phase and batch projects are archived by default and can be unarchived if needed |
+| Smith MCP Development | Historical Control Plane | Archived | Historical Smith-first workflow build-out; do not reopen as a parallel product program |
 
 ### Project Role Labels
 

@@ -1,51 +1,52 @@
-# Walkthrough — Mister Smith Live Run Trace Evaluation Prompt
+# Walkthrough — Mister Smith Next SpecKit Epic Handoff Prompt
 
 ## Original Request Summary
 
-Create a prompt for a new Codex session that goes through a live run of Mister Smith and evaluates
-and traces the run thoroughly.
+Generate a handoff prompt for a new Codex session that starts the next phase of development by
+creating and scoping the next bounded SpecKit epic for Mister Smith.
 
 ## Key Improvements Made
 
-- anchored the prompt to the repo's current state rather than older recovery-era assumptions
-- made current code and live runtime behavior the primary truth sources
-- turned "trace the run thoroughly" into an explicit evidence checklist
-- required a durable repo artifact rather than an ephemeral terminal-only conclusion
-- kept provider/model claims honest and explicit
-- kept Linear and Symphony out of the proof path except as optional development-state cross-checks
+- anchored the prompt to the March 19 checkpoint instead of the older frontier-direction note
+- forced the next session to ground on current runtime and stress-evaluation evidence before
+  choosing scope
+- kept the work bounded to one next SpecKit packet instead of implementation or general cleanup
+- required a real `specs/` packet as output rather than an informal planning memo
+- added an explicit decision point for whether any remaining post-`MS-77` external-agent work
+  belongs in the same epic or a later one
 
 ## Before / After Shape
 
 ### Before
 
-- broad request for a live run and deep evaluation
-- no explicit document start sequence
-- no durable artifact requirement
-- no concrete tracing markers
+- broad request to start the next phase
+- no explicit forward-authority document
+- no requirement to use the March 19 evaluation notes
+- no forced decision on external-agent follow-on scope
 
 ### After
 
-- structured session brief with ordered phases
-- current repo docs and code surfaces named up front
-- explicit run evidence targets such as task result fields, autonomy status, lifecycle markers, and
-  ToolBus boundaries
-- durable evidence note requirement with clear contents
-- explicit "do not claim" and stop-condition sections
+- ordered read sequence through current-state, the March 19 checkpoint, runtime proof, stress
+  evaluation, and `MS-77`
+- bounded mission: create one next SpecKit packet only
+- explicit packet deliverables under the next numbered `specs/` directory
+- direct requirement to state what is in scope now and what is deferred
 
 ## How To Use The Prompt
 
 Start a new Codex session in `/Users/macmain/MisterSmith` and give it the final prompt from:
 
-`docs/prompt-improver-spec/final-prompts/mister-smith-live-run-trace-evaluation.md`
+`docs/prompt-improver-spec/final-prompts/mister-smith-next-speckit-epic-handoff.md`
 
 The receiving session should then:
 
-1. verify current repo truth
-2. run Mister Smith live
-3. collect and compare evidence
-4. leave a durable evidence note
-5. summarize what the run proves and what remains unproven
+1. ground on current repo authority and March 19 evidence
+2. decide the next bounded epic honestly
+3. write the next full SpecKit packet under `specs/`
+4. state whether any post-`MS-77` external-agent work stays inside that epic or moves to a later
+   one
+5. stop before implementation
 
 ## Final Prompt Location
 
-`docs/prompt-improver-spec/final-prompts/mister-smith-live-run-trace-evaluation.md`
+`docs/prompt-improver-spec/final-prompts/mister-smith-next-speckit-epic-handoff.md`

@@ -1,0 +1,10 @@
+{
+  "task_id": "a0528205-95e0-4c7b-a700-058814930e18",
+  "status": "failed",
+  "result": {
+    "error": "planner execution failed: Ask operation timed out",
+    "model_id": "gpt-5.4",
+    "provider_kind": "openai_chatgpt",
+    "workflow_id": "a0528205-95e0-4c7b-a700-058814930e18"
+  }
+}

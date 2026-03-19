@@ -1,0 +1,1 @@
+User-facing final text was not present in task-status-latest.json, autonomy-status.json, or autonomy-status-cli.txt; only structural workflow evidence was persisted.

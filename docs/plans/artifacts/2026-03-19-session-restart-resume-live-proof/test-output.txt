@@ -1,0 +1,107 @@
+   Compiling mister-smith-transport v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-transport)
+   Compiling hyper-rustls v0.27.7
+   Compiling mister-smith-actor v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-actor)
+   Compiling rmcp v1.2.0
+   Compiling mister-smith-async v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-async)
+   Compiling reqwest v0.12.28
+   Compiling mister-smith-supervision v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-supervision)
+   Compiling mister-smith-security v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-security)
+   Compiling mister-smith-nats v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-nats)
+   Compiling mister-smith-persistence v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-persistence)
+   Compiling mister-smith-grpc v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-grpc)
+   Compiling mister-smith-http v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-http)
+   Compiling mister-smith-mcp v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-mcp)
+   Compiling mister-smith-agents v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-agents)
+   Compiling mister-smith-integration-tests v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-integration-tests)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.75s
+     Running unittests src/lib.rs (target/debug/deps/mister_smith_integration_tests-35a0caf0d282ec53)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/async_events.rs (target/debug/deps/async_events-94e7e88259a28211)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/conversation_restart_resume.rs (target/debug/deps/conversation_restart_resume-cc769efabd67743c)
+
+running 1 test
+test live_restart_resume_http_roundtrip_recovers_idle_session_and_resumed_lineage ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 28.41s
+
+     Running tests/events_monitoring.rs (target/debug/deps/events_monitoring-ce663c439fa33897)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/full_lifecycle.rs (target/debug/deps/full_lifecycle-ed2cfa7ab89430f5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/persistence_integration.rs (target/debug/deps/persistence_integration-43d98254b3558372)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/phase8_integration.rs (target/debug/deps/phase8_integration-9e929cd043746a12)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/phase8_lifecycle.rs (target/debug/deps/phase8_lifecycle-4f3b63ec7b43925f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/phase8_observability.rs (target/debug/deps/phase8_observability-d34fc9fbfc870610)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/resources_monitoring.rs (target/debug/deps/resources_monitoring-0bc6406f5bc33cf3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/runtime_monitoring.rs (target/debug/deps/runtime_monitoring-10bc2404ec8660cb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/security_integration.rs (target/debug/deps/security_integration-f68412fae14a75a8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/supervision.rs (target/debug/deps/supervision-276d7fcca20f119f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+     Running tests/transport_e2e.rs (target/debug/deps/transport_e2e-07174e4383847b1c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/transport_supervision.rs (target/debug/deps/transport_supervision-263153238c0d092c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+

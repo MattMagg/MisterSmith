@@ -1,0 +1,3 @@
+NAMES               IMAGE                STATUS                  PORTS
+deploy-postgres-1   postgres:15-alpine   Up 34 hours (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+deploy-nats-1       nats:2.12.4-alpine   Up 34 hours (healthy)   0.0.0.0:4222->4222/tcp, [::]:4222->4222/tcp, 0.0.0.0:8222->8222/tcp, [::]:8222->8222/tcp

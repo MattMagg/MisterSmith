@@ -1,7 +1,11 @@
 # Smith-First Mister Smith Development System
 
 Date: March 16, 2026
-Status: Active
+Status: Historical
+
+This note remains useful background for the Smith-first control-plane build-out, but it is no
+longer the forward-development authority. Use
+`docs/plans/2026-03-19-central-development-checkpoint.md` for current repo-wide direction.
 
 ## Objective
 

@@ -1,0 +1,12 @@
+session_id: e5fcb6db-6b9c-491d-a9e4-4abbe6cebb7a
+status: active
+coordinator_agent_id: 935325e0-946e-4e01-9b07-598bd786f884
+provider_kind: openai_chatgpt
+model_id: gpt-5.4
+active_workflow_id: none
+last_completed_workflow_id: 4da9de30-a603-4c7c-b9c6-84b49c20b611
+turn_count: 2
+ended_at: none
+turns:
+  1 cd1ee8b1-8508-4ded-9cd9-78aebb4d707a failed resume=recovered_after_restart=true recovered_at=2026-03-19T15:28:58.282304Z reason=workflow interrupted by runtime restart before session sync Create a restart-resume proof memo by splitting the work into two parallel tracks, one for runtime recovery and one for operator-visible evidence, then synthesize the result into a concise summary.
+  2 4da9de30-a603-4c7c-b9c6-84b49c20b611 completed resume=resumed_after_restart=true resumed_from_turn=1 resumed_from_workflow=cd1ee8b1-8508-4ded-9cd9-78aebb4d707a Turn the recovered summary into a two-item checklist and keep the same session context.

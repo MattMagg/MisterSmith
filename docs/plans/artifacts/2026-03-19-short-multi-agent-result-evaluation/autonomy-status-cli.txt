@@ -1,0 +1,29 @@
+workflow: de579e73-0637-4ba0-958f-2f8809a68137
+graph: de579e73-0637-4ba0-958f-2f8809a68137 Completed
+session: none
+resume provenance: none
+topology: Hybrid width=2 shape=fanout-join structure=roots:2 | max_parallel_width:2 | max_depth:2 | fanout:false | join:true dependency=fanout-join rationale=selected hybrid topology from compatible planner policy hint signals=health:healthy | budget_pressure:normal
+fallback: fallback to sequential preserves dependency order under degraded signals
+team sizing: phase=frontier_rebalance desired=1 selected=1 frontier=1 depth=2 conservative=false budget=0 cap=none rationale=task shape fanout-join with frontier width 1 | dependency depth 2 keeps coordination cost acceptable | frontier budget pressure 0 | selected 1 workers from the available pool of 2 | frontier health Unknown influenced active width
+branches:
+15fd2ea0-3f78-43df-82b9-671c8b20474c Completed checkpoint=none recovery=Resume
+5cf1d70e-e52f-4a46-9c9f-bc4f8314dba8 Completed checkpoint=none recovery=Resume
+b803b04c-48d7-4f85-8610-e663a8c8f87a Completed checkpoint=none recovery=Resume
+checkpoints:
+none
+routing:
+15fd2ea0-3f78-43df-82b9-671c8b20474c Unknown budget=0 depth=0 rationale=budget pressure 0% across routed scope | dependency depth 0 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+b803b04c-48d7-4f85-8610-e663a8c8f87a Unknown budget=0 depth=0 rationale=budget pressure 0% across routed scope | dependency depth 0 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+5cf1d70e-e52f-4a46-9c9f-bc4f8314dba8 Unknown budget=0 depth=1 rationale=budget pressure 0% across routed scope | dependency depth 1 across ready branch frontier | checkpoint recovery scope covers 2 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+5cf1d70e-e52f-4a46-9c9f-bc4f8314dba8 Unknown budget=0 depth=2 rationale=budget pressure 0% across routed scope | dependency depth 2 across ready branch frontier | checkpoint recovery scope covers 2 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+step routing:
+planner.step.1#1 kind=planner action=continue previous=none changed=false tier=direct preferred=none cost=1211 confidence=1.00 checkpoints=none reason=Selected via RoundRobin delta=initial step routing decision for workflow-visible control state
+interventions:
+none
+delegation:
+none
+delegation alerts:
+none
+external capability decisions:
+none
+conservative: none

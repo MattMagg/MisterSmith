@@ -1,0 +1,24 @@
+workflow: 9425e03e-698c-4a76-b1b3-724772b56085
+graph: 9425e03e-698c-4a76-b1b3-724772b56085 Completed
+session: none
+resume provenance: none
+topology: Sequential width=1 shape=strict-chain structure=roots:1 | max_parallel_width:1 | max_depth:0 | fanout:false | join:false dependency=strict-chain rationale=selected sequential topology from compatible planner policy hint signals=health:healthy | budget_pressure:normal
+fallback: none
+team sizing: phase=initial desired=1 selected=1 frontier=1 depth=0 conservative=false budget=0 cap=none rationale=task shape strict-chain with frontier width 1 | dependency depth 0 keeps coordination cost acceptable | frontier budget pressure 0 | selected 1 workers from the available pool of 2 | frontier health Unknown influenced active width
+branches:
+ed7ab477-9e8f-43eb-a08b-12b5c767663f Completed checkpoint=none recovery=Resume
+checkpoints:
+none
+routing:
+ed7ab477-9e8f-43eb-a08b-12b5c767663f Unknown budget=0 depth=0 rationale=budget pressure 0% across routed scope | dependency depth 0 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+step routing:
+planner.step.1#1 kind=planner action=continue previous=none changed=false tier=direct preferred=none cost=1375 confidence=1.00 checkpoints=none reason=Selected via RoundRobin delta=initial step routing decision for workflow-visible control state
+interventions:
+none
+delegation:
+none
+delegation alerts:
+none
+external capability decisions:
+none
+conservative: none

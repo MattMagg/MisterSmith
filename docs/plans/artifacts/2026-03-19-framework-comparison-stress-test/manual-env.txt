@@ -1,0 +1,4 @@
+http_port=63083
+grpc_port=63084
+database_url=postgres://mistersmith:mistersmith_dev@127.0.0.1:5432/mistersmith_framework_stress_20260319
+nats_url=nats://127.0.0.1:4222

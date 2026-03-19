@@ -1,0 +1,10 @@
+*   Trying 127.0.0.1:8222...
+* Connected to 127.0.0.1 (127.0.0.1) port 8222
+> GET /healthz HTTP/1.1
+> Host: 127.0.0.1:8222
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+* Recv failure: Connection reset by peer
+* Closing connection

@@ -1,0 +1,56 @@
+{
+  "task_id": "de579e73-0637-4ba0-958f-2f8809a68137",
+  "status": "completed",
+  "workflow_id": "de579e73-0637-4ba0-958f-2f8809a68137",
+  "provider_kind": "openai_chatgpt",
+  "model_id": "gpt-5.4",
+  "step_results_count": 4,
+  "worker_ids": [
+    "3f3c4f4d-ea40-4d37-9ac0-090f3c4689d2",
+    "e1ef6497-9265-436f-ad64-1dabc04e9228"
+  ],
+  "runtime_execution_mode": {
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "planner_steps": [
+    {
+      "id": "s1",
+      "action": "Invent morning activity",
+      "branch": "branch-a",
+      "role": "worker",
+      "depends_on": []
+    },
+    {
+      "id": "s2",
+      "action": "Invent evening activity",
+      "branch": "branch-b",
+      "role": "worker",
+      "depends_on": []
+    },
+    {
+      "id": "s3",
+      "action": "Join and compress outputs",
+      "branch": "join",
+      "role": "coordinator",
+      "depends_on": [
+        "s1",
+        "s2"
+      ]
+    },
+    {
+      "id": "s4",
+      "action": "Validate final constraints",
+      "branch": "join",
+      "role": "coordinator",
+      "depends_on": [
+        "s3"
+      ]
+    }
+  ]
+}
