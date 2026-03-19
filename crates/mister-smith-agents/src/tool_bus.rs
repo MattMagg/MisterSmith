@@ -5,9 +5,12 @@ use std::time::{Duration, Instant};
 use dashmap::DashMap;
 use mister_smith_core::{
     AgentId, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy, DelegationScope,
-    ExecutionBranchId, TaskId, Tool, ToolError,
+    ExecutionBranchId, RevocationState, TaskId, Tool, ToolError,
 };
-use mister_smith_events::{AutonomyEvent, AutonomyEventEnvelope, CapabilitySummary, EventBus};
+use mister_smith_events::{
+    AutonomyEvent, AutonomyEventEnvelope, CapabilitySummary, EventBus,
+    ExternalCapabilityDecisionOutcome, ExternalCapabilityDecisionSummary,
+};
 use mister_smith_mcp::client::McpClient;
 use mister_smith_mcp::errors::McpError;
 use mister_smith_mcp::ToolCallRequest;
@@ -478,11 +481,12 @@ impl ToolBus {
             })?;
 
         let execute_action = self.resolve_execute_action(&entry, principal)?;
-        if let Some(decision) = if let Some(action) = execute_action.as_ref() {
+        let authorization_decision = if let Some(action) = execute_action.as_ref() {
             self.evaluate_authorization_for_action(principal, action)?
         } else {
             self.evaluate_authorization(principal, "execute", namespace, Some(name))?
-        } {
+        };
+        if let Some(decision) = authorization_decision.as_ref() {
             if !decision.allowed {
                 self.record_audit_event(
                     principal,
@@ -494,7 +498,22 @@ impl ToolBus {
                     None,
                     None,
                 );
-                return Err(AgentSystemError::PermissionDenied(decision.reason));
+                if let Some(summary) = principal.and_then(|principal| {
+                    execute_action.as_ref().and_then(|action| {
+                        external_capability_decision_from_claims(
+                            &principal.claims,
+                            action,
+                            ExternalCapabilityDecisionOutcome::Rejected,
+                            Some(decision),
+                            &decision.reason,
+                            None,
+                        )
+                    })
+                }) {
+                    self.publish_external_capability_decision(principal, summary)
+                        .await;
+                }
+                return Err(AgentSystemError::PermissionDenied(decision.reason.clone()));
             }
         }
 
@@ -518,6 +537,34 @@ impl ToolBus {
                 if let Some(summary) = summary {
                     self.publish_delegation_update(principal, summary).await;
                 }
+                if let Some(summary) = principal.and_then(|principal| {
+                    execute_action.as_ref().and_then(|action| {
+                        external_capability_decision_from_claims(
+                            &principal.claims,
+                            action,
+                            ExternalCapabilityDecisionOutcome::Rejected,
+                            authorization_decision.as_ref(),
+                            &error.to_string(),
+                            Some(match &error {
+                                mister_smith_core::DelegationError::Revoked { .. } => {
+                                    RevocationState::Revoked
+                                }
+                                mister_smith_core::DelegationError::Expired { .. } => {
+                                    RevocationState::Expired
+                                }
+                                _ => principal
+                                    .claims
+                                    .delegation_capability
+                                    .as_ref()
+                                    .map(|capability| capability.revocation_state)
+                                    .unwrap_or(RevocationState::Active),
+                            }),
+                        )
+                    })
+                }) {
+                    self.publish_external_capability_decision(principal, summary)
+                        .await;
+                }
                 return Err(AgentSystemError::PermissionDenied(error.to_string()));
             }
         };
@@ -527,6 +574,18 @@ impl ToolBus {
             .map(|validated| capability_summary(validated, None))
         {
             self.publish_delegation_update(principal, summary).await;
+        }
+        if let Some(summary) = delegation_validation.as_ref().and_then(|validated| {
+            execute_action.as_ref().map(|action| {
+                external_capability_decision_from_validated(
+                    validated,
+                    action,
+                    authorization_decision.as_ref(),
+                )
+            })
+        }) {
+            self.publish_external_capability_decision(principal, summary)
+                .await;
         }
 
         let backend = self
@@ -774,6 +833,40 @@ impl ToolBus {
         }
     }
 
+    async fn publish_external_capability_decision(
+        &self,
+        principal: Option<&ToolPrincipal>,
+        payload: ExternalCapabilityDecisionSummary,
+    ) {
+        let Some(event_bus) = &self.event_bus else {
+            return;
+        };
+        let Some(principal) = principal else {
+            return;
+        };
+        let Some(workflow_id) = principal.workflow_id else {
+            return;
+        };
+
+        let event = AutonomyEvent::DelegationDecisionRecorded(AutonomyEventEnvelope {
+            workflow_id,
+            graph_id: None,
+            branch_id: principal.branch_id,
+            payload,
+            operator_visible: true,
+        });
+
+        if let Err(error) = event_bus
+            .publish(event.into_event("mister-smith-agents::tool-bus"))
+            .await
+        {
+            tracing::warn!(
+                %error,
+                "failed to publish external capability decision from tool bus"
+            );
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn record_audit_event(
         &self,
@@ -940,6 +1033,52 @@ fn capability_summary(
     }
 }
 
+fn external_capability_decision_from_validated(
+    validated: &ValidatedDelegation,
+    action: &DelegatedAction,
+    policy_decision: Option<&PolicyDecision>,
+) -> ExternalCapabilityDecisionSummary {
+    let capability = &validated.capability;
+    let mut rationale = Vec::new();
+    if let Some(descriptor_id) = capability.descriptor_id.as_deref() {
+        rationale.push(format!(
+            "descriptor '{descriptor_id}' matched the requested external action"
+        ));
+    }
+    if let Some(required_scope) = action.required_scope {
+        rationale.push(format!(
+            "required scope {:?} matched capability scope {:?}",
+            required_scope, capability.scope
+        ));
+    }
+    if let Some(decision) = policy_decision {
+        rationale.push(format!("policy engine reason: {}", decision.reason));
+    }
+    rationale.push(format!(
+        "authority chain depth {} remained {:?} at the boundary",
+        validated.provenance.links.len(),
+        capability.revocation_state
+    ));
+
+    ExternalCapabilityDecisionSummary {
+        capability_id: capability.capability_id,
+        capability_descriptor_id: capability.descriptor_id.clone(),
+        action_descriptor_id: Some(action.descriptor_id.clone()),
+        action_id: Some(action.action_id.clone()),
+        action_title: Some(action.title.clone()),
+        scope: capability.scope,
+        required_scope: action.required_scope,
+        policy_action: Some(action.policy.action.clone()),
+        policy_resource: Some(action.policy.resource.clone()),
+        policy_scope: Some(action.policy.scope.clone()),
+        policy_resource_id: action.policy.resource_id.clone(),
+        revocation_state: capability.revocation_state,
+        chain_depth: validated.provenance.links.len(),
+        outcome: ExternalCapabilityDecisionOutcome::Allowed,
+        rationale,
+    }
+}
+
 fn capability_summary_from_claims_error(
     claims: &AgentClaims,
     error: &mister_smith_core::DelegationError,
@@ -967,6 +1106,61 @@ fn capability_summary_from_claims_error(
         provenance,
         revocation_state,
         rejection_reason: Some(error.to_string()),
+    })
+}
+
+fn external_capability_decision_from_claims(
+    claims: &AgentClaims,
+    action: &DelegatedAction,
+    outcome: ExternalCapabilityDecisionOutcome,
+    policy_decision: Option<&PolicyDecision>,
+    reason: &str,
+    revocation_state_override: Option<RevocationState>,
+) -> Option<ExternalCapabilityDecisionSummary> {
+    let capability = claims.delegation_capability.clone()?;
+    let chain_depth = claims
+        .provenance_chain
+        .as_ref()
+        .map(|provenance| provenance.links.len())
+        .unwrap_or_default();
+    let revocation_state = revocation_state_override.unwrap_or(capability.revocation_state);
+
+    let mut rationale = vec![reason.to_string()];
+    if let Some(descriptor_id) = capability.descriptor_id.as_deref() {
+        rationale.push(format!(
+            "capability descriptor at the boundary was '{descriptor_id}'"
+        ));
+    }
+    rationale.push(format!(
+        "external action requested descriptor '{}'",
+        action.descriptor_id
+    ));
+    if let Some(required_scope) = action.required_scope {
+        rationale.push(format!(
+            "external action required scope {:?} while the capability carried {:?}",
+            required_scope, capability.scope
+        ));
+    }
+    if let Some(decision) = policy_decision {
+        rationale.push(format!("policy engine reason: {}", decision.reason));
+    }
+
+    Some(ExternalCapabilityDecisionSummary {
+        capability_id: capability.capability_id,
+        capability_descriptor_id: capability.descriptor_id.clone(),
+        action_descriptor_id: Some(action.descriptor_id.clone()),
+        action_id: Some(action.action_id.clone()),
+        action_title: Some(action.title.clone()),
+        scope: capability.scope,
+        required_scope: action.required_scope,
+        policy_action: Some(action.policy.action.clone()),
+        policy_resource: Some(action.policy.resource.clone()),
+        policy_scope: Some(action.policy.scope.clone()),
+        policy_resource_id: action.policy.resource_id.clone(),
+        revocation_state,
+        chain_depth,
+        outcome,
+        rationale,
     })
 }
 

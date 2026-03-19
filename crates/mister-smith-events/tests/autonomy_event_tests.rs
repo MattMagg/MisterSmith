@@ -9,7 +9,8 @@ use mister_smith_core::{
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
     CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, EventBus,
-    EventType, ExecutionGraphSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
+    EventType, ExecutionGraphSummary, ExternalCapabilityDecisionOutcome,
+    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
     StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 use serde::de::DeserializeOwned;
@@ -95,6 +96,32 @@ fn sample_team_sizing(
             ),
         ],
         decided_at: chrono::Utc::now(),
+    }
+}
+
+fn sample_external_capability_decision(
+    capability_id: CapabilityId,
+    scope: DelegationScope,
+) -> ExternalCapabilityDecisionSummary {
+    ExternalCapabilityDecisionSummary {
+        capability_id,
+        capability_descriptor_id: Some("tool:agent.echo".to_string()),
+        action_descriptor_id: Some("tool:agent.echo".to_string()),
+        action_id: Some("tool:agent.echo#execute".to_string()),
+        action_title: Some("execute agent.echo".to_string()),
+        scope,
+        required_scope: Some(scope),
+        policy_action: Some("execute".to_string()),
+        policy_resource: Some("echo".to_string()),
+        policy_scope: Some("agent".to_string()),
+        policy_resource_id: Some("agent.echo".to_string()),
+        revocation_state: RevocationState::Active,
+        chain_depth: 1,
+        outcome: ExternalCapabilityDecisionOutcome::Allowed,
+        rationale: vec![
+            "descriptor 'tool:agent.echo' matched the requested external action".to_string(),
+            "required scope InvokeTool matched capability scope InvokeTool".to_string(),
+        ],
     }
 }
 
@@ -295,6 +322,10 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
                 message: "operator review required for widened authority".to_string(),
             },
         ],
+        external_capability_decisions: vec![sample_external_capability_decision(
+            CapabilityId::new(),
+            DelegationScope::InvokeTool,
+        )],
         profiles: vec![ProfileSnapshot {
             profile_id: ProfileSnapshotId::new(),
             target: ProfileTarget::Branch,
@@ -407,6 +438,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
+        external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
         conservative_reasons: vec!["control-plane freshness unavailable".to_string()],
@@ -646,6 +678,23 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         )
         .await
         .unwrap();
+    let capability_id = CapabilityId::new();
+    event_bus
+        .publish(
+            AutonomyEvent::DelegationDecisionRecorded(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: sample_external_capability_decision(
+                    capability_id,
+                    DelegationScope::InvokeTool,
+                ),
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
 
     let view = event_bus
         .autonomy_status(&workflow_id)
@@ -671,6 +720,15 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         .any(|line| line.contains("minimize restart blast radius")));
     assert_eq!(view.checkpoint_lineage.len(), 1);
     assert_eq!(view.routing_history.len(), 1);
+    assert_eq!(view.external_capability_decisions.len(), 1);
+    assert_eq!(
+        view.external_capability_decisions[0].outcome,
+        ExternalCapabilityDecisionOutcome::Allowed
+    );
+    assert!(view.external_capability_decisions[0]
+        .rationale
+        .iter()
+        .any(|line| line.contains("matched the requested external action")));
     assert_eq!(
         view.interventions[0].rationale,
         "operator escalation remained visible"
@@ -745,6 +803,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
             rejection_reason: Some("Delegation capability revoked".to_string()),
             message: "delegation suspended pending operator review".to_string(),
         }],
+        external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
         conservative_reasons: vec!["delegation scope suspended".to_string()],

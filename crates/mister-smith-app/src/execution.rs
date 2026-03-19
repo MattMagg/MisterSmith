@@ -294,6 +294,7 @@ impl RuntimeTaskService {
             if let Ok(Some(record)) = queries::find_task(&self.pool, *workflow_id.as_ref()).await {
                 crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
                 crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
+                crate::autonomy::enrich_external_capability_decisions(&mut view, &record.metadata);
             }
             return Some(view);
         }
@@ -1257,6 +1258,7 @@ impl RuntimeTaskService {
         };
         crate::autonomy::enrich_session_linkage(&mut view, metadata);
         crate::autonomy::enrich_step_routing_history(&mut view, metadata);
+        crate::autonomy::enrich_external_capability_decisions(&mut view, metadata);
         persist_autonomy_status(metadata, &view);
     }
 
@@ -1364,6 +1366,7 @@ fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStat
     let mut view = serde_json::from_value::<AutonomyStatusView>(raw).ok()?;
     crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
     crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
+    crate::autonomy::enrich_external_capability_decisions(&mut view, &record.metadata);
     Some(view)
 }
 
@@ -1453,7 +1456,8 @@ mod tests {
         TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale,
     };
     use mister_smith_events::{
-        BranchSummary, ExecutionGraphSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
+        BranchSummary, ExecutionGraphSummary, ExternalCapabilityDecisionOutcome,
+        StepRoutingDecisionSummary, TopologyPlanSummary,
     };
     use mister_smith_security::DelegationService;
 
@@ -1519,6 +1523,7 @@ mod tests {
             interventions: vec![],
             delegation_capabilities: vec![],
             delegation_alerts: vec![],
+            external_capability_decisions: vec![],
             profiles: vec![],
             guard_decisions: vec![],
             conservative_reasons: vec!["restart-safe recovery".to_string()],
@@ -1620,6 +1625,68 @@ mod tests {
             metadata["external_delegation"]["action"]["revocation_key"],
             "tool:app.workflow#execute"
         );
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_enriches_allowed_external_capability_decision() {
+        let view = sample_autonomy_view();
+        let delegation = sample_external_delegation();
+        let mut metadata = json!({
+            "external_delegation": delegation,
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should expose external capability decisions");
+        let summary = recovered
+            .external_capability_decisions
+            .first()
+            .expect("external capability decision should be derived from metadata");
+
+        assert_eq!(summary.outcome, ExternalCapabilityDecisionOutcome::Allowed);
+        assert_eq!(
+            summary.capability_descriptor_id.as_deref(),
+            Some("tool:app.workflow")
+        );
+        assert_eq!(
+            summary.action_descriptor_id.as_deref(),
+            Some("tool:app.workflow")
+        );
+        assert!(summary
+            .rationale
+            .iter()
+            .any(|line| line.contains("matched the requested external action")));
+        assert!(summary
+            .rationale
+            .iter()
+            .any(|line| line
+                .contains("required scope InvokeTool matched capability scope InvokeTool")));
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_enriches_rejected_external_capability_decision() {
+        let view = sample_autonomy_view();
+        let mut delegation = sample_external_delegation();
+        delegation.capability.descriptor_id = Some("tool:app.other".to_string());
+        let mut metadata = json!({
+            "external_delegation": delegation,
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record).expect(
+            "persisted autonomy status should derive rejected external capability decisions",
+        );
+        let summary = recovered
+            .external_capability_decisions
+            .first()
+            .expect("rejected external capability decision should be derived from metadata");
+
+        assert_eq!(summary.outcome, ExternalCapabilityDecisionOutcome::Rejected);
+        assert!(summary.rationale.iter().any(|line| {
+            line.contains("does not authorize action descriptor 'tool:app.workflow'")
+        }));
     }
 
     #[test]

@@ -7,6 +7,7 @@ use mister_smith_core::{
     AgentId, AuthorityPrincipal, DelegationScope, Tool, ToolCapabilities, ToolError, ToolId,
     ToolSchema,
 };
+use mister_smith_events::{AutonomyEvent, EventBus, ExternalCapabilityDecisionOutcome};
 use mister_smith_security::audit::{
     events::{AuditEventType, AuditOutcome},
     AuditLogger,
@@ -102,6 +103,24 @@ fn delegated_claims(
     claims.delegation_capability = Some(validated.capability.clone());
     claims.provenance_chain = Some(validated.provenance.clone());
     claims
+}
+
+async fn recv_external_capability_decision(
+    rx: &mut tokio::sync::broadcast::Receiver<mister_smith_events::Event>,
+) -> mister_smith_events::ExternalCapabilityDecisionSummary {
+    for _ in 0..4 {
+        let event = tokio::time::timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("autonomy event should arrive")
+            .expect("broadcast should stay open");
+        let autonomy_event = serde_json::from_value::<AutonomyEvent>(event.payload.clone())
+            .expect("broadcast payload should decode as AutonomyEvent");
+        if let AutonomyEvent::DelegationDecisionRecorded(envelope) = autonomy_event {
+            return envelope.payload;
+        }
+    }
+
+    panic!("expected external capability decision event");
 }
 
 #[tokio::test]
@@ -580,15 +599,105 @@ async fn invoke_allows_unprivileged_tool_for_delegated_principal() {
 }
 
 #[tokio::test]
+async fn invoke_publishes_allowed_external_capability_decision_for_privileged_tools() {
+    let event_bus = Arc::new(EventBus::default());
+    let mut rx = event_bus.subscribe_broadcast();
+    let delegation_service = Arc::new(DelegationService::new());
+    let bus = ToolBus::with_security(
+        Some(Arc::new(PolicyEngine::new(&RbacConfig::default()))),
+        None,
+    )
+    .with_delegation_service(delegation_service.clone())
+    .with_event_bus(event_bus);
+    let agent_id = AgentId::new();
+    let workflow_id = mister_smith_core::TaskId::new();
+    let (capability, provenance) = delegation_service
+        .issue_capability(
+            AuthorityPrincipal::Policy("operator".to_string()),
+            agent_id,
+            DelegationScope::InvokeTool,
+            Some("tool:data.echo".to_string()),
+            Duration::from_secs(60),
+            None,
+            None,
+        )
+        .expect("capability should issue");
+    let principal = mister_smith_agents::tool_bus::ToolPrincipal::new(
+        agent_id,
+        delegated_claims(
+            agent_id,
+            &["execute:tool:data"],
+            &ValidatedDelegation {
+                capability,
+                provenance: provenance.clone(),
+                chain_depth: provenance.links.len(),
+            },
+        ),
+    )
+    .with_workflow(workflow_id)
+    .requiring_delegation(DelegationScope::InvokeTool);
+
+    bus.register_privileged_native_tool(
+        "echo",
+        "data",
+        agent_id,
+        "Echoes the payload",
+        json!({ "type": "object" }),
+        json!({ "type": "object" }),
+        DelegationScope::InvokeTool,
+        Arc::new(EchoTool { id: ToolId::new() }),
+    );
+
+    let result = bus
+        .invoke(
+            Some(&principal),
+            "data",
+            "echo",
+            json!({ "value": "allowed" }),
+            Some(Duration::from_millis(50)),
+        )
+        .await
+        .expect("descriptor-bound privileged tool should be allowed");
+
+    assert_eq!(result, json!({ "echo": { "value": "allowed" } }));
+
+    let decision = recv_external_capability_decision(&mut rx).await;
+    assert_eq!(decision.outcome, ExternalCapabilityDecisionOutcome::Allowed);
+    assert_eq!(
+        decision.capability_descriptor_id.as_deref(),
+        Some("tool:data.echo")
+    );
+    assert_eq!(
+        decision.action_id.as_deref(),
+        Some("tool:data.echo#execute")
+    );
+    assert!(decision
+        .rationale
+        .iter()
+        .any(|line| line.contains("matched the requested external action")));
+    assert!(
+        decision
+            .rationale
+            .iter()
+            .any(|line| line
+                .contains("required scope InvokeTool matched capability scope InvokeTool"))
+    );
+}
+
+#[tokio::test]
 async fn invoke_rejects_descriptor_mismatch_for_privileged_tools() {
     let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
+    let event_bus = Arc::new(EventBus::default());
+    let mut rx = event_bus.subscribe_broadcast();
     let delegation_service = Arc::new(DelegationService::new());
     let bus = ToolBus::with_security(
         Some(Arc::new(PolicyEngine::new(&RbacConfig::default()))),
         Some(audit.clone()),
     )
-    .with_delegation_service(delegation_service.clone());
+    .with_delegation_service(delegation_service.clone())
+    .with_event_bus(event_bus);
     let agent_id = AgentId::new();
+    let workflow_id = mister_smith_core::TaskId::new();
     let (capability, provenance) = delegation_service
         .issue_capability(
             AuthorityPrincipal::Policy("operator".to_string()),
@@ -612,6 +721,7 @@ async fn invoke_rejects_descriptor_mismatch_for_privileged_tools() {
             },
         ),
     )
+    .with_workflow(workflow_id)
     .requiring_delegation(DelegationScope::InvokeTool);
 
     bus.register_privileged_native_tool(
@@ -647,4 +757,18 @@ async fn invoke_rejects_descriptor_mismatch_for_privileged_tools() {
         .as_ref()
         .and_then(|delegation| delegation.rejection_reason.as_ref())
         .is_some_and(|reason| reason.contains("does not authorize action descriptor")));
+
+    let decision = recv_external_capability_decision(&mut rx).await;
+    assert_eq!(
+        decision.outcome,
+        ExternalCapabilityDecisionOutcome::Rejected
+    );
+    assert_eq!(
+        decision.action_descriptor_id.as_deref(),
+        Some("tool:data.echo")
+    );
+    assert!(decision
+        .rationale
+        .iter()
+        .any(|line| line.contains("does not authorize action descriptor")));
 }

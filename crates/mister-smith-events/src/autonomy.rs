@@ -239,6 +239,60 @@ pub struct DelegationAlert {
     pub message: String,
 }
 
+/// Operator-facing outcome for an external capability boundary decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExternalCapabilityDecisionOutcome {
+    /// The external capability call remained authorized at the boundary.
+    Allowed,
+    /// The external capability call was rejected at the boundary.
+    Rejected,
+}
+
+/// Operator-visible explanation of one external capability boundary decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalCapabilityDecisionSummary {
+    /// Capability used for the external boundary call.
+    pub capability_id: CapabilityId,
+    /// Descriptor bound to the capability, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_descriptor_id: Option<String>,
+    /// Descriptor requested by the external delegated action, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_descriptor_id: Option<String>,
+    /// Stable action identifier at the boundary, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_id: Option<String>,
+    /// Human-readable delegated action title, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_title: Option<String>,
+    /// Scope carried by the capability at the boundary.
+    pub scope: DelegationScope,
+    /// Required scope requested by the external action, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_scope: Option<DelegationScope>,
+    /// Policy action evaluated for the delegated boundary, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_action: Option<String>,
+    /// Policy resource evaluated for the delegated boundary, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_resource: Option<String>,
+    /// Policy scope evaluated for the delegated boundary, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_scope: Option<String>,
+    /// Optional concrete policy resource identifier at the boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_resource_id: Option<String>,
+    /// Effective revocation state observed for the capability.
+    pub revocation_state: RevocationState,
+    /// Depth of the authority chain used for the boundary call.
+    pub chain_depth: usize,
+    /// Final operator-facing decision outcome.
+    pub outcome: ExternalCapabilityDecisionOutcome,
+    /// Operator-visible explanation of why the decision was allowed or rejected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rationale: Vec<String>,
+}
+
 /// Operator-visible restart and resume provenance for a workflow turn.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResumeProvenanceSummary {
@@ -301,6 +355,9 @@ pub struct AutonomyStatusView {
     pub delegation_capabilities: Vec<CapabilitySummary>,
     /// Delegation or provenance warnings.
     pub delegation_alerts: Vec<DelegationAlert>,
+    /// External capability boundary decisions projected for operator inspection.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_capability_decisions: Vec<ExternalCapabilityDecisionSummary>,
     /// Supervisory profile snapshots retained for operator inspection.
     pub profiles: Vec<ProfileSnapshot>,
     /// Guard decisions that informed the current supervision posture.
@@ -347,6 +404,8 @@ pub enum AutonomyEventType {
     RoutingDecisionRecorded,
     /// Delegation capability or provenance state changed.
     DelegationUpdated,
+    /// Delegation allow/reject decision changed.
+    DelegationDecisionRecorded,
     /// Aggregate autonomy status view changed.
     StatusUpdated,
 }
@@ -374,6 +433,8 @@ pub enum AutonomyEvent {
     RoutingDecisionRecorded(AutonomyEventEnvelope<RoutingDecisionSummary>),
     /// Delegation capability changed.
     DelegationUpdated(AutonomyEventEnvelope<CapabilitySummary>),
+    /// Delegation allow/reject decision changed.
+    DelegationDecisionRecorded(AutonomyEventEnvelope<ExternalCapabilityDecisionSummary>),
     /// Aggregate status view changed.
     StatusUpdated(Box<AutonomyEventEnvelope<AutonomyStatusView>>),
 }
@@ -426,6 +487,9 @@ impl AutonomyEvent {
             AutonomyEvent::CheckpointRecorded(_) => AutonomyEventType::CheckpointRecorded,
             AutonomyEvent::RoutingDecisionRecorded(_) => AutonomyEventType::RoutingDecisionRecorded,
             AutonomyEvent::DelegationUpdated(_) => AutonomyEventType::DelegationUpdated,
+            AutonomyEvent::DelegationDecisionRecorded(_) => {
+                AutonomyEventType::DelegationDecisionRecorded
+            }
             AutonomyEvent::StatusUpdated(_) => AutonomyEventType::StatusUpdated,
         }
     }
@@ -450,6 +514,7 @@ impl AutonomyEvent {
             AutonomyEvent::CheckpointRecorded(envelope) => envelope.workflow_id,
             AutonomyEvent::RoutingDecisionRecorded(envelope) => envelope.workflow_id,
             AutonomyEvent::DelegationUpdated(envelope) => envelope.workflow_id,
+            AutonomyEvent::DelegationDecisionRecorded(envelope) => envelope.workflow_id,
             AutonomyEvent::StatusUpdated(envelope) => envelope.workflow_id,
         }
     }
@@ -467,6 +532,7 @@ impl AutonomyEvent {
             AutonomyEvent::CheckpointRecorded(envelope) => envelope.branch_id,
             AutonomyEvent::RoutingDecisionRecorded(envelope) => envelope.branch_id,
             AutonomyEvent::DelegationUpdated(envelope) => envelope.branch_id,
+            AutonomyEvent::DelegationDecisionRecorded(envelope) => envelope.branch_id,
             AutonomyEvent::StatusUpdated(envelope) => envelope.branch_id,
         }
     }

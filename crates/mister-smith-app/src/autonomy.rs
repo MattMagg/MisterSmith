@@ -9,9 +9,10 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
-use mister_smith_core::{AgentId, SessionId, TaskId};
+use mister_smith_core::{AgentId, ExternalDelegationEnvelope, RevocationState, SessionId, TaskId};
 use mister_smith_events::{
-    AutonomyStatusView, EventBus, ResumeProvenanceSummary, StepRoutingDecisionSummary,
+    AutonomyStatusView, EventBus, ExternalCapabilityDecisionOutcome,
+    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, StepRoutingDecisionSummary,
 };
 use mister_smith_persistence::postgres::queries;
 use reqwest::Client;
@@ -190,6 +191,7 @@ pub async fn status_from_bus_with_session_linkage(
     {
         enrich_session_linkage(&mut view, &record.metadata);
         enrich_step_routing_history(&mut view, &record.metadata);
+        enrich_external_capability_decisions(&mut view, &record.metadata);
     }
     Ok(view)
 }
@@ -416,6 +418,12 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let external_capability_decisions = view
+        .external_capability_decisions
+        .iter()
+        .map(render_external_capability_decision)
+        .collect::<Vec<_>>()
+        .join("\n");
     let conservative_summary = if view.conservative_reasons.is_empty() {
         "none".to_string()
     } else {
@@ -423,7 +431,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -456,6 +464,11 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
             "none".to_string()
         } else {
             delegation_alerts
+        },
+        if external_capability_decisions.is_empty() {
+            "none".to_string()
+        } else {
+            external_capability_decisions
         },
         conservative_summary
     )
@@ -505,6 +518,23 @@ pub(crate) fn enrich_step_routing_history(view: &mut AutonomyStatusView, metadat
     if let Ok(history) = serde_json::from_value::<Vec<StepRoutingDecisionSummary>>(raw) {
         view.step_routing_history = history;
     }
+}
+
+pub(crate) fn enrich_external_capability_decisions(
+    view: &mut AutonomyStatusView,
+    metadata: &Value,
+) {
+    if !view.external_capability_decisions.is_empty() {
+        return;
+    }
+    let Some(raw) = metadata.get("external_delegation").cloned() else {
+        return;
+    };
+    let Ok(envelope) = serde_json::from_value::<ExternalDelegationEnvelope>(raw) else {
+        return;
+    };
+    view.external_capability_decisions
+        .push(external_capability_decision_summary(view, &envelope));
 }
 
 pub(crate) fn resume_provenance_from_metadata(metadata: &Value) -> Option<ResumeProvenanceDetails> {
@@ -594,6 +624,207 @@ fn render_resume_provenance(summary: &ResumeProvenanceSummary) -> String {
     } else {
         parts.join(" ")
     }
+}
+
+fn external_capability_decision_summary(
+    view: &AutonomyStatusView,
+    envelope: &ExternalDelegationEnvelope,
+) -> ExternalCapabilityDecisionSummary {
+    let capability = view
+        .delegation_capabilities
+        .iter()
+        .find(|summary| summary.capability_id == envelope.capability.capability_id);
+    let alert = view
+        .delegation_alerts
+        .iter()
+        .find(|candidate| candidate.capability_id == Some(envelope.capability.capability_id));
+    let effective_descriptor_id = capability
+        .and_then(|summary| summary.descriptor_id.clone())
+        .or_else(|| envelope.capability.descriptor_id.clone());
+    let effective_scope = capability
+        .map(|summary| summary.scope)
+        .unwrap_or(envelope.capability.scope);
+    let effective_revocation_state = capability
+        .map(|summary| summary.revocation_state)
+        .unwrap_or(envelope.capability.revocation_state);
+    let chain_depth = capability
+        .map(|summary| summary.chain_depth())
+        .unwrap_or_else(|| envelope.provenance.links.len());
+
+    let rejection_reason = capability
+        .and_then(|summary| summary.rejection_reason.clone())
+        .or_else(|| alert.and_then(|candidate| candidate.rejection_reason.clone()))
+        .or_else(|| {
+            envelope.action.as_ref().and_then(|action| {
+                if let Some(required_scope) = action.required_scope {
+                    if required_scope != effective_scope {
+                        return Some(format!(
+                            "capability scope {:?} does not satisfy required external scope {:?}",
+                            effective_scope, required_scope
+                        ));
+                    }
+                }
+                match effective_descriptor_id.as_deref() {
+                    Some(descriptor_id) if descriptor_id != action.descriptor_id => Some(format!(
+                        "delegation descriptor '{descriptor_id}' does not authorize action descriptor '{}'",
+                        action.descriptor_id
+                    )),
+                    _ => None,
+                }
+            })
+        })
+        .or_else(|| match effective_revocation_state {
+            RevocationState::Revoked => {
+                Some("capability was revoked before the external boundary call".to_string())
+            }
+            RevocationState::Expired => {
+                Some("capability expired before the external boundary call".to_string())
+            }
+            RevocationState::Active => None,
+        });
+
+    let outcome = if rejection_reason.is_some() {
+        ExternalCapabilityDecisionOutcome::Rejected
+    } else {
+        ExternalCapabilityDecisionOutcome::Allowed
+    };
+
+    let mut rationale = Vec::new();
+    if let Some(action) = envelope.action.as_ref() {
+        match effective_descriptor_id.as_deref() {
+            Some(descriptor_id) if descriptor_id == action.descriptor_id => rationale.push(
+                format!(
+                    "descriptor '{descriptor_id}' matched the requested external action"
+                ),
+            ),
+            Some(descriptor_id) => rationale.push(format!(
+                "descriptor '{descriptor_id}' was compared against requested action descriptor '{}'",
+                action.descriptor_id
+            )),
+            None => rationale.push(format!(
+                "legacy scope-bound capability allowed action descriptor '{}'",
+                action.descriptor_id
+            )),
+        }
+
+        if let Some(required_scope) = action.required_scope {
+            if required_scope == effective_scope {
+                rationale.push(format!(
+                    "required scope {:?} matched capability scope {:?}",
+                    required_scope, effective_scope
+                ));
+            } else {
+                rationale.push(format!(
+                    "required scope {:?} did not match capability scope {:?}",
+                    required_scope, effective_scope
+                ));
+            }
+        } else {
+            rationale
+                .push("typed action did not request an additional delegated scope".to_string());
+        }
+    } else {
+        rationale.push(
+            "external delegation envelope carried capability provenance without a typed action"
+                .to_string(),
+        );
+    }
+
+    rationale.push(format!(
+        "capability state {:?} at chain depth {}",
+        effective_revocation_state, chain_depth
+    ));
+    if let Some(reason) = rejection_reason {
+        rationale.insert(0, reason);
+    }
+
+    ExternalCapabilityDecisionSummary {
+        capability_id: envelope.capability.capability_id,
+        capability_descriptor_id: effective_descriptor_id,
+        action_descriptor_id: envelope
+            .action
+            .as_ref()
+            .map(|action| action.descriptor_id.clone()),
+        action_id: envelope
+            .action
+            .as_ref()
+            .map(|action| action.action_id.clone()),
+        action_title: envelope.action.as_ref().map(|action| action.title.clone()),
+        scope: effective_scope,
+        required_scope: envelope
+            .action
+            .as_ref()
+            .and_then(|action| action.required_scope),
+        policy_action: envelope
+            .action
+            .as_ref()
+            .map(|action| action.policy.action.clone()),
+        policy_resource: envelope
+            .action
+            .as_ref()
+            .map(|action| action.policy.resource.clone()),
+        policy_scope: envelope
+            .action
+            .as_ref()
+            .map(|action| action.policy.scope.clone()),
+        policy_resource_id: envelope
+            .action
+            .as_ref()
+            .and_then(|action| action.policy.resource_id.clone()),
+        revocation_state: effective_revocation_state,
+        chain_depth,
+        outcome,
+        rationale,
+    }
+}
+
+fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSummary) -> String {
+    let outcome = match summary.outcome {
+        ExternalCapabilityDecisionOutcome::Allowed => "allowed",
+        ExternalCapabilityDecisionOutcome::Rejected => "rejected",
+    };
+    let capability_descriptor = summary
+        .capability_descriptor_id
+        .as_deref()
+        .unwrap_or("none");
+    let action_descriptor = summary.action_descriptor_id.as_deref().unwrap_or("none");
+    let action_id = summary.action_id.as_deref().unwrap_or("none");
+    let action_title = summary.action_title.as_deref().unwrap_or("none");
+    let required_scope = summary
+        .required_scope
+        .map(|scope| format!("{scope:?}"))
+        .unwrap_or_else(|| "none".to_string());
+    let policy = match (
+        summary.policy_action.as_deref(),
+        summary.policy_scope.as_deref(),
+        summary.policy_resource.as_deref(),
+    ) {
+        (Some(action), Some(scope), Some(resource)) => format!("{action}/{scope}/{resource}"),
+        _ => "none".to_string(),
+    };
+    let resource_id = summary.policy_resource_id.as_deref().unwrap_or("none");
+    let rationale = if summary.rationale.is_empty() {
+        "none".to_string()
+    } else {
+        summary.rationale.join(" | ")
+    };
+
+    format!(
+        "{} outcome={} capability_descriptor={} action_descriptor={} action_id={} title={} scope={:?} required_scope={} state={:?} depth={} policy={} resource_id={} rationale={}",
+        summary.capability_id,
+        outcome,
+        capability_descriptor,
+        action_descriptor,
+        action_id,
+        action_title,
+        summary.scope,
+        required_scope,
+        summary.revocation_state,
+        summary.chain_depth,
+        policy,
+        resource_id,
+        rationale
+    )
 }
 
 fn parse_datetime(value: &Value) -> Option<DateTime<Utc>> {

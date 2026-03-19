@@ -30,7 +30,8 @@ use crate::topology::{TopologyCompiler, TopologySignals};
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, Event, EventBus, ExecutionGraphSummary,
-    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
+    ExternalCapabilityDecisionSummary, RoutingDecisionSummary, StepRoutingDecisionSummary,
+    TopologyPlanSummary,
 };
 
 #[cfg(feature = "llm")]
@@ -707,6 +708,43 @@ impl Orchestrator {
             .iter()
             .filter_map(CapabilitySummary::to_alert)
             .collect::<Vec<_>>();
+        let mut external_capability_decisions = self
+            .autonomy_events(workflow_id)
+            .into_iter()
+            .filter_map(|event| match event {
+                AutonomyEvent::DelegationDecisionRecorded(envelope) => Some(envelope.payload),
+                _ => None,
+            })
+            .fold(
+                HashMap::<
+                    (
+                        mister_smith_core::CapabilityId,
+                        Option<String>,
+                        Option<String>,
+                    ),
+                    ExternalCapabilityDecisionSummary,
+                >::new(),
+                |mut decisions, summary| {
+                    decisions.insert(
+                        (
+                            summary.capability_id,
+                            summary.action_id.clone(),
+                            summary.action_descriptor_id.clone(),
+                        ),
+                        summary,
+                    );
+                    decisions
+                },
+            )
+            .into_values()
+            .collect::<Vec<_>>();
+        external_capability_decisions.sort_by(|left, right| {
+            left.capability_id
+                .to_string()
+                .cmp(&right.capability_id.to_string())
+                .then_with(|| left.action_id.cmp(&right.action_id))
+                .then_with(|| left.action_descriptor_id.cmp(&right.action_descriptor_id))
+        });
         let team_sizing = self
             .adaptive_team_plans
             .get(workflow_id)
@@ -777,6 +815,7 @@ impl Orchestrator {
             interventions,
             delegation_capabilities,
             delegation_alerts,
+            external_capability_decisions,
             profiles,
             guard_decisions,
             conservative_reasons,
