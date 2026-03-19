@@ -12,9 +12,9 @@ use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
-    InterventionRecord, MemorySnapshotId, ProfileSnapshot, ProfileSnapshotId, ProvenanceChain,
-    RevocationState, SessionId, TaskId, TaskShapeClassification, TeamSizingDecision, TopologyKind,
-    TopologyRationale,
+    InterventionRecord, MemorySnapshotId, OperatorResultPreview, ProfileSnapshot,
+    ProfileSnapshotId, ProvenanceChain, RevocationState, SessionId, TaskId,
+    TaskShapeClassification, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -340,6 +340,9 @@ pub struct AutonomyStatusView {
     /// Restart and resume provenance for the workflow when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_provenance: Option<ResumeProvenanceSummary>,
+    /// Compact operator-facing result preview derived from the canonical result contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_preview: Option<OperatorResultPreview>,
     /// Graph summary for the running workflow.
     pub graph: ExecutionGraphSummary,
     /// Selected topology summary.

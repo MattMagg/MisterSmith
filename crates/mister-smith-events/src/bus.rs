@@ -14,9 +14,10 @@ use tokio::sync::{broadcast, RwLock};
 use tracing;
 
 use mister_smith_core::{
-    CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, GuardDecision,
-    GuardDecisionId, InterventionRecord, InterventionRecordId, ProfileSnapshot, ProfileSnapshotId,
-    SystemEvent, TaskId, TeamSizingDecision,
+    CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, GraphState, GuardDecision,
+    GuardDecisionId, InterventionRecord, InterventionRecordId, OperatorResultPreview,
+    ProfileSnapshot, ProfileSnapshotId, ProofOutcomeClassification, SystemEvent, TaskId,
+    TeamSizingDecision,
 };
 
 use crate::autonomy::{
@@ -40,6 +41,7 @@ struct AutonomyStatusAccumulator {
     turn_index: Option<u32>,
     coordinator_agent_id: Option<mister_smith_core::AgentId>,
     resume_provenance: Option<ResumeProvenanceSummary>,
+    result_preview: Option<OperatorResultPreview>,
     graph: Option<ExecutionGraphSummary>,
     topology: Option<TopologyPlanSummary>,
     team_sizing: Option<TeamSizingDecision>,
@@ -187,12 +189,21 @@ impl AutonomyStatusAccumulator {
                 &self.conservative_reasons,
             )
         });
+        let result_preview = self.result_preview.clone().or_else(|| {
+            infer_result_preview_from_projection(
+                &graph,
+                &topology,
+                &branches,
+                &self.routing_history,
+            )
+        });
 
         Some(AutonomyStatusView {
             session_id: self.session_id,
             turn_index: self.turn_index,
             coordinator_agent_id: self.coordinator_agent_id,
             resume_provenance: self.resume_provenance.clone(),
+            result_preview,
             graph,
             topology,
             team_sizing,
@@ -217,6 +228,7 @@ impl AutonomyStatusAccumulator {
             turn_index: view.turn_index,
             coordinator_agent_id: view.coordinator_agent_id,
             resume_provenance: view.resume_provenance,
+            result_preview: view.result_preview,
             graph: Some(view.graph),
             topology: Some(view.topology),
             team_sizing: view.team_sizing,
@@ -380,6 +392,85 @@ fn infer_team_sizing_from_projection(
         rationale_lines,
         decided_at: chrono::DateTime::<chrono::Utc>::from(SystemTime::UNIX_EPOCH),
     })
+}
+
+fn infer_result_preview_from_projection(
+    graph: &ExecutionGraphSummary,
+    topology: &TopologyPlanSummary,
+    branches: &[BranchSummary],
+    routing_history: &[RoutingDecisionSummary],
+) -> Option<OperatorResultPreview> {
+    let proof_outcome =
+        infer_proof_outcome_from_projection(graph, topology, branches, routing_history)?;
+
+    let preview_text = match proof_outcome {
+        ProofOutcomeClassification::GraphFormedAndCompleted => Some(format!(
+            "graph completed with {} branch(es) across {} node(s)",
+            graph.branch_count, graph.node_count
+        )),
+        ProofOutcomeClassification::CollapsedToSequential => {
+            Some("completed with a sequential execution path".to_string())
+        }
+        ProofOutcomeClassification::FailedBeforeGraph => {
+            Some("workflow failed before graph formation".to_string())
+        }
+    };
+
+    let mut provenance_lines = vec![
+        "canonical result stored in metadata.final_result".to_string(),
+        "aggregated payload nested under metadata.aggregated_result".to_string(),
+        "full payload remains recoverable from task.result".to_string(),
+    ];
+    provenance_lines.push(format!(
+        "projection observed graph state {:?} with topology {:?}",
+        graph.state, topology.topology_kind
+    ));
+    if !routing_history.is_empty() {
+        provenance_lines.push(format!(
+            "routing history retained {} decision(s)",
+            routing_history.len()
+        ));
+    }
+
+    Some(OperatorResultPreview {
+        workflow_id: graph.workflow_id,
+        proof_outcome,
+        preview_text,
+        payload_location: "task.result".to_string(),
+        provenance_lines,
+    })
+}
+
+fn infer_proof_outcome_from_projection(
+    graph: &ExecutionGraphSummary,
+    topology: &TopologyPlanSummary,
+    branches: &[BranchSummary],
+    routing_history: &[RoutingDecisionSummary],
+) -> Option<ProofOutcomeClassification> {
+    match graph.state {
+        GraphState::Completed => {
+            let collapsed_to_sequential = graph.branch_count <= 1
+                && topology.parallelism_width <= 1
+                && matches!(
+                    topology.task_shape.kind,
+                    mister_smith_core::TaskShapeKind::StrictChain
+                );
+
+            Some(if collapsed_to_sequential {
+                ProofOutcomeClassification::CollapsedToSequential
+            } else {
+                ProofOutcomeClassification::GraphFormedAndCompleted
+            })
+        }
+        GraphState::Failed | GraphState::Aborted => {
+            let formed_visible_graph = graph.branch_count > 1
+                || graph.node_count > 1
+                || !branches.is_empty()
+                || !routing_history.is_empty();
+            (!formed_visible_graph).then_some(ProofOutcomeClassification::FailedBeforeGraph)
+        }
+        GraphState::Pending | GraphState::Running | GraphState::Checkpointed => None,
+    }
 }
 
 fn delegation_alert_key(alert: &DelegationAlert) -> String {

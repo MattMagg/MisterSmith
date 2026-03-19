@@ -69,6 +69,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
+        result_preview: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
