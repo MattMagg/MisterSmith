@@ -1,6 +1,6 @@
 # Mister Smith Current State
 
-Date: March 18, 2026
+Date: March 19, 2026
 Status: Active
 
 ## Purpose
@@ -40,16 +40,19 @@ Mister Smith OS is the Rust workspace and its runtime surfaces:
 - autonomy, task, and session state
 - the agent, routing, and execution crates in this repo
 
-These are not part of the Mister Smith OS itself:
+External development workflow systems are not part of the Mister Smith OS itself:
 
 - Linear
 - Symphony
-- Smith MCP
 - Ralph
 - SpecKit
 
 Those are development and control-plane tools used to build, stage, review, and operate work on
 the repo. They are important to development flow, but they are not runtime subsystems of the OS.
+
+The shipped `mister-smith-mcp` crate belongs to this workspace and this product boundary. It also
+serves as a repo control-plane surface, but it should not be collapsed into the same bucket as
+external workflow services such as Linear or Symphony.
 
 ## Current Repo-Wide State
 
@@ -61,6 +64,8 @@ the repo. They are important to development flow, but they are not runtime subsy
   - one-shot workflow execution through `mister-smith run` and `POST /api/v1/tasks`
   - autonomy inspection through `mister-smith autonomy list` and `mister-smith autonomy status`
   - bounded same-agent session handling through `POST /api/v1/sessions` and related session routes
+- the default runtime path now uses supervised planner and executor lifecycles, a Tokio workflow
+  runner, and a ToolBus-backed execution boundary
 - A real local provider-backed runtime proof has been completed on the current runtime path using
   `openai_chatgpt` with `gpt-5.4`.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
@@ -88,6 +93,8 @@ Read the current state in three layers:
 - real workflow submission and terminal completion tracking
 - autonomy inspection surfaces keyed by `workflow_id`
 - bounded same-agent sessions with stable `session_id` and `coordinator_agent_id`
+- supervised planner and executor lifecycles on the default runtime path
+- ToolBus-backed workflow step execution on the default runtime path
 
 This is the current OS path that has real end-to-end proof.
 
@@ -96,32 +103,37 @@ This is the current OS path that has real end-to-end proof.
 These capabilities are real in the codebase, but the default runtime path does not yet use all of
 them end to end:
 
-- supervision-owned agent spawning and lifecycle helpers
 - provider-neutral `ModelRouter` substrate
 - deterministic `MockProvider`
-- ToolBus-to-LLM tool-calling bridge
 - budget abstractions and router budget hooks
+- JetStream KV-backed budget and distributed state control
+- additive external-agent interoperability surfaces and capability discovery adapters
 
 Current default runtime limitations to keep in mind:
 
 - the live runtime path is currently fixed to `openai_chatgpt` and `gpt-5.4`
 - the default runtime router path is currently a plain round-robin router, not the full
   budget-backed control-loop path
-- the current executor path is still primarily strategy generation, not a fully tool-backed worker
-  execution loop
-- the supervision substrate exists, but the current workflow execution path is not yet fully owned
-  by supervised agent lifecycles end to end
+- external delegation metadata, provenance, and operator-visible decisions are landed, but there is
+  not yet a first-class external-agent interoperability surface on `main`
 
 ## What Is Planned Next
 
-The current next frontier epics are:
+The completed frontier epics are:
 
 - `MS-45`: task-shape-aware orchestration and dynamic team sizing
 - `MS-46`: session restart-resume and distributed operating state
 - `MS-47`: step-level intelligence and model routing control loop
+
+The remaining open frontier epic is:
+
 - `MS-48`: capability kernel and external agent interoperability
 
-These are tracked in `docs/plans/2026-03-16-frontier-direction.md`.
+The current open gap inside `MS-48` is the additive external-agent surface itself. Capability
+descriptors, external delegation provenance and policy preservation, and operator-visible boundary
+decisions are already landed on `main`.
+
+This direction is tracked in `docs/plans/2026-03-16-frontier-direction.md`.
 
 ## Practical Reading Order
 

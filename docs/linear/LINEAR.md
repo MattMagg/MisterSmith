@@ -23,10 +23,12 @@ post-recovery operating-system work captured in `docs/plans/2026-03-16-frontier-
 
 ### Current Strategy
 
-- `MS-45` through `MS-48` are the current post-recovery operating-system backlog epics; keep them
-  in `Backlog` until the next execution cycle explicitly stages bounded slices.
-- `MisterSmith Validated Backlog` should hold these epics in `Backlog` until they are explicitly
-  staged.
+- `MS-45`, `MS-46`, and `MS-47` are complete post-recovery operating-system epics; treat them as
+  backlog history rather than current runnable direction.
+- `MS-48` remains the only open post-recovery frontier epic, and it should stay in `Backlog`
+  until its remaining external-agent-surface gap is split into one bounded slice.
+- `MisterSmith Validated Backlog` should hold only genuinely open frontier work in `Backlog` until
+  it is explicitly staged.
 - Do not move these issues into the watched queue just to keep Symphony busy. Stage only the next
   bounded runnable slice.
 - The current repo-owned direction note is
