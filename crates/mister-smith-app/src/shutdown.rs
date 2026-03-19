@@ -121,16 +121,7 @@ pub async fn graceful_shutdown(
     }
     info!("Background monitors stopped");
 
-    // Step 4: Disconnect NATS
-    if let Some(ref nats) = ctx.nats_transport {
-        match tokio::time::timeout(Duration::from_secs(5), nats.disconnect()).await {
-            Ok(Ok(())) => info!("NATS disconnected"),
-            Ok(Err(e)) => warn!(error = %e, "NATS disconnect error"),
-            Err(_) => warn!("NATS disconnect timed out"),
-        }
-    }
-
-    // Step 5: Wait for HTTP server to finish draining
+    // Step 4: Wait for HTTP server to finish draining
     if let Some(handle) = ctx.http_handle {
         let remaining = shutdown_timeout.saturating_sub(start.elapsed());
         match tokio::time::timeout(remaining, handle).await {
@@ -140,7 +131,26 @@ pub async fn graceful_shutdown(
         }
     }
 
-    // Step 6: Mark stopped
+    // Step 5: Shut down the supervised actor system and supervision loop.
+    match tokio::time::timeout(Duration::from_secs(5), ctx.supervised_system.shutdown()).await {
+        Ok(Ok(())) => info!("Supervised actor system stopped"),
+        Ok(Err(e)) => warn!(error = %e, "Supervised actor system shutdown error"),
+        Err(_) => warn!("Supervised actor system shutdown timed out"),
+    }
+    if let Some(handle) = ctx.supervision_handle {
+        let _ = tokio::time::timeout(Duration::from_secs(5), handle).await;
+    }
+
+    // Step 6: Disconnect NATS
+    if let Some(ref nats) = ctx.nats_transport {
+        match tokio::time::timeout(Duration::from_secs(5), nats.disconnect()).await {
+            Ok(Ok(())) => info!("NATS disconnected"),
+            Ok(Err(e)) => warn!(error = %e, "NATS disconnect error"),
+            Err(_) => warn!("NATS disconnect timed out"),
+        }
+    }
+
+    // Step 7: Mark stopped
     state_tracker.set(ProcessLifecycle::Stopped);
     let shutdown_duration = start.elapsed();
     info!(
@@ -160,6 +170,11 @@ pub async fn forced_shutdown(ctx: BootstrapContext, state_tracker: &ProcessState
     // Signal servers to stop
     let _ = ctx.shutdown_tx.send(());
     ctx.shutdown_flag.store(true, Ordering::SeqCst);
+
+    let _ = ctx.supervised_system.shutdown().await;
+    if let Some(handle) = ctx.supervision_handle {
+        handle.abort();
+    }
 
     // Close NATS immediately (no drain wait)
     if let Some(ref nats) = ctx.nats_transport {

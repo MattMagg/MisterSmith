@@ -52,6 +52,7 @@ pub struct BootstrapContext {
     pub health_monitor: Arc<HealthMonitor>,
     pub metrics_collector: Arc<MetricsCollector>,
     pub supervised_system: Arc<SupervisedSystem>,
+    pub supervision_handle: Option<tokio::task::JoinHandle<()>>,
     pub agent_registry: Arc<AgentRegistry>,
     pub nats_transport: Option<Arc<NatsTransport>>,
     /// Broadcast sender — dropping or sending signals HTTP server shutdown.
@@ -127,20 +128,25 @@ async fn bootstrap_inner(
     // Step 3: Connect to NATS (if configured)
     let nats_transport = connect_nats(config).await?;
 
-    // Step 4: Initialize runtime-backed task execution
-    let task_service = RuntimeTaskService::bootstrap(event_bus.clone(), nats_transport.clone())
-        .await
-        .map_err(|error| format!("runtime task service bootstrap failed: {error}"))?;
-    let conversation_service = ConversationRuntimeService::new(task_service.clone());
-    info!("Runtime task service initialized");
-
-    // Step 5: Initialize supervision tree
+    // Step 4: Initialize supervision tree
     let actor_config = mister_smith_actor::ActorSystemConfig::default();
     let supervised_system = Arc::new(SupervisedSystem::with_event_bus(
         actor_config,
         event_bus.clone(),
     ));
+    let supervision_handle = Some(supervised_system.start_supervision());
     info!("Supervision tree initialized");
+
+    // Step 5: Initialize runtime-backed task execution
+    let task_service = RuntimeTaskService::bootstrap(
+        event_bus.clone(),
+        nats_transport.clone(),
+        supervised_system.clone(),
+    )
+    .await
+    .map_err(|error| format!("runtime task service bootstrap failed: {error}"))?;
+    let conversation_service = ConversationRuntimeService::new(task_service.clone());
+    info!("Runtime task service initialized");
 
     // Step 6: Initialize agent registry
     let agent_registry = Arc::new(AgentRegistry::new());
@@ -192,6 +198,7 @@ async fn bootstrap_inner(
         health_monitor,
         metrics_collector,
         supervised_system,
+        supervision_handle,
         agent_registry,
         nats_transport,
         shutdown_tx,
