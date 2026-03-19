@@ -154,6 +154,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
                 "preferred tier updated from slm-tier to llm-tier".to_string(),
             ],
         }],
+        result_preview: None,
         interventions: vec![InterventionRecord {
             record_id: InterventionRecordId::new(),
             decision_id,

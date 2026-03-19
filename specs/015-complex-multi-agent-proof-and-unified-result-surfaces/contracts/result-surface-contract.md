@@ -108,6 +108,8 @@ Expected behavior:
 
 - autonomy inspection renders a result preview and provenance block correlated with graph state,
   topology, and proof outcome classification
+- the typed event/status surface carries this block as
+  `AutonomyStatusView.result_preview: Option<OperatorResultPreview>`
 - operators can distinguish:
   - `graph_formed_and_completed`
   - `collapsed_to_sequential`

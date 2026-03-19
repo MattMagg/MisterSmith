@@ -810,6 +810,7 @@ impl Orchestrator {
             memory_pressure: Vec::<ContextPressureSummary>::new(),
             routing_history,
             step_routing_history,
+            result_preview: None,
             interventions,
             delegation_capabilities,
             delegation_alerts,

@@ -1518,6 +1518,7 @@ mod tests {
             memory_pressure: vec![],
             routing_history: vec![],
             step_routing_history: vec![],
+            result_preview: None,
             interventions: vec![],
             delegation_capabilities: vec![],
             delegation_alerts: vec![],

@@ -12,9 +12,9 @@ use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
-    InterventionRecord, MemorySnapshotId, ProfileSnapshot, ProfileSnapshotId, ProvenanceChain,
-    RevocationState, SessionId, TaskId, TaskShapeClassification, TeamSizingDecision, TopologyKind,
-    TopologyRationale,
+    InterventionRecord, MemorySnapshotId, OperatorResultPreview, ProfileSnapshot,
+    ProfileSnapshotId, ProvenanceChain, RevocationState, SessionId, TaskId,
+    TaskShapeClassification, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -358,6 +358,9 @@ pub struct AutonomyStatusView {
     /// Step-level routing history projected from workflow metadata when available.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub step_routing_history: Vec<StepRoutingDecisionSummary>,
+    /// Compact operator-facing result preview and provenance when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_preview: Option<OperatorResultPreview>,
     /// Applied intervention records visible to operators.
     pub interventions: Vec<InterventionRecord>,
     /// Active or recently rejected delegation capabilities.
