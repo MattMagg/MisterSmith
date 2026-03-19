@@ -462,10 +462,7 @@ pub fn infer_proof_outcome_from_projection(
 ) -> Option<ProofOutcomeClassification> {
     match graph.state {
         GraphState::Completed => {
-            let collapsed_to_sequential = topology.topology_kind == TopologyKind::Sequential
-                && topology.parallelism_width <= 1
-                && (topology.task_shape.max_parallel_width > 1
-                    || !matches!(topology.task_shape.kind, TaskShapeKind::StrictChain));
+            let collapsed_to_sequential = projection_collapsed_to_sequential(topology);
 
             Some(if collapsed_to_sequential {
                 ProofOutcomeClassification::CollapsedToSequential
@@ -474,14 +471,32 @@ pub fn infer_proof_outcome_from_projection(
             })
         }
         GraphState::Failed | GraphState::Aborted => {
-            let formed_visible_graph = graph.branch_count > 1
-                || graph.node_count > 1
-                || !branches.is_empty()
-                || !routing_history.is_empty();
+            let formed_visible_graph =
+                projection_has_visible_graph(graph, branches, routing_history);
             (!formed_visible_graph).then_some(ProofOutcomeClassification::FailedBeforeGraph)
         }
         GraphState::Pending | GraphState::Running | GraphState::Checkpointed => None,
     }
+}
+
+#[must_use]
+fn projection_collapsed_to_sequential(topology: &TopologyPlanSummary) -> bool {
+    topology.topology_kind == TopologyKind::Sequential
+        && topology.parallelism_width <= 1
+        && (topology.task_shape.max_parallel_width > 1
+            || !matches!(topology.task_shape.kind, TaskShapeKind::StrictChain))
+}
+
+#[must_use]
+fn projection_has_visible_graph(
+    graph: &ExecutionGraphSummary,
+    branches: &[BranchSummary],
+    routing_history: &[RoutingDecisionSummary],
+) -> bool {
+    graph.branch_count > 1
+        || graph.node_count > 1
+        || !branches.is_empty()
+        || !routing_history.is_empty()
 }
 
 /// Derive a bounded operator-facing result preview from a typed autonomy projection.
