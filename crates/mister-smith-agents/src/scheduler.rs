@@ -341,6 +341,23 @@ impl TaskScheduler {
             .collect()
     }
 
+    /// Get output values for all completed subtasks of a parent task without unnecessary allocations of the full TaskAssignment struct.
+    pub fn completed_subtask_outputs(&self, parent_id: &TaskId) -> Vec<serde_json::Value> {
+        self.tasks
+            .iter()
+            .filter_map(|e| {
+                let task = e.value();
+                if task.parent_task_id.as_ref() == Some(parent_id)
+                    && task.state == TaskState::Completed
+                {
+                    task.output.clone()
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Check if all subtasks for a given parent task are complete without allocating a Vec.
     pub fn all_subtasks_completed(&self, parent_id: &TaskId) -> bool {
         let mut has_subtasks = false;

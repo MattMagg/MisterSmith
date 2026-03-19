@@ -13,3 +13,7 @@
 ## 2025-02-17 - Serialize Request Body Outside Loop
 **Learning:** Avoid `serde_json::to_vec` and JSON serialization on each retry loop iteration, since the request payload is static. Even though `reqwest` exposes `.json()`, passing `.body()` directly with a cloned `Vec<u8>` is considerably faster and avoids excessive object creation in high-latency network retries.
 **Action:** Identify serialization inside retry loops and move it outside to save CPU cycles and reduce overall latency.
+
+## 2025-05-15 - [Avoid N+1 Cloning of DashMap Values for Data Extraction]
+**Learning:** Extracting full structs containing heavy `serde_json::Value` fields using `.map(|e| e.clone()).collect()` from a `DashMap` iteratively (e.g., retrieving `TaskAssignment` records to access their outputs) is extremely expensive.
+**Action:** Use `.filter_map` directly on the `DashMap` iterator to map directly to lightweight data representations or specific cloned fields (e.g., `task.output.clone()`) instead of cloning the entire wrapper struct.
