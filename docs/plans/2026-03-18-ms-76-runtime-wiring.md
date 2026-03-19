@@ -128,6 +128,30 @@ Regression found and fixed during validation:
 - fix: `normalize_runtime_plan(...)` now reindexes runtime steps deterministically instead of
   preserving planner-supplied numeric step labels for parallel branches
 
+Review follow-up fix set on PR `#211`:
+
+- runtime supervisor no longer uses the default root escalation budget; it now uses a dedicated
+  non-shutdown strategy for shared runtime worker actors
+- normal-stop and ignored supervised children are now removed from the supervision tree and restart
+  factory map instead of accumulating stale entries
+- planner `step_routing_history` is now persisted into workflow metadata before graph compilation,
+  so pre-graph failures retain routing breadcrumbs
+
+Follow-up validation after review comments:
+
+- `cargo test -p mister-smith-supervision transient_child_not_restarted_on_normal_stop`
+- `cargo test -p mister-smith-app runtime_supervision_strategy_avoids_root_shutdown_budget`
+- `cargo test -p mister-smith-app persist_step_routing_history_writes_non_empty_history`
+- `cargo test -p mister-smith-app normalize_runtime_plan_reindexes_duplicate_numeric_steps`
+- `cargo build --workspace`
+- fresh live runtime proof:
+  - workflow `02016dd3-5414-4e61-988b-f3cfa9dc1b19` completed through `POST /api/v1/tasks`
+  - task result again proved `planner_lifecycle = supervised_actor`,
+    `executor_lifecycle = supervised_actor`, `workflow_runner = tokio_task`, and
+    `execution_boundary = tool_bus`
+  - `cargo run -q -p mister-smith-app -- autonomy status --workflow-id 02016dd3-5414-4e61-988b-f3cfa9dc1b19 --base-url http://127.0.0.1:8080`
+    now explicitly surfaced `step routing:` with the planner decision line after completion
+
 ## Stop Conditions
 
 - The runtime still depends on dedicated workflow threads after the change.

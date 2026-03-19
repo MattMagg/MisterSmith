@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_nats::jetstream::stream::RetentionPolicy;
 use async_trait::async_trait;
@@ -18,10 +19,10 @@ use mister_smith_agents::scheduler::{
 };
 use mister_smith_agents::{AgentConfig, Orchestrator, ToolBus, TopologyCompiler, TopologySignals};
 use mister_smith_core::{
-    AgentId, AgentType, BranchState, GraphState, GuardTarget, NodeState, SupervisionStrategy,
-    TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema,
+    AgentId, AgentType, BranchState, EscalationPolicy, GraphState, GuardTarget, NodeState,
+    SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema,
 };
-use mister_smith_events::{AutonomyStatusView, EventBus};
+use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
     TaskExecutionService, TaskStatusView, TaskSubmissionRequest, TaskSubmissionResponse,
 };
@@ -146,6 +147,25 @@ fn runtime_execution_mode() -> Value {
     })
 }
 
+fn runtime_supervision_strategy() -> SupervisionStrategy {
+    SupervisionStrategy {
+        max_failures: 32,
+        failure_window: Duration::from_secs(60),
+        escalation_policy: EscalationPolicy::LogAndIgnore,
+        ..Default::default()
+    }
+}
+
+fn persist_step_routing_history(metadata: &mut Value, history: &[StepRoutingDecisionSummary]) {
+    if history.is_empty() {
+        return;
+    }
+
+    if let Ok(serialized) = serde_json::to_value(history) {
+        put_metadata(metadata, "step_routing_history", serialized);
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct RuntimeTaskService {
     pool: PgPool,
@@ -238,7 +258,7 @@ impl RuntimeTaskService {
             .with_event_bus(event_bus),
         );
         let runtime_supervisor_id = supervised_system
-            .create_supervisor(SupervisionStrategy::default())
+            .create_supervisor(runtime_supervision_strategy())
             .await;
         let tool_bus = Arc::new(ToolBus::new());
         register_runtime_tools(tool_bus.as_ref(), runtime_supervisor_id);
@@ -434,11 +454,13 @@ impl RuntimeTaskService {
                 planning_context.clone(),
             )
             .await?;
+        let planner_step_routing_history = self.orchestrator.step_routing_history(&workflow_id);
         let execution_plan = normalize_runtime_plan(
             &request.description,
             &planning_context,
             planner_output.clone(),
         );
+        persist_step_routing_history(&mut metadata, &planner_step_routing_history);
         put_metadata(&mut metadata, "planner_output", planner_output.clone());
         put_metadata(&mut metadata, "execution_plan", execution_plan.clone());
         self.update_task_metadata(workflow_id, metadata.clone())
@@ -1956,6 +1978,15 @@ mod runtime_plan_tests {
     use super::*;
 
     #[test]
+    fn runtime_supervision_strategy_avoids_root_shutdown_budget() {
+        let strategy = runtime_supervision_strategy();
+
+        assert_eq!(strategy.max_failures, 32);
+        assert_eq!(strategy.failure_window, Duration::from_secs(60));
+        assert_eq!(strategy.escalation_policy, EscalationPolicy::LogAndIgnore);
+    }
+
+    #[test]
     fn normalize_runtime_plan_reindexes_duplicate_numeric_steps() {
         let plan = normalize_runtime_plan(
             "ship proof",
@@ -1986,6 +2017,33 @@ mod runtime_plan_tests {
 
         assert_eq!(numeric_steps, vec![1, 2, 3]);
         assert_eq!(plan["runtime_normalized"], json!(true));
+    }
+
+    #[test]
+    fn persist_step_routing_history_writes_non_empty_history() {
+        let mut metadata = json!({});
+        let history = vec![StepRoutingDecisionSummary {
+            step_id: "planner.step.1".to_string(),
+            step_index: Some(1),
+            step_kind: Some("planner".to_string()),
+            model_id: "gpt-5.4".to_string(),
+            tier: "llm-tier".to_string(),
+            reason: "selected direct routing".to_string(),
+            previous_step_id: None,
+            previous_action: None,
+            previous_tier: None,
+            action: "continue".to_string(),
+            action_changed: false,
+            preferred_tier_after: Some("llm-tier".to_string()),
+            estimated_cost_tokens: Some(96),
+            confidence_score: Some(0.95),
+            triggered_checkpoints: vec![],
+            change_rationale: vec!["initial routing decision".to_string()],
+        }];
+
+        persist_step_routing_history(&mut metadata, &history);
+
+        assert_eq!(metadata["step_routing_history"], json!(history));
     }
 }
 

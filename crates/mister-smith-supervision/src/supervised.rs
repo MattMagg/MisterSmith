@@ -435,9 +435,25 @@ async fn handle_decision(
             // Stop/Ignore are terminal only for the current notification.
             // Return explicitly so supervision_loop can continue processing
             // future actor failures.
-            SupervisionDecision::Stop(_) | SupervisionDecision::Ignore => return,
+            SupervisionDecision::Stop(actor_id) => {
+                cleanup_terminated_child(tree, factories, actor_id).await;
+                return;
+            }
+            SupervisionDecision::Ignore => {
+                cleanup_terminated_child(tree, factories, failed_actor_id).await;
+                return;
+            }
         }
     }
+}
+
+async fn cleanup_terminated_child(
+    tree: &RwLock<SupervisionTree>,
+    factories: &RwLock<HashMap<AgentId, Box<dyn ActorRestarter>>>,
+    actor_id: AgentId,
+) {
+    tree.write().await.remove_child(&actor_id);
+    factories.write().await.remove(&actor_id);
 }
 
 #[cfg(test)]
@@ -940,6 +956,11 @@ mod tests {
 
         // Transient actor should NOT be restarted on normal stop
         assert_eq!(starts.load(Ordering::SeqCst), 1);
+        let tracked_child = supervised
+            .with_tree(|tree| tree.find_supervisor(&actor_id).is_some())
+            .await;
+        assert!(!tracked_child);
+        assert!(!supervised.factories.read().await.contains_key(&actor_id));
 
         supervised.shutdown().await.unwrap();
     }
