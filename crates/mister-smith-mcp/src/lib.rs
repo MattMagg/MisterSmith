@@ -13,7 +13,7 @@ pub mod server;
 pub mod session;
 
 pub use bridge::McpNatsBridge;
-pub use client::{McpClient, McpTool};
+pub use client::{ExternalCapabilityDescriptor, McpClient, McpTool};
 pub use compatibility::{
     build_smith_compatibility_server, CompatibilityStatus, SmithCompatibilityOptions, ToolResponse,
 };

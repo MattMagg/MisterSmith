@@ -359,11 +359,13 @@ mod tests {
                             name: "echo".into(),
                             description: "Echo text".into(),
                             input_schema: serde_json::json!({"type": "object"}),
+                            capability_descriptor: None,
                         },
                         McpTool {
                             name: "sum".into(),
                             description: "Sum numbers".into(),
                             input_schema: serde_json::json!({"type": "object"}),
+                            capability_descriptor: None,
                         },
                     ],
                 })
@@ -384,11 +386,13 @@ mod tests {
                             name: "echo".into(),
                             description: "Echo duplicate".into(),
                             input_schema: serde_json::json!({"type": "object"}),
+                            capability_descriptor: None,
                         },
                         McpTool {
                             name: "search".into(),
                             description: "Search docs".into(),
                             input_schema: serde_json::json!({"type": "object"}),
+                            capability_descriptor: None,
                         },
                     ],
                 })

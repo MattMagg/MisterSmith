@@ -20,7 +20,7 @@ use rmcp::{
     ServerHandler,
 };
 
-use crate::client::McpTool;
+use crate::client::{ExternalCapabilityDescriptor, McpTool};
 use crate::config::McpServerConfig;
 use crate::errors::McpError;
 
@@ -189,6 +189,7 @@ impl McpServer {
                 name: t.external_name(),
                 description: t.description.clone(),
                 input_schema: t.input_schema.clone(),
+                capability_descriptor: Some(t.capability_descriptor()),
             })
             .collect();
         Ok(filtered)
@@ -307,6 +308,23 @@ impl ExposedTool {
             format!("{}.{}", self.namespace, self.name)
         }
     }
+
+    fn capability_descriptor(&self) -> ExternalCapabilityDescriptor {
+        let external_name = self.external_name();
+        let descriptor_id = tool_descriptor_id(&external_name);
+        let action_id = format!("{descriptor_id}#execute");
+
+        ExternalCapabilityDescriptor {
+            boundary: "mcp.tool".to_string(),
+            external_name,
+            descriptor_id,
+            action_id: action_id.clone(),
+            required_scope: "InvokeTool".to_string(),
+            namespace: self.namespace.clone(),
+            resource_id: Some(self.name.clone()),
+            revocation_key: action_id,
+        }
+    }
 }
 
 fn tool_descriptor_id(tool_name: &str) -> String {
@@ -338,11 +356,16 @@ impl ServerHandler for McpServerAdapter {
             let rendered = tools
                 .into_iter()
                 .map(|tool| {
+                    let capability_meta = tool.capability_meta();
                     let schema = match tool.input_schema {
                         serde_json::Value::Object(map) => map,
                         _ => serde_json::Map::new(),
                     };
-                    Tool::new(tool.name, tool.description, schema)
+                    let rendered = Tool::new(tool.name, tool.description, schema);
+                    match capability_meta {
+                        Some(meta) => rendered.with_meta(meta),
+                        None => rendered,
+                    }
                 })
                 .collect();
 
@@ -455,6 +478,20 @@ mod tests {
         let tools = server.handle_tools_list(None).await.unwrap();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name, "agent.greet");
+        let capability = tools[0]
+            .capability_descriptor
+            .as_ref()
+            .expect("listed tools should publish bounded capability metadata");
+        assert_eq!(capability.boundary, "mcp.tool");
+        assert_eq!(capability.external_name, "agent.greet");
+        assert_eq!(capability.descriptor_id, "tool:agent.greet");
+        let meta = tools[0]
+            .capability_meta()
+            .expect("listed tool should reconstruct Smith capability meta");
+        assert_eq!(
+            meta.0["mister_smith_capability"]["descriptor_id"],
+            serde_json::json!("tool:agent.greet")
+        );
     }
 
     #[tokio::test]

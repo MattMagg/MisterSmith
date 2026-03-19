@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rmcp::{
-    model::{CallToolRequestParams, ClientInfo},
+    model::{CallToolRequestParams, ClientInfo, Meta},
     service::{Peer, RoleClient, RunningService},
     transport::{StreamableHttpClientTransport, TokioChildProcess},
     ClientHandler, ServiceExt,
@@ -21,6 +21,43 @@ use crate::errors::McpError;
 use crate::server::ToolCallRequest;
 
 const TOOL_CALL_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const SMITH_CAPABILITY_META_KEY: &str = "mister_smith_capability";
+
+/// Descriptor metadata for one discoverable external capability surface.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ExternalCapabilityDescriptor {
+    /// Boundary family that owns the capability surface.
+    pub boundary: String,
+    /// Externally visible resource name.
+    pub external_name: String,
+    /// Stable descriptor bound to delegated authority.
+    pub descriptor_id: String,
+    /// Stable execution action bound to the descriptor.
+    pub action_id: String,
+    /// Scope required to invoke the surface.
+    pub required_scope: String,
+    /// Namespace within the external boundary.
+    pub namespace: String,
+    /// Boundary-local resource identifier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_id: Option<String>,
+    /// Revocation key checked before execution.
+    pub revocation_key: String,
+}
+
+impl ExternalCapabilityDescriptor {
+    pub(crate) fn into_meta_value(self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap_or_else(|_| serde_json::json!({}))
+    }
+}
+
+pub(crate) fn capability_descriptor_from_meta(
+    meta: Option<&Meta>,
+) -> Option<ExternalCapabilityDescriptor> {
+    meta.and_then(|meta| meta.get(SMITH_CAPABILITY_META_KEY))
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
+}
 
 /// Represents a discovered MCP tool.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -31,6 +68,22 @@ pub struct McpTool {
     pub description: String,
     /// JSON schema for tool parameters.
     pub input_schema: serde_json::Value,
+    /// Optional bounded capability descriptor published by the server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_descriptor: Option<ExternalCapabilityDescriptor>,
+}
+
+impl McpTool {
+    pub(crate) fn capability_meta(&self) -> Option<Meta> {
+        self.capability_descriptor.clone().map(|descriptor| {
+            let mut meta = Meta::new();
+            meta.0.insert(
+                SMITH_CAPABILITY_META_KEY.to_string(),
+                descriptor.into_meta_value(),
+            );
+            meta
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -221,6 +274,7 @@ impl McpClient {
                     name: tool.name.into_owned(),
                     description: tool.description.map(|d| d.into_owned()).unwrap_or_default(),
                     input_schema: serde_json::Value::Object((*tool.input_schema).clone()),
+                    capability_descriptor: capability_descriptor_from_meta(tool.meta.as_ref()),
                 })
             })
             .collect();
@@ -602,6 +656,38 @@ mod tests {
         let tools = client.discover_tools().await.unwrap();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name, "read_file");
+    }
+
+    #[tokio::test]
+    async fn discovery_preserves_mister_smith_capability_metadata() {
+        let mut meta = Meta::new();
+        meta.0.insert(
+            SMITH_CAPABILITY_META_KEY.to_string(),
+            ExternalCapabilityDescriptor {
+                boundary: "mcp.tool".to_string(),
+                external_name: "echo".to_string(),
+                descriptor_id: "tool:echo".to_string(),
+                action_id: "tool:echo#execute".to_string(),
+                required_scope: "InvokeTool".to_string(),
+                namespace: "test".to_string(),
+                resource_id: Some("echo".to_string()),
+                revocation_key: "tool:echo#execute".to_string(),
+            }
+            .into_meta_value(),
+        );
+        let server = TestServer::new(vec![mk_tool("echo").with_meta(meta)]);
+        let client = connected_client_with_server(test_config(), server)
+            .await
+            .unwrap();
+
+        let tools = client.discover_tools().await.unwrap();
+        let capability = tools[0]
+            .capability_descriptor
+            .as_ref()
+            .expect("capability metadata should be preserved");
+        assert_eq!(capability.boundary, "mcp.tool");
+        assert_eq!(capability.external_name, "echo");
+        assert_eq!(capability.descriptor_id, "tool:echo");
     }
 
     #[tokio::test]
