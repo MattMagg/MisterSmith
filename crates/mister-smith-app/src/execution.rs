@@ -361,29 +361,31 @@ impl RuntimeTaskService {
             "recovered_after_restart": true,
         });
         let final_result = crate::autonomy::build_canonical_result_envelope(
-            workflow_id,
-            PROVIDER_KIND_NAME,
-            MODEL_ID,
-            metadata
-                .get("description")
-                .and_then(Value::as_str)
-                .unwrap_or(message),
-            runtime_execution_mode(),
-            metadata
-                .get("planner_output")
-                .cloned()
-                .unwrap_or(Value::Null),
-            metadata
-                .get("execution_plan")
-                .cloned()
-                .unwrap_or(Value::Null),
-            metadata
-                .get("step_results")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default(),
-            aggregated_result.clone(),
-            "failed",
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: metadata
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .unwrap_or(message),
+                runtime_execution_mode: runtime_execution_mode(),
+                planner_output: metadata
+                    .get("planner_output")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                execution_plan: metadata
+                    .get("execution_plan")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                step_results: metadata
+                    .get("step_results")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default(),
+                aggregated_result: aggregated_result.clone(),
+                status: "failed",
+            },
         );
         let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
             "failed",
@@ -726,22 +728,24 @@ impl RuntimeTaskService {
             .await
             .map_err(|error| format!("result aggregation failed: {error}"))?;
         let final_result = crate::autonomy::build_canonical_result_envelope(
-            workflow_id,
-            PROVIDER_KIND_NAME,
-            MODEL_ID,
-            &request.description,
-            runtime_execution_mode(),
-            metadata
-                .get("planner_output")
-                .cloned()
-                .unwrap_or(Value::Null),
-            metadata
-                .get("execution_plan")
-                .cloned()
-                .unwrap_or(Value::Null),
-            step_results.values().cloned().collect::<Vec<_>>(),
-            aggregated_result.clone(),
-            "completed",
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: &request.description,
+                runtime_execution_mode: runtime_execution_mode(),
+                planner_output: metadata
+                    .get("planner_output")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                execution_plan: metadata
+                    .get("execution_plan")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                step_results: step_results.values().cloned().collect::<Vec<_>>(),
+                aggregated_result: aggregated_result.clone(),
+                status: "completed",
+            },
         );
         let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
             "completed",
@@ -1083,29 +1087,31 @@ impl RuntimeTaskService {
             _ => json!({ "failure": { "message": message } }),
         };
         let final_result = crate::autonomy::build_canonical_result_envelope(
-            workflow_id,
-            PROVIDER_KIND_NAME,
-            MODEL_ID,
-            metadata
-                .get("description")
-                .and_then(Value::as_str)
-                .unwrap_or("workflow failed"),
-            runtime_execution_mode(),
-            metadata
-                .get("planner_output")
-                .cloned()
-                .unwrap_or(Value::Null),
-            metadata
-                .get("execution_plan")
-                .cloned()
-                .unwrap_or(Value::Null),
-            metadata
-                .get("step_results")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default(),
-            json!({ "error": message }),
-            "failed",
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: metadata
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .unwrap_or("workflow failed"),
+                runtime_execution_mode: runtime_execution_mode(),
+                planner_output: metadata
+                    .get("planner_output")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                execution_plan: metadata
+                    .get("execution_plan")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                step_results: metadata
+                    .get("step_results")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default(),
+                aggregated_result: json!({ "error": message }),
+                status: "failed",
+            },
         );
         let aggregated_result = final_result.aggregated_result.clone();
         let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(

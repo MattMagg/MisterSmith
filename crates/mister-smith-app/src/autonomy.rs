@@ -531,18 +531,34 @@ pub(crate) fn enrich_step_routing_history(view: &mut AutonomyStatusView, metadat
     }
 }
 
+pub(crate) struct CanonicalResultEnvelopeInput<'a> {
+    pub(crate) workflow_id: TaskId,
+    pub(crate) provider_kind: &'a str,
+    pub(crate) model_id: &'a str,
+    pub(crate) description: &'a str,
+    pub(crate) runtime_execution_mode: Value,
+    pub(crate) planner_output: Value,
+    pub(crate) execution_plan: Value,
+    pub(crate) step_results: Vec<Value>,
+    pub(crate) aggregated_result: Value,
+    pub(crate) status: &'a str,
+}
+
 pub(crate) fn build_canonical_result_envelope(
-    workflow_id: TaskId,
-    provider_kind: &str,
-    model_id: &str,
-    description: &str,
-    runtime_execution_mode: Value,
-    planner_output: Value,
-    execution_plan: Value,
-    step_results: Vec<Value>,
-    aggregated_result: Value,
-    status: &str,
+    input: CanonicalResultEnvelopeInput<'_>,
 ) -> UnifiedResultEnvelope {
+    let CanonicalResultEnvelopeInput {
+        workflow_id,
+        provider_kind,
+        model_id,
+        description,
+        runtime_execution_mode,
+        planner_output,
+        execution_plan,
+        step_results,
+        aggregated_result,
+        status,
+    } = input;
     let proof_outcome =
         classify_proof_outcome(status, Some(&execution_plan), Some(step_results.as_slice()));
     UnifiedResultEnvelope {
