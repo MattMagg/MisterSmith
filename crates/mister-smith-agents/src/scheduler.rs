@@ -341,6 +341,23 @@ impl TaskScheduler {
             .collect()
     }
 
+    /// Get completed subtask outputs without cloning full task records.
+    pub fn completed_subtask_outputs(&self, parent_id: &TaskId) -> Vec<serde_json::Value> {
+        self.tasks
+            .iter()
+            .filter_map(|e| {
+                let task = e.value();
+                if task.parent_task_id.as_ref() == Some(parent_id)
+                    && task.state == TaskState::Completed
+                {
+                    task.output.clone()
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Check if all subtasks for a given parent task are complete without allocating a Vec.
     pub fn all_subtasks_completed(&self, parent_id: &TaskId) -> bool {
         let mut has_subtasks = false;
@@ -603,5 +620,43 @@ mod tests {
         let combined = agg.aggregate(results).await.unwrap();
         assert!(combined.is_array());
         assert_eq!(combined.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_completed_subtask_outputs_filters_to_completed_children() {
+        let scheduler = TaskScheduler::new();
+        let parent_id = TaskId::new();
+        let agent_id = AgentId::new();
+
+        let completed_child =
+            TaskAssignment::new("child", serde_json::json!({})).with_parent(parent_id);
+        let completed_child_id = completed_child.task_id;
+        scheduler.submit(completed_child);
+        scheduler.assign(&completed_child_id, agent_id).unwrap();
+        scheduler.start(&completed_child_id).unwrap();
+        scheduler
+            .complete(&completed_child_id, serde_json::json!({"result": "done"}))
+            .unwrap();
+
+        let pending_child =
+            TaskAssignment::new("child", serde_json::json!({})).with_parent(parent_id);
+        scheduler.submit(pending_child);
+
+        let other_parent_child =
+            TaskAssignment::new("child", serde_json::json!({})).with_parent(TaskId::new());
+        let other_parent_child_id = other_parent_child.task_id;
+        scheduler.submit(other_parent_child);
+        scheduler.assign(&other_parent_child_id, agent_id).unwrap();
+        scheduler.start(&other_parent_child_id).unwrap();
+        scheduler
+            .complete(
+                &other_parent_child_id,
+                serde_json::json!({"result": "other"}),
+            )
+            .unwrap();
+
+        let outputs = scheduler.completed_subtask_outputs(&parent_id);
+
+        assert_eq!(outputs, vec![serde_json::json!({"result": "done"})]);
     }
 }
