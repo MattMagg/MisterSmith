@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use mister_smith_core::CapabilityActionKind;
 use mister_smith_security::DelegationService;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::process::Command;
@@ -13,7 +14,10 @@ use tokio::sync::RwLock;
 
 use crate::config::McpServerConfig;
 use crate::errors::McpError;
-use crate::server::{ExposedTool, McpServer, ToolCallRequest, ToolHandler};
+use crate::server::{
+    tool_boundary_action, CapabilityCatalogEntry, ExposedTool, McpServer, ToolCallRequest,
+    ToolHandler,
+};
 
 const DEFAULT_SERVER_NAME: &str = "smith";
 const DEFAULT_LINEAR_ENDPOINT: &str = "https://api.linear.app/graphql";
@@ -742,6 +746,7 @@ struct SmithRuntimeState {
     last_reload_at: DateTime<Utc>,
     reload_nonce: u64,
     registered_tool_names: Vec<String>,
+    registered_capability_catalog: Vec<CapabilityCatalogEntry>,
 }
 
 impl Default for SmithRuntimeState {
@@ -752,6 +757,7 @@ impl Default for SmithRuntimeState {
             last_reload_at: now,
             reload_nonce: 0,
             registered_tool_names: Vec::new(),
+            registered_capability_catalog: Vec::new(),
         }
     }
 }
@@ -796,6 +802,10 @@ impl SmithCompatibilityServer {
 
     async fn set_registered_tools(&self, tool_names: Vec<String>) {
         self.runtime.write().await.registered_tool_names = tool_names;
+    }
+
+    async fn set_registered_capability_catalog(&self, catalog: Vec<CapabilityCatalogEntry>) {
+        self.runtime.write().await.registered_capability_catalog = catalog;
     }
 
     async fn runtime_info(&self) -> ServerRuntimeInfo {
@@ -1422,6 +1432,58 @@ impl SmithCompatibilityServer {
             ],
             blocking_issues: Vec::new(),
             data: self.runtime_info().await,
+        })
+    }
+
+    async fn describe_external_capabilities(
+        &self,
+        request: ToolCallRequest,
+    ) -> Result<serde_json::Value, McpError> {
+        let runtime = self.runtime.read().await;
+        let catalog = runtime.registered_capability_catalog.clone();
+        drop(runtime);
+
+        let observed_delegation = request.context.delegation.as_ref().map(|envelope| {
+            serde_json::json!({
+                "descriptor_id": envelope.descriptor_id(),
+                "capability_id": envelope.capability.capability_id,
+                "scope": envelope.capability.scope,
+                "revocation_state": envelope.capability.revocation_state,
+                "chain_depth": envelope.provenance.links.len(),
+                "root_issuer": envelope.provenance.root_issuer,
+                "terminal_capability": envelope.provenance.terminal_capability,
+                "action": envelope.action,
+            })
+        });
+
+        let discovery_surface = catalog
+            .iter()
+            .find(|entry| entry.tool_name == "describe_external_capabilities")
+            .cloned();
+
+        json_response(ToolResponse {
+            status: CompatibilityStatus::Ok,
+            summary: format!(
+                "described {} external MCP capability surfaces",
+                catalog.len()
+            ),
+            evidence: vec![EvidenceItem {
+                label: "capability_count".to_string(),
+                detail: catalog.len().to_string(),
+            }],
+            warnings: Vec::new(),
+            recommended_next_tools: vec!["get_server_runtime_info".to_string()],
+            blocking_issues: Vec::new(),
+            data: serde_json::json!({
+                "discovery_surface": discovery_surface,
+                "observed_delegation": observed_delegation,
+                "capabilities": catalog,
+                "notes": [
+                    "Capability descriptors are also published in MCP tools/list metadata under mister_smith_capability.",
+                    "This catalog tool is the bounded discovery surface and requires a Discover action envelope.",
+                    "Delegated execute calls preserve the same descriptor and policy tuple at the MCP tools/call boundary."
+                ]
+            }),
         })
     }
 
@@ -5241,6 +5303,16 @@ pub async fn build_smith_compatibility_server(
         |state, params| async move { state.get_server_runtime_info(params).await },
     )
     .await;
+    register_compatibility_request_tool(
+        &server,
+        &compatibility,
+        "describe_external_capabilities",
+        "Describe the bounded external MCP capability surfaces and discovery contract for external agents.",
+        object_schema(&[], &[]),
+        tool_boundary_action("describe_external_capabilities", "", CapabilityActionKind::Discover),
+        |state, request| async move { state.describe_external_capabilities(request).await },
+    )
+    .await;
     register_compatibility_tool(
         &server,
         &compatibility,
@@ -5673,6 +5745,9 @@ pub async fn build_smith_compatibility_server(
     compatibility
         .set_registered_tools(server.registered_tool_names().await)
         .await;
+    compatibility
+        .set_registered_capability_catalog(server.capability_catalog().await)
+        .await;
     Ok(server)
 }
 
@@ -5695,6 +5770,34 @@ async fn register_compatibility_tool<F, Fut>(
                 description: description.to_string(),
                 input_schema,
                 namespace: String::new(),
+                required_boundary_action: None,
+            },
+            handler,
+        )
+        .await;
+}
+
+async fn register_compatibility_request_tool<F, Fut>(
+    server: &Arc<McpServer>,
+    compatibility: &Arc<SmithCompatibilityServer>,
+    name: &str,
+    description: &str,
+    input_schema: serde_json::Value,
+    required_boundary_action: mister_smith_core::DelegatedAction,
+    func: F,
+) where
+    F: Fn(Arc<SmithCompatibilityServer>, ToolCallRequest) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<serde_json::Value, McpError>> + Send + 'static,
+{
+    let handler = compatibility_request_handler(compatibility.clone(), func);
+    server
+        .register_tool(
+            ExposedTool {
+                name: name.to_string(),
+                description: description.to_string(),
+                input_schema,
+                namespace: String::new(),
+                required_boundary_action: Some(required_boundary_action),
             },
             handler,
         )
@@ -5712,6 +5815,20 @@ where
     Arc::new(move |request: ToolCallRequest| {
         let compatibility = compatibility.clone();
         Box::pin(func(compatibility, request.params))
+    })
+}
+
+fn compatibility_request_handler<F, Fut>(
+    compatibility: Arc<SmithCompatibilityServer>,
+    func: F,
+) -> ToolHandler
+where
+    F: Fn(Arc<SmithCompatibilityServer>, ToolCallRequest) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<serde_json::Value, McpError>> + Send + 'static,
+{
+    Arc::new(move |request: ToolCallRequest| {
+        let compatibility = compatibility.clone();
+        Box::pin(func(compatibility, request))
     })
 }
 
@@ -7176,8 +7293,8 @@ mod tests {
     use std::time::Duration;
 
     use mister_smith_core::{
-        AgentId, AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
-        DelegationScope, ExternalDelegationEnvelope,
+        AgentId, AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegationScope,
+        ExternalDelegationEnvelope,
     };
     use mister_smith_security::DelegationService;
     use rmcp::{
@@ -7203,7 +7320,9 @@ mod tests {
         ))
     }
 
-    fn sample_external_delegation(descriptor_id: &str) -> ExternalDelegationEnvelope {
+    fn sample_external_delegation_for_action(
+        action: DelegatedAction,
+    ) -> ExternalDelegationEnvelope {
         let service = DelegationService::new();
         let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
         let (capability, provenance) = service
@@ -7211,30 +7330,23 @@ mod tests {
                 AuthorityPrincipal::Policy("operator".to_string()),
                 recipient,
                 DelegationScope::InvokeTool,
-                Some(descriptor_id.to_string()),
+                Some(action.descriptor_id.clone()),
                 Duration::from_secs(300),
                 None,
                 None,
             )
             .expect("delegation should issue");
-        let resource_id = descriptor_id.trim_start_matches("tool:").to_string();
-        let action_id = format!("{descriptor_id}#execute");
 
-        ExternalDelegationEnvelope::new(capability, provenance).with_action(DelegatedAction {
-            descriptor_id: descriptor_id.to_string(),
-            action_id: action_id.clone(),
-            title: format!("execute {resource_id}"),
-            description: format!("execute access for tool {resource_id}"),
-            kind: CapabilityActionKind::Execute,
-            policy: DelegatedActionPolicy {
-                action: "execute".to_string(),
-                resource: "tool".to_string(),
-                scope: "compatibility".to_string(),
-                resource_id: Some(resource_id),
-            },
-            required_scope: Some(DelegationScope::InvokeTool),
-            revocation_key: action_id,
-        })
+        ExternalDelegationEnvelope::new(capability, provenance).with_action(action)
+    }
+
+    fn sample_external_delegation(descriptor_id: &str) -> ExternalDelegationEnvelope {
+        let external_name = descriptor_id.trim_start_matches("tool:");
+        sample_external_delegation_for_action(tool_boundary_action(
+            external_name,
+            "",
+            CapabilityActionKind::Execute,
+        ))
     }
 
     fn write_fixture_repo(root: &Path) {
@@ -8021,6 +8133,9 @@ apps = true
             .any(|tool| tool.name == "audit_workflow_readiness"));
         assert!(tools
             .iter()
+            .any(|tool| tool.name == "describe_external_capabilities"));
+        assert!(tools
+            .iter()
             .any(|tool| tool.name == "get_server_runtime_info"));
         assert!(tools.iter().any(|tool| tool.name == "save_linear_issue"));
         assert!(tools.iter().any(|tool| tool.name == "save_issue_workpad"));
@@ -8041,6 +8156,101 @@ apps = true
             .iter()
             .any(|tool| tool.name == "translate_speckit_tasks"));
         assert!(!tools.iter().any(|tool| tool.name.contains("smith.")));
+    }
+
+    #[tokio::test]
+    async fn describe_external_capabilities_requires_discover_delegation() {
+        let repo_root = temp_path("describe-capabilities");
+        write_fixture_repo(&repo_root);
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout: temp_path("symphony-capability-discovery"),
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(temp_path("workspaces-capability-discovery")),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let err = server
+            .handle_tools_call("describe_external_capabilities", serde_json::json!({}))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            McpError::ToolCallFailed(message)
+                if message.contains("delegation envelope required for MCP tool 'describe_external_capabilities'")
+        ));
+    }
+
+    #[tokio::test]
+    async fn describe_external_capabilities_returns_catalog_with_matching_discover_delegation() {
+        let repo_root = temp_path("describe-capabilities-authorized");
+        write_fixture_repo(&repo_root);
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.clone(),
+            codex_config_path: config_path,
+            workflow_path: repo_root.join("WORKFLOW.md"),
+            symphony_checkout: temp_path("symphony-capability-discovery-ok"),
+            env_file_path: repo_root.join(".env"),
+            workspace_root_override: Some(temp_path("workspaces-capability-discovery-ok")),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        })
+        .await
+        .unwrap();
+
+        let discover_action = tool_boundary_action(
+            "describe_external_capabilities",
+            "",
+            CapabilityActionKind::Discover,
+        );
+        let result = server
+            .handle_tools_call(
+                "describe_external_capabilities",
+                ToolCallRequest::new(serde_json::json!({}))
+                    .with_delegation(sample_external_delegation_for_action(discover_action))
+                    .into_wire_params(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["discovery_surface"]["tool_name"],
+            serde_json::json!("describe_external_capabilities")
+        );
+        assert_eq!(
+            result["data"]["observed_delegation"]["action"]["action_id"],
+            serde_json::json!("tool:describe_external_capabilities#discover")
+        );
+        assert!(result["data"]["capabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["tool_name"] == "save_linear_issue"));
     }
 
     #[tokio::test]
