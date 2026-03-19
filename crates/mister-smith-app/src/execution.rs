@@ -3,22 +3,26 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::sync::Arc;
-use std::thread;
+use std::time::Duration;
 
 use async_nats::jetstream::stream::RetentionPolicy;
 use async_trait::async_trait;
 use chrono::Utc;
+use mister_smith_agents::agent::spawn_supervised;
 use mister_smith_agents::config::TaskState;
+use mister_smith_agents::orchestrator::{LlmSupervision, LlmSupervisionConfig};
 use mister_smith_agents::roles::executor::{ExecutorAgent, ExecutorMessage, ExecutorState};
-use mister_smith_agents::roles::planner::{
-    normalize_planner_output, PlannerAgent, PlannerMessage, PlannerState,
-};
+use mister_smith_agents::roles::planner::PlannerAgent;
+use mister_smith_agents::roles::planner::{normalize_planner_output, PlannerMessage, PlannerState};
 use mister_smith_agents::scheduler::{
     ArrayAggregator, IdentityDecomposer, TaskAssignment, TaskScheduler,
 };
-use mister_smith_agents::{Orchestrator, TopologyCompiler, TopologySignals};
-use mister_smith_core::{Actor, AgentId, BranchState, GraphState, NodeState, TaskId};
-use mister_smith_events::{AutonomyStatusView, EventBus};
+use mister_smith_agents::{AgentConfig, Orchestrator, ToolBus, TopologyCompiler, TopologySignals};
+use mister_smith_core::{
+    AgentId, AgentType, BranchState, EscalationPolicy, GraphState, GuardTarget, NodeState,
+    SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema,
+};
+use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
     TaskExecutionService, TaskStatusView, TaskSubmissionRequest, TaskSubmissionResponse,
 };
@@ -31,6 +35,7 @@ use mister_smith_persistence::postgres::migrations::MigrationRunner;
 use mister_smith_persistence::postgres::queries::{self, TaskRecord};
 use mister_smith_persistence::repository::task::TaskRepository;
 use mister_smith_persistence::{PostgresConnection, Repository};
+use mister_smith_supervision::SupervisedSystem;
 use mister_smith_transport::{MessageEnvelope, MessagePriority};
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -46,6 +51,8 @@ pub(crate) const MODEL_ID: &str = "gpt-5.4";
 const WORKFLOW_STREAM: &str = "mister_smith_workflows";
 const WORKFLOW_SUBJECT_PATTERN: &str = "workflow.>";
 const AUTONOMY_STATUS_METADATA_KEY: &str = "autonomy_status";
+const WORKFLOW_TOOL_NAMESPACE: &str = "workflow";
+const WORKFLOW_EXECUTE_STEP_TOOL: &str = "execute_step";
 
 struct PreparedDecisionExecution {
     tasks: Vec<PreparedTaskExecution>,
@@ -74,12 +81,101 @@ struct FailedTaskExecution {
 }
 
 #[derive(Clone)]
+struct WorkflowStepTool {
+    id: ToolId,
+}
+
+#[async_trait]
+impl Tool for WorkflowStepTool {
+    async fn execute(&self, params: Value) -> Result<Value, ToolError> {
+        let mut object = params.as_object().cloned().ok_or_else(|| {
+            ToolError::ParameterValidationFailed(
+                "workflow.execute_step expects an object payload".to_string(),
+            )
+        })?;
+
+        object.insert("status".to_string(), json!("completed"));
+        object.insert("execution_boundary".to_string(), json!("tool_bus"));
+        object.insert(
+            "tool_name".to_string(),
+            json!(format!(
+                "{WORKFLOW_TOOL_NAMESPACE}.{WORKFLOW_EXECUTE_STEP_TOOL}"
+            )),
+        );
+
+        Ok(Value::Object(object))
+    }
+
+    fn schema(&self) -> ToolSchema {
+        ToolSchema
+    }
+
+    fn capabilities(&self) -> ToolCapabilities {
+        ToolCapabilities
+    }
+
+    fn tool_id(&self) -> ToolId {
+        self.id
+    }
+
+    fn version(&self) -> semver::Version {
+        semver::Version::new(0, 1, 0)
+    }
+}
+
+fn register_runtime_tools(tool_bus: &ToolBus, agent_id: AgentId) {
+    tool_bus.register_native_tool(
+        WORKFLOW_EXECUTE_STEP_TOOL,
+        WORKFLOW_TOOL_NAMESPACE,
+        agent_id,
+        "Execute one prepared workflow step through the runtime tool boundary",
+        json!({"type": "object"}),
+        json!({"type": "object"}),
+        Arc::new(WorkflowStepTool { id: ToolId::new() }),
+    );
+}
+
+fn runtime_execution_mode() -> Value {
+    json!({
+        "workflow_runner": "tokio_task",
+        "planner_lifecycle": "supervised_actor",
+        "executor_lifecycle": "supervised_actor",
+        "execution_boundary": "tool_bus",
+        "tool_name": format!("{WORKFLOW_TOOL_NAMESPACE}.{WORKFLOW_EXECUTE_STEP_TOOL}"),
+        "provider_kind": PROVIDER_KIND_NAME,
+        "model_id": MODEL_ID,
+    })
+}
+
+fn runtime_supervision_strategy() -> SupervisionStrategy {
+    SupervisionStrategy {
+        max_failures: 32,
+        failure_window: Duration::from_secs(60),
+        escalation_policy: EscalationPolicy::LogAndIgnore,
+        ..Default::default()
+    }
+}
+
+fn persist_step_routing_history(metadata: &mut Value, history: &[StepRoutingDecisionSummary]) {
+    if history.is_empty() {
+        return;
+    }
+
+    if let Ok(serialized) = serde_json::to_value(history) {
+        put_metadata(metadata, "step_routing_history", serialized);
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct RuntimeTaskService {
     pool: PgPool,
     repository: Arc<TaskRepository>,
     jetstream: Arc<JetStreamManager>,
     router: Arc<ModelRouter>,
     orchestrator: Arc<Orchestrator>,
+    supervised_system: Arc<SupervisedSystem>,
+    runtime_supervisor_id: AgentId,
+    tool_bus: Arc<ToolBus>,
     boot_started_at: chrono::DateTime<Utc>,
     default_coordinator_id: AgentId,
     worker_ids: Vec<AgentId>,
@@ -89,6 +185,7 @@ impl RuntimeTaskService {
     pub(crate) async fn bootstrap(
         event_bus: Arc<EventBus>,
         nats_transport: Option<Arc<NatsTransport>>,
+        supervised_system: Arc<SupervisedSystem>,
     ) -> Result<Arc<Self>, String> {
         let boot_started_at = Utc::now();
         let database_url = env::var("DATABASE_URL")
@@ -160,6 +257,11 @@ impl RuntimeTaskService {
             )
             .with_event_bus(event_bus),
         );
+        let runtime_supervisor_id = supervised_system
+            .create_supervisor(runtime_supervision_strategy())
+            .await;
+        let tool_bus = Arc::new(ToolBus::new());
+        register_runtime_tools(tool_bus.as_ref(), runtime_supervisor_id);
 
         info!(
             provider_kind = PROVIDER_KIND_NAME,
@@ -174,6 +276,9 @@ impl RuntimeTaskService {
             jetstream,
             router,
             orchestrator,
+            supervised_system,
+            runtime_supervisor_id,
+            tool_bus,
             boot_started_at,
             default_coordinator_id: AgentId::new(),
             worker_ids: vec![AgentId::new(), AgentId::new()],
@@ -278,6 +383,11 @@ impl RuntimeTaskService {
         self.orchestrator
             .register_workflow_coordinator(&workflow_id, coordinator_id);
         let mut metadata = initial_metadata(&request, coordinator_id, &self.worker_ids, "running");
+        put_metadata(
+            &mut metadata,
+            "runtime_execution_mode",
+            runtime_execution_mode(),
+        );
         self.update_root_record(
             workflow_id,
             "running",
@@ -337,29 +447,20 @@ impl RuntimeTaskService {
             }
         });
 
-        let mut planner = PlannerAgent::with_router(coordinator_id, self.router.clone());
-        let mut planner_state = PlannerState::default();
-        let planner_output = planner
-            .handle_message(
-                PlannerMessage::PlanGoal {
-                    goal: request.description.clone(),
-                    context: planning_context.clone(),
-                    managed_context: None,
-                },
-                &mut planner_state,
+        let planner_output = self
+            .execute_plan_with_supervised_planner(
+                workflow_id,
+                request.description.clone(),
+                planning_context.clone(),
             )
-            .await
-            .map_err(|error| format!("planner execution failed: {error}"))?;
+            .await?;
+        let planner_step_routing_history = self.orchestrator.step_routing_history(&workflow_id);
         let execution_plan = normalize_runtime_plan(
             &request.description,
             &planning_context,
             planner_output.clone(),
         );
-        put_metadata(
-            &mut metadata,
-            "step_routing_history",
-            serde_json::to_value(&planner_state.routing_control.history).unwrap_or(Value::Null),
-        );
+        persist_step_routing_history(&mut metadata, &planner_step_routing_history);
         put_metadata(&mut metadata, "planner_output", planner_output.clone());
         put_metadata(&mut metadata, "execution_plan", execution_plan.clone());
         self.update_task_metadata(workflow_id, metadata.clone())
@@ -375,6 +476,7 @@ impl RuntimeTaskService {
                 "model_id": MODEL_ID,
                 "planner_output": planner_output,
                 "execution_plan": execution_plan,
+                "runtime_execution_mode": runtime_execution_mode(),
             }),
         )
         .await?;
@@ -508,8 +610,12 @@ impl RuntimeTaskService {
 
             let mut join_set = JoinSet::new();
             for prepared in prepared_decisions {
-                let router = self.router.clone();
-                join_set.spawn(execute_prepared_decision(router, workflow_id, prepared));
+                let service = self.clone();
+                join_set.spawn(async move {
+                    service
+                        .execute_prepared_decision(workflow_id, prepared)
+                        .await
+                });
             }
 
             let mut failures = Vec::new();
@@ -588,6 +694,7 @@ impl RuntimeTaskService {
             "provider_kind": PROVIDER_KIND_NAME,
             "model_id": MODEL_ID,
             "description": request.description,
+            "runtime_execution_mode": runtime_execution_mode(),
             "planner_output": metadata.get("planner_output").cloned().unwrap_or(Value::Null),
             "execution_plan": metadata.get("execution_plan").cloned().unwrap_or(Value::Null),
             "step_results": step_results.values().cloned().collect::<Vec<_>>(),
@@ -622,6 +729,168 @@ impl RuntimeTaskService {
             "Workflow completed"
         );
         Ok(())
+    }
+
+    async fn execute_plan_with_supervised_planner(
+        &self,
+        workflow_id: TaskId,
+        goal: String,
+        context: Value,
+    ) -> Result<Value, String> {
+        let planner_id = AgentId::new();
+        let planner_config = AgentConfig::for_type(AgentType::Planner);
+        let planner_timeout = planner_config.task_timeout;
+        let router = self.router.clone();
+        let orchestrator = self.orchestrator.clone();
+
+        let runtime = spawn_supervised(
+            self.supervised_system.as_ref(),
+            self.runtime_supervisor_id,
+            move || {
+                let supervision = LlmSupervision::new(
+                    orchestrator.clone(),
+                    workflow_id,
+                    LlmSupervisionConfig::new(GuardTarget::Provider(
+                        PROVIDER_KIND_NAME.to_string(),
+                    )),
+                );
+                (
+                    PlannerAgent::with_router_and_supervision(
+                        planner_id,
+                        router.clone(),
+                        supervision,
+                    ),
+                    PlannerState::default(),
+                )
+            },
+            planner_config,
+        )
+        .await
+        .map_err(|error| {
+            format!("failed to spawn supervised planner for {workflow_id}: {error}")
+        })?;
+
+        let result = runtime
+            .ask(
+                PlannerMessage::PlanGoal {
+                    goal,
+                    context,
+                    managed_context: None,
+                },
+                planner_timeout,
+            )
+            .await
+            .map_err(|error| format!("planner execution failed: {error}"));
+        let _ = runtime.stop().await;
+        result
+    }
+
+    async fn execute_prepared_decision(
+        &self,
+        workflow_id: TaskId,
+        prepared: PreparedDecisionExecution,
+    ) -> Result<Vec<CompletedTaskExecution>, FailedTaskExecution> {
+        let mut completed_steps = Vec::new();
+        let first_task = prepared.tasks.first().map(|task| FailedTaskExecution {
+            completed_steps: Vec::new(),
+            task_id: task.task.task_id,
+            worker_id: task.worker_id,
+            branch_id: task
+                .task
+                .input
+                .get("branch_id")
+                .cloned()
+                .unwrap_or(Value::Null),
+            message: String::new(),
+        });
+        let executor_runtime_id = AgentId::new();
+        let executor_config = AgentConfig::for_type(AgentType::Executor);
+        let executor_timeout = executor_config.task_timeout;
+        let tool_bus = self.tool_bus.clone();
+        let runtime = spawn_supervised(
+            self.supervised_system.as_ref(),
+            self.runtime_supervisor_id,
+            move || {
+                (
+                    ExecutorAgent::with_tool_bus(
+                        executor_runtime_id,
+                        tool_bus.clone(),
+                        WORKFLOW_TOOL_NAMESPACE,
+                        WORKFLOW_EXECUTE_STEP_TOOL,
+                    ),
+                    ExecutorState::default(),
+                )
+            },
+            executor_config,
+        )
+        .await
+        .map_err(|error| {
+            let mut failed = first_task.unwrap_or(FailedTaskExecution {
+                completed_steps: Vec::new(),
+                task_id: TaskId::new(),
+                worker_id: AgentId::new(),
+                branch_id: Value::Null,
+                message: String::new(),
+            });
+            failed.message =
+                format!("failed to spawn supervised executor for workflow {workflow_id}: {error}");
+            failed
+        })?;
+
+        for prepared_task in prepared.tasks {
+            let task_id = prepared_task.task.task_id;
+            let worker_id = prepared_task.worker_id;
+            let branch_id = prepared_task
+                .task
+                .input
+                .get("branch_id")
+                .cloned()
+                .unwrap_or(Value::Null);
+            let action = prepared_task.task.task_type.clone();
+
+            info!(
+                workflow_id = %workflow_id,
+                task_id = %task_id,
+                worker_id = %worker_id,
+                provider_kind = PROVIDER_KIND_NAME,
+                model_id = MODEL_ID,
+                "Executing workflow step"
+            );
+
+            let result = match runtime
+                .ask(
+                    ExecutorMessage::ExecutePlan {
+                        plan: prepared_task.execution_input,
+                        managed_context: None,
+                    },
+                    executor_timeout,
+                )
+                .await
+            {
+                Ok(result) => result,
+                Err(error) => {
+                    let _ = runtime.stop().await;
+                    return Err(FailedTaskExecution {
+                        completed_steps,
+                        task_id,
+                        worker_id,
+                        branch_id: branch_id.clone(),
+                        message: format!("worker {worker_id} failed task {task_id}: {error}"),
+                    });
+                }
+            };
+
+            completed_steps.push(CompletedTaskExecution {
+                task_id,
+                worker_id,
+                branch_id,
+                action,
+                result,
+            });
+        }
+
+        let _ = runtime.stop().await;
+        Ok(completed_steps)
     }
 
     async fn save_root_record(
@@ -997,40 +1266,14 @@ impl RuntimeTaskService {
         request: TaskSubmissionRequest,
     ) -> Result<(), String> {
         let service = self.clone();
-        let thread_name = format!("mister-smith-workflow-{workflow_id}");
+        tokio::spawn(async move {
+            if let Err(error) = service.run_workflow(workflow_id, request).await {
+                error!(workflow_id = %workflow_id, error = %error, "Workflow run failed");
+                service.fail_workflow(workflow_id, error).await;
+            }
+        });
 
-        thread::Builder::new()
-            .name(thread_name)
-            .spawn(move || {
-                let runtime = match tokio::runtime::Builder::new_multi_thread()
-                    .worker_threads(2)
-                    .enable_all()
-                    .build()
-                {
-                    Ok(runtime) => runtime,
-                    Err(error) => {
-                        let message =
-                            format!("failed to build dedicated workflow runtime: {error}");
-                        error!(workflow_id = %workflow_id, error = %message, "Workflow run failed");
-                        if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                        {
-                            runtime.block_on(service.fail_workflow(workflow_id, message));
-                        }
-                        return;
-                    }
-                };
-
-                runtime.block_on(async move {
-                    if let Err(error) = service.run_workflow(workflow_id, request).await {
-                        error!(workflow_id = %workflow_id, error = %error, "Workflow run failed");
-                        service.fail_workflow(workflow_id, error).await;
-                    }
-                });
-            })
-            .map(|_| ())
-            .map_err(|error| format!("failed to spawn workflow runner thread: {error}"))
+        Ok(())
     }
 }
 
@@ -1598,8 +1841,7 @@ fn normalize_runtime_plan(goal: &str, context: &Value, raw_plan: Value) -> Value
             .map(ToString::to_string)
             .unwrap_or_else(|| format!("step-{}", index + 1));
         step.insert("id".to_string(), json!(step_id.clone()));
-        step.entry("step".to_string())
-            .or_insert_with(|| json!(index + 1));
+        step.insert("step".to_string(), json!(index + 1));
         step.entry("action".to_string())
             .or_insert_with(|| json!("execute"));
         step.entry("description".to_string())
@@ -1731,65 +1973,103 @@ fn execution_input_for_task(
     })
 }
 
-async fn execute_prepared_decision(
-    router: Arc<ModelRouter>,
-    workflow_id: TaskId,
-    prepared: PreparedDecisionExecution,
-) -> Result<Vec<CompletedTaskExecution>, FailedTaskExecution> {
-    let mut completed_steps = Vec::new();
+#[cfg(test)]
+mod runtime_plan_tests {
+    use super::*;
 
-    for prepared_task in prepared.tasks {
-        let task_id = prepared_task.task.task_id;
-        let worker_id = prepared_task.worker_id;
-        let branch_id = prepared_task
-            .task
-            .input
-            .get("branch_id")
-            .cloned()
-            .unwrap_or(Value::Null);
-        let action = prepared_task.task.task_type.clone();
+    #[test]
+    fn runtime_supervision_strategy_avoids_root_shutdown_budget() {
+        let strategy = runtime_supervision_strategy();
 
-        info!(
-            workflow_id = %workflow_id,
-            task_id = %task_id,
-            worker_id = %worker_id,
-            provider_kind = PROVIDER_KIND_NAME,
-            model_id = MODEL_ID,
-            "Executing workflow step"
-        );
-
-        let mut executor = ExecutorAgent::with_router(worker_id, router.clone());
-        let mut executor_state = ExecutorState::default();
-        let result = match executor
-            .handle_message(
-                ExecutorMessage::ExecutePlan {
-                    plan: prepared_task.execution_input,
-                    managed_context: None,
-                },
-                &mut executor_state,
-            )
-            .await
-        {
-            Ok(result) => result,
-            Err(error) => {
-                return Err(FailedTaskExecution {
-                    completed_steps,
-                    task_id,
-                    worker_id,
-                    branch_id: branch_id.clone(),
-                    message: format!("worker {worker_id} failed task {task_id}: {error}"),
-                });
-            }
-        };
-
-        completed_steps.push(CompletedTaskExecution {
-            task_id,
-            worker_id,
-            branch_id,
-            action,
-            result,
-        });
+        assert_eq!(strategy.max_failures, 32);
+        assert_eq!(strategy.failure_window, Duration::from_secs(60));
+        assert_eq!(strategy.escalation_policy, EscalationPolicy::LogAndIgnore);
     }
 
-    Ok(completed_steps)
+    #[test]
+    fn normalize_runtime_plan_reindexes_duplicate_numeric_steps() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "steps": [
+                    {
+                        "id": "plan-a",
+                        "step": 1,
+                        "action": "analyze",
+                        "description": "worker a"
+                    },
+                    {
+                        "id": "plan-b",
+                        "step": 1,
+                        "action": "analyze",
+                        "description": "worker b"
+                    }
+                ]
+            }),
+        );
+
+        let steps = plan["steps"].as_array().expect("normalized steps array");
+        let numeric_steps: Vec<u64> = steps
+            .iter()
+            .filter_map(|step| step["step"].as_u64())
+            .collect();
+
+        assert_eq!(numeric_steps, vec![1, 2, 3]);
+        assert_eq!(plan["runtime_normalized"], json!(true));
+    }
+
+    #[test]
+    fn persist_step_routing_history_writes_non_empty_history() {
+        let mut metadata = json!({});
+        let history = vec![StepRoutingDecisionSummary {
+            step_id: "planner.step.1".to_string(),
+            step_index: Some(1),
+            step_kind: Some("planner".to_string()),
+            model_id: "gpt-5.4".to_string(),
+            tier: "llm-tier".to_string(),
+            reason: "selected direct routing".to_string(),
+            previous_step_id: None,
+            previous_action: None,
+            previous_tier: None,
+            action: "continue".to_string(),
+            action_changed: false,
+            preferred_tier_after: Some("llm-tier".to_string()),
+            estimated_cost_tokens: Some(96),
+            confidence_score: Some(0.95),
+            triggered_checkpoints: vec![],
+            change_rationale: vec!["initial routing decision".to_string()],
+        }];
+
+        persist_step_routing_history(&mut metadata, &history);
+
+        assert_eq!(metadata["step_routing_history"], json!(history));
+    }
+}
+
+#[cfg(test)]
+mod workflow_step_tool_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn workflow_step_tool_marks_payload_as_tool_bus_completed() {
+        let tool = WorkflowStepTool { id: ToolId::new() };
+        let payload = json!({
+            "workflow_goal": "ship proof",
+            "task": {
+                "step_id": "step-1",
+                "action": "analyze",
+            },
+        });
+
+        let result = tool.execute(payload.clone()).await.unwrap();
+
+        assert_eq!(result["status"], "completed");
+        assert_eq!(result["execution_boundary"], "tool_bus");
+        assert_eq!(
+            result["tool_name"],
+            format!("{WORKFLOW_TOOL_NAMESPACE}.{WORKFLOW_EXECUTE_STEP_TOOL}")
+        );
+        assert_eq!(result["task"], payload["task"]);
+    }
 }

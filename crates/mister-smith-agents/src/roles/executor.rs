@@ -1,5 +1,7 @@
 //! Executor agent role — carries out planned actions.
 
+use std::sync::Arc;
+
 use crate::context_manager::{
     resolve_managed_context_input, ContextManager, ManagedContextInput, ManagedContextRuntime,
 };
@@ -7,6 +9,7 @@ use crate::context_manager::{
 use crate::orchestrator::LlmSupervision;
 #[cfg(feature = "llm")]
 use crate::roles::llm_bridge::complete_with_optional_supervision;
+use crate::tool_bus::{ToolBus, ToolPrincipal};
 use mister_smith_core::{Actor, AgentId, AgentType, ContextBudget};
 use mister_smith_persistence::SnapshotScope;
 use serde::{Deserialize, Serialize};
@@ -70,10 +73,19 @@ pub enum ExecutorError {
 pub struct ExecutorAgent {
     id: AgentId,
     managed_context: Option<ManagedContextRuntime>,
+    execution_tool: Option<ExecutionToolBinding>,
     #[cfg(feature = "llm")]
-    router: Option<std::sync::Arc<mister_smith_llm::ModelRouter>>,
+    router: Option<Arc<mister_smith_llm::ModelRouter>>,
     #[cfg(feature = "llm")]
     supervision: Option<LlmSupervision>,
+}
+
+#[derive(Clone)]
+struct ExecutionToolBinding {
+    tool_bus: Arc<ToolBus>,
+    namespace: String,
+    name: String,
+    principal: Option<ToolPrincipal>,
 }
 
 impl ExecutorAgent {
@@ -82,6 +94,7 @@ impl ExecutorAgent {
         Self {
             id,
             managed_context: None,
+            execution_tool: None,
             #[cfg(feature = "llm")]
             router: None,
             #[cfg(feature = "llm")]
@@ -94,6 +107,7 @@ impl ExecutorAgent {
         Self {
             id,
             managed_context: Some(managed_context),
+            execution_tool: None,
             #[cfg(feature = "llm")]
             router: None,
             #[cfg(feature = "llm")]
@@ -103,10 +117,11 @@ impl ExecutorAgent {
 
     /// Create a new `ExecutorAgent` with an LLM [`ModelRouter`] for AI-powered execution strategy.
     #[cfg(feature = "llm")]
-    pub fn with_router(id: AgentId, router: std::sync::Arc<mister_smith_llm::ModelRouter>) -> Self {
+    pub fn with_router(id: AgentId, router: Arc<mister_smith_llm::ModelRouter>) -> Self {
         Self {
             id,
             managed_context: None,
+            execution_tool: None,
             router: Some(router),
             supervision: None,
         }
@@ -116,12 +131,13 @@ impl ExecutorAgent {
     #[cfg(feature = "llm")]
     pub fn with_router_and_supervision(
         id: AgentId,
-        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+        router: Arc<mister_smith_llm::ModelRouter>,
         supervision: LlmSupervision,
     ) -> Self {
         Self {
             id,
             managed_context: None,
+            execution_tool: None,
             router: Some(router),
             supervision: Some(supervision),
         }
@@ -131,13 +147,61 @@ impl ExecutorAgent {
     #[cfg(feature = "llm")]
     pub fn with_router_and_managed_context(
         id: AgentId,
-        router: std::sync::Arc<mister_smith_llm::ModelRouter>,
+        router: Arc<mister_smith_llm::ModelRouter>,
         managed_context: ManagedContextRuntime,
     ) -> Self {
         Self {
             id,
             managed_context: Some(managed_context),
+            execution_tool: None,
             router: Some(router),
+            supervision: None,
+        }
+    }
+
+    /// Create a new `ExecutorAgent` that executes plans through a concrete ToolBus boundary.
+    pub fn with_tool_bus(
+        id: AgentId,
+        tool_bus: Arc<ToolBus>,
+        namespace: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
+        Self {
+            id,
+            managed_context: None,
+            execution_tool: Some(ExecutionToolBinding {
+                tool_bus,
+                namespace: namespace.into(),
+                name: name.into(),
+                principal: None,
+            }),
+            #[cfg(feature = "llm")]
+            router: None,
+            #[cfg(feature = "llm")]
+            supervision: None,
+        }
+    }
+
+    /// Create a ToolBus-backed executor with an authenticated invocation principal.
+    pub fn with_tool_bus_and_principal(
+        id: AgentId,
+        tool_bus: Arc<ToolBus>,
+        namespace: impl Into<String>,
+        name: impl Into<String>,
+        principal: ToolPrincipal,
+    ) -> Self {
+        Self {
+            id,
+            managed_context: None,
+            execution_tool: Some(ExecutionToolBinding {
+                tool_bus,
+                namespace: namespace.into(),
+                name: name.into(),
+                principal: Some(principal),
+            }),
+            #[cfg(feature = "llm")]
+            router: None,
+            #[cfg(feature = "llm")]
             supervision: None,
         }
     }
@@ -204,6 +268,37 @@ impl Actor for ExecutorAgent {
 
                 state.executing = true;
                 state.steps_completed = 0;
+
+                if let Some(binding) = &self.execution_tool {
+                    let result = binding
+                        .tool_bus
+                        .invoke(
+                            binding.principal.as_ref(),
+                            &binding.namespace,
+                            &binding.name,
+                            plan.clone(),
+                            None,
+                        )
+                        .await
+                        .map_err(|error| ExecutorError::Internal(error.to_string()))?;
+
+                    return Ok(match result {
+                        serde_json::Value::Object(mut object) => {
+                            object
+                                .entry("status".to_string())
+                                .or_insert_with(|| serde_json::json!("completed"));
+                            object
+                                .entry("execution_boundary".to_string())
+                                .or_insert_with(|| serde_json::json!("tool_bus"));
+                            serde_json::Value::Object(object)
+                        }
+                        other => serde_json::json!({
+                            "status": "completed",
+                            "execution_boundary": "tool_bus",
+                            "result": other,
+                        }),
+                    });
+                }
 
                 // When the `llm` feature is enabled and a router is configured,
                 // ask the model to analyze the plan and suggest an execution strategy.
@@ -301,6 +396,43 @@ impl Actor for ExecutorAgent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use mister_smith_core::{Tool, ToolCapabilities, ToolError, ToolId, ToolSchema};
+
+    use crate::tool_bus::ToolBus;
+
+    #[derive(Clone)]
+    struct RecordingTool {
+        id: ToolId,
+    }
+
+    #[async_trait]
+    impl Tool for RecordingTool {
+        async fn execute(&self, params: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+            Ok(serde_json::json!({
+                "tool_name": "workflow.execute_step",
+                "received": params,
+            }))
+        }
+
+        fn schema(&self) -> ToolSchema {
+            ToolSchema
+        }
+
+        fn capabilities(&self) -> ToolCapabilities {
+            ToolCapabilities
+        }
+
+        fn tool_id(&self) -> ToolId {
+            self.id
+        }
+
+        fn version(&self) -> semver::Version {
+            semver::Version::new(0, 1, 0)
+        }
+    }
 
     #[tokio::test]
     async fn executor_plan_step_progress_flow() {
@@ -358,5 +490,46 @@ mod tests {
             .unwrap();
         assert_eq!(resp["executing"], true);
         assert_eq!(resp["steps_completed"], 2);
+    }
+
+    #[tokio::test]
+    async fn executor_uses_tool_bus_execution_boundary_when_configured() {
+        let tool_bus = Arc::new(ToolBus::new());
+        let agent_id = AgentId::new();
+        tool_bus.register_native_tool(
+            "execute_step",
+            "workflow",
+            agent_id,
+            "Execute one workflow step",
+            serde_json::json!({"type": "object"}),
+            serde_json::json!({"type": "object"}),
+            Arc::new(RecordingTool { id: ToolId::new() }),
+        );
+
+        let mut agent =
+            ExecutorAgent::with_tool_bus(agent_id, tool_bus, "workflow", "execute_step");
+        let mut state = ExecutorState::default();
+        let plan = serde_json::json!({
+            "step_id": "step-1",
+            "action": "analyze",
+        });
+
+        let response = agent
+            .handle_message(
+                ExecutorMessage::ExecutePlan {
+                    plan: plan.clone(),
+                    managed_context: None,
+                },
+                &mut state,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response["status"], "completed");
+        assert_eq!(response["execution_boundary"], "tool_bus");
+        assert_eq!(response["tool_name"], "workflow.execute_step");
+        assert_eq!(response["received"], plan);
+        assert!(state.executing);
+        assert_eq!(state.steps_completed, 0);
     }
 }

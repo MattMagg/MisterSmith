@@ -783,6 +783,14 @@ impl Orchestrator {
         })
     }
 
+    /// Return the latest persisted step-routing history even before a graph exists.
+    pub fn step_routing_history(&self, workflow_id: &TaskId) -> Vec<StepRoutingDecisionSummary> {
+        self.step_routing_histories
+            .get(workflow_id)
+            .map(|history| history.value().clone())
+            .unwrap_or_default()
+    }
+
     /// List workflow IDs that currently have recorded autonomy state.
     pub fn autonomy_workflow_ids(&self) -> Vec<TaskId> {
         let mut workflow_ids = self
