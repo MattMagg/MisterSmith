@@ -20,10 +20,10 @@ use mister_smith_core::{
 };
 
 use crate::autonomy::{
-    AutonomyEvent, AutonomyStatusView, BranchSummary, CapabilitySummary, CheckpointRecordSummary,
-    ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
-    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
-    StepRoutingDecisionSummary, TopologyPlanSummary,
+    infer_result_preview_from_projection, AutonomyEvent, AutonomyStatusView, BranchSummary,
+    CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert,
+    ExecutionGraphSummary, ExternalCapabilityDecisionSummary, ResumeProvenanceSummary,
+    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 use crate::dead_letter::DeadLetterQueue;
 use crate::error::EventBusError;
@@ -40,6 +40,7 @@ struct AutonomyStatusAccumulator {
     turn_index: Option<u32>,
     coordinator_agent_id: Option<mister_smith_core::AgentId>,
     resume_provenance: Option<ResumeProvenanceSummary>,
+    result_preview: Option<OperatorResultPreview>,
     graph: Option<ExecutionGraphSummary>,
     topology: Option<TopologyPlanSummary>,
     team_sizing: Option<TeamSizingDecision>,
@@ -48,7 +49,6 @@ struct AutonomyStatusAccumulator {
     memory_pressure: HashMap<ContextBudgetId, ContextPressureSummary>,
     routing_history: Vec<RoutingDecisionSummary>,
     step_routing_history: Vec<StepRoutingDecisionSummary>,
-    result_preview: Option<OperatorResultPreview>,
     interventions: HashMap<InterventionRecordId, InterventionRecord>,
     delegation_capabilities: HashMap<mister_smith_core::CapabilityId, CapabilitySummary>,
     delegation_alerts: HashMap<String, DelegationAlert>,
@@ -188,12 +188,21 @@ impl AutonomyStatusAccumulator {
                 &self.conservative_reasons,
             )
         });
+        let result_preview = self.result_preview.clone().or_else(|| {
+            infer_result_preview_from_projection(
+                &graph,
+                &topology,
+                &branches,
+                &self.routing_history,
+            )
+        });
 
         Some(AutonomyStatusView {
             session_id: self.session_id,
             turn_index: self.turn_index,
             coordinator_agent_id: self.coordinator_agent_id,
             resume_provenance: self.resume_provenance.clone(),
+            result_preview,
             graph,
             topology,
             team_sizing,
@@ -202,7 +211,6 @@ impl AutonomyStatusAccumulator {
             memory_pressure,
             routing_history: self.routing_history.clone(),
             step_routing_history: self.step_routing_history.clone(),
-            result_preview: self.result_preview.clone(),
             interventions,
             delegation_capabilities,
             delegation_alerts,
@@ -219,10 +227,10 @@ impl AutonomyStatusAccumulator {
             turn_index: view.turn_index,
             coordinator_agent_id: view.coordinator_agent_id,
             resume_provenance: view.resume_provenance,
+            result_preview: view.result_preview,
             graph: Some(view.graph),
             topology: Some(view.topology),
             team_sizing: view.team_sizing,
-            result_preview: view.result_preview,
             ..Self::default()
         };
 

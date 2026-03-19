@@ -15,8 +15,9 @@ use mister_smith_agents::{
 use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchState, CheckpointId, DelegationScope, ExecutionBranchId,
     FailureClass, GuardTarget, HealthState, InterventionType, MemorySnapshotId, NodeState,
-    PersistenceError, ProfileSnapshot, ProfileSnapshotId, ProfileTarget, ProvenanceChain,
-    ProvenanceLink, RevocationState, SemanticSignal, SemanticSignalKind, TaskId,
+    PersistenceError, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
+    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RevocationState, SemanticSignal,
+    SemanticSignalKind, TaskId,
 };
 use mister_smith_events::{AutonomyEvent, CapabilitySummary, EventBus};
 use serde_json::json;
@@ -568,6 +569,44 @@ fn gate10_rejects_invalid_graph_before_dispatch() {
         err,
         mister_smith_core::TopologyError::CycleDetected { .. }
     ));
+}
+
+#[test]
+fn gate10_completed_graph_status_includes_result_preview() {
+    let scheduler = Arc::new(TaskScheduler::new());
+    let orchestrator = Orchestrator::new(
+        Arc::new(IdentityDecomposer),
+        Arc::new(ArrayAggregator),
+        scheduler,
+    );
+    let mut graph = TopologyCompiler::default()
+        .compile(
+            TaskId::new(),
+            &frontier_rebalance_plan(),
+            &TopologySignals::default(),
+        )
+        .expect("frontier rebalance graph should compile");
+    let workflow_id = graph.workflow_id;
+
+    for node in &mut graph.nodes {
+        node.state = NodeState::Completed;
+    }
+    for branch in &mut graph.branches {
+        branch.state = BranchState::Completed;
+    }
+    graph.state = mister_smith_core::GraphState::Completed;
+    orchestrator.register_execution_graph(graph);
+
+    let preview = orchestrator
+        .autonomy_status(&workflow_id)
+        .and_then(|status| status.result_preview)
+        .expect("completed graphs should expose a shared result preview");
+
+    assert_eq!(preview.payload_location, "task.result");
+    assert_eq!(
+        preview.proof_outcome,
+        ProofOutcomeClassification::GraphFormedAndCompleted
+    );
 }
 
 #[tokio::test]

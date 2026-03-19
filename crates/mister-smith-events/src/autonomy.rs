@@ -13,8 +13,9 @@ use mister_smith_core::{
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
     InterventionRecord, MemorySnapshotId, OperatorResultPreview, ProfileSnapshot,
-    ProfileSnapshotId, ProvenanceChain, RevocationState, SessionId, TaskId,
-    TaskShapeClassification, TeamSizingDecision, TopologyKind, TopologyRationale,
+    ProfileSnapshotId, ProofOutcomeClassification, ProvenanceChain, RevocationState, SessionId,
+    TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind,
+    TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -449,6 +450,87 @@ pub enum AutonomyEvent {
     DelegationDecisionRecorded(AutonomyEventEnvelope<ExternalCapabilityDecisionSummary>),
     /// Aggregate status view changed.
     StatusUpdated(Box<AutonomyEventEnvelope<AutonomyStatusView>>),
+}
+
+/// Derive the shared proof-outcome class from a typed autonomy projection when possible.
+#[must_use]
+pub fn infer_proof_outcome_from_projection(
+    graph: &ExecutionGraphSummary,
+    topology: &TopologyPlanSummary,
+    branches: &[BranchSummary],
+    routing_history: &[RoutingDecisionSummary],
+) -> Option<ProofOutcomeClassification> {
+    match graph.state {
+        GraphState::Completed => {
+            let collapsed_to_sequential = topology.topology_kind == TopologyKind::Sequential
+                && topology.parallelism_width <= 1
+                && (topology.task_shape.max_parallel_width > 1
+                    || !matches!(topology.task_shape.kind, TaskShapeKind::StrictChain));
+
+            Some(if collapsed_to_sequential {
+                ProofOutcomeClassification::CollapsedToSequential
+            } else {
+                ProofOutcomeClassification::GraphFormedAndCompleted
+            })
+        }
+        GraphState::Failed | GraphState::Aborted => {
+            let formed_visible_graph = graph.branch_count > 1
+                || graph.node_count > 1
+                || !branches.is_empty()
+                || !routing_history.is_empty();
+            (!formed_visible_graph).then_some(ProofOutcomeClassification::FailedBeforeGraph)
+        }
+        GraphState::Pending | GraphState::Running | GraphState::Checkpointed => None,
+    }
+}
+
+/// Derive a bounded operator-facing result preview from a typed autonomy projection.
+#[must_use]
+pub fn infer_result_preview_from_projection(
+    graph: &ExecutionGraphSummary,
+    topology: &TopologyPlanSummary,
+    branches: &[BranchSummary],
+    routing_history: &[RoutingDecisionSummary],
+) -> Option<OperatorResultPreview> {
+    let proof_outcome =
+        infer_proof_outcome_from_projection(graph, topology, branches, routing_history)?;
+
+    let preview_text = match proof_outcome {
+        ProofOutcomeClassification::GraphFormedAndCompleted => Some(format!(
+            "workflow completed with {} branch(es) across {} node(s)",
+            graph.branch_count, graph.node_count
+        )),
+        ProofOutcomeClassification::CollapsedToSequential => {
+            Some("completed with a sequential execution path".to_string())
+        }
+        ProofOutcomeClassification::FailedBeforeGraph => {
+            Some("workflow failed before graph formation".to_string())
+        }
+    };
+
+    let mut provenance_lines = vec![
+        "canonical result stored in metadata.final_result".to_string(),
+        "aggregated payload nested under metadata.aggregated_result".to_string(),
+        "full payload remains recoverable from task.result".to_string(),
+    ];
+    provenance_lines.push(format!(
+        "projection observed graph state {:?} with topology {:?}",
+        graph.state, topology.topology_kind
+    ));
+    if !routing_history.is_empty() {
+        provenance_lines.push(format!(
+            "routing history retained {} decision(s)",
+            routing_history.len()
+        ));
+    }
+
+    Some(OperatorResultPreview {
+        workflow_id: graph.workflow_id,
+        proof_outcome,
+        preview_text,
+        payload_location: "task.result".to_string(),
+        provenance_lines,
+    })
 }
 
 impl CapabilitySummary {
