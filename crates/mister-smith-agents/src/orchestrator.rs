@@ -707,6 +707,42 @@ impl Orchestrator {
             .iter()
             .filter_map(CapabilitySummary::to_alert)
             .collect::<Vec<_>>();
+        let mut external_capability_decisions = self
+            .autonomy_events(workflow_id)
+            .into_iter()
+            .filter_map(|event| match event {
+                AutonomyEvent::DelegationDecisionRecorded(envelope) => Some(envelope.payload),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        external_capability_decisions.sort_by(|left, right| {
+            left.observed_at
+                .cmp(&right.observed_at)
+                .then_with(|| {
+                    left.branch_id
+                        .map(|branch_id| branch_id.to_string())
+                        .unwrap_or_else(|| "none".to_string())
+                        .cmp(
+                            &right
+                                .branch_id
+                                .map(|branch_id| branch_id.to_string())
+                                .unwrap_or_else(|| "none".to_string()),
+                        )
+                })
+                .then_with(|| {
+                    left.capability_id
+                        .map(|capability_id| capability_id.to_string())
+                        .unwrap_or_else(|| "none".to_string())
+                        .cmp(
+                            &right
+                                .capability_id
+                                .map(|capability_id| capability_id.to_string())
+                                .unwrap_or_else(|| "none".to_string()),
+                        )
+                })
+                .then_with(|| left.action_id.cmp(&right.action_id))
+                .then_with(|| left.action_descriptor_id.cmp(&right.action_descriptor_id))
+        });
         let team_sizing = self
             .adaptive_team_plans
             .get(workflow_id)
@@ -777,6 +813,7 @@ impl Orchestrator {
             interventions,
             delegation_capabilities,
             delegation_alerts,
+            external_capability_decisions,
             profiles,
             guard_decisions,
             conservative_reasons,

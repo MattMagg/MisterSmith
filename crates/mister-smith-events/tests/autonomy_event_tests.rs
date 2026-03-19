@@ -9,7 +9,8 @@ use mister_smith_core::{
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
     CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, EventBus,
-    EventType, ExecutionGraphSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
+    EventType, ExecutionGraphSummary, ExternalCapabilityDecisionOutcome,
+    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
     StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 use serde::de::DeserializeOwned;
@@ -95,6 +96,34 @@ fn sample_team_sizing(
             ),
         ],
         decided_at: chrono::Utc::now(),
+    }
+}
+
+fn sample_external_capability_decision(
+    capability_id: CapabilityId,
+    scope: DelegationScope,
+) -> ExternalCapabilityDecisionSummary {
+    ExternalCapabilityDecisionSummary {
+        branch_id: None,
+        capability_id: Some(capability_id),
+        capability_descriptor_id: Some("tool:agent.echo".to_string()),
+        action_descriptor_id: Some("tool:agent.echo".to_string()),
+        action_id: Some("tool:agent.echo#execute".to_string()),
+        action_title: Some("execute agent.echo".to_string()),
+        scope: Some(scope),
+        required_scope: Some(scope),
+        policy_action: Some("execute".to_string()),
+        policy_resource: Some("echo".to_string()),
+        policy_scope: Some("agent".to_string()),
+        policy_resource_id: Some("agent.echo".to_string()),
+        revocation_state: Some(RevocationState::Active),
+        chain_depth: 1,
+        outcome: ExternalCapabilityDecisionOutcome::Allowed,
+        observed_at: Some(chrono::Utc::now()),
+        rationale: vec![
+            "descriptor 'tool:agent.echo' matched the requested external action".to_string(),
+            "required scope InvokeTool matched capability scope InvokeTool".to_string(),
+        ],
     }
 }
 
@@ -295,6 +324,10 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
                 message: "operator review required for widened authority".to_string(),
             },
         ],
+        external_capability_decisions: vec![sample_external_capability_decision(
+            CapabilityId::new(),
+            DelegationScope::InvokeTool,
+        )],
         profiles: vec![ProfileSnapshot {
             profile_id: ProfileSnapshotId::new(),
             target: ProfileTarget::Branch,
@@ -407,6 +440,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
+        external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
         conservative_reasons: vec!["control-plane freshness unavailable".to_string()],
@@ -646,6 +680,46 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         )
         .await
         .unwrap();
+    let capability_id = CapabilityId::new();
+    let mut first_decision =
+        sample_external_capability_decision(capability_id, DelegationScope::InvokeTool);
+    first_decision.branch_id = Some(branch_id);
+    event_bus
+        .publish(
+            AutonomyEvent::DelegationDecisionRecorded(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: first_decision,
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    let retry_branch_id = ExecutionBranchId::new();
+    let mut retry_decision =
+        sample_external_capability_decision(capability_id, DelegationScope::InvokeTool);
+    retry_decision.branch_id = Some(retry_branch_id);
+    retry_decision.outcome = ExternalCapabilityDecisionOutcome::Rejected;
+    retry_decision.observed_at = Some(chrono::Utc::now() + chrono::Duration::seconds(1));
+    retry_decision.rationale.insert(
+        0,
+        "delegation descriptor 'tool:agent.echo' was revoked before retry".to_string(),
+    );
+    event_bus
+        .publish(
+            AutonomyEvent::DelegationDecisionRecorded(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(retry_branch_id),
+                payload: retry_decision,
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
 
     let view = event_bus
         .autonomy_status(&workflow_id)
@@ -671,6 +745,27 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         .any(|line| line.contains("minimize restart blast radius")));
     assert_eq!(view.checkpoint_lineage.len(), 1);
     assert_eq!(view.routing_history.len(), 1);
+    assert_eq!(view.external_capability_decisions.len(), 2);
+    assert_eq!(
+        view.external_capability_decisions[0].branch_id,
+        Some(branch_id)
+    );
+    assert_eq!(
+        view.external_capability_decisions[0].outcome,
+        ExternalCapabilityDecisionOutcome::Allowed
+    );
+    assert!(view.external_capability_decisions[0]
+        .rationale
+        .iter()
+        .any(|line| line.contains("matched the requested external action")));
+    assert_eq!(
+        view.external_capability_decisions[1].branch_id,
+        Some(retry_branch_id)
+    );
+    assert_eq!(
+        view.external_capability_decisions[1].outcome,
+        ExternalCapabilityDecisionOutcome::Rejected
+    );
     assert_eq!(
         view.interventions[0].rationale,
         "operator escalation remained visible"
@@ -679,6 +774,149 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         .conservative_reasons
         .iter()
         .any(|reason| reason.contains("control-plane state unavailable")));
+}
+
+#[tokio::test]
+async fn delegation_decision_projection_preserves_branch_and_retry_history() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch_a = ExecutionBranchId::new();
+    let branch_b = ExecutionBranchId::new();
+    let capability_id = CapabilityId::new();
+
+    let status_view = AutonomyStatusView {
+        session_id: None,
+        turn_index: None,
+        coordinator_agent_id: None,
+        resume_provenance: None,
+        graph: ExecutionGraphSummary {
+            graph_id,
+            workflow_id,
+            state: GraphState::Running,
+            branch_count: 2,
+            node_count: 2,
+            active_topology: Some(TopologyKind::Hybrid),
+        },
+        topology: TopologyPlanSummary {
+            graph_id,
+            topology_kind: TopologyKind::Hybrid,
+            parallelism_width: 2,
+            task_shape: sample_task_shape(TaskShapeKind::FanoutJoin),
+            coordination_policy: CoordinationPolicy::Mixed,
+            rationale: TopologyRationale {
+                dependency_shape: "parallel branches".to_string(),
+                operational_signals: vec![],
+                selected_for: "preserve review visibility".to_string(),
+                fallback_reason: None,
+            },
+            fallback_topology: None,
+        },
+        team_sizing: None,
+        branches: vec![
+            BranchSummary {
+                branch_id: branch_a,
+                graph_id,
+                state: BranchState::Running,
+                assigned_agents: vec![],
+                checkpoint_id: None,
+                recovery_strategy: BranchRecoveryStrategy::Resume,
+            },
+            BranchSummary {
+                branch_id: branch_b,
+                graph_id,
+                state: BranchState::Running,
+                assigned_agents: vec![],
+                checkpoint_id: None,
+                recovery_strategy: BranchRecoveryStrategy::Resume,
+            },
+        ],
+        checkpoint_lineage: vec![],
+        memory_pressure: vec![],
+        routing_history: vec![],
+        step_routing_history: vec![],
+        interventions: vec![],
+        delegation_capabilities: vec![],
+        delegation_alerts: vec![],
+        external_capability_decisions: vec![],
+        profiles: vec![],
+        guard_decisions: vec![],
+        conservative_reasons: vec![],
+    };
+
+    event_bus
+        .publish(
+            AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: status_view,
+                operator_visible: true,
+            }))
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+
+    let mut branch_a_allowed =
+        sample_external_capability_decision(capability_id, DelegationScope::InvokeTool);
+    branch_a_allowed.branch_id = Some(branch_a);
+
+    let mut branch_b_allowed =
+        sample_external_capability_decision(capability_id, DelegationScope::InvokeTool);
+    branch_b_allowed.branch_id = Some(branch_b);
+
+    let mut branch_a_rejected =
+        sample_external_capability_decision(capability_id, DelegationScope::InvokeTool);
+    branch_a_rejected.branch_id = Some(branch_a);
+    branch_a_rejected.outcome = ExternalCapabilityDecisionOutcome::Rejected;
+    branch_a_rejected.rationale = vec!["descriptor mismatch on retry".to_string()];
+
+    for (branch_id, payload) in [
+        (branch_a, branch_a_allowed),
+        (branch_b, branch_b_allowed),
+        (branch_a, branch_a_rejected),
+    ] {
+        event_bus
+            .publish(
+                AutonomyEvent::DelegationDecisionRecorded(AutonomyEventEnvelope {
+                    workflow_id,
+                    graph_id: Some(graph_id),
+                    branch_id: Some(branch_id),
+                    payload,
+                    operator_visible: true,
+                })
+                .into_event("autonomy-test"),
+            )
+            .await
+            .unwrap();
+    }
+
+    let view = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .expect("autonomy projection should preserve distinct boundary decisions");
+
+    assert_eq!(view.external_capability_decisions.len(), 3);
+    assert_eq!(
+        view.external_capability_decisions
+            .iter()
+            .filter(|decision| decision.branch_id == Some(branch_a))
+            .count(),
+        2
+    );
+    assert_eq!(
+        view.external_capability_decisions
+            .iter()
+            .filter(|decision| decision.branch_id == Some(branch_b))
+            .count(),
+        1
+    );
+    assert!(view
+        .external_capability_decisions
+        .iter()
+        .any(|decision| decision.branch_id == Some(branch_a)
+            && decision.outcome == ExternalCapabilityDecisionOutcome::Rejected));
 }
 
 #[tokio::test]
@@ -745,6 +983,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
             rejection_reason: Some("Delegation capability revoked".to_string()),
             message: "delegation suspended pending operator review".to_string(),
         }],
+        external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
         conservative_reasons: vec!["delegation scope suspended".to_string()],

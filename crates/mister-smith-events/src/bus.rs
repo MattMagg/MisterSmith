@@ -21,8 +21,9 @@ use mister_smith_core::{
 
 use crate::autonomy::{
     AutonomyEvent, AutonomyStatusView, BranchSummary, CapabilitySummary, CheckpointRecordSummary,
-    ContextPressureSummary, DelegationAlert, ExecutionGraphSummary, ResumeProvenanceSummary,
-    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
+    ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
+    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
+    StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 use crate::dead_letter::DeadLetterQueue;
 use crate::error::EventBusError;
@@ -50,6 +51,7 @@ struct AutonomyStatusAccumulator {
     interventions: HashMap<InterventionRecordId, InterventionRecord>,
     delegation_capabilities: HashMap<mister_smith_core::CapabilityId, CapabilitySummary>,
     delegation_alerts: HashMap<String, DelegationAlert>,
+    external_capability_decisions: Vec<ExternalCapabilityDecisionSummary>,
     profiles: HashMap<ProfileSnapshotId, ProfileSnapshot>,
     guard_decisions: HashMap<GuardDecisionId, GuardDecision>,
     conservative_reasons: Vec<String>,
@@ -112,6 +114,9 @@ impl AutonomyStatusAccumulator {
             AutonomyEvent::DelegationUpdated(envelope) => {
                 self.update_delegation(envelope.payload);
             }
+            AutonomyEvent::DelegationDecisionRecorded(envelope) => {
+                self.update_external_capability_decision(envelope.payload);
+            }
             AutonomyEvent::StatusUpdated(envelope) => {
                 *self = Self::from_view(envelope.payload.clone());
             }
@@ -160,6 +165,13 @@ impl AutonomyStatusAccumulator {
         let mut delegation_alerts = self.delegation_alerts.values().cloned().collect::<Vec<_>>();
         delegation_alerts.sort_by_key(|alert| alert.message.clone());
 
+        let mut external_capability_decisions = self.external_capability_decisions.clone();
+        external_capability_decisions.sort_by(|left, right| {
+            left.observed_at.cmp(&right.observed_at).then_with(|| {
+                external_capability_decision_key(left).cmp(&external_capability_decision_key(right))
+            })
+        });
+
         let mut profiles = self.profiles.values().cloned().collect::<Vec<_>>();
         profiles.sort_by(|left, right| left.updated_at.cmp(&right.updated_at));
 
@@ -192,6 +204,7 @@ impl AutonomyStatusAccumulator {
             interventions,
             delegation_capabilities,
             delegation_alerts,
+            external_capability_decisions,
             profiles,
             guard_decisions,
             conservative_reasons: self.conservative_reasons.clone(),
@@ -238,6 +251,7 @@ impl AutonomyStatusAccumulator {
                 .delegation_alerts
                 .insert(delegation_alert_key(&alert), alert);
         }
+        accumulator.external_capability_decisions = view.external_capability_decisions;
         for profile in view.profiles {
             accumulator.profiles.insert(profile.profile_id, profile);
         }
@@ -259,6 +273,12 @@ impl AutonomyStatusAccumulator {
             self.delegation_alerts.insert(key, alert);
         } else {
             self.delegation_alerts.remove(&key);
+        }
+    }
+
+    fn update_external_capability_decision(&mut self, decision: ExternalCapabilityDecisionSummary) {
+        if !self.external_capability_decisions.contains(&decision) {
+            self.external_capability_decisions.push(decision);
         }
     }
 
@@ -375,6 +395,26 @@ fn delegation_alert_key(alert: &DelegationAlert) -> String {
 
 fn delegation_capability_key(capability: &CapabilitySummary) -> String {
     format!("{:?}:{}", Some(capability.scope), capability.capability_id)
+}
+
+fn external_capability_decision_key(decision: &ExternalCapabilityDecisionSummary) -> String {
+    format!(
+        "{}:{}:{}:{}:{}",
+        decision
+            .branch_id
+            .map(|branch_id| branch_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        decision
+            .capability_id
+            .map(|capability_id| capability_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        decision.action_id.as_deref().unwrap_or("none"),
+        decision.action_descriptor_id.as_deref().unwrap_or("none"),
+        match decision.outcome {
+            crate::autonomy::ExternalCapabilityDecisionOutcome::Allowed => "allowed",
+            crate::autonomy::ExternalCapabilityDecisionOutcome::Rejected => "rejected",
+        }
+    )
 }
 
 /// In-process event bus with handler dispatch, broadcast, and dead letter handling.

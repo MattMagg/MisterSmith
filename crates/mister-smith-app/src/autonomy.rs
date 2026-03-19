@@ -11,7 +11,8 @@ use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{AgentId, SessionId, TaskId};
 use mister_smith_events::{
-    AutonomyStatusView, EventBus, ResumeProvenanceSummary, StepRoutingDecisionSummary,
+    AutonomyStatusView, EventBus, ExternalCapabilityDecisionOutcome,
+    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, StepRoutingDecisionSummary,
 };
 use mister_smith_persistence::postgres::queries;
 use reqwest::Client;
@@ -416,6 +417,12 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let external_capability_decisions = view
+        .external_capability_decisions
+        .iter()
+        .map(render_external_capability_decision)
+        .collect::<Vec<_>>()
+        .join("\n");
     let conservative_summary = if view.conservative_reasons.is_empty() {
         "none".to_string()
     } else {
@@ -423,7 +430,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -456,6 +463,11 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
             "none".to_string()
         } else {
             delegation_alerts
+        },
+        if external_capability_decisions.is_empty() {
+            "none".to_string()
+        } else {
+            external_capability_decisions
         },
         conservative_summary
     )
@@ -594,6 +606,77 @@ fn render_resume_provenance(summary: &ResumeProvenanceSummary) -> String {
     } else {
         parts.join(" ")
     }
+}
+
+fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSummary) -> String {
+    let outcome = match summary.outcome {
+        ExternalCapabilityDecisionOutcome::Allowed => "allowed",
+        ExternalCapabilityDecisionOutcome::Rejected => "rejected",
+    };
+    let branch_id = summary
+        .branch_id
+        .map(|branch_id| branch_id.to_string())
+        .unwrap_or_else(|| "none".to_string());
+    let capability_id = summary
+        .capability_id
+        .map(|capability_id| capability_id.to_string())
+        .unwrap_or_else(|| "none".to_string());
+    let capability_descriptor = summary
+        .capability_descriptor_id
+        .as_deref()
+        .unwrap_or("none");
+    let action_descriptor = summary.action_descriptor_id.as_deref().unwrap_or("none");
+    let action_id = summary.action_id.as_deref().unwrap_or("none");
+    let action_title = summary.action_title.as_deref().unwrap_or("none");
+    let required_scope = summary
+        .required_scope
+        .map(|scope| format!("{scope:?}"))
+        .unwrap_or_else(|| "none".to_string());
+    let scope = summary
+        .scope
+        .map(|scope| format!("{scope:?}"))
+        .unwrap_or_else(|| "none".to_string());
+    let revocation_state = summary
+        .revocation_state
+        .map(|state| format!("{state:?}"))
+        .unwrap_or_else(|| "none".to_string());
+    let policy = match (
+        summary.policy_action.as_deref(),
+        summary.policy_scope.as_deref(),
+        summary.policy_resource.as_deref(),
+    ) {
+        (Some(action), Some(scope), Some(resource)) => format!("{action}/{scope}/{resource}"),
+        _ => "none".to_string(),
+    };
+    let resource_id = summary.policy_resource_id.as_deref().unwrap_or("none");
+    let observed_at = summary
+        .observed_at
+        .map(|timestamp| timestamp.to_rfc3339())
+        .unwrap_or_else(|| "none".to_string());
+    let rationale = if summary.rationale.is_empty() {
+        "none".to_string()
+    } else {
+        summary.rationale.join(" | ")
+    };
+
+    format!(
+        "{} branch={} observed_at={} outcome={} capability_descriptor={} action_descriptor={} action_id={} title={} scope={} required_scope={} state={} depth={} policy={} resource_id={} rationale={}",
+        capability_id,
+        branch_id,
+        observed_at,
+        outcome,
+        capability_descriptor,
+        action_descriptor,
+        action_id,
+        action_title,
+        scope,
+        required_scope,
+        revocation_state,
+        summary.chain_depth,
+        policy,
+        resource_id,
+        rationale
+    )
 }
 
 fn parse_datetime(value: &Value) -> Option<DateTime<Utc>> {

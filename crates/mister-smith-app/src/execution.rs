@@ -1448,12 +1448,14 @@ mod tests {
     use chrono::Utc;
     use mister_smith_core::{
         AuthorityPrincipal, BranchRecoveryStrategy, BranchState, CapabilityActionKind,
-        CoordinationPolicy, DelegatedAction, DelegatedActionPolicy, DelegationScope,
-        ExecutionBranchId, ExecutionGraphId, ExternalDelegationEnvelope, GraphState, SessionId,
-        TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale,
+        CapabilityId, CoordinationPolicy, DelegatedAction, DelegatedActionPolicy, DelegationScope,
+        ExecutionBranchId, ExecutionGraphId, ExternalDelegationEnvelope, GraphState,
+        RevocationState, SessionId, TaskShapeClassification, TaskShapeKind, TopologyKind,
+        TopologyRationale,
     };
     use mister_smith_events::{
-        BranchSummary, ExecutionGraphSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
+        BranchSummary, ExecutionGraphSummary, ExternalCapabilityDecisionOutcome,
+        ExternalCapabilityDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
     };
     use mister_smith_security::DelegationService;
 
@@ -1519,6 +1521,7 @@ mod tests {
             interventions: vec![],
             delegation_capabilities: vec![],
             delegation_alerts: vec![],
+            external_capability_decisions: vec![],
             profiles: vec![],
             guard_decisions: vec![],
             conservative_reasons: vec!["restart-safe recovery".to_string()],
@@ -1619,6 +1622,143 @@ mod tests {
         assert_eq!(
             metadata["external_delegation"]["action"]["revocation_key"],
             "tool:app.workflow#execute"
+        );
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_does_not_infer_allowed_external_capability_decision() {
+        let view = sample_autonomy_view();
+        let delegation = sample_external_delegation();
+        let mut metadata = json!({
+            "external_delegation": delegation,
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should still recover");
+
+        assert!(
+            recovered.external_capability_decisions.is_empty(),
+            "metadata-only delegation context must not fabricate an allowed boundary decision"
+        );
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_preserves_allowed_external_capability_decision_snapshot() {
+        let mut view = sample_autonomy_view();
+        view.external_capability_decisions = vec![ExternalCapabilityDecisionSummary {
+            branch_id: Some(ExecutionBranchId::new()),
+            capability_id: Some(CapabilityId::new()),
+            capability_descriptor_id: Some("tool:app.workflow".to_string()),
+            action_descriptor_id: Some("tool:app.workflow".to_string()),
+            action_id: Some("tool:app.workflow#execute".to_string()),
+            action_title: Some("execute app.workflow".to_string()),
+            scope: Some(mister_smith_core::DelegationScope::InvokeTool),
+            required_scope: Some(mister_smith_core::DelegationScope::InvokeTool),
+            policy_action: Some("execute".to_string()),
+            policy_resource: Some("workflow".to_string()),
+            policy_scope: Some("app".to_string()),
+            policy_resource_id: Some("app.workflow".to_string()),
+            revocation_state: Some(RevocationState::Active),
+            chain_depth: 1,
+            outcome: ExternalCapabilityDecisionOutcome::Allowed,
+            observed_at: Some(Utc::now()),
+            rationale: vec![
+                "descriptor 'tool:app.workflow' matched the requested external action".to_string(),
+                "required scope InvokeTool matched capability scope InvokeTool".to_string(),
+            ],
+        }];
+        let mut metadata = json!({});
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should expose external capability decisions");
+        let summary = recovered
+            .external_capability_decisions
+            .first()
+            .expect("external capability decision should survive in the persisted snapshot");
+
+        assert_eq!(summary.outcome, ExternalCapabilityDecisionOutcome::Allowed);
+        assert_eq!(
+            summary.capability_descriptor_id.as_deref(),
+            Some("tool:app.workflow")
+        );
+        assert_eq!(
+            summary.action_descriptor_id.as_deref(),
+            Some("tool:app.workflow")
+        );
+        assert!(summary
+            .rationale
+            .iter()
+            .any(|line| line.contains("matched the requested external action")));
+        assert!(summary
+            .rationale
+            .iter()
+            .any(|line| line
+                .contains("required scope InvokeTool matched capability scope InvokeTool")));
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_preserves_rejected_external_capability_decision_snapshot()
+    {
+        let mut view = sample_autonomy_view();
+        view.external_capability_decisions = vec![ExternalCapabilityDecisionSummary {
+            branch_id: Some(ExecutionBranchId::new()),
+            capability_id: Some(CapabilityId::new()),
+            capability_descriptor_id: Some("tool:app.other".to_string()),
+            action_descriptor_id: Some("tool:app.workflow".to_string()),
+            action_id: Some("tool:app.workflow#execute".to_string()),
+            action_title: Some("execute app.workflow".to_string()),
+            scope: Some(mister_smith_core::DelegationScope::InvokeTool),
+            required_scope: Some(mister_smith_core::DelegationScope::InvokeTool),
+            policy_action: Some("execute".to_string()),
+            policy_resource: Some("workflow".to_string()),
+            policy_scope: Some("app".to_string()),
+            policy_resource_id: Some("app.workflow".to_string()),
+            revocation_state: Some(RevocationState::Active),
+            chain_depth: 1,
+            outcome: ExternalCapabilityDecisionOutcome::Rejected,
+            observed_at: Some(Utc::now()),
+            rationale: vec![
+                "delegation descriptor 'tool:app.other' does not authorize action descriptor 'tool:app.workflow'".to_string(),
+            ],
+        }];
+        let mut metadata = json!({});
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record).expect(
+            "persisted autonomy status should preserve rejected external capability decisions",
+        );
+        let summary = recovered.external_capability_decisions.first().expect(
+            "rejected external capability decision should survive in the persisted snapshot",
+        );
+
+        assert_eq!(summary.outcome, ExternalCapabilityDecisionOutcome::Rejected);
+        assert!(summary.rationale.iter().any(|line| {
+            line.contains("does not authorize action descriptor 'tool:app.workflow'")
+        }));
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_does_not_infer_rejected_external_capability_decision() {
+        let view = sample_autonomy_view();
+        let mut delegation = sample_external_delegation();
+        delegation.capability.descriptor_id = Some("tool:app.other".to_string());
+        let mut metadata = json!({
+            "external_delegation": delegation,
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should still recover");
+
+        assert!(
+            recovered.external_capability_decisions.is_empty(),
+            "metadata-only delegation context must not fabricate a rejected boundary decision"
         );
     }
 
