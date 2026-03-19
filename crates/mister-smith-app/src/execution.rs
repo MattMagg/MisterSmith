@@ -20,8 +20,7 @@ use mister_smith_agents::scheduler::{
 use mister_smith_agents::{AgentConfig, Orchestrator, ToolBus, TopologyCompiler, TopologySignals};
 use mister_smith_core::{
     AgentId, AgentType, BranchState, EscalationPolicy, GraphState, GuardTarget, NodeState,
-    ProofOutcomeClassification, SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError,
-    ToolId, ToolSchema, UnifiedResultEnvelope,
+    SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -295,6 +294,11 @@ impl RuntimeTaskService {
             if let Ok(Some(record)) = queries::find_task(&self.pool, *workflow_id.as_ref()).await {
                 crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
                 crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
+                crate::autonomy::enrich_result_preview(
+                    &mut view,
+                    &record.metadata,
+                    record.result.as_ref(),
+                );
             }
             return Some(view);
         }
@@ -352,19 +356,52 @@ impl RuntimeTaskService {
         put_metadata(&mut metadata, "failure", json!({ "message": message }));
         mark_persisted_autonomy_status_failed(&mut metadata);
 
-        let result = json!({
-            "workflow_id": workflow_id,
-            "provider_kind": PROVIDER_KIND_NAME,
-            "model_id": MODEL_ID,
+        let aggregated_result = json!({
             "error": message,
             "recovered_after_restart": true,
         });
+        let final_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: metadata
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .unwrap_or(message),
+                runtime_execution_mode: runtime_execution_mode(),
+                planner_output: metadata
+                    .get("planner_output")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                execution_plan: metadata
+                    .get("execution_plan")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                step_results: metadata
+                    .get("step_results")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default(),
+                aggregated_result: aggregated_result.clone(),
+                status: "failed",
+            },
+        );
+        let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
+            "failed",
+            final_result.clone(),
+        ))
+        .unwrap_or(Value::Null);
+        let final_result = serde_json::to_value(final_result).unwrap_or(Value::Null);
+        put_metadata(&mut metadata, "aggregated_result", aggregated_result);
+        put_metadata(&mut metadata, "final_result", final_result);
+        self.capture_autonomy_status_metadata(workflow_id, &mut metadata, Some(&task_result));
 
         self.update_root_record(
             workflow_id,
             "failed",
             metadata,
-            Some(result),
+            Some(task_result),
             record.started_at.or(Some(record.created_at)),
             Some(failed_at),
         )
@@ -492,7 +529,7 @@ impl RuntimeTaskService {
             .map_err(|error| format!("execution graph compile failed: {error}"))?;
         graph.state = GraphState::Running;
         self.orchestrator.register_execution_graph(graph.clone());
-        self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
+        self.capture_autonomy_status_metadata(workflow_id, &mut metadata, None);
         self.update_task_metadata(workflow_id, metadata.clone())
             .await?;
 
@@ -547,7 +584,7 @@ impl RuntimeTaskService {
                 .collect::<Vec<_>>();
             routing_history.extend(decision_payload.clone());
             put_metadata(&mut metadata, "routing_history", json!(routing_history));
-            self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
+            self.capture_autonomy_status_metadata(workflow_id, &mut metadata, None);
             self.update_task_metadata(workflow_id, metadata.clone())
                 .await?;
             self.publish_event(
@@ -690,30 +727,43 @@ impl RuntimeTaskService {
             .aggregate(&workflow_id)
             .await
             .map_err(|error| format!("result aggregation failed: {error}"))?;
-        self.transition_workflow_complete(workflow_id);
-        let proof_outcome = self
-            .orchestrator
-            .autonomy_status(&workflow_id)
-            .and_then(|view| view.result_preview.map(|preview| preview.proof_outcome))
-            .ok_or_else(|| {
-                format!("proof outcome missing for workflow {workflow_id} after completion")
-            })?;
-        let final_result = build_final_result(
-            workflow_id,
-            &request.description,
-            &metadata,
-            &step_results,
-            aggregated_result,
-            proof_outcome,
+        let final_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: &request.description,
+                runtime_execution_mode: runtime_execution_mode(),
+                planner_output: metadata
+                    .get("planner_output")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                execution_plan: metadata
+                    .get("execution_plan")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                step_results: step_results.values().cloned().collect::<Vec<_>>(),
+                aggregated_result: aggregated_result.clone(),
+                status: "completed",
+            },
         );
+        let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
+            "completed",
+            final_result.clone(),
+        ))
+        .map_err(|error| format!("failed to serialize task result view: {error}"))?;
+        let final_result = serde_json::to_value(final_result)
+            .map_err(|error| format!("failed to serialize canonical result: {error}"))?;
 
+        put_metadata(&mut metadata, "aggregated_result", aggregated_result);
         put_metadata(&mut metadata, "final_result", final_result.clone());
-        self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
+        self.transition_workflow_complete(workflow_id);
+        self.capture_autonomy_status_metadata(workflow_id, &mut metadata, Some(&task_result));
         self.update_root_record(
             workflow_id,
             "completed",
             metadata.clone(),
-            Some(final_result.clone()),
+            Some(task_result),
             Some(Utc::now()),
             Some(Utc::now()),
         )
@@ -1036,7 +1086,43 @@ impl RuntimeTaskService {
             }
             _ => json!({ "failure": { "message": message } }),
         };
-        self.capture_autonomy_status_metadata(workflow_id, &mut metadata);
+        let final_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: metadata
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .unwrap_or("workflow failed"),
+                runtime_execution_mode: runtime_execution_mode(),
+                planner_output: metadata
+                    .get("planner_output")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                execution_plan: metadata
+                    .get("execution_plan")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                step_results: metadata
+                    .get("step_results")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default(),
+                aggregated_result: json!({ "error": message }),
+                status: "failed",
+            },
+        );
+        let aggregated_result = final_result.aggregated_result.clone();
+        let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
+            "failed",
+            final_result.clone(),
+        ))
+        .unwrap_or(Value::Null);
+        let final_result = serde_json::to_value(final_result).unwrap_or(Value::Null);
+        put_metadata(&mut metadata, "aggregated_result", aggregated_result);
+        put_metadata(&mut metadata, "final_result", final_result);
+        self.capture_autonomy_status_metadata(workflow_id, &mut metadata, Some(&task_result));
         let coordinator_id =
             coordinator_id_from_metadata(&metadata).unwrap_or(self.default_coordinator_id);
         let _ = self
@@ -1044,12 +1130,7 @@ impl RuntimeTaskService {
                 workflow_id,
                 "failed",
                 metadata.clone(),
-                Some(json!({
-                    "workflow_id": workflow_id,
-                    "provider_kind": PROVIDER_KIND_NAME,
-                    "model_id": MODEL_ID,
-                    "error": message,
-                })),
+                Some(task_result),
                 Some(Utc::now()),
                 Some(Utc::now()),
             )
@@ -1125,7 +1206,7 @@ impl RuntimeTaskService {
             "step_results",
             json!(step_results.values().cloned().collect::<Vec<_>>()),
         );
-        self.capture_autonomy_status_metadata(workflow_id, metadata);
+        self.capture_autonomy_status_metadata(workflow_id, metadata, None);
         self.update_task_metadata(workflow_id, metadata.clone())
             .await?;
         self.publish_event(
@@ -1160,7 +1241,7 @@ impl RuntimeTaskService {
             "last_step_failure",
             json!(failed_step.message.clone()),
         );
-        self.capture_autonomy_status_metadata(workflow_id, metadata);
+        self.capture_autonomy_status_metadata(workflow_id, metadata, None);
         self.update_task_metadata(workflow_id, metadata.clone())
             .await?;
         self.publish_event(
@@ -1256,12 +1337,18 @@ impl RuntimeTaskService {
         self.orchestrator.register_execution_graph(graph);
     }
 
-    fn capture_autonomy_status_metadata(&self, workflow_id: TaskId, metadata: &mut Value) {
+    fn capture_autonomy_status_metadata(
+        &self,
+        workflow_id: TaskId,
+        metadata: &mut Value,
+        task_result: Option<&Value>,
+    ) {
         let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id) else {
             return;
         };
         crate::autonomy::enrich_session_linkage(&mut view, metadata);
         crate::autonomy::enrich_step_routing_history(&mut view, metadata);
+        crate::autonomy::enrich_result_preview(&mut view, metadata, task_result);
         persist_autonomy_status(metadata, &view);
     }
 
@@ -1364,40 +1451,12 @@ fn persist_autonomy_status(metadata: &mut Value, view: &AutonomyStatusView) {
     put_metadata(metadata, AUTONOMY_STATUS_METADATA_KEY, value);
 }
 
-fn build_final_result(
-    workflow_id: TaskId,
-    description: &str,
-    metadata: &Value,
-    step_results: &BTreeMap<String, Value>,
-    aggregated_result: Value,
-    proof_outcome: ProofOutcomeClassification,
-) -> Value {
-    serde_json::to_value(UnifiedResultEnvelope {
-        workflow_id,
-        provider_kind: PROVIDER_KIND_NAME.to_string(),
-        model_id: MODEL_ID.to_string(),
-        description: description.to_string(),
-        runtime_execution_mode: runtime_execution_mode(),
-        planner_output: metadata
-            .get("planner_output")
-            .cloned()
-            .unwrap_or(Value::Null),
-        execution_plan: metadata
-            .get("execution_plan")
-            .cloned()
-            .unwrap_or(Value::Null),
-        step_results: step_results.values().cloned().collect(),
-        aggregated_result,
-        proof_outcome,
-    })
-    .expect("canonical result envelope should serialize")
-}
-
 fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStatusView> {
     let raw = record.metadata.get(AUTONOMY_STATUS_METADATA_KEY)?.clone();
     let mut view = serde_json::from_value::<AutonomyStatusView>(raw).ok()?;
     crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
     crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
+    crate::autonomy::enrich_result_preview(&mut view, &record.metadata, record.result.as_ref());
     Some(view)
 }
 
@@ -1484,8 +1543,8 @@ mod tests {
         AuthorityPrincipal, BranchRecoveryStrategy, BranchState, CapabilityActionKind,
         CapabilityId, CoordinationPolicy, DelegatedAction, DelegatedActionPolicy, DelegationScope,
         ExecutionBranchId, ExecutionGraphId, ExternalDelegationEnvelope, GraphState,
-        OperatorResultPreview, ProofOutcomeClassification, RevocationState, SessionId,
-        TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale,
+        RevocationState, SessionId, TaskShapeClassification, TaskShapeKind, TopologyKind,
+        TopologyRationale,
     };
     use mister_smith_events::{
         BranchSummary, ExecutionGraphSummary, ExternalCapabilityDecisionOutcome,
@@ -1504,23 +1563,11 @@ mod tests {
         let workflow_id = TaskId::new();
         let graph_id = ExecutionGraphId::new();
         let branch_id = ExecutionBranchId::new();
-        let result_preview =
-            matches!(graph_state, GraphState::Completed).then_some(OperatorResultPreview {
-                workflow_id,
-                proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
-                preview_text: Some("workflow completed with 1 branch(es) across 3 node(s)".into()),
-                payload_location: "task.result".to_string(),
-                provenance_lines: vec![
-                    "canonical result stored in metadata.final_result".to_string(),
-                    "aggregated payload nested under metadata.aggregated_result".to_string(),
-                ],
-            });
         AutonomyStatusView {
             session_id: None,
             turn_index: None,
             coordinator_agent_id: None,
             resume_provenance: None,
-            result_preview,
             graph: ExecutionGraphSummary {
                 graph_id,
                 workflow_id,
@@ -1564,6 +1611,7 @@ mod tests {
             memory_pressure: vec![],
             routing_history: vec![],
             step_routing_history: vec![],
+            result_preview: None,
             interventions: vec![],
             delegation_capabilities: vec![],
             delegation_alerts: vec![],
@@ -1625,6 +1673,12 @@ mod tests {
         }
     }
 
+    fn sample_task_with_result(metadata: Value, result: Value) -> TaskRecord {
+        let mut record = sample_task_with_metadata(metadata);
+        record.result = Some(result);
+        record
+    }
+
     #[test]
     fn recover_persisted_autonomy_status_restores_session_linkage() {
         let session_id = SessionId::new();
@@ -1646,41 +1700,6 @@ mod tests {
         assert_eq!(recovered.session_id, Some(session_id));
         assert_eq!(recovered.turn_index, Some(2));
         assert_eq!(recovered.coordinator_agent_id, Some(coordinator_agent_id));
-        assert_eq!(
-            recovered
-                .result_preview
-                .as_ref()
-                .map(|preview| preview.proof_outcome),
-            Some(ProofOutcomeClassification::GraphFormedAndCompleted)
-        );
-    }
-
-    #[test]
-    fn build_final_result_embeds_required_proof_outcome() {
-        let workflow_id = TaskId::new();
-        let metadata = json!({
-            "planner_output": { "plan": "ready" },
-            "execution_plan": { "steps": ["analyze"] },
-        });
-        let step_results = BTreeMap::from([("1".to_string(), json!({ "status": "ok" }))]);
-
-        let final_result = build_final_result(
-            workflow_id,
-            "Analyze an incident packet",
-            &metadata,
-            &step_results,
-            json!({ "summary": "bounded final payload" }),
-            ProofOutcomeClassification::GraphFormedAndCompleted,
-        );
-
-        assert_eq!(
-            final_result.get("proof_outcome"),
-            Some(&json!("graph_formed_and_completed"))
-        );
-        assert_eq!(
-            final_result.get("aggregated_result"),
-            Some(&json!({ "summary": "bounded final payload" }))
-        );
     }
 
     #[test]
@@ -1921,6 +1940,93 @@ mod tests {
         assert_eq!(recovered.step_routing_history.len(), 1);
         assert_eq!(recovered.step_routing_history[0].action, "continue");
         assert!(recovered.step_routing_history[0].action_changed);
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_enriches_result_preview_from_task_result() {
+        let mut view = sample_autonomy_view();
+        view.graph.state = GraphState::Completed;
+        let workflow_id = view.graph.workflow_id;
+        let mut metadata = json!({
+            "final_result": {
+                "workflow_id": workflow_id,
+                "provider_kind": PROVIDER_KIND_NAME,
+                "model_id": MODEL_ID,
+                "description": "freeze the result contract",
+                "runtime_execution_mode": {
+                    "execution_boundary": "tool_bus"
+                },
+                "planner_output": {
+                    "steps": 1
+                },
+                "execution_plan": {
+                    "steps": [{"id": "step-1"}]
+                },
+                "step_results": [
+                    {
+                        "task_id": TaskId::new(),
+                        "result": {
+                            "summary": "bounded answer preview"
+                        }
+                    }
+                ],
+                "aggregated_result": {
+                    "summary": "bounded answer preview"
+                },
+            }
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_result(
+            metadata,
+            json!({
+                "workflow_id": workflow_id,
+                "status": "completed",
+                "proof_outcome": "collapsed_to_sequential",
+                "result": {
+                    "workflow_id": workflow_id,
+                    "provider_kind": PROVIDER_KIND_NAME,
+                    "model_id": MODEL_ID,
+                    "description": "freeze the result contract",
+                    "runtime_execution_mode": {
+                        "execution_boundary": "tool_bus"
+                    },
+                    "planner_output": {
+                        "steps": 1
+                    },
+                    "execution_plan": {
+                        "steps": [{"id": "step-1"}]
+                    },
+                    "step_results": [
+                        {
+                            "task_id": TaskId::new(),
+                            "result": {
+                                "summary": "bounded answer preview"
+                            }
+                        }
+                    ],
+                    "aggregated_result": {
+                        "summary": "bounded answer preview"
+                    },
+                    "proof_outcome": "collapsed_to_sequential"
+                }
+            }),
+        );
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should expose the operator result preview");
+
+        let preview = recovered
+            .result_preview
+            .expect("result preview should derive from the canonical task result");
+        assert_eq!(preview.payload_location, "task.result");
+        assert_eq!(
+            preview.proof_outcome,
+            mister_smith_core::ProofOutcomeClassification::CollapsedToSequential
+        );
+        assert_eq!(
+            preview.preview_text.as_deref(),
+            Some("bounded answer preview")
+        );
     }
 
     #[test]

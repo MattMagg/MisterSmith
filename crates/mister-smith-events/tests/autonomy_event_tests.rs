@@ -4,8 +4,8 @@ use mister_smith_core::{
     ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
     GuardEvidence, HealthState, InterventionRecordId, InterventionType, OperatorResultPreview,
     ProfileSnapshot, ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification, ProvenanceChain,
-    ProvenanceLink, RevocationState, TaskId, TaskShapeClassification, TaskShapeKind,
-    TeamSizingDecision, TopologyKind, TopologyRationale,
+    ProvenanceLink, ResultProvenanceSummary, RevocationState, TaskId, TaskShapeClassification,
+    TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
@@ -131,29 +131,29 @@ fn sample_external_capability_decision(
 fn sample_result_preview(
     workflow_id: TaskId,
     proof_outcome: ProofOutcomeClassification,
-    preview_text: &str,
 ) -> OperatorResultPreview {
     OperatorResultPreview {
         workflow_id,
         proof_outcome,
-        preview_text: Some(preview_text.to_string()),
+        preview_text: Some("bounded answer preview".to_string()),
         payload_location: "task.result".to_string(),
         provenance_lines: vec![
             "canonical result stored in metadata.final_result".to_string(),
             "aggregated payload nested under metadata.aggregated_result".to_string(),
+            "session assistant_result derives from the canonical result object".to_string(),
         ],
     }
 }
 
 #[test]
 fn autonomy_event_surfaces_compile_with_shared_trait_bounds() {
+    assert_event_traits::<OperatorResultPreview>();
     assert_event_traits::<ExecutionGraphSummary>();
     assert_event_traits::<TopologyPlanSummary>();
     assert_event_traits::<BranchSummary>();
     assert_event_traits::<ContextPressureSummary>();
     assert_event_traits::<CapabilitySummary>();
     assert_event_traits::<DelegationAlert>();
-    assert_event_traits::<OperatorResultPreview>();
     assert_event_traits::<StepRoutingDecisionSummary>();
     assert_event_traits::<AutonomyStatusView>();
     assert_event_traits::<AutonomyEventEnvelope<ExecutionGraphSummary>>();
@@ -225,11 +225,6 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             resumed_from_workflow_id: Some(TaskId::new()),
             resumed_from_turn_index: Some(1),
         }),
-        result_preview: Some(sample_result_preview(
-            workflow_id,
-            ProofOutcomeClassification::GraphFormedAndCompleted,
-            "bounded answer preview",
-        )),
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -315,6 +310,10 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             triggered_checkpoints: vec![],
             change_rationale: vec!["action changed from fallback to continue".to_string()],
         }],
+        result_preview: Some(sample_result_preview(
+            workflow_id,
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        )),
         interventions: vec![mister_smith_core::InterventionRecord {
             record_id: InterventionRecordId::new(),
             decision_id: GuardDecisionId::new(),
@@ -388,14 +387,6 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             .expect("resume provenance should round-trip")
             .resumed_after_restart
     );
-    assert_eq!(
-        roundtrip
-            .result_preview
-            .as_ref()
-            .expect("result preview should round-trip")
-            .proof_outcome,
-        ProofOutcomeClassification::GraphFormedAndCompleted
-    );
 }
 
 #[test]
@@ -408,11 +399,6 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
-        result_preview: Some(sample_result_preview(
-            workflow_id,
-            ProofOutcomeClassification::CollapsedToSequential,
-            "completed with a sequential execution path",
-        )),
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -474,6 +460,10 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
             rationale: vec!["sequential routing avoided restart blast radius".to_string()],
         }],
         step_routing_history: vec![],
+        result_preview: Some(sample_result_preview(
+            workflow_id,
+            ProofOutcomeClassification::CollapsedToSequential,
+        )),
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
@@ -814,193 +804,6 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
 }
 
 #[tokio::test]
-async fn event_bus_derives_collapsed_sequential_result_preview_from_completed_projection() {
-    let event_bus = EventBus::default();
-    let workflow_id = TaskId::new();
-    let graph_id = ExecutionGraphId::new();
-    let branch_id = ExecutionBranchId::new();
-
-    event_bus
-        .publish(
-            AutonomyEvent::GraphUpdated(AutonomyEventEnvelope {
-                workflow_id,
-                graph_id: Some(graph_id),
-                branch_id: None,
-                payload: ExecutionGraphSummary {
-                    graph_id,
-                    workflow_id,
-                    state: GraphState::Completed,
-                    branch_count: 1,
-                    node_count: 3,
-                    active_topology: Some(TopologyKind::Sequential),
-                },
-                operator_visible: true,
-            })
-            .into_event("autonomy-test"),
-        )
-        .await
-        .unwrap();
-    event_bus
-        .publish(
-            AutonomyEvent::TopologySelected(AutonomyEventEnvelope {
-                workflow_id,
-                graph_id: Some(graph_id),
-                branch_id: None,
-                payload: TopologyPlanSummary {
-                    graph_id,
-                    topology_kind: TopologyKind::Sequential,
-                    parallelism_width: 1,
-                    task_shape: sample_task_shape(TaskShapeKind::ParallelFanout),
-                    coordination_policy: CoordinationPolicy::StrictSequence,
-                    rationale: TopologyRationale {
-                        dependency_shape: "collapsed fanout".to_string(),
-                        operational_signals: vec!["budget cap".to_string()],
-                        selected_for: "degrade parallel plan to sequential fallback".to_string(),
-                        fallback_reason: None,
-                    },
-                    fallback_topology: Some(TopologyKind::Sequential),
-                },
-                operator_visible: true,
-            })
-            .into_event("autonomy-test"),
-        )
-        .await
-        .unwrap();
-    event_bus
-        .publish(
-            AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
-                workflow_id,
-                graph_id: Some(graph_id),
-                branch_id: Some(branch_id),
-                payload: BranchSummary {
-                    branch_id,
-                    graph_id,
-                    state: BranchState::Completed,
-                    assigned_agents: vec![AgentId::new()],
-                    checkpoint_id: None,
-                    recovery_strategy: BranchRecoveryStrategy::Resume,
-                },
-                operator_visible: true,
-            })
-            .into_event("autonomy-test"),
-        )
-        .await
-        .unwrap();
-
-    let view = event_bus
-        .autonomy_status(&workflow_id)
-        .await
-        .expect("completed projection should expose a derived result preview");
-    let preview = view
-        .result_preview
-        .expect("completed sequential projection should infer result preview");
-
-    assert_eq!(
-        preview.proof_outcome,
-        ProofOutcomeClassification::CollapsedToSequential
-    );
-    assert_eq!(preview.payload_location, "task.result");
-    assert_eq!(
-        preview.preview_text.as_deref(),
-        Some("completed with a sequential execution path")
-    );
-    assert!(preview
-        .provenance_lines
-        .iter()
-        .any(|line| line.contains("metadata.final_result")));
-}
-
-#[tokio::test]
-async fn event_bus_keeps_planned_strict_chain_as_graph_formed_completion() {
-    let event_bus = EventBus::default();
-    let workflow_id = TaskId::new();
-    let graph_id = ExecutionGraphId::new();
-    let branch_id = ExecutionBranchId::new();
-
-    event_bus
-        .publish(
-            AutonomyEvent::GraphUpdated(AutonomyEventEnvelope {
-                workflow_id,
-                graph_id: Some(graph_id),
-                branch_id: None,
-                payload: ExecutionGraphSummary {
-                    graph_id,
-                    workflow_id,
-                    state: GraphState::Completed,
-                    branch_count: 1,
-                    node_count: 3,
-                    active_topology: Some(TopologyKind::Sequential),
-                },
-                operator_visible: true,
-            })
-            .into_event("autonomy-test"),
-        )
-        .await
-        .unwrap();
-    event_bus
-        .publish(
-            AutonomyEvent::TopologySelected(AutonomyEventEnvelope {
-                workflow_id,
-                graph_id: Some(graph_id),
-                branch_id: None,
-                payload: TopologyPlanSummary {
-                    graph_id,
-                    topology_kind: TopologyKind::Sequential,
-                    parallelism_width: 1,
-                    task_shape: sample_task_shape(TaskShapeKind::StrictChain),
-                    coordination_policy: CoordinationPolicy::StrictSequence,
-                    rationale: TopologyRationale {
-                        dependency_shape: "single branch".to_string(),
-                        operational_signals: vec!["stable checkpoint".to_string()],
-                        selected_for: "preserve recovery context".to_string(),
-                        fallback_reason: None,
-                    },
-                    fallback_topology: Some(TopologyKind::Sequential),
-                },
-                operator_visible: true,
-            })
-            .into_event("autonomy-test"),
-        )
-        .await
-        .unwrap();
-    event_bus
-        .publish(
-            AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
-                workflow_id,
-                graph_id: Some(graph_id),
-                branch_id: Some(branch_id),
-                payload: BranchSummary {
-                    branch_id,
-                    graph_id,
-                    state: BranchState::Completed,
-                    assigned_agents: vec![AgentId::new()],
-                    checkpoint_id: None,
-                    recovery_strategy: BranchRecoveryStrategy::Resume,
-                },
-                operator_visible: true,
-            })
-            .into_event("autonomy-test"),
-        )
-        .await
-        .unwrap();
-
-    let preview = event_bus
-        .autonomy_status(&workflow_id)
-        .await
-        .and_then(|view| view.result_preview)
-        .expect("strict chain completion should still expose a result preview");
-
-    assert_eq!(
-        preview.proof_outcome,
-        ProofOutcomeClassification::GraphFormedAndCompleted
-    );
-    assert_eq!(
-        preview.preview_text.as_deref(),
-        Some("workflow completed with 1 branch(es) across 3 node(s)")
-    );
-}
-
-#[tokio::test]
 async fn delegation_decision_projection_preserves_branch_and_retry_history() {
     let event_bus = EventBus::default();
     let workflow_id = TaskId::new();
@@ -1014,7 +817,6 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
-        result_preview: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -1060,6 +862,10 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         memory_pressure: vec![],
         routing_history: vec![],
         step_routing_history: vec![],
+        result_preview: Some(sample_result_preview(
+            workflow_id,
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        )),
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
@@ -1117,6 +923,15 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
             .unwrap();
     }
 
+    let view = event_bus.autonomy_status(&workflow_id).await.unwrap();
+    assert_eq!(
+        view.result_preview,
+        Some(sample_result_preview(
+            workflow_id,
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        ))
+    );
+
     let view = event_bus
         .autonomy_status(&workflow_id)
         .await
@@ -1144,6 +959,34 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
             && decision.outcome == ExternalCapabilityDecisionOutcome::Rejected));
 }
 
+#[test]
+fn operator_result_preview_roundtrips_with_shared_contract_fields() {
+    let workflow_id = TaskId::new();
+    let preview = sample_result_preview(
+        workflow_id,
+        ProofOutcomeClassification::GraphFormedAndCompleted,
+    );
+    let provenance = ResultProvenanceSummary {
+        runtime_execution_mode: serde_json::json!({"execution_boundary": "tool_bus"}),
+        graph_state: Some("completed".to_string()),
+        graph_id: Some(ExecutionGraphId::new().to_string()),
+        source_fields: vec![
+            "metadata.final_result".to_string(),
+            "metadata.aggregated_result".to_string(),
+        ],
+    };
+
+    let preview_json = serde_json::to_string(&preview).unwrap();
+    let preview_roundtrip: OperatorResultPreview = serde_json::from_str(&preview_json).unwrap();
+
+    let provenance_json = serde_json::to_string(&provenance).unwrap();
+    let provenance_roundtrip: ResultProvenanceSummary =
+        serde_json::from_str(&provenance_json).unwrap();
+
+    assert_eq!(preview_roundtrip, preview);
+    assert_eq!(provenance_roundtrip, provenance);
+}
+
 #[tokio::test]
 async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
     let event_bus = EventBus::default();
@@ -1157,7 +1000,6 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
-        result_preview: None,
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -1197,6 +1039,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         memory_pressure: vec![],
         routing_history: vec![],
         step_routing_history: vec![],
+        result_preview: None,
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![DelegationAlert {

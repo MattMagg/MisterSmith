@@ -353,17 +353,17 @@ where
 
 #[test]
 fn autonomy_types_compile_with_shared_trait_bounds() {
+    assert_autonomy_traits::<ProofOutcomeClassification>();
+    assert_autonomy_traits::<UnifiedResultEnvelope>();
+    assert_autonomy_traits::<TaskResultView>();
+    assert_autonomy_traits::<ResultProvenanceSummary>();
+    assert_autonomy_traits::<SessionRetainedResultView>();
+    assert_autonomy_traits::<OperatorResultPreview>();
     assert_autonomy_traits::<TaskShapeKind>();
     assert_autonomy_traits::<TaskShapeClassification>();
     assert_autonomy_traits::<TopologyRationale>();
     assert_autonomy_traits::<TopologyPlan>();
     assert_autonomy_traits::<TeamSizingDecision>();
-    assert_autonomy_traits::<ProofOutcomeClassification>();
-    assert_autonomy_traits::<UnifiedResultEnvelope>();
-    assert_autonomy_traits::<ResultProvenanceSummary>();
-    assert_autonomy_traits::<TaskResultView>();
-    assert_autonomy_traits::<SessionRetainedResultView>();
-    assert_autonomy_traits::<OperatorResultPreview>();
     assert_autonomy_traits::<ContextBudget>();
     assert_autonomy_traits::<MetricWindow>();
     assert_autonomy_traits::<SemanticSignal>();
@@ -387,7 +387,6 @@ fn autonomy_ids_enums_and_errors_are_available() {
         reserved_units: 256,
         policy: BudgetPolicy::Summarize,
     };
-    let proof_outcome = ProofOutcomeClassification::GraphFormedAndCompleted;
     let plan = TopologyPlan {
         topology_kind: TopologyKind::Hybrid,
         parallelism_width: 4,
@@ -446,23 +445,20 @@ fn autonomy_ids_enums_and_errors_are_available() {
         target_scope: GuardTarget::Graph(graph_id),
         operator_visibility: true,
     };
-    let result = UnifiedResultEnvelope {
+    let canonical_result = UnifiedResultEnvelope {
         workflow_id,
         provider_kind: "openai_chatgpt".to_string(),
         model_id: "gpt-5.4".to_string(),
-        description: "Analyze an incident packet".to_string(),
-        runtime_execution_mode: serde_json::json!({
-            "workflow_runner": "tokio_task",
-            "execution_boundary": "tool_bus",
-        }),
+        description: "freeze the result contract".to_string(),
+        runtime_execution_mode: serde_json::json!({"execution_boundary": "tool_bus"}),
         planner_output: serde_json::json!({"steps": 2}),
-        execution_plan: serde_json::json!({"topology": "parallel"}),
-        step_results: vec![serde_json::json!({"step_id": "planner"})],
+        execution_plan: serde_json::json!({"topology_hint": "hybrid"}),
+        step_results: vec![serde_json::json!({"status": "completed"})],
         aggregated_result: serde_json::json!({"summary": "bounded final payload"}),
-        proof_outcome,
+        proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
     };
     let provenance = ResultProvenanceSummary {
-        runtime_execution_mode: result.runtime_execution_mode.clone(),
+        runtime_execution_mode: canonical_result.runtime_execution_mode.clone(),
         graph_state: Some("completed".to_string()),
         graph_id: Some(graph_id.to_string()),
         source_fields: vec![
@@ -473,20 +469,23 @@ fn autonomy_ids_enums_and_errors_are_available() {
     let task_result = TaskResultView {
         workflow_id,
         status: "completed".to_string(),
-        result: result.clone(),
-        proof_outcome,
+        result: canonical_result.clone(),
+        proof_outcome: canonical_result.proof_outcome,
     };
     let session_result = SessionRetainedResultView {
         workflow_id,
-        turn_index: 2,
+        turn_index: 3,
         status: "completed".to_string(),
-        assistant_result: serde_json::json!({"preview": "bounded answer preview"}),
+        assistant_result: serde_json::json!({
+            "preview": "bounded answer preview",
+            "aggregated_result": canonical_result.aggregated_result.clone(),
+        }),
         preview: Some("bounded answer preview".to_string()),
         provenance: provenance.clone(),
     };
     let operator_preview = OperatorResultPreview {
         workflow_id,
-        proof_outcome,
+        proof_outcome: canonical_result.proof_outcome,
         preview_text: Some("bounded answer preview".to_string()),
         payload_location: "task.result".to_string(),
         provenance_lines: vec![
@@ -503,19 +502,19 @@ fn autonomy_ids_enums_and_errors_are_available() {
 
     assert_ne!(graph_id.to_string(), "");
     assert_eq!(budget.scope, BudgetScope::Branch);
-    assert_eq!(proof_outcome.as_str(), "graph_formed_and_completed");
     assert_eq!(plan.topology_kind, TopologyKind::Hybrid);
+    assert_eq!(
+        canonical_result.proof_outcome.as_str(),
+        "graph_formed_and_completed"
+    );
+    assert_eq!(task_result.workflow_id, workflow_id);
+    assert_eq!(session_result.turn_index, 3);
+    assert_eq!(session_result.provenance.source_fields.len(), 2);
+    assert_eq!(operator_preview.payload_location, "task.result");
     assert_eq!(team_sizing.workflow_id, workflow_id);
     assert!(team_sizing.selected_workers <= team_sizing.desired_workers);
     assert!(team_sizing.selected_workers <= team_sizing.available_workers);
     assert_eq!(decision.intervention, InterventionType::BranchIsolation);
-    assert_eq!(result.proof_outcome, proof_outcome);
-    assert_eq!(
-        task_result.result.aggregated_result,
-        result.aggregated_result
-    );
-    assert_eq!(session_result.provenance.source_fields.len(), 2);
-    assert_eq!(operator_preview.payload_location, "task.result");
     assert!(matches!(
         system_error,
         SystemError::Autonomy(AutonomyError::Topology(TopologyError::CycleDetected { .. }))

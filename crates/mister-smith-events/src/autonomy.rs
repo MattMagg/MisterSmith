@@ -341,9 +341,6 @@ pub struct AutonomyStatusView {
     /// Restart and resume provenance for the workflow when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_provenance: Option<ResumeProvenanceSummary>,
-    /// Compact operator-facing result preview derived from the canonical result contract.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub result_preview: Option<OperatorResultPreview>,
     /// Graph summary for the running workflow.
     pub graph: ExecutionGraphSummary,
     /// Selected topology summary.
@@ -362,6 +359,9 @@ pub struct AutonomyStatusView {
     /// Step-level routing history projected from workflow metadata when available.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub step_routing_history: Vec<StepRoutingDecisionSummary>,
+    /// Compact operator-facing result preview and provenance when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_preview: Option<OperatorResultPreview>,
     /// Applied intervention records visible to operators.
     pub interventions: Vec<InterventionRecord>,
     /// Active or recently rejected delegation capabilities.
