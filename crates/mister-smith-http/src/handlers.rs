@@ -720,9 +720,29 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Default)]
+    #[derive(Clone)]
     struct RecordingTaskService {
         last_request: Arc<tokio::sync::Mutex<Option<TaskSubmissionRequest>>>,
+        response: TaskSubmissionResponse,
+    }
+
+    impl Default for RecordingTaskService {
+        fn default() -> Self {
+            Self {
+                last_request: Arc::new(tokio::sync::Mutex::new(None)),
+                response: TaskSubmissionResponse {
+                    task_id: TaskId::from_uuid(
+                        Uuid::parse_str("00000000-0000-0000-0000-000000000010")
+                            .expect("fixed task id should parse"),
+                    ),
+                    assigned_agent_id: AgentId::from_uuid(
+                        Uuid::parse_str("00000000-0000-0000-0000-000000000011")
+                            .expect("fixed agent id should parse"),
+                    ),
+                    status: "queued".to_string(),
+                },
+            }
+        }
     }
 
     impl RecordingTaskService {
@@ -742,11 +762,7 @@ mod tests {
             request: TaskSubmissionRequest,
         ) -> Result<TaskSubmissionResponse, String> {
             *self.last_request.lock().await = Some(request);
-            Ok(TaskSubmissionResponse {
-                task_id: TaskId::new(),
-                assigned_agent_id: AgentId::new(),
-                status: "queued".to_string(),
-            })
+            Ok(self.response.clone())
         }
 
         async fn get_task(&self, _task_id: TaskId) -> Result<Option<TaskStatusView>, String> {
@@ -872,19 +888,37 @@ mod tests {
 
     #[tokio::test]
     async fn create_task_returns_202_fields() {
-        let state = test_state();
+        let service = RecordingTaskService::default();
+        let state = test_state().with_task_service(Arc::new(service));
         let request = CreateTaskRequest {
             description: "Test task".to_string(),
             agent_type: None,
             priority: None,
         };
-        let result = create_task(
+        let (status, Json(response)) = create_task(
             State(state),
             ExternalDelegationBoundary(None),
             Json(request),
         )
-        .await;
-        assert!(result.is_err());
+        .await
+        .expect("task creation should succeed");
+
+        assert_eq!(status, StatusCode::ACCEPTED);
+        assert_eq!(
+            response.task_id,
+            TaskId::from_uuid(
+                Uuid::parse_str("00000000-0000-0000-0000-000000000010")
+                    .expect("fixed task id should parse"),
+            )
+        );
+        assert_eq!(
+            response.assigned_agent_id,
+            AgentId::from_uuid(
+                Uuid::parse_str("00000000-0000-0000-0000-000000000011")
+                    .expect("fixed agent id should parse"),
+            )
+        );
+        assert_eq!(response.status, "queued");
     }
 
     #[tokio::test]
@@ -899,7 +933,7 @@ mod tests {
             priority: Some("high".to_string()),
         };
 
-        let (status, _response) = create_task(
+        let (status, Json(response)) = create_task(
             State(state),
             ExternalDelegationBoundary(Some(delegation.clone())),
             Json(request),
@@ -911,7 +945,10 @@ mod tests {
 
         let recorded = service.last_request().await;
         assert_eq!(recorded.description, "Delegated task");
+        assert_eq!(recorded.priority.as_deref(), Some("high"));
+        assert!(recorded.conversation.is_none());
         assert_eq!(recorded.delegation, Some(delegation));
+        assert_eq!(response.status, "queued");
     }
 
     #[tokio::test]
