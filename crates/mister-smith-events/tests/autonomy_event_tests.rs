@@ -12,8 +12,8 @@ use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
     CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, EventBus,
     EventType, ExecutionGraphSummary, ExternalCapabilityDecisionOutcome,
-    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
-    StepRoutingDecisionSummary, TopologyPlanSummary,
+    ExternalCapabilityDecisionSummary, ExternalCapabilityDecisionSurface, ResumeProvenanceSummary,
+    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 use serde::de::DeserializeOwned;
 
@@ -106,6 +106,7 @@ fn sample_external_capability_decision(
     scope: DelegationScope,
 ) -> ExternalCapabilityDecisionSummary {
     ExternalCapabilityDecisionSummary {
+        boundary_surface: Some(ExternalCapabilityDecisionSurface::ToolBus),
         branch_id: None,
         capability_id: Some(capability_id),
         capability_descriptor_id: Some("tool:agent.echo".to_string()),
@@ -125,6 +126,35 @@ fn sample_external_capability_decision(
         rationale: vec![
             "descriptor 'tool:agent.echo' matched the requested external action".to_string(),
             "required scope InvokeTool matched capability scope InvokeTool".to_string(),
+        ],
+    }
+}
+
+fn sample_task_ingress_decision(
+    capability_id: CapabilityId,
+    scope: DelegationScope,
+) -> ExternalCapabilityDecisionSummary {
+    ExternalCapabilityDecisionSummary {
+        boundary_surface: Some(ExternalCapabilityDecisionSurface::TaskIngress),
+        branch_id: None,
+        capability_id: Some(capability_id),
+        capability_descriptor_id: Some("tool:agent.echo".to_string()),
+        action_descriptor_id: Some("tool:agent.echo".to_string()),
+        action_id: Some("tool:agent.echo#execute".to_string()),
+        action_title: Some("execute agent.echo".to_string()),
+        scope: Some(scope),
+        required_scope: Some(scope),
+        policy_action: Some("execute".to_string()),
+        policy_resource: Some("echo".to_string()),
+        policy_scope: Some("agent".to_string()),
+        policy_resource_id: Some("agent.echo".to_string()),
+        revocation_state: Some(RevocationState::Active),
+        chain_depth: 1,
+        outcome: ExternalCapabilityDecisionOutcome::Allowed,
+        observed_at: None,
+        rationale: vec![
+            "accepted delegated task ingress remained authorized at POST /api/v1/tasks".to_string(),
+            "continuity projected from workflow metadata accepted_task_ingress sourced from external_delegation".to_string(),
         ],
     }
 }
@@ -498,10 +528,10 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
                 message: "operator review required for widened authority".to_string(),
             },
         ],
-        external_capability_decisions: vec![sample_external_capability_decision(
-            CapabilityId::new(),
-            DelegationScope::InvokeTool,
-        )],
+        external_capability_decisions: vec![
+            sample_external_capability_decision(CapabilityId::new(), DelegationScope::InvokeTool),
+            sample_task_ingress_decision(CapabilityId::new(), DelegationScope::InvokeTool),
+        ],
         profiles: vec![ProfileSnapshot {
             profile_id: ProfileSnapshotId::new(),
             target: ProfileTarget::Branch,
@@ -932,6 +962,10 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         view.external_capability_decisions[0].outcome,
         ExternalCapabilityDecisionOutcome::Allowed
     );
+    assert_eq!(
+        view.external_capability_decisions[0].boundary_surface,
+        Some(ExternalCapabilityDecisionSurface::ToolBus)
+    );
     assert!(view.external_capability_decisions[0]
         .rationale
         .iter()
@@ -943,6 +977,10 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
     assert_eq!(
         view.external_capability_decisions[1].outcome,
         ExternalCapabilityDecisionOutcome::Rejected
+    );
+    assert_eq!(
+        view.external_capability_decisions[1].boundary_surface,
+        Some(ExternalCapabilityDecisionSurface::ToolBus)
     );
     assert_eq!(
         view.interventions[0].rationale,
@@ -1437,7 +1475,8 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         .external_capability_decisions
         .iter()
         .any(|decision| decision.branch_id == Some(branch_a)
-            && decision.outcome == ExternalCapabilityDecisionOutcome::Rejected));
+            && decision.outcome == ExternalCapabilityDecisionOutcome::Rejected
+            && decision.boundary_surface == Some(ExternalCapabilityDecisionSurface::ToolBus)));
 }
 
 #[test]

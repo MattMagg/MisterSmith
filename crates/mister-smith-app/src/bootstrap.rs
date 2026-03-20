@@ -356,7 +356,7 @@ async fn start_http_server(
                 let pool = autonomy_pool.clone();
                 let task_service = autonomy_task_service_for_status.clone();
                 async move {
-                    match autonomy::status_from_bus_with_session_linkage(
+                    match autonomy::status_from_bus_with_metadata_continuity(
                         event_bus,
                         pool,
                         &workflow_id,

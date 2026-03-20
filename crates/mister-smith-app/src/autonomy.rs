@@ -11,15 +11,16 @@ use axum::Json;
 use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{
-    AgentId, CoordinationPolicy, ExecutionGraphId, GraphState, OperatorResultPreview,
-    ProofOutcomeClassification, ResultProvenanceSummary, SessionId, SessionRetainedResultView,
-    TaskId, TaskResultView, TaskShapeClassification, TaskShapeKind, TopologyKind,
-    TopologyRationale, UnifiedResultEnvelope,
+    AgentId, CapabilityId, CoordinationPolicy, DelegationScope, ExecutionGraphId, GraphState,
+    OperatorResultPreview, ProofOutcomeClassification, ResultProvenanceSummary, RevocationState,
+    SessionId, SessionRetainedResultView, TaskId, TaskResultView, TaskShapeClassification,
+    TaskShapeKind, TopologyKind, TopologyRationale, UnifiedResultEnvelope,
 };
 use mister_smith_events::autonomy::merge_operator_result_preview;
 use mister_smith_events::{
     AutonomyStatusView, EventBus, ExternalCapabilityDecisionOutcome,
-    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, StepRoutingDecisionSummary,
+    ExternalCapabilityDecisionSummary, ExternalCapabilityDecisionSurface, ResumeProvenanceSummary,
+    StepRoutingDecisionSummary,
 };
 use mister_smith_persistence::postgres::queries;
 use reqwest::Client;
@@ -29,6 +30,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 const RESULT_PREVIEW_MAX_CHARS: usize = 160;
+const ACCEPTED_TASK_INGRESS_METADATA_KEY: &str = "accepted_task_ingress";
+const TASK_INGRESS_REQUEST_SURFACE: &str = "POST /api/v1/tasks";
 
 /// Serializable list of workflow IDs with autonomy status projections.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -182,8 +185,8 @@ pub async fn status_from_bus(
 }
 
 /// Resolve autonomy status directly from the in-process event bus and enrich
-/// it with persisted session linkage when available.
-pub async fn status_from_bus_with_session_linkage(
+/// it with persisted workflow metadata continuity when available.
+pub async fn status_from_bus_with_metadata_continuity(
     event_bus: Arc<EventBus>,
     pool: PgPool,
     workflow_id: &str,
@@ -199,6 +202,7 @@ pub async fn status_from_bus_with_session_linkage(
         })?
     {
         enrich_session_linkage(&mut view, &record.metadata);
+        enrich_accepted_task_ingress_continuity(&mut view, &record.metadata);
         enrich_step_routing_history(&mut view, &record.metadata);
         enrich_result_preview(&mut view, &record.metadata, record.result.as_ref());
     }
@@ -523,6 +527,142 @@ pub(crate) fn enrich_session_linkage(view: &mut AutonomyStatusView, metadata: &s
     }
 }
 
+pub(crate) fn enrich_accepted_task_ingress_continuity(
+    view: &mut AutonomyStatusView,
+    metadata: &Value,
+) {
+    if view.external_capability_decisions.iter().any(|decision| {
+        decision.boundary_surface == Some(ExternalCapabilityDecisionSurface::TaskIngress)
+    }) {
+        return;
+    }
+
+    let Some(accepted_ingress) = metadata
+        .get(ACCEPTED_TASK_INGRESS_METADATA_KEY)
+        .and_then(Value::as_object)
+    else {
+        return;
+    };
+
+    let Some(request_surface) = accepted_ingress
+        .get("request_surface")
+        .and_then(Value::as_str)
+    else {
+        return;
+    };
+    if request_surface != TASK_INGRESS_REQUEST_SURFACE {
+        return;
+    }
+
+    let source_metadata_key = accepted_ingress
+        .get("source_metadata_key")
+        .and_then(Value::as_str)
+        .unwrap_or("external_delegation");
+    let capability_descriptor_id = accepted_ingress
+        .get("capability_descriptor_id")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let action_descriptor_id = accepted_ingress
+        .get("action_descriptor_id")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let action_id = accepted_ingress
+        .get("action_id")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let action_title = accepted_ingress
+        .get("action_title")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let scope = accepted_ingress
+        .get("scope")
+        .and_then(parse_enum_value::<DelegationScope>);
+    let required_scope = accepted_ingress
+        .get("required_scope")
+        .and_then(parse_enum_value::<DelegationScope>);
+    let policy_action = accepted_ingress
+        .get("policy_action")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let policy_resource = accepted_ingress
+        .get("policy_resource")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let policy_scope = accepted_ingress
+        .get("policy_scope")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let policy_resource_id = accepted_ingress
+        .get("policy_resource_id")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let revocation_state = accepted_ingress
+        .get("revocation_state")
+        .and_then(parse_enum_value::<RevocationState>);
+    let chain_depth = accepted_ingress
+        .get("chain_depth")
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok())
+        .unwrap_or_default();
+
+    let mut rationale = vec![
+        format!("accepted delegated task ingress remained authorized at {request_surface}"),
+        format!(
+            "continuity projected from workflow metadata {ACCEPTED_TASK_INGRESS_METADATA_KEY} sourced from {source_metadata_key}"
+        ),
+    ];
+    if let Some(descriptor_id) = capability_descriptor_id.as_deref() {
+        rationale.push(format!(
+            "capability descriptor at accepted task ingress was '{descriptor_id}'"
+        ));
+    }
+    if let Some(descriptor_id) = action_descriptor_id.as_deref() {
+        rationale.push(format!(
+            "accepted task ingress requested descriptor '{descriptor_id}'"
+        ));
+    }
+    if let Some(required_scope) = required_scope {
+        rationale.push(format!(
+            "accepted task ingress required scope {:?} while the capability carried {:?}",
+            required_scope, scope
+        ));
+    }
+    if let (Some(action), Some(policy_scope), Some(resource)) = (
+        policy_action.as_deref(),
+        policy_scope.as_deref(),
+        policy_resource.as_deref(),
+    ) {
+        rationale.push(format!(
+            "policy continuity preserved as {action}/{policy_scope}/{resource}"
+        ));
+    }
+
+    view.external_capability_decisions
+        .push(ExternalCapabilityDecisionSummary {
+            boundary_surface: Some(ExternalCapabilityDecisionSurface::TaskIngress),
+            branch_id: None,
+            capability_id: accepted_ingress
+                .get("capability_id")
+                .and_then(parse_enum_value::<CapabilityId>),
+            capability_descriptor_id,
+            action_descriptor_id,
+            action_id,
+            action_title,
+            scope,
+            required_scope,
+            policy_action,
+            policy_resource,
+            policy_scope,
+            policy_resource_id,
+            revocation_state,
+            chain_depth,
+            outcome: ExternalCapabilityDecisionOutcome::Allowed,
+            observed_at: None,
+            rationale,
+        });
+    sort_external_capability_decisions(&mut view.external_capability_decisions);
+}
+
 pub(crate) fn enrich_step_routing_history(view: &mut AutonomyStatusView, metadata: &Value) {
     if !view.step_routing_history.is_empty() {
         return;
@@ -533,6 +673,46 @@ pub(crate) fn enrich_step_routing_history(view: &mut AutonomyStatusView, metadat
     if let Ok(history) = serde_json::from_value::<Vec<StepRoutingDecisionSummary>>(raw) {
         view.step_routing_history = history;
     }
+}
+
+fn sort_external_capability_decisions(decisions: &mut [ExternalCapabilityDecisionSummary]) {
+    decisions.sort_by(|left, right| {
+        left.observed_at.cmp(&right.observed_at).then_with(|| {
+            external_capability_decision_sort_key(left)
+                .cmp(&external_capability_decision_sort_key(right))
+        })
+    });
+}
+
+fn external_capability_decision_sort_key(decision: &ExternalCapabilityDecisionSummary) -> String {
+    format!(
+        "{}:{}:{}:{}:{}:{}",
+        decision
+            .boundary_surface
+            .map(|surface| format!("{surface:?}"))
+            .unwrap_or_else(|| "none".to_string()),
+        decision
+            .branch_id
+            .map(|branch_id| branch_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        decision
+            .capability_id
+            .map(|capability_id| capability_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        decision.action_id.as_deref().unwrap_or("none"),
+        decision.action_descriptor_id.as_deref().unwrap_or("none"),
+        match decision.outcome {
+            ExternalCapabilityDecisionOutcome::Allowed => "allowed",
+            ExternalCapabilityDecisionOutcome::Rejected => "rejected",
+        }
+    )
+}
+
+fn parse_enum_value<T>(value: &Value) -> Option<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_json::from_value(value.clone()).ok()
 }
 
 pub(crate) struct CanonicalResultEnvelopeInput<'a> {
@@ -1335,6 +1515,13 @@ fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSumma
         ExternalCapabilityDecisionOutcome::Allowed => "allowed",
         ExternalCapabilityDecisionOutcome::Rejected => "rejected",
     };
+    let boundary_surface = summary
+        .boundary_surface
+        .map(|surface| match surface {
+            ExternalCapabilityDecisionSurface::ToolBus => "tool_bus",
+            ExternalCapabilityDecisionSurface::TaskIngress => "task_ingress",
+        })
+        .unwrap_or("unknown");
     let branch_id = summary
         .branch_id
         .map(|branch_id| branch_id.to_string())
@@ -1382,8 +1569,9 @@ fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSumma
     };
 
     format!(
-        "{} branch={} observed_at={} outcome={} capability_descriptor={} action_descriptor={} action_id={} title={} scope={} required_scope={} state={} depth={} policy={} resource_id={} rationale={}",
+        "{} surface={} branch={} observed_at={} outcome={} capability_descriptor={} action_descriptor={} action_id={} title={} scope={} required_scope={} state={} depth={} policy={} resource_id={} rationale={}",
         capability_id,
+        boundary_surface,
         branch_id,
         observed_at,
         outcome,

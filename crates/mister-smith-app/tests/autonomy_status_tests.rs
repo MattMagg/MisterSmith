@@ -16,8 +16,9 @@ use mister_smith_core::{
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
-    ExternalCapabilityDecisionOutcome, ExternalCapabilityDecisionSummary, ResumeProvenanceSummary,
-    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
+    ExternalCapabilityDecisionOutcome, ExternalCapabilityDecisionSummary,
+    ExternalCapabilityDecisionSurface, ResumeProvenanceSummary, RoutingDecisionSummary,
+    StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 
 fn sample_task_shape(kind: TaskShapeKind) -> TaskShapeClassification {
@@ -197,6 +198,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             message: "operator review required".to_string(),
         }],
         external_capability_decisions: vec![ExternalCapabilityDecisionSummary {
+            boundary_surface: Some(ExternalCapabilityDecisionSurface::ToolBus),
             branch_id: Some(branch_id),
             capability_id: Some(capability_id),
             capability_descriptor_id: Some("tool:agent.echo".to_string()),
@@ -272,6 +274,30 @@ fn sample_step_routing_history(
         triggered_checkpoints: vec![],
         change_rationale: vec![format!("action changed to {action}")],
     }
+}
+
+fn sample_accepted_task_ingress_metadata(
+    capability_id: mister_smith_core::CapabilityId,
+) -> serde_json::Value {
+    serde_json::json!({
+        "accepted_task_ingress": {
+            "request_surface": "POST /api/v1/tasks",
+            "source_metadata_key": "external_delegation",
+            "capability_id": capability_id,
+            "capability_descriptor_id": "tool:agent.echo",
+            "action_descriptor_id": "tool:agent.echo",
+            "action_id": "tool:agent.echo#execute",
+            "action_title": "execute agent.echo",
+            "scope": "InvokeTool",
+            "required_scope": "InvokeTool",
+            "policy_action": "execute",
+            "policy_resource": "echo",
+            "policy_scope": "agent",
+            "policy_resource_id": "agent.echo",
+            "revocation_state": "Active",
+            "chain_depth": 1
+        }
+    })
 }
 
 fn sample_task_result_view(
@@ -354,11 +380,55 @@ fn render_status_surfaces_operator_rationale_and_history() {
     assert!(rendered.contains("lineage="));
     assert!(rendered.contains("delegation revoked before tool execution"));
     assert!(rendered.contains("external capability decisions:"));
+    assert!(rendered.contains("surface=tool_bus"));
     assert!(rendered.contains("outcome=allowed"));
     assert!(rendered.contains(&format!("branch={branch_id}")));
     assert!(rendered.contains("tool:agent.echo#execute"));
     assert!(rendered.contains("required scope InvokeTool matched capability scope InvokeTool"));
     assert!(rendered.contains("control-plane state unavailable"));
+}
+
+#[test]
+fn enrich_accepted_task_ingress_continuity_surfaces_task_ingress_decision() {
+    let (mut view, _, _) = sample_view();
+    let capability_id = view
+        .external_capability_decisions
+        .first()
+        .and_then(|decision| decision.capability_id)
+        .expect("sample view should include one capability decision");
+    view.external_capability_decisions.clear();
+
+    autonomy::enrich_accepted_task_ingress_continuity(
+        &mut view,
+        &sample_accepted_task_ingress_metadata(capability_id),
+    );
+
+    let summary = view
+        .external_capability_decisions
+        .first()
+        .expect("accepted task ingress should project one boundary decision");
+    assert_eq!(
+        summary.boundary_surface,
+        Some(ExternalCapabilityDecisionSurface::TaskIngress)
+    );
+    assert_eq!(summary.outcome, ExternalCapabilityDecisionOutcome::Allowed);
+    assert_eq!(summary.branch_id, None);
+    assert_eq!(
+        summary.action_id.as_deref(),
+        Some("tool:agent.echo#execute")
+    );
+    assert!(summary
+        .rationale
+        .iter()
+        .any(|line| line.contains("POST /api/v1/tasks")));
+    assert!(summary
+        .rationale
+        .iter()
+        .any(|line| { line.contains("accepted_task_ingress sourced from external_delegation") }));
+
+    let rendered = autonomy::render_status(&view);
+    assert!(rendered.contains("surface=task_ingress"));
+    assert!(rendered.contains("branch=none"));
 }
 
 #[test]

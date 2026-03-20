@@ -420,7 +420,11 @@ fn delegation_capability_key(capability: &CapabilitySummary) -> String {
 
 fn external_capability_decision_key(decision: &ExternalCapabilityDecisionSummary) -> String {
     format!(
-        "{}:{}:{}:{}:{}",
+        "{}:{}:{}:{}:{}:{}",
+        decision
+            .boundary_surface
+            .map(|surface| format!("{surface:?}"))
+            .unwrap_or_else(|| "none".to_string()),
         decision
             .branch_id
             .map(|branch_id| branch_id.to_string())

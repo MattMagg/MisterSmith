@@ -11,6 +11,7 @@ use mister_smith_core::{
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, CapabilitySummary, EventBus,
     ExternalCapabilityDecisionOutcome, ExternalCapabilityDecisionSummary,
+    ExternalCapabilityDecisionSurface,
 };
 use mister_smith_mcp::client::McpClient;
 use mister_smith_mcp::errors::McpError;
@@ -1065,6 +1066,7 @@ fn external_capability_decision_from_validated(
     ));
 
     ExternalCapabilityDecisionSummary {
+        boundary_surface: Some(ExternalCapabilityDecisionSurface::ToolBus),
         branch_id,
         capability_id: Some(capability.capability_id),
         capability_descriptor_id: capability.descriptor_id.clone(),
@@ -1161,6 +1163,7 @@ fn external_capability_decision_from_claims(
     }
 
     ExternalCapabilityDecisionSummary {
+        boundary_surface: Some(ExternalCapabilityDecisionSurface::ToolBus),
         branch_id,
         capability_id: capability.map(|capability| capability.capability_id),
         capability_descriptor_id: capability

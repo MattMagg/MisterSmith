@@ -1099,6 +1099,69 @@ mod tests {
     }
 
     #[test]
+    fn retained_context_after_turn_does_not_relabel_autonomy_status_surfaces() {
+        let workflow_id = TaskId::new();
+        let turn = SessionTurnRecord {
+            turn_id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
+            turn_index: 3,
+            workflow_id: *workflow_id.as_ref(),
+            user_message: "Continue the delegated workflow".to_string(),
+            result_summary: None,
+            status: "completed".to_string(),
+            created_at: Utc::now(),
+            completed_at: Some(Utc::now()),
+        };
+
+        let retained = retained_context_after_turn(
+            &empty_retained_context(),
+            &turn,
+            workflow_id,
+            Some(json!({
+                "workflow_id": workflow_id,
+                "status": "completed",
+                "proof_outcome": "graph_formed_and_completed",
+                "external_capability_decisions": [
+                    {
+                        "boundary_surface": "task_ingress",
+                        "action_id": "tool:agent.echo#execute"
+                    }
+                ],
+                "result": {
+                    "workflow_id": workflow_id,
+                    "provider_kind": "openai_chatgpt",
+                    "model_id": "gpt-5.4",
+                    "description": "continue the delegated workflow",
+                    "runtime_execution_mode": {
+                        "execution_boundary": "tool_bus"
+                    },
+                    "planner_output": {
+                        "steps": 1
+                    },
+                    "execution_plan": {
+                        "steps": [{"id": "step-1"}]
+                    },
+                    "step_results": [],
+                    "aggregated_result": {
+                        "summary": "bounded answer preview"
+                    },
+                    "proof_outcome": "graph_formed_and_completed"
+                }
+            })),
+        );
+
+        let assistant_result = retained["last_assistant_result"]["assistant_result"].clone();
+        assert!(assistant_result
+            .get("external_capability_decisions")
+            .is_none());
+        assert!(assistant_result.get("boundary_surface").is_none());
+        assert_eq!(
+            retained["last_assistant_result"]["preview"],
+            json!("bounded answer preview")
+        );
+    }
+
+    #[test]
     fn retained_result_for_turn_uses_stored_projection_with_proof_outcome() {
         let workflow_id = TaskId::new();
         let retained_context = json!({

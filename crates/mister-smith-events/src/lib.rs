@@ -38,8 +38,8 @@ pub use autonomy::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
     CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert,
     ExecutionGraphSummary, ExternalCapabilityDecisionOutcome, ExternalCapabilityDecisionSummary,
-    ResumeProvenanceSummary, RoutingDecisionSummary, StepRoutingDecisionSummary,
-    TopologyPlanSummary,
+    ExternalCapabilityDecisionSurface, ResumeProvenanceSummary, RoutingDecisionSummary,
+    StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 pub use builder::EventBuilder;
 pub use bus::EventBus;
