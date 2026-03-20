@@ -13,6 +13,7 @@ use mister_smith_core::{
     AgentId, OperatorResultPreview, ProofOutcomeClassification, ResultProvenanceSummary, SessionId,
     SessionRetainedResultView, TaskId, TaskResultView, UnifiedResultEnvelope,
 };
+use mister_smith_events::autonomy::merge_operator_result_preview;
 use mister_smith_events::{
     AutonomyStatusView, EventBus, ExternalCapabilityDecisionOutcome,
     ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, StepRoutingDecisionSummary,
@@ -620,21 +621,33 @@ pub(crate) fn enrich_result_preview(
     task_result: Option<&Value>,
 ) {
     let status_hint = status_hint_from_graph_state(&view.graph.state);
+    let existing_preview = view.result_preview.clone();
     let payload_preview = task_result
         .and_then(|value| {
             canonical_result_from_value(value, Some(status_hint))
-                .map(|result| operator_result_preview(&result, "task.result"))
+                .map(|result| operator_result_preview(&result, "task.result", view))
         })
         .or_else(|| {
             metadata.get("final_result").and_then(|value| {
                 canonical_result_from_value(value, Some(status_hint))
-                    .map(|result| operator_result_preview(&result, "metadata.final_result"))
+                    .map(|result| operator_result_preview(&result, "metadata.final_result", view))
             })
         });
 
-    if let Some(preview) = payload_preview {
+    if let Some(mut preview) = payload_preview {
+        if let Some(existing_preview) = existing_preview.as_ref() {
+            preview = merge_operator_result_preview(&preview, existing_preview);
+        }
         view.result_preview = Some(preview);
     }
+}
+
+pub(crate) fn retained_result_view(
+    task_result: &Value,
+    turn_index: u32,
+    status: &str,
+) -> Option<SessionRetainedResultView> {
+    build_session_retained_result(task_result, turn_index, status)
 }
 
 pub(crate) fn retained_assistant_result(
@@ -642,7 +655,7 @@ pub(crate) fn retained_assistant_result(
     turn_index: u32,
     status: &str,
 ) -> Option<Value> {
-    build_session_retained_result(task_result, turn_index, status)
+    retained_result_view(task_result, turn_index, status)
         .map(|projection| projection.assistant_result)
 }
 
@@ -668,13 +681,14 @@ fn build_session_retained_result(
 fn operator_result_preview(
     canonical_result: &UnifiedResultEnvelope,
     payload_location: &str,
+    view: &AutonomyStatusView,
 ) -> OperatorResultPreview {
     OperatorResultPreview {
         workflow_id: canonical_result.workflow_id,
         proof_outcome: canonical_result.proof_outcome,
         preview_text: preview_text(&canonical_result.aggregated_result),
         payload_location: payload_location.to_string(),
-        provenance_lines: result_preview_provenance(canonical_result.proof_outcome),
+        provenance_lines: result_preview_provenance(canonical_result, payload_location, view),
     }
 }
 
@@ -725,8 +739,12 @@ fn result_provenance(
     }
 }
 
-fn result_preview_provenance(proof_outcome: ProofOutcomeClassification) -> Vec<String> {
-    let outcome_line = match proof_outcome {
+fn result_preview_provenance(
+    canonical_result: &UnifiedResultEnvelope,
+    payload_location: &str,
+    view: &AutonomyStatusView,
+) -> Vec<String> {
+    let outcome_line = match canonical_result.proof_outcome {
         ProofOutcomeClassification::GraphFormedAndCompleted => {
             "graph formed and completed before final result publication"
         }
@@ -736,12 +754,65 @@ fn result_preview_provenance(proof_outcome: ProofOutcomeClassification) -> Vec<S
         }
     };
 
-    vec![
+    let mut lines = vec![
         outcome_line.to_string(),
+        format!(
+            "provider={} model={}",
+            canonical_result.provider_kind, canonical_result.model_id
+        ),
+    ];
+    if let Some(runtime_line) =
+        runtime_execution_mode_provenance(&canonical_result.runtime_execution_mode)
+    {
+        lines.push(runtime_line);
+    }
+    lines.push(format!(
+        "graph state {:?} with topology {:?} ({} branch(es), {} node(s))",
+        view.graph.state,
+        view.topology.topology_kind,
+        view.graph.branch_count,
+        view.graph.node_count
+    ));
+    if !view.routing_history.is_empty() {
+        lines.push(format!(
+            "routing history retained {} decision(s)",
+            view.routing_history.len()
+        ));
+    }
+    lines.extend([
         "canonical result stored in metadata.final_result".to_string(),
         "aggregated payload nested under metadata.aggregated_result".to_string(),
+        format!("full payload remains recoverable from {payload_location}"),
         "session assistant_result derives from the canonical result object".to_string(),
-    ]
+    ]);
+    lines
+}
+
+fn runtime_execution_mode_provenance(runtime_execution_mode: &Value) -> Option<String> {
+    let object = runtime_execution_mode.as_object()?;
+    let mut parts = Vec::new();
+
+    if let Some(boundary) = object.get("execution_boundary").and_then(Value::as_str) {
+        parts.push(format!("boundary={boundary}"));
+    }
+    if let Some(runner) = object.get("workflow_runner").and_then(Value::as_str) {
+        parts.push(format!("runner={runner}"));
+    }
+    if let Some(planner) = object.get("planner_lifecycle").and_then(Value::as_str) {
+        parts.push(format!("planner={planner}"));
+    }
+    if let Some(executor) = object.get("executor_lifecycle").and_then(Value::as_str) {
+        parts.push(format!("executor={executor}"));
+    }
+    if let Some(tool_name) = object.get("tool_name").and_then(Value::as_str) {
+        parts.push(format!("tool={tool_name}"));
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(format!("runtime execution mode {}", parts.join(" ")))
+    }
 }
 
 fn canonical_result_from_value(
@@ -897,7 +968,7 @@ pub(crate) fn resume_provenance_from_metadata(metadata: &Value) -> Option<Resume
             })
         });
     let resumed_after_restart = transcript_entry
-        .and_then(|entry| entry.get("assistant_result"))
+        .and_then(transcript_assistant_result_payload)
         .and_then(|result| result.get("recovered_after_restart"))
         .and_then(Value::as_bool)
         .unwrap_or(false);
@@ -920,6 +991,11 @@ pub(crate) fn resume_provenance_from_metadata(metadata: &Value) -> Option<Resume
         resumed_from_workflow_id,
         resumed_from_turn_index,
     })
+}
+
+fn transcript_assistant_result_payload(entry: &Value) -> Option<&Value> {
+    let projection = entry.get("assistant_result")?;
+    projection.get("assistant_result").or(Some(projection))
 }
 
 fn render_resume_provenance(summary: &ResumeProvenanceSummary) -> String {
@@ -956,19 +1032,22 @@ fn render_result_preview(summary: &OperatorResultPreview) -> String {
         .preview_text
         .clone()
         .unwrap_or_else(|| "none".to_string());
-    let provenance = if summary.provenance_lines.is_empty() {
-        "none".to_string()
-    } else {
-        summary.provenance_lines.join(" | ")
-    };
-
-    format!(
-        "proof={} location={} preview={} provenance={}",
+    let mut rendered = format!(
+        "proof={} location={} preview={}",
         summary.proof_outcome.as_str(),
         summary.payload_location,
         preview_text,
-        provenance
-    )
+    );
+    if summary.provenance_lines.is_empty() {
+        rendered.push_str("\n  provenance: none");
+    } else {
+        rendered.push_str("\n  provenance:");
+        for line in &summary.provenance_lines {
+            rendered.push_str("\n  - ");
+            rendered.push_str(line);
+        }
+    }
+    rendered
 }
 
 fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSummary) -> String {

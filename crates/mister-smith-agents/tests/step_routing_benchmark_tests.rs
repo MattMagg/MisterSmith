@@ -32,6 +32,7 @@ impl BenchmarkStrategy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WorkloadClass {
     ConfidenceEscalation,
+    HarderWorkloadConfidenceEscalation,
     ProviderFailureFallback,
 }
 
@@ -39,7 +40,15 @@ impl WorkloadClass {
     const fn label(self) -> &'static str {
         match self {
             Self::ConfidenceEscalation => "confidence_escalation_bundle",
+            Self::HarderWorkloadConfidenceEscalation => "harder_workload_confidence_bundle",
             Self::ProviderFailureFallback => "provider_failure_bundle",
+        }
+    }
+
+    const fn step_count(self) -> u32 {
+        match self {
+            Self::HarderWorkloadConfidenceEscalation => 3,
+            Self::ConfidenceEscalation | Self::ProviderFailureFallback => 2,
         }
     }
 }
@@ -227,17 +236,21 @@ async fn build_router(
     llm_calls: Arc<Mutex<u32>>,
 ) -> ModelRouter {
     let threshold = match workload {
-        WorkloadClass::ConfidenceEscalation => 0.6,
+        WorkloadClass::ConfidenceEscalation | WorkloadClass::HarderWorkloadConfidenceEscalation => {
+            0.6
+        }
         WorkloadClass::ProviderFailureFallback => 0.3,
     };
     let router = ModelRouter::new(RoutingPolicy::Cascade(cascade_policy(threshold)));
 
     let slm: Arc<dyn ModelProvider> = match workload {
-        WorkloadClass::ConfidenceEscalation => Arc::new(StaticResponseProvider::new(
-            "slm-model",
-            low_confidence_response("slm-model"),
-            slm_calls,
-        )),
+        WorkloadClass::ConfidenceEscalation | WorkloadClass::HarderWorkloadConfidenceEscalation => {
+            Arc::new(StaticResponseProvider::new(
+                "slm-model",
+                low_confidence_response("slm-model"),
+                slm_calls,
+            ))
+        }
         WorkloadClass::ProviderFailureFallback => {
             Arc::new(FailingProvider::new("slm-model", slm_calls))
         }
@@ -265,13 +278,17 @@ async fn run_bundle(workload: WorkloadClass, strategy: BenchmarkStrategy) -> Har
     let mut control = StepRoutingControl::default();
     let mut step_history = Vec::new();
 
-    for step_index in 1..=2u32 {
+    for step_index in 1..=workload.step_count() {
         let step_id = match workload {
-            WorkloadClass::ConfidenceEscalation => format!("planner.step.{step_index}"),
+            WorkloadClass::ConfidenceEscalation
+            | WorkloadClass::HarderWorkloadConfidenceEscalation => {
+                format!("planner.step.{step_index}")
+            }
             WorkloadClass::ProviderFailureFallback => format!("critic.step.{step_index}"),
         };
         let step_kind = match workload {
-            WorkloadClass::ConfidenceEscalation => "planner",
+            WorkloadClass::ConfidenceEscalation
+            | WorkloadClass::HarderWorkloadConfidenceEscalation => "planner",
             WorkloadClass::ProviderFailureFallback => "critic",
         };
         let routing_hint = match strategy {
@@ -367,6 +384,35 @@ async fn step_routing_benchmark_harness_records_confidence_bundle_improvement() 
 }
 
 #[tokio::test]
+async fn step_routing_benchmark_harness_records_harder_workload_bundle_improvement() {
+    let baseline = run_bundle(
+        WorkloadClass::HarderWorkloadConfidenceEscalation,
+        BenchmarkStrategy::StatelessBaseline,
+    )
+    .await;
+    let adaptive = run_bundle(
+        WorkloadClass::HarderWorkloadConfidenceEscalation,
+        BenchmarkStrategy::AdaptiveCarryover,
+    )
+    .await;
+
+    assert_eq!(baseline.provider_calls, 6);
+    assert_eq!(adaptive.provider_calls, 4);
+    assert_eq!(baseline.triggered_checkpoints, 3);
+    assert_eq!(adaptive.triggered_checkpoints, 1);
+    assert_eq!(baseline.action_changes, 0);
+    assert_eq!(adaptive.action_changes, 1);
+    assert_eq!(adaptive.step_history.len(), 3);
+    assert_eq!(adaptive.step_history[0].action, "escalate");
+    assert_eq!(adaptive.step_history[1].action, "continue");
+    assert_eq!(adaptive.step_history[2].action, "continue");
+    assert!(adaptive.step_history[1]
+        .change_rationale
+        .iter()
+        .any(|line| line.contains("action changed from escalate to continue")));
+}
+
+#[tokio::test]
 async fn step_routing_benchmark_harness_records_provider_failure_bundle_match() {
     let baseline = run_bundle(
         WorkloadClass::ProviderFailureFallback,
@@ -396,12 +442,12 @@ async fn step_routing_benchmark_harness_records_provider_failure_bundle_match() 
 #[tokio::test]
 async fn step_routing_benchmark_harness_is_repeatable() {
     let first = run_bundle(
-        WorkloadClass::ConfidenceEscalation,
+        WorkloadClass::HarderWorkloadConfidenceEscalation,
         BenchmarkStrategy::AdaptiveCarryover,
     )
     .await;
     let second = run_bundle(
-        WorkloadClass::ConfidenceEscalation,
+        WorkloadClass::HarderWorkloadConfidenceEscalation,
         BenchmarkStrategy::AdaptiveCarryover,
     )
     .await;

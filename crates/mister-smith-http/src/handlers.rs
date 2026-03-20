@@ -180,6 +180,9 @@ pub struct SessionTurnSummaryResponse {
     pub status: String,
     /// Original operator message.
     pub user_message: String,
+    /// Retained session-facing result projection for the turn, when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assistant_result: Option<mister_smith_core::SessionRetainedResultView>,
     /// Restart and resume provenance derived from workflow metadata, when available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resume_provenance: Option<SessionResumeProvenanceResponse>,
@@ -229,6 +232,9 @@ pub struct SessionInspectResponse {
     pub last_completed_workflow_id: Option<TaskId>,
     /// Number of accepted turns.
     pub turn_count: u32,
+    /// Most recent retained session-facing result projection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_assistant_result: Option<mister_smith_core::SessionRetainedResultView>,
     /// Ordered turn summaries.
     pub turns: Vec<SessionTurnSummaryResponse>,
     /// Logical close time when ended.
@@ -492,6 +498,7 @@ pub async fn get_session(
         active_workflow_id: view.active_workflow_id,
         last_completed_workflow_id: view.last_completed_workflow_id,
         turn_count: view.turn_count,
+        last_assistant_result: view.last_assistant_result,
         turns: view
             .turns
             .into_iter()
@@ -500,6 +507,7 @@ pub async fn get_session(
                 workflow_id: turn.workflow_id,
                 status: turn.status,
                 user_message: turn.user_message,
+                assistant_result: turn.assistant_result,
                 resume_provenance: turn.resume_provenance.map(|provenance| {
                     SessionResumeProvenanceResponse {
                         recovered_after_restart: provenance.recovered_after_restart,
@@ -663,7 +671,7 @@ mod tests {
     };
     use mister_smith_core::{
         AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
-        DelegationScope, ExternalDelegationEnvelope,
+        DelegationScope, ExternalDelegationEnvelope, SessionRetainedResultView,
     };
 
     #[derive(Clone)]
@@ -926,6 +934,34 @@ mod tests {
         let session_id = SessionId::new();
         let resumed_from_workflow_id = TaskId::new();
         let active_workflow_id = TaskId::new();
+        let retained_result = SessionRetainedResultView {
+            workflow_id: resumed_from_workflow_id,
+            turn_index: 1,
+            status: "failed".to_string(),
+            assistant_result: serde_json::json!({
+                "preview": "workflow interrupted by runtime restart before session sync",
+                "aggregated_result": {
+                    "error": "workflow interrupted by runtime restart before session sync",
+                    "recovered_after_restart": true
+                },
+                "proof_outcome": "failed_before_graph",
+                "recovered_after_restart": true
+            }),
+            preview: Some(
+                "workflow interrupted by runtime restart before session sync".to_string(),
+            ),
+            provenance: mister_smith_core::ResultProvenanceSummary {
+                runtime_execution_mode: serde_json::json!({
+                    "execution_boundary": "tool_bus"
+                }),
+                graph_state: None,
+                graph_id: None,
+                source_fields: vec![
+                    "metadata.final_result".to_string(),
+                    "metadata.aggregated_result".to_string(),
+                ],
+            },
+        };
         let state = test_state().with_conversation_service(Arc::new(FixedConversationService {
             view: ConversationSessionView {
                 session_id,
@@ -936,12 +972,14 @@ mod tests {
                 active_workflow_id: Some(active_workflow_id),
                 last_completed_workflow_id: Some(resumed_from_workflow_id),
                 turn_count: 2,
+                last_assistant_result: Some(retained_result.clone()),
                 turns: vec![
                     ConversationTurnSummaryView {
                         turn_index: 1,
                         workflow_id: resumed_from_workflow_id,
                         status: "failed".to_string(),
                         user_message: "turn one".to_string(),
+                        assistant_result: Some(retained_result),
                         resume_provenance: Some(ConversationResumeProvenanceView {
                             recovered_after_restart: true,
                             resumed_after_restart: false,
@@ -959,6 +997,7 @@ mod tests {
                         workflow_id: active_workflow_id,
                         status: "queued".to_string(),
                         user_message: "turn two".to_string(),
+                        assistant_result: None,
                         resume_provenance: Some(ConversationResumeProvenanceView {
                             recovered_after_restart: false,
                             resumed_after_restart: true,
@@ -979,6 +1018,14 @@ mod tests {
         let value = serde_json::to_value(response).expect("inspect response should serialize");
 
         assert_eq!(value["session_id"], session_id.to_string());
+        assert_eq!(
+            value["last_assistant_result"]["workflow_id"],
+            resumed_from_workflow_id.to_string()
+        );
+        assert_eq!(
+            value["turns"][0]["assistant_result"]["assistant_result"]["proof_outcome"],
+            "failed_before_graph"
+        );
         assert_eq!(
             value["turns"][0]["resume_provenance"]["recovered_after_restart"],
             true

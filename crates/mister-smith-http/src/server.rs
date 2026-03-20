@@ -9,7 +9,8 @@ use axum::middleware as axum_mw;
 use axum::Router;
 use chrono::{DateTime, Utc};
 use mister_smith_core::{
-    AgentId, AgentType, ExternalDelegationEnvelope, SessionId, SessionStatus, TaskId,
+    AgentId, AgentType, ExternalDelegationEnvelope, SessionId, SessionRetainedResultView,
+    SessionStatus, TaskId,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -147,6 +148,8 @@ pub struct ConversationTurnSummaryView {
     pub status: String,
     /// Original operator message for the turn.
     pub user_message: String,
+    /// Retained session-facing result projection for the turn, when available.
+    pub assistant_result: Option<SessionRetainedResultView>,
     /// Restart and resume provenance derived from workflow metadata when available.
     pub resume_provenance: Option<ConversationResumeProvenanceView>,
 }
@@ -187,6 +190,8 @@ pub struct ConversationSessionView {
     pub last_completed_workflow_id: Option<TaskId>,
     /// Number of accepted turns.
     pub turn_count: u32,
+    /// Most recent retained session-facing result projection.
+    pub last_assistant_result: Option<SessionRetainedResultView>,
     /// Ordered turn summaries.
     pub turns: Vec<ConversationTurnSummaryView>,
     /// Logical close time when ended.
