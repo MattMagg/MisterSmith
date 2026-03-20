@@ -1,10 +1,12 @@
 #![cfg(feature = "llm")]
 
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use mister_smith_agents::orchestrator::StepRoutingControl;
 use mister_smith_core::LlmError;
+use mister_smith_core::ProofOutcomeClassification;
 use mister_smith_events::StepRoutingDecisionSummary;
 use mister_smith_llm::{
     CascadePolicy, CascadeTier, CircuitBreakerConfig, CompletionRequest, CompletionResponse,
@@ -50,6 +52,16 @@ struct HarnessResult {
     triggered_checkpoints: usize,
     action_changes: usize,
     step_history: Vec<StepRoutingDecisionSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EvaluationHarnessRun {
+    workload_class: &'static str,
+    completed: bool,
+    graph_formed: bool,
+    branch_count: Option<usize>,
+    result_preview: Option<&'static str>,
+    evidence_note_path: &'static str,
 }
 
 #[derive(Debug)]
@@ -317,6 +329,16 @@ async fn run_bundle(workload: WorkloadClass, strategy: BenchmarkStrategy) -> Har
     }
 }
 
+fn classify_evaluation_run(run: &EvaluationHarnessRun) -> ProofOutcomeClassification {
+    if !run.completed || !run.graph_formed {
+        ProofOutcomeClassification::FailedBeforeGraph
+    } else if run.branch_count.unwrap_or(0) <= 1 {
+        ProofOutcomeClassification::CollapsedToSequential
+    } else {
+        ProofOutcomeClassification::GraphFormedAndCompleted
+    }
+}
+
 #[tokio::test]
 async fn step_routing_benchmark_harness_records_confidence_bundle_improvement() {
     let baseline = run_bundle(
@@ -385,4 +407,72 @@ async fn step_routing_benchmark_harness_is_repeatable() {
     .await;
 
     assert_eq!(first, second);
+}
+
+#[test]
+fn proof_matrix_harness_replays_success_collapse_and_failure_visible_cases() {
+    let expected_labels = ProofOutcomeClassification::ALL.map(ProofOutcomeClassification::as_str);
+    assert_eq!(
+        expected_labels,
+        [
+            "graph_formed_and_completed",
+            "collapsed_to_sequential",
+            "failed_before_graph",
+        ]
+    );
+
+    let cases = [
+        (
+            EvaluationHarnessRun {
+                workload_class: "short_multi_agent_result_evaluation",
+                completed: true,
+                graph_formed: true,
+                branch_count: Some(3),
+                result_preview: Some("workflow completed with a real multi-branch graph"),
+                evidence_note_path: "docs/plans/2026-03-19-short-multi-agent-result-evaluation.md",
+            },
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        ),
+        (
+            EvaluationHarnessRun {
+                workload_class: "framework_stress_trimmed_benchmark",
+                completed: true,
+                graph_formed: true,
+                branch_count: Some(1),
+                result_preview: Some("completed with a sequential execution path"),
+                evidence_note_path: "docs/plans/2026-03-19-framework-comparison-stress-test.md",
+            },
+            ProofOutcomeClassification::CollapsedToSequential,
+        ),
+        (
+            EvaluationHarnessRun {
+                workload_class: "framework_stress_heavy_benchmark",
+                completed: false,
+                graph_formed: false,
+                branch_count: None,
+                result_preview: Some("workflow failed before graph formation"),
+                evidence_note_path: "docs/plans/2026-03-19-framework-comparison-stress-test.md",
+            },
+            ProofOutcomeClassification::FailedBeforeGraph,
+        ),
+    ];
+
+    for (run, expected) in cases {
+        assert!(
+            Path::new(run.evidence_note_path).is_file(),
+            "missing evidence note for {}",
+            run.workload_class
+        );
+        assert_eq!(
+            classify_evaluation_run(&run),
+            expected,
+            "unexpected proof outcome for {}",
+            run.workload_class
+        );
+        assert!(
+            run.result_preview.is_some(),
+            "expected bounded preview for {}",
+            run.workload_class
+        );
+    }
 }
