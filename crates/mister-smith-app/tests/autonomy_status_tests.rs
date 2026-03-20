@@ -278,10 +278,35 @@ fn sample_task_result_view(
     workflow_id: TaskId,
     proof_outcome: ProofOutcomeClassification,
 ) -> serde_json::Value {
+    sample_task_result_payload(workflow_id, "completed", 1, 1, Some(proof_outcome))
+}
+
+fn sample_task_result_payload(
+    workflow_id: TaskId,
+    status: &str,
+    execution_step_count: usize,
+    step_result_count: usize,
+    proof_outcome: Option<ProofOutcomeClassification>,
+) -> serde_json::Value {
+    let execution_steps = (1..=execution_step_count)
+        .map(|index| serde_json::json!({ "id": format!("step-{index}") }))
+        .collect::<Vec<_>>();
+    let step_results = (0..step_result_count)
+        .map(|_| {
+            serde_json::json!({
+                "task_id": TaskId::new(),
+                "result": {
+                    "summary": "bounded answer preview"
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    let proof_outcome = proof_outcome.map(ProofOutcomeClassification::as_str);
+
     serde_json::json!({
         "workflow_id": workflow_id,
-        "status": "completed",
-        "proof_outcome": proof_outcome.as_str(),
+        "status": status,
+        "proof_outcome": proof_outcome,
         "result": {
             "workflow_id": workflow_id,
             "provider_kind": "openai_chatgpt",
@@ -295,24 +320,13 @@ fn sample_task_result_view(
                 "steps": 1
             },
             "execution_plan": {
-                "steps": [
-                    {
-                        "id": "step-1"
-                    }
-                ]
+                "steps": execution_steps
             },
-            "step_results": [
-                {
-                    "task_id": TaskId::new(),
-                    "result": {
-                        "summary": "bounded answer preview"
-                    }
-                }
-            ],
+            "step_results": step_results,
             "aggregated_result": {
                 "summary": "bounded answer preview"
             },
-            "proof_outcome": proof_outcome.as_str()
+            "proof_outcome": proof_outcome
         }
     })
 }
@@ -458,6 +472,77 @@ fn classify_proof_outcome_keeps_failed_runs_in_the_single_failure_class() {
 }
 
 #[test]
+fn classify_proof_outcome_covers_success_collapse_and_failure_visible_matrix() {
+    let success_plan = serde_json::json!({
+        "steps": [
+            { "id": "step-1" },
+            { "id": "step-2" }
+        ]
+    });
+    let success_steps = vec![
+        serde_json::json!({
+            "task_id": TaskId::new(),
+            "result": { "summary": "parallel branch alpha" }
+        }),
+        serde_json::json!({
+            "task_id": TaskId::new(),
+            "result": { "summary": "parallel branch beta" }
+        }),
+    ];
+    let collapse_plan = serde_json::json!({
+        "steps": [
+            { "id": "step-1" }
+        ]
+    });
+    let collapse_steps = vec![serde_json::json!({
+        "task_id": TaskId::new(),
+        "result": { "summary": "single sequential branch" }
+    })];
+    let failure_plan = serde_json::json!({
+        "steps": [
+            { "id": "step-1" },
+            { "id": "step-2" }
+        ]
+    });
+    let failure_steps = vec![serde_json::json!({
+        "task_id": TaskId::new(),
+        "result": { "summary": "partial branch output" }
+    })];
+
+    let cases = [
+        (
+            "success",
+            "completed",
+            &success_plan,
+            success_steps.as_slice(),
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        ),
+        (
+            "collapse",
+            "completed",
+            &collapse_plan,
+            collapse_steps.as_slice(),
+            ProofOutcomeClassification::CollapsedToSequential,
+        ),
+        (
+            "failure_visible",
+            "failed",
+            &failure_plan,
+            failure_steps.as_slice(),
+            ProofOutcomeClassification::FailedBeforeGraph,
+        ),
+    ];
+
+    for (label, status, execution_plan, step_results, expected) in cases {
+        assert_eq!(
+            autonomy::classify_proof_outcome(status, Some(execution_plan), Some(step_results)),
+            expected,
+            "unexpected proof outcome for {label}"
+        );
+    }
+}
+
+#[test]
 fn render_status_surfaces_result_preview_block() {
     let (mut view, _, _) = sample_view();
     view.result_preview = Some(mister_smith_core::OperatorResultPreview {
@@ -524,6 +609,120 @@ fn enrich_result_preview_merges_existing_structural_provenance() {
     assert!(preview.provenance_lines.iter().any(|line| {
         line.contains("projection observed graph state Completed with topology Sequential")
     }));
+}
+
+#[test]
+fn enrich_and_render_result_preview_cover_success_collapse_and_failure_visible_matrix() {
+    let cases = [
+        (
+            "success",
+            GraphState::Completed,
+            TopologyKind::Hybrid,
+            2usize,
+            TaskShapeKind::FanoutJoin,
+            2usize,
+            "completed",
+            4usize,
+            4usize,
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+            "graph formed and completed before final result publication",
+            "topology: Hybrid width=2 shape=fanout-join",
+        ),
+        (
+            "collapse",
+            GraphState::Completed,
+            TopologyKind::Sequential,
+            1usize,
+            TaskShapeKind::ParallelFanout,
+            3usize,
+            "completed",
+            1usize,
+            1usize,
+            ProofOutcomeClassification::CollapsedToSequential,
+            "planner emitted one sequential step",
+            "topology: Sequential width=1 shape=parallel-fanout",
+        ),
+        (
+            "failure_visible",
+            GraphState::Failed,
+            TopologyKind::Hybrid,
+            2usize,
+            TaskShapeKind::FanoutJoin,
+            2usize,
+            "failed",
+            2usize,
+            1usize,
+            ProofOutcomeClassification::FailedBeforeGraph,
+            "workflow failed before usable graph formation",
+            "topology: Hybrid width=2 shape=fanout-join",
+        ),
+    ];
+
+    for (
+        label,
+        graph_state,
+        topology_kind,
+        parallelism_width,
+        task_shape_kind,
+        max_parallel_width,
+        status,
+        execution_step_count,
+        step_result_count,
+        expected_outcome,
+        expected_provenance,
+        expected_topology,
+    ) in cases
+    {
+        let (mut view, _, _) = sample_view();
+        view.graph.state = graph_state;
+        view.graph.branch_count = max_parallel_width;
+        view.graph.node_count = execution_step_count;
+        view.graph.active_topology = Some(topology_kind);
+        view.topology.topology_kind = topology_kind;
+        view.topology.parallelism_width = parallelism_width;
+        view.topology.task_shape.kind = task_shape_kind;
+        view.topology.task_shape.max_parallel_width = max_parallel_width;
+        view.topology.task_shape.has_fanout = max_parallel_width > 1;
+        view.topology.task_shape.has_join = matches!(task_shape_kind, TaskShapeKind::FanoutJoin);
+        view.topology.task_shape.structural_signals = vec![
+            "roots:1".to_string(),
+            format!("max_parallel_width:{max_parallel_width}"),
+            "max_depth:2".to_string(),
+        ];
+
+        let task_result = sample_task_result_payload(
+            view.graph.workflow_id,
+            status,
+            execution_step_count,
+            step_result_count,
+            None,
+        );
+
+        autonomy::enrich_result_preview(&mut view, &serde_json::json!({}), Some(&task_result));
+
+        let preview = view
+            .result_preview
+            .clone()
+            .expect("proof matrix case should infer a result preview");
+        let rendered = autonomy::render_status(&view);
+
+        assert_eq!(
+            preview.proof_outcome, expected_outcome,
+            "unexpected preview proof outcome for {label}"
+        );
+        assert!(
+            rendered.contains(&format!("proof={}", expected_outcome.as_str())),
+            "missing proof outcome in rendered status for {label}"
+        );
+        assert!(
+            rendered.contains(expected_provenance),
+            "missing provenance in rendered status for {label}"
+        );
+        assert!(
+            rendered.contains(expected_topology),
+            "missing topology summary in rendered status for {label}"
+        );
+    }
 }
 
 #[test]
