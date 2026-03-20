@@ -791,6 +791,90 @@ fn render_status_surfaces_restart_resume_provenance() {
 }
 
 #[test]
+fn synthesize_failed_before_graph_status_uses_frontier_width_for_single_root_fanout() {
+    let workflow_id = TaskId::new();
+    let canonical_result =
+        autonomy::build_canonical_result_envelope(autonomy::CanonicalResultEnvelopeInput {
+            workflow_id,
+            provider_kind: "openai_chatgpt",
+            model_id: "gpt-5.4",
+            description: "single-root fanout failure",
+            runtime_execution_mode: serde_json::json!({}),
+            planner_output: serde_json::json!({
+                "goal": "single root fanout",
+            }),
+            execution_plan: serde_json::json!({
+                "steps": [
+                    {"id": "root", "depends_on": []},
+                    {"id": "branch-a", "depends_on": ["root"]},
+                    {"id": "branch-b", "depends_on": ["root"]},
+                ]
+            }),
+            step_results: vec![],
+            aggregated_result: serde_json::json!({
+                "error": "planner execution failed: Ask operation timed out",
+            }),
+            status: "failed",
+        });
+    let metadata = serde_json::json!({
+        "final_result": serde_json::to_value(canonical_result).expect("final result should serialize")
+    });
+
+    let view = autonomy::synthesize_failed_before_graph_status(workflow_id, &metadata, None)
+        .expect("single-root fanout should synthesize a bounded autonomy status");
+
+    assert_eq!(view.graph.branch_count, 1);
+    assert_eq!(view.graph.node_count, 3);
+    assert_eq!(view.topology.parallelism_width, 2);
+    assert_eq!(view.topology.topology_kind, TopologyKind::Parallel);
+    assert_eq!(view.topology.task_shape.kind, TaskShapeKind::ParallelFanout);
+    assert_eq!(view.topology.task_shape.max_parallel_width, 2);
+}
+
+#[test]
+fn synthesize_failed_before_graph_status_preserves_hybrid_fanout_join_width() {
+    let workflow_id = TaskId::new();
+    let canonical_result = autonomy::build_canonical_result_envelope(
+        autonomy::CanonicalResultEnvelopeInput {
+            workflow_id,
+            provider_kind: "openai_chatgpt",
+            model_id: "gpt-5.4",
+            description: "fanout join failure",
+            runtime_execution_mode: serde_json::json!({}),
+            planner_output: serde_json::json!({
+                "goal": "fanout join",
+            }),
+            execution_plan: serde_json::json!({
+                "steps": [
+                    {"id": "root", "depends_on": []},
+                    {"id": "branch-a", "depends_on": ["root"]},
+                    {"id": "branch-b", "depends_on": ["root"]},
+                    {"id": "join", "depends_on": ["branch-a", "branch-b"]},
+                ]
+            }),
+            step_results: vec![],
+            aggregated_result: serde_json::json!({
+                "error": "execution graph compile failed: Unsupported topology contract: unsupported planner role 'joiner'",
+            }),
+            status: "failed",
+        },
+    );
+    let metadata = serde_json::json!({
+        "final_result": serde_json::to_value(canonical_result).expect("final result should serialize")
+    });
+
+    let view = autonomy::synthesize_failed_before_graph_status(workflow_id, &metadata, None)
+        .expect("fanout-join should synthesize a bounded autonomy status");
+
+    assert_eq!(view.graph.branch_count, 1);
+    assert_eq!(view.graph.node_count, 4);
+    assert_eq!(view.topology.parallelism_width, 2);
+    assert_eq!(view.topology.topology_kind, TopologyKind::Hybrid);
+    assert_eq!(view.topology.task_shape.kind, TaskShapeKind::FanoutJoin);
+    assert_eq!(view.topology.task_shape.max_parallel_width, 2);
+}
+
+#[test]
 fn enrich_step_routing_history_preserves_live_history_over_stale_metadata() {
     let (mut view, _, _) = sample_view();
     let live_history = view.step_routing_history.clone();

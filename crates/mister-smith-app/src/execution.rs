@@ -2491,6 +2491,95 @@ mod tests {
     }
 
     #[test]
+    fn recover_persisted_autonomy_status_falls_back_to_metadata_final_result_when_task_result_mismatches(
+    ) {
+        let workflow_id = TaskId::new();
+        let session_id = SessionId::new();
+        let coordinator_agent_id = AgentId::new();
+        let execution_plan = json!({
+            "steps": [
+                {"id": "root", "depends_on": []},
+                {"id": "branch-a", "depends_on": ["root"]},
+                {"id": "branch-b", "depends_on": ["root"]},
+                {"id": "join", "depends_on": ["branch-a", "branch-b"]},
+            ]
+        });
+        let canonical_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: "openai_chatgpt",
+                model_id: "gpt-5.4",
+                description: "packet 015 failed before graph publication",
+                runtime_execution_mode: json!({
+                    "execution_boundary": "tool_bus",
+                    "workflow_runner": "tokio_task",
+                    "planner_lifecycle": "supervised_actor",
+                    "executor_lifecycle": "supervised_actor",
+                }),
+                planner_output: json!({
+                    "goal": "incident packet",
+                    "steps": 4,
+                }),
+                execution_plan: execution_plan.clone(),
+                step_results: vec![],
+                aggregated_result: json!({
+                    "error": "planner execution failed: Ask operation timed out",
+                }),
+                status: "failed",
+            },
+        );
+        let mismatched_task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
+            "failed",
+            crate::autonomy::build_canonical_result_envelope(
+                crate::autonomy::CanonicalResultEnvelopeInput {
+                    workflow_id: TaskId::new(),
+                    provider_kind: "openai_chatgpt",
+                    model_id: "gpt-5.4",
+                    description: "wrong workflow",
+                    runtime_execution_mode: json!({}),
+                    planner_output: Value::Null,
+                    execution_plan: Value::Null,
+                    step_results: vec![],
+                    aggregated_result: json!({
+                        "error": "wrong workflow",
+                    }),
+                    status: "failed",
+                },
+            ),
+        ))
+        .expect("task result should serialize");
+        let mut record = sample_task_with_result(
+            json!({
+                "session_id": session_id,
+                "turn_index": 2,
+                "coordinator_agent_id": coordinator_agent_id,
+                "final_result": serde_json::to_value(canonical_result).expect("final result should serialize"),
+                "execution_plan": execution_plan,
+            }),
+            mismatched_task_result,
+        );
+        record.task_id = *workflow_id.as_ref();
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("metadata.final_result should recover failed-before-graph parity");
+
+        assert_eq!(recovered.graph.workflow_id, workflow_id);
+        assert_eq!(recovered.graph.state, GraphState::Failed);
+        let preview = recovered
+            .result_preview
+            .expect("recovered view should expose a synthesized result preview");
+        assert_eq!(preview.payload_location, "metadata.final_result");
+        assert_eq!(
+            preview.proof_outcome,
+            ProofOutcomeClassification::FailedBeforeGraph
+        );
+        assert_eq!(
+            preview.preview_text.as_deref(),
+            Some("planner execution failed: Ask operation timed out")
+        );
+    }
+
+    #[test]
     fn mark_persisted_autonomy_status_failed_rewrites_running_projection() {
         let mut metadata = json!({});
         let view = sample_autonomy_view_with_states(GraphState::Running, BranchState::Running);

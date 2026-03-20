@@ -625,14 +625,17 @@ pub(crate) fn enrich_result_preview(
 ) {
     let status_hint = status_hint_from_graph_state(&view.graph.state);
     let existing_preview = view.result_preview.clone();
+    let workflow_id = view.graph.workflow_id;
     let payload_preview = task_result
         .and_then(|value| {
             canonical_result_from_value(value, Some(status_hint))
+                .filter(|result| result.workflow_id == workflow_id)
                 .map(|result| operator_result_preview(&result, "task.result", view))
         })
         .or_else(|| {
             metadata.get("final_result").and_then(|value| {
                 canonical_result_from_value(value, Some(status_hint))
+                    .filter(|result| result.workflow_id == workflow_id)
                     .map(|result| operator_result_preview(&result, "metadata.final_result", view))
             })
         });
@@ -652,17 +655,19 @@ pub(crate) fn synthesize_failed_before_graph_status(
 ) -> Option<AutonomyStatusView> {
     let canonical_result = task_result
         .and_then(|value| canonical_result_from_value(value, Some("failed")))
+        .filter(|result| {
+            result.workflow_id == workflow_id
+                && result.proof_outcome == ProofOutcomeClassification::FailedBeforeGraph
+        })
         .or_else(|| {
             metadata
                 .get("final_result")
                 .and_then(|value| canonical_result_from_value(value, Some("failed")))
+                .filter(|result| {
+                    result.workflow_id == workflow_id
+                        && result.proof_outcome == ProofOutcomeClassification::FailedBeforeGraph
+                })
         })?;
-
-    if canonical_result.workflow_id != workflow_id
-        || canonical_result.proof_outcome != ProofOutcomeClassification::FailedBeforeGraph
-    {
-        return None;
-    }
 
     let plan_summary = failed_before_graph_plan_summary(&canonical_result);
     let graph_id = ExecutionGraphId::from_uuid(*workflow_id.as_ref());
@@ -822,6 +827,7 @@ fn failed_before_graph_plan_summary(
     }
 
     let max_depth = max_plan_depth(&step_ids, &dependencies_by_step);
+    let max_frontier_width = max_plan_frontier_width(&step_ids, &dependencies_by_step);
     let has_fanout = dependency_fanout.values().any(|count| *count > 1);
     let branch_count = if root_count > 0 {
         root_count
@@ -830,7 +836,11 @@ fn failed_before_graph_plan_summary(
     } else {
         0
     };
-    let parallelism_width = branch_count.max(1);
+    let parallelism_width = if node_count > 0 {
+        max_frontier_width.max(1)
+    } else {
+        0
+    };
     let topology_kind = if parallelism_width <= 1 {
         TopologyKind::Sequential
     } else if has_join {
@@ -864,6 +874,7 @@ fn failed_before_graph_plan_summary(
         structural_signals: vec![
             format!("stored_plan_nodes:{node_count}"),
             format!("stored_plan_roots:{root_count}"),
+            format!("stored_plan_frontier_width:{max_frontier_width}"),
             format!("stored_plan_depth:{max_depth}"),
         ],
     };
@@ -908,6 +919,22 @@ fn max_plan_depth(
         .map(|step_id| plan_step_depth(step_id, dependencies_by_step, &mut memo, &mut visiting))
         .max()
         .unwrap_or(0)
+}
+
+fn max_plan_frontier_width(
+    step_ids: &[String],
+    dependencies_by_step: &BTreeMap<String, Vec<String>>,
+) -> usize {
+    let mut memo = BTreeMap::<String, usize>::new();
+    let mut visiting = BTreeSet::<String>::new();
+    let mut frontier_counts = BTreeMap::<usize, usize>::new();
+
+    for step_id in step_ids {
+        let depth = plan_step_depth(step_id, dependencies_by_step, &mut memo, &mut visiting);
+        *frontier_counts.entry(depth).or_insert(0) += 1;
+    }
+
+    frontier_counts.values().copied().max().unwrap_or(0)
 }
 
 fn plan_step_depth(
