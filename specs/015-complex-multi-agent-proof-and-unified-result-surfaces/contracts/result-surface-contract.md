@@ -75,6 +75,8 @@ Session retention keeps a bounded projection of the canonical result object.
 Expected behavior:
 
 - `assistant_result` and `last_assistant_result` derive from the canonical result object
+- retained session storage and session inspect surfaces serialize the full retained-result
+  projection at `assistant_result` / `last_assistant_result`, not only the inner assistant payload
 - retained session views must preserve result preview plus enough provenance to correlate with the
   owning workflow
 - session inspection must not silently drop assistant-result material once it was retained

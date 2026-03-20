@@ -637,12 +637,20 @@ pub(crate) fn enrich_result_preview(
     }
 }
 
+pub(crate) fn retained_result_view(
+    task_result: &Value,
+    turn_index: u32,
+    status: &str,
+) -> Option<SessionRetainedResultView> {
+    build_session_retained_result(task_result, turn_index, status)
+}
+
 pub(crate) fn retained_assistant_result(
     task_result: &Value,
     turn_index: u32,
     status: &str,
 ) -> Option<Value> {
-    build_session_retained_result(task_result, turn_index, status)
+    retained_result_view(task_result, turn_index, status)
         .map(|projection| projection.assistant_result)
 }
 
@@ -897,7 +905,7 @@ pub(crate) fn resume_provenance_from_metadata(metadata: &Value) -> Option<Resume
             })
         });
     let resumed_after_restart = transcript_entry
-        .and_then(|entry| entry.get("assistant_result"))
+        .and_then(transcript_assistant_result_payload)
         .and_then(|result| result.get("recovered_after_restart"))
         .and_then(Value::as_bool)
         .unwrap_or(false);
@@ -920,6 +928,11 @@ pub(crate) fn resume_provenance_from_metadata(metadata: &Value) -> Option<Resume
         resumed_from_workflow_id,
         resumed_from_turn_index,
     })
+}
+
+fn transcript_assistant_result_payload(entry: &Value) -> Option<&Value> {
+    let projection = entry.get("assistant_result")?;
+    projection.get("assistant_result").or(Some(projection))
 }
 
 fn render_resume_provenance(summary: &ResumeProvenanceSummary) -> String {
