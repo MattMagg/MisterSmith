@@ -20,10 +20,11 @@ use mister_smith_core::{
 };
 
 use crate::autonomy::{
-    infer_result_preview_from_projection, AutonomyEvent, AutonomyStatusView, BranchSummary,
-    CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert,
-    ExecutionGraphSummary, ExternalCapabilityDecisionSummary, ResumeProvenanceSummary,
-    RoutingDecisionSummary, StepRoutingDecisionSummary, TopologyPlanSummary,
+    infer_result_preview_from_projection, merge_operator_result_preview, AutonomyEvent,
+    AutonomyStatusView, BranchSummary, CapabilitySummary, CheckpointRecordSummary,
+    ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
+    ExternalCapabilityDecisionSummary, ResumeProvenanceSummary, RoutingDecisionSummary,
+    StepRoutingDecisionSummary, TopologyPlanSummary,
 };
 use crate::dead_letter::DeadLetterQueue;
 use crate::error::EventBusError;
@@ -188,14 +189,23 @@ impl AutonomyStatusAccumulator {
                 &self.conservative_reasons,
             )
         });
-        let result_preview = self.result_preview.clone().or_else(|| {
-            infer_result_preview_from_projection(
-                &graph,
-                &topology,
-                &branches,
-                &self.routing_history,
-            )
-        });
+        let inferred_result_preview = infer_result_preview_from_projection(
+            &graph,
+            &topology,
+            &branches,
+            &self.routing_history,
+        );
+        let result_preview = match (
+            self.result_preview.as_ref(),
+            inferred_result_preview.as_ref(),
+        ) {
+            (Some(preview), Some(inferred)) => {
+                Some(merge_operator_result_preview(preview, inferred))
+            }
+            (Some(preview), None) => Some(preview.clone()),
+            (None, Some(inferred)) => Some(inferred.clone()),
+            (None, None) => None,
+        };
 
         Some(AutonomyStatusView {
             session_id: self.session_id,

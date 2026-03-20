@@ -377,6 +377,22 @@ fn enrich_result_preview_prefers_task_result_projection() {
         .provenance_lines
         .iter()
         .any(|line| line.contains("planner emitted one sequential step")));
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("provider=openai_chatgpt model=gpt-5.4")));
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("runtime execution mode boundary=tool_bus runner=tokio_task")));
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| { line.contains("graph state Completed with topology Sequential") }));
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("routing history retained 1 decision(s)")));
 }
 
 #[test]
@@ -418,6 +434,7 @@ fn render_status_surfaces_result_preview_block() {
         payload_location: "task.result".to_string(),
         provenance_lines: vec![
             "graph formed and completed before final result publication".to_string(),
+            "provider=openai_chatgpt model=gpt-5.4".to_string(),
             "canonical result stored in metadata.final_result".to_string(),
         ],
     });
@@ -428,7 +445,50 @@ fn render_status_surfaces_result_preview_block() {
     assert!(rendered.contains("proof=graph_formed_and_completed"));
     assert!(rendered.contains("location=task.result"));
     assert!(rendered.contains("preview=bounded answer preview"));
+    assert!(rendered.contains("provenance:"));
+    assert!(rendered.contains("  - graph formed and completed before final result publication"));
+    assert!(rendered.contains("  - provider=openai_chatgpt model=gpt-5.4"));
     assert!(rendered.contains("canonical result stored in metadata.final_result"));
+}
+
+#[test]
+fn enrich_result_preview_merges_existing_structural_provenance() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    view.result_preview = Some(mister_smith_core::OperatorResultPreview {
+        workflow_id: view.graph.workflow_id,
+        proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+        preview_text: Some("structural preview only".to_string()),
+        payload_location: "task.result".to_string(),
+        provenance_lines: vec![
+            "projection observed graph state Completed with topology Sequential (1 branch(es), 3 node(s))".to_string(),
+            "routing history retained 1 decision(s)".to_string(),
+        ],
+    });
+    let task_result = sample_task_result_view(
+        view.graph.workflow_id,
+        ProofOutcomeClassification::GraphFormedAndCompleted,
+    );
+    let metadata = serde_json::json!({
+        "final_result": task_result["result"].clone(),
+    });
+
+    autonomy::enrich_result_preview(&mut view, &metadata, Some(&task_result));
+
+    let preview = view
+        .result_preview
+        .expect("canonical preview should remain present");
+    assert_eq!(
+        preview.preview_text.as_deref(),
+        Some("bounded answer preview")
+    );
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("provider=openai_chatgpt model=gpt-5.4")));
+    assert!(preview.provenance_lines.iter().any(|line| {
+        line.contains("projection observed graph state Completed with topology Sequential")
+    }));
 }
 
 #[test]

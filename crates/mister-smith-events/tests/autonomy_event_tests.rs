@@ -1022,14 +1022,18 @@ async fn event_bus_aggregates_the_frozen_proof_outcome_matrix() {
             preview_text: Some("workflow completed with 2 branch(es) across 4 node(s)".to_string()),
             payload_location: "task.result".to_string(),
             provenance_lines: vec![
+                "graph formed and completed before final result publication".to_string(),
+                format!(
+                    "projection observed graph state {:?} with topology {:?} ({} branch(es), {} node(s))",
+                    GraphState::Completed,
+                    TopologyKind::Hybrid,
+                    2,
+                    4
+                ),
                 "canonical result stored in metadata.final_result".to_string(),
                 "aggregated payload nested under metadata.aggregated_result".to_string(),
                 "full payload remains recoverable from task.result".to_string(),
-                format!(
-                    "projection observed graph state {:?} with topology {:?}",
-                    GraphState::Completed,
-                    TopologyKind::Hybrid
-                ),
+                "projection retained 1 branch detail record(s)".to_string(),
                 "routing history retained 1 decision(s)".to_string(),
             ],
         }
@@ -1087,6 +1091,10 @@ async fn event_bus_aggregates_the_frozen_proof_outcome_matrix() {
         collapse_preview.preview_text.clone(),
         Some("completed with a sequential execution path".to_string())
     );
+    assert!(collapse_preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("planner emitted one sequential step")));
 
     let failure_bus = EventBus::default();
     let failure_workflow_id = TaskId::new();
@@ -1140,6 +1148,10 @@ async fn event_bus_aggregates_the_frozen_proof_outcome_matrix() {
         failure_preview.preview_text.clone(),
         Some("workflow failed before graph formation".to_string())
     );
+    assert!(failure_preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("workflow failed before usable graph formation")));
 }
 
 #[tokio::test]
@@ -1187,6 +1199,89 @@ async fn event_bus_keeps_failed_visible_graph_runs_in_the_frozen_failure_class()
         preview.preview_text.as_deref(),
         Some("workflow failed before graph formation")
     );
+}
+
+#[tokio::test]
+async fn event_bus_merges_explicit_preview_with_projection_provenance() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch = sample_branch_summary(graph_id);
+    let routing = sample_routing_summary(workflow_id, graph_id, branch.branch_id);
+    let view = AutonomyStatusView {
+        session_id: None,
+        turn_index: None,
+        coordinator_agent_id: None,
+        resume_provenance: None,
+        graph: sample_graph_summary(
+            workflow_id,
+            graph_id,
+            GraphState::Completed,
+            2,
+            4,
+            Some(TopologyKind::Hybrid),
+        ),
+        topology: sample_topology_summary(
+            graph_id,
+            TopologyKind::Hybrid,
+            2,
+            TaskShapeKind::FanoutJoin,
+        ),
+        team_sizing: None,
+        branches: vec![branch],
+        checkpoint_lineage: vec![],
+        memory_pressure: vec![],
+        routing_history: vec![routing],
+        step_routing_history: vec![],
+        result_preview: Some(sample_result_preview(
+            workflow_id,
+            ProofOutcomeClassification::GraphFormedAndCompleted,
+        )),
+        interventions: vec![],
+        delegation_capabilities: vec![],
+        delegation_alerts: vec![],
+        external_capability_decisions: vec![],
+        profiles: vec![],
+        guard_decisions: vec![],
+        conservative_reasons: vec![],
+    };
+
+    event_bus
+        .publish(
+            AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: view,
+                operator_visible: true,
+            }))
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+
+    let preview = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .expect("status snapshot should assemble")
+        .result_preview
+        .expect("result preview should remain present");
+
+    assert_eq!(
+        preview.preview_text.as_deref(),
+        Some("bounded answer preview")
+    );
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("canonical result stored in metadata.final_result")));
+    assert!(preview.provenance_lines.iter().any(|line| {
+        line.contains("projection observed graph state Completed with topology Hybrid")
+    }));
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("routing history retained 1 decision(s)")));
 }
 
 #[tokio::test]

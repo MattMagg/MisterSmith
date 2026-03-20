@@ -496,6 +496,15 @@ pub fn infer_result_preview_from_projection(
     let proof_outcome =
         infer_proof_outcome_from_projection(graph, topology, branches, routing_history)?;
 
+    let outcome_line = match proof_outcome {
+        ProofOutcomeClassification::GraphFormedAndCompleted => {
+            "graph formed and completed before final result publication"
+        }
+        ProofOutcomeClassification::CollapsedToSequential => "planner emitted one sequential step",
+        ProofOutcomeClassification::FailedBeforeGraph => {
+            "workflow failed before usable graph formation"
+        }
+    };
     let preview_text = match proof_outcome {
         ProofOutcomeClassification::GraphFormedAndCompleted => Some(format!(
             "workflow completed with {} branch(es) across {} node(s)",
@@ -510,14 +519,21 @@ pub fn infer_result_preview_from_projection(
     };
 
     let mut provenance_lines = vec![
+        outcome_line.to_string(),
+        format!(
+            "projection observed graph state {:?} with topology {:?} ({} branch(es), {} node(s))",
+            graph.state, topology.topology_kind, graph.branch_count, graph.node_count
+        ),
         "canonical result stored in metadata.final_result".to_string(),
         "aggregated payload nested under metadata.aggregated_result".to_string(),
         "full payload remains recoverable from task.result".to_string(),
     ];
-    provenance_lines.push(format!(
-        "projection observed graph state {:?} with topology {:?}",
-        graph.state, topology.topology_kind
-    ));
+    if !branches.is_empty() {
+        provenance_lines.push(format!(
+            "projection retained {} branch detail record(s)",
+            branches.len()
+        ));
+    }
     if !routing_history.is_empty() {
         provenance_lines.push(format!(
             "routing history retained {} decision(s)",
@@ -532,6 +548,27 @@ pub fn infer_result_preview_from_projection(
         payload_location: "task.result".to_string(),
         provenance_lines,
     })
+}
+
+/// Merge two operator-facing previews without dropping bounded provenance lines.
+#[must_use]
+pub fn merge_operator_result_preview(
+    preferred: &OperatorResultPreview,
+    fallback: &OperatorResultPreview,
+) -> OperatorResultPreview {
+    let mut merged = preferred.clone();
+    if merged.preview_text.is_none() {
+        merged.preview_text = fallback.preview_text.clone();
+    }
+    if merged.payload_location.is_empty() {
+        merged.payload_location = fallback.payload_location.clone();
+    }
+    for line in &fallback.provenance_lines {
+        if !merged.provenance_lines.contains(line) {
+            merged.provenance_lines.push(line.clone());
+        }
+    }
+    merged
 }
 
 impl CapabilitySummary {
