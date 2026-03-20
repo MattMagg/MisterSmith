@@ -1591,6 +1591,102 @@ fn coordinator_id_from_metadata(metadata: &Value) -> Option<AgentId> {
         .map(AgentId::from_uuid)
 }
 
+fn planner_output_supports_explicit_runtime_graph(steps: &[Value]) -> bool {
+    steps.len() > 1
+        && steps.iter().any(|raw_step| {
+            raw_step.as_object().is_some_and(|step| {
+                step.get("branch").and_then(Value::as_str).is_some()
+                    || step
+                        .get("depends_on")
+                        .and_then(Value::as_array)
+                        .map(|dependencies| !dependencies.is_empty())
+                        .unwrap_or(false)
+            })
+        })
+}
+
+fn next_root_branch_label(index: usize) -> String {
+    match index {
+        1 => "branch-a".to_string(),
+        2 => "branch-b".to_string(),
+        _ => format!("branch-{index}"),
+    }
+}
+
+fn next_join_branch_label(index: usize) -> String {
+    match index {
+        1 => "join".to_string(),
+        _ => format!("join-{index}"),
+    }
+}
+
+fn normalize_explicit_runtime_steps(goal: &str, steps: &[Value]) -> Vec<Value> {
+    let mut runtime_steps = Vec::new();
+    let mut branch_by_step_id = BTreeMap::<String, String>::new();
+    let mut root_branch_index = 1usize;
+    let mut join_branch_index = 1usize;
+
+    for (index, raw_step) in steps.iter().enumerate() {
+        let mut step = raw_step.as_object().cloned().unwrap_or_default();
+        let step_id = step
+            .get("id")
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+            .unwrap_or_else(|| format!("step-{}", index + 1));
+        let dependencies = step
+            .get("depends_on")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        step.insert("id".to_string(), json!(step_id.clone()));
+        step.insert("step".to_string(), json!(index + 1));
+        step.entry("action".to_string())
+            .or_insert_with(|| json!("execute"));
+        step.entry("description".to_string())
+            .or_insert_with(|| json!(goal));
+        step.insert("depends_on".to_string(), Value::Array(dependencies.clone()));
+
+        let branch = step
+            .get("branch")
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+            .unwrap_or_else(|| {
+                if dependencies.len() > 1 {
+                    let label = next_join_branch_label(join_branch_index);
+                    join_branch_index += 1;
+                    label
+                } else if let Some(parent_step_id) = dependencies.first().and_then(Value::as_str) {
+                    branch_by_step_id
+                        .get(parent_step_id)
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            let label = next_root_branch_label(root_branch_index);
+                            root_branch_index += 1;
+                            label
+                        })
+                } else {
+                    let label = next_root_branch_label(root_branch_index);
+                    root_branch_index += 1;
+                    label
+                }
+            });
+
+        step.entry("role".to_string()).or_insert_with(|| {
+            json!(if dependencies.len() > 1 {
+                "coordinator"
+            } else {
+                "worker"
+            })
+        });
+        step.insert("branch".to_string(), json!(branch.clone()));
+        branch_by_step_id.insert(step_id, branch);
+        runtime_steps.push(Value::Object(step));
+    }
+
+    runtime_steps
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2226,76 +2322,90 @@ fn normalize_runtime_plan(goal: &str, context: &Value, raw_plan: Value) -> Value
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+    let preserve_explicit_graph = planner_output_supports_explicit_runtime_graph(&steps);
 
-    let mut runtime_steps = Vec::new();
-    let mut previous_join_id: Option<String> = None;
-    let mut root_ids = Vec::new();
+    let runtime_steps = if preserve_explicit_graph {
+        normalize_explicit_runtime_steps(goal, &steps)
+    } else {
+        let mut runtime_steps = Vec::new();
+        let mut previous_join_id: Option<String> = None;
+        let mut root_ids = Vec::new();
 
-    for (index, raw_step) in steps.iter().enumerate() {
-        let mut step = raw_step.as_object().cloned().unwrap_or_default();
-        let step_id = step
-            .get("id")
-            .and_then(Value::as_str)
-            .map(ToString::to_string)
-            .unwrap_or_else(|| format!("step-{}", index + 1));
-        step.insert("id".to_string(), json!(step_id.clone()));
-        step.insert("step".to_string(), json!(index + 1));
-        step.entry("action".to_string())
-            .or_insert_with(|| json!("execute"));
-        step.entry("description".to_string())
-            .or_insert_with(|| json!(goal));
+        for (index, raw_step) in steps.iter().enumerate() {
+            let mut step = raw_step.as_object().cloned().unwrap_or_default();
+            let step_id = step
+                .get("id")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+                .unwrap_or_else(|| format!("step-{}", index + 1));
+            step.insert("id".to_string(), json!(step_id.clone()));
+            step.insert("step".to_string(), json!(index + 1));
+            step.entry("action".to_string())
+                .or_insert_with(|| json!("execute"));
+            step.entry("description".to_string())
+                .or_insert_with(|| json!(goal));
 
-        if index == 0 {
-            step.insert("role".to_string(), json!("worker"));
-            step.insert("branch".to_string(), json!("branch-a"));
-            step.insert("depends_on".to_string(), json!([]));
-            root_ids.push(step_id.clone());
-        } else if index == 1 {
-            step.insert("role".to_string(), json!("worker"));
-            step.insert("branch".to_string(), json!("branch-b"));
-            step.insert("depends_on".to_string(), json!([]));
-            root_ids.push(step_id.clone());
-        } else {
-            step.insert("role".to_string(), json!("coordinator"));
-            step.insert("branch".to_string(), json!("join"));
-            let deps = if let Some(previous_join_id) = &previous_join_id {
-                vec![previous_join_id.clone()]
+            if index == 0 {
+                step.insert("role".to_string(), json!("worker"));
+                step.insert("branch".to_string(), json!("branch-a"));
+                step.insert("depends_on".to_string(), json!([]));
+                root_ids.push(step_id.clone());
+            } else if index == 1 {
+                step.insert("role".to_string(), json!("worker"));
+                step.insert("branch".to_string(), json!("branch-b"));
+                step.insert("depends_on".to_string(), json!([]));
+                root_ids.push(step_id.clone());
             } else {
-                root_ids.clone()
-            };
-            step.insert("depends_on".to_string(), json!(deps));
-            previous_join_id = Some(step_id.clone());
+                step.insert("role".to_string(), json!("coordinator"));
+                step.insert("branch".to_string(), json!("join"));
+                let deps = if let Some(previous_join_id) = &previous_join_id {
+                    vec![previous_join_id.clone()]
+                } else {
+                    root_ids.clone()
+                };
+                step.insert("depends_on".to_string(), json!(deps));
+                previous_join_id = Some(step_id.clone());
+            }
+
+            runtime_steps.push(Value::Object(step));
         }
 
-        runtime_steps.push(Value::Object(step));
-    }
+        if runtime_steps.len() == 2 {
+            runtime_steps.push(json!({
+                "id": "join-step",
+                "step": 3,
+                "action": "synthesize",
+                "description": format!(
+                    "Synthesize both worker branch results into one final answer for: {goal}"
+                ),
+                "role": "coordinator",
+                "branch": "join",
+                "depends_on": root_ids,
+            }));
+        }
 
-    if runtime_steps.len() == 2 {
-        runtime_steps.push(json!({
-            "id": "join-step",
-            "step": 3,
-            "action": "synthesize",
-            "description": format!(
-                "Synthesize both worker branch results into one final answer for: {goal}"
-            ),
-            "role": "coordinator",
-            "branch": "join",
-            "depends_on": root_ids,
-        }));
-    }
+        runtime_steps
+    };
+
+    let topology_hint = if preserve_explicit_graph {
+        plan.get("topology_hint")
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+    } else if runtime_steps.len() >= 3 {
+        Some("hybrid".to_string())
+    } else {
+        Some("sequential".to_string())
+    };
 
     if let Some(object) = plan.as_object_mut() {
         object.insert("goal".to_string(), json!(goal));
         object.insert("context".to_string(), context.clone());
         object.insert("steps".to_string(), Value::Array(runtime_steps.clone()));
-        object.insert(
-            "topology_hint".to_string(),
-            json!(if runtime_steps.len() >= 3 {
-                "hybrid"
-            } else {
-                "sequential"
-            }),
-        );
+        if let Some(topology_hint) = topology_hint {
+            object.insert("topology_hint".to_string(), json!(topology_hint));
+        } else {
+            object.remove("topology_hint");
+        }
         object.insert(
             "runtime_normalized".to_string(),
             json!(runtime_steps.len() >= 2),
@@ -2415,6 +2525,128 @@ mod runtime_plan_tests {
 
         assert_eq!(numeric_steps, vec![1, 2, 3]);
         assert_eq!(plan["runtime_normalized"], json!(true));
+    }
+
+    #[test]
+    fn normalize_runtime_plan_preserves_explicit_harder_workload_graph() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "topology_hint": "hybrid",
+                "steps": [
+                    {
+                        "id": "draft-outline",
+                        "step": 7,
+                        "action": "outline",
+                        "description": "draft outline",
+                        "role": "worker",
+                        "branch": "outline"
+                    },
+                    {
+                        "id": "collect-evidence",
+                        "step": 7,
+                        "action": "collect",
+                        "description": "collect evidence",
+                        "role": "worker",
+                        "branch": "research"
+                    },
+                    {
+                        "id": "synthesize",
+                        "step": 9,
+                        "action": "synthesize",
+                        "description": "merge both branches",
+                        "depends_on": ["draft-outline", "collect-evidence"]
+                    },
+                    {
+                        "id": "fact-check",
+                        "step": 11,
+                        "action": "fact-check",
+                        "description": "fact check merged draft",
+                        "depends_on": ["synthesize"]
+                    }
+                ]
+            }),
+        );
+
+        let steps = plan["steps"].as_array().expect("normalized steps array");
+        let numeric_steps: Vec<u64> = steps
+            .iter()
+            .filter_map(|step| step["step"].as_u64())
+            .collect();
+        let branches: Vec<&str> = steps
+            .iter()
+            .map(|step| step["branch"].as_str().expect("branch label"))
+            .collect();
+
+        assert_eq!(numeric_steps, vec![1, 2, 3, 4]);
+        assert_eq!(branches, vec!["outline", "research", "join", "join"]);
+        assert_eq!(
+            steps[2]["depends_on"],
+            json!(["draft-outline", "collect-evidence"])
+        );
+        assert_eq!(steps[3]["depends_on"], json!(["synthesize"]));
+        assert_eq!(steps[2]["role"], json!("coordinator"));
+        assert_eq!(steps[3]["role"], json!("worker"));
+        assert_eq!(plan["topology_hint"], json!("hybrid"));
+        assert_eq!(plan["runtime_normalized"], json!(true));
+    }
+
+    #[test]
+    fn normalize_runtime_plan_preserves_one_shot_runtime_compatibility() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "steps": [
+                    {
+                        "id": "single-step",
+                        "step": 4,
+                        "action": "answer",
+                        "description": "one bounded answer"
+                    }
+                ]
+            }),
+        );
+
+        let steps = plan["steps"].as_array().expect("normalized steps array");
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0]["id"], json!("single-step"));
+        assert_eq!(steps[0]["step"], json!(1));
+        assert_eq!(steps[0]["branch"], json!("branch-a"));
+        assert_eq!(steps[0]["depends_on"], json!([]));
+        assert_eq!(plan["topology_hint"], json!("sequential"));
+        assert_eq!(plan["runtime_normalized"], json!(false));
+    }
+
+    #[test]
+    fn normalize_runtime_plan_keeps_single_explicit_branch_step_sequential() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "topology_hint": "parallel",
+                "steps": [
+                    {
+                        "id": "single-step",
+                        "step": 4,
+                        "action": "answer",
+                        "description": "one bounded answer",
+                        "branch": "research",
+                        "depends_on": ["earlier-step"]
+                    }
+                ]
+            }),
+        );
+
+        let steps = plan["steps"].as_array().expect("normalized steps array");
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0]["id"], json!("single-step"));
+        assert_eq!(steps[0]["step"], json!(1));
+        assert_eq!(steps[0]["branch"], json!("branch-a"));
+        assert_eq!(steps[0]["depends_on"], json!([]));
+        assert_eq!(plan["topology_hint"], json!("sequential"));
+        assert_eq!(plan["runtime_normalized"], json!(false));
     }
 
     #[test]

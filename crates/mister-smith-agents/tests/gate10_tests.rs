@@ -17,7 +17,7 @@ use mister_smith_core::{
     FailureClass, GuardTarget, HealthState, InterventionType, MemorySnapshotId, NodeState,
     PersistenceError, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
     ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RevocationState, SemanticSignal,
-    SemanticSignalKind, TaskId,
+    SemanticSignalKind, TaskId, TopologyKind,
 };
 use mister_smith_events::{AutonomyEvent, CapabilitySummary, EventBus};
 use serde_json::json;
@@ -606,6 +606,107 @@ fn gate10_completed_graph_status_includes_result_preview() {
     assert_eq!(
         preview.proof_outcome,
         ProofOutcomeClassification::GraphFormedAndCompleted
+    );
+}
+
+#[test]
+fn gate10_collapsed_graph_status_includes_result_preview() {
+    let scheduler = Arc::new(TaskScheduler::new());
+    let orchestrator = Orchestrator::new(
+        Arc::new(IdentityDecomposer),
+        Arc::new(ArrayAggregator),
+        scheduler,
+    );
+    let mut graph = TopologyCompiler::default()
+        .compile(
+            TaskId::new(),
+            &frontier_rebalance_plan(),
+            &TopologySignals::default(),
+        )
+        .expect("frontier rebalance graph should compile");
+    let workflow_id = graph.workflow_id;
+
+    for node in &mut graph.nodes {
+        node.state = NodeState::Completed;
+    }
+    for branch in &mut graph.branches {
+        branch.state = BranchState::Completed;
+    }
+    graph.state = mister_smith_core::GraphState::Completed;
+    graph.topology_plan.topology_kind = TopologyKind::Sequential;
+    graph.topology_plan.parallelism_width = 1;
+    orchestrator.register_execution_graph(graph);
+
+    let preview = orchestrator
+        .autonomy_status(&workflow_id)
+        .and_then(|status| status.result_preview)
+        .expect("collapsed graphs should expose a shared result preview");
+
+    assert_eq!(preview.payload_location, "task.result");
+    assert_eq!(
+        preview.proof_outcome,
+        ProofOutcomeClassification::CollapsedToSequential
+    );
+}
+
+#[test]
+fn gate10_failed_graph_status_includes_result_preview_for_partial_graph_evidence() {
+    let scheduler = Arc::new(TaskScheduler::new());
+    let orchestrator = Orchestrator::new(
+        Arc::new(IdentityDecomposer),
+        Arc::new(ArrayAggregator),
+        scheduler,
+    );
+    let mut graph = TopologyCompiler::default()
+        .compile(
+            TaskId::new(),
+            &frontier_rebalance_plan(),
+            &TopologySignals::default(),
+        )
+        .expect("frontier rebalance graph should compile");
+    let workflow_id = graph.workflow_id;
+
+    let root = node_id_for(&graph, "root");
+    let left = node_id_for(&graph, "left");
+    let failed_nodes = [node_id_for(&graph, "right")];
+    graph.nodes.iter_mut().for_each(|node| {
+        node.state = if node.node_id == root || node.node_id == left {
+            NodeState::Completed
+        } else if failed_nodes.contains(&node.node_id) {
+            NodeState::Failed
+        } else {
+            NodeState::Pending
+        };
+    });
+    graph.branches.iter_mut().for_each(|branch| {
+        branch.state = if branch
+            .node_ids
+            .iter()
+            .any(|node_id| *node_id == root || *node_id == left)
+        {
+            BranchState::Completed
+        } else if branch
+            .node_ids
+            .iter()
+            .any(|node_id| failed_nodes.contains(node_id))
+        {
+            BranchState::Failed
+        } else {
+            BranchState::Pending
+        };
+    });
+    graph.state = mister_smith_core::GraphState::Failed;
+    orchestrator.register_execution_graph(graph);
+
+    let preview = orchestrator
+        .autonomy_status(&workflow_id)
+        .and_then(|status| status.result_preview)
+        .expect("failed graphs should expose a shared result preview");
+
+    assert_eq!(preview.payload_location, "task.result");
+    assert_eq!(
+        preview.proof_outcome,
+        ProofOutcomeClassification::FailedBeforeGraph
     );
 }
 

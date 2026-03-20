@@ -6,8 +6,8 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, ExecutionBranchId, ExecutionNodeId,
-    GuardDecision, GuardTarget, HealthState, InterventionRecord, ProfileSnapshot, TaskId,
-    TeamSizingDecision,
+    GraphState, GuardDecision, GuardTarget, HealthState, InterventionRecord, ProfileSnapshot,
+    TaskId, TeamSizingDecision,
 };
 use tracing::{instrument, warn};
 
@@ -80,13 +80,22 @@ fn baseline_team_sizing_decision(
     conservative_reasons: &[String],
 ) -> TeamSizingDecision {
     let desired_workers = graph.topology_plan.parallelism_width.max(1);
-    let available_workers = graph
+    let assigned_worker_count = graph
         .branches
         .iter()
         .flat_map(|branch| branch.assigned_agents.iter().copied())
         .collect::<HashSet<_>>()
-        .len()
-        .max(1);
+        .len();
+    let uses_structural_parallelism_fallback = assigned_worker_count == 0
+        && matches!(
+            graph.state,
+            GraphState::Pending | GraphState::Running | GraphState::Checkpointed
+        );
+    let available_workers = if uses_structural_parallelism_fallback {
+        desired_workers
+    } else {
+        assigned_worker_count.max(1)
+    };
     let selected_workers = desired_workers.min(available_workers);
     let branch_frontier_width = graph
         .topology_plan
@@ -118,11 +127,23 @@ fn baseline_team_sizing_decision(
             graph.topology_plan.topology_kind, desired_workers
         )
         .to_ascii_lowercase(),
-        format!(
+    ];
+    if uses_structural_parallelism_fallback {
+        rationale_lines.push(format!(
+            "selected {} workers from structural parallelism because no live worker assignments are recorded yet for this non-terminal graph",
+            selected_workers
+        ));
+    } else if assigned_worker_count == 0 {
+        rationale_lines.push(
+            "selected 1 worker because this terminal graph no longer has live worker assignments to preserve"
+                .to_string(),
+        );
+    } else {
+        rationale_lines.push(format!(
             "selected {} workers because {} workers are currently available",
             selected_workers, available_workers
-        ),
-    ];
+        ));
+    }
     if let Some(pressure) = budget_pressure {
         rationale_lines.push(format!("latest routing budget pressure {}", pressure));
     }
@@ -2247,6 +2268,7 @@ fn model_event_for_error(error: &mister_smith_core::LlmError) -> ModelEvent {
 mod tests {
     use super::*;
     use crate::scheduler::{ArrayAggregator, IdentityDecomposer};
+    use serde_json::json;
 
     #[tokio::test]
     async fn test_orchestrator_decompose_and_aggregate() {
@@ -2299,5 +2321,147 @@ mod tests {
             aggregate_frontier_health([HealthState::Healthy, HealthState::Unknown]),
             HealthState::Unknown
         );
+    }
+
+    #[test]
+    fn autonomy_status_uses_structural_team_width_for_unassigned_harder_workload_graphs() {
+        let scheduler = Arc::new(TaskScheduler::new());
+        let orchestrator = Orchestrator::new(
+            Arc::new(IdentityDecomposer),
+            Arc::new(ArrayAggregator),
+            scheduler,
+        );
+        let graph = TopologyCompiler::default()
+            .compile(
+                TaskId::new(),
+                &json!({
+                    "goal": "harder-proof",
+                    "steps": [
+                        {
+                            "id": "root",
+                            "step": 1,
+                            "action": "root",
+                            "description": "root"
+                        },
+                        {
+                            "id": "alpha",
+                            "step": 2,
+                            "action": "alpha",
+                            "description": "alpha",
+                            "depends_on": ["root"],
+                            "branch": "alpha"
+                        },
+                        {
+                            "id": "beta",
+                            "step": 3,
+                            "action": "beta",
+                            "description": "beta",
+                            "depends_on": ["root"],
+                            "branch": "beta"
+                        },
+                        {
+                            "id": "gamma",
+                            "step": 4,
+                            "action": "gamma",
+                            "description": "gamma",
+                            "depends_on": ["root"],
+                            "branch": "gamma"
+                        }
+                    ]
+                }),
+                &TopologySignals::default(),
+            )
+            .expect("harder workload graph should compile");
+        let workflow_id = graph.workflow_id;
+        orchestrator.register_execution_graph(graph);
+
+        let team_sizing = orchestrator
+            .autonomy_status(&workflow_id)
+            .and_then(|status| status.team_sizing)
+            .expect("autonomy status should expose baseline team sizing");
+
+        assert_eq!(team_sizing.desired_workers, 3);
+        assert_eq!(team_sizing.available_workers, 3);
+        assert_eq!(team_sizing.selected_workers, 3);
+        assert!(team_sizing
+            .rationale_lines
+            .iter()
+            .any(|line| line.contains("non-terminal graph")));
+    }
+
+    #[test]
+    fn autonomy_status_does_not_reuse_structural_team_width_for_unassigned_terminal_graphs() {
+        for terminal_state in [
+            mister_smith_core::GraphState::Completed,
+            mister_smith_core::GraphState::Failed,
+        ] {
+            let scheduler = Arc::new(TaskScheduler::new());
+            let orchestrator = Orchestrator::new(
+                Arc::new(IdentityDecomposer),
+                Arc::new(ArrayAggregator),
+                scheduler,
+            );
+            let mut graph = TopologyCompiler::default()
+                .compile(
+                    TaskId::new(),
+                    &json!({
+                        "goal": "harder-proof",
+                        "steps": [
+                            {
+                                "id": "root",
+                                "step": 1,
+                                "action": "root",
+                                "description": "root"
+                            },
+                            {
+                                "id": "alpha",
+                                "step": 2,
+                                "action": "alpha",
+                                "description": "alpha",
+                                "depends_on": ["root"],
+                                "branch": "alpha"
+                            },
+                            {
+                                "id": "beta",
+                                "step": 3,
+                                "action": "beta",
+                                "description": "beta",
+                                "depends_on": ["root"],
+                                "branch": "beta"
+                            },
+                            {
+                                "id": "gamma",
+                                "step": 4,
+                                "action": "gamma",
+                                "description": "gamma",
+                                "depends_on": ["root"],
+                                "branch": "gamma"
+                            }
+                        ]
+                    }),
+                    &TopologySignals::default(),
+                )
+                .expect("harder workload graph should compile");
+            let workflow_id = graph.workflow_id;
+            graph.state = terminal_state;
+            orchestrator.register_execution_graph(graph);
+
+            let team_sizing = orchestrator
+                .autonomy_status(&workflow_id)
+                .and_then(|status| status.team_sizing)
+                .expect("autonomy status should expose baseline team sizing");
+
+            assert_eq!(team_sizing.desired_workers, 3);
+            assert_eq!(team_sizing.available_workers, 1);
+            assert_eq!(team_sizing.selected_workers, 1);
+            assert_eq!(
+                team_sizing.cap_reason.as_deref(),
+                Some("available worker pool smaller than structural width")
+            );
+            assert!(team_sizing
+                .rationale_lines
+                .iter()
+                .any(|line| line.contains("terminal graph")));
+        }
     }
 }

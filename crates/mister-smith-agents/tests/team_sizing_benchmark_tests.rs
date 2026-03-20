@@ -81,6 +81,60 @@ fn wide_fanout_plan() -> serde_json::Value {
     })
 }
 
+fn harder_fanout_plan() -> serde_json::Value {
+    json!({
+        "goal": "harder-fanout",
+        "steps": [
+            {
+                "id": "root",
+                "step": 1,
+                "action": "root",
+                "description": "root"
+            },
+            {
+                "id": "alpha",
+                "step": 2,
+                "action": "alpha",
+                "description": "alpha",
+                "depends_on": ["root"],
+                "branch": "alpha"
+            },
+            {
+                "id": "beta",
+                "step": 3,
+                "action": "beta",
+                "description": "beta",
+                "depends_on": ["root"],
+                "branch": "beta"
+            },
+            {
+                "id": "gamma",
+                "step": 4,
+                "action": "gamma",
+                "description": "gamma",
+                "depends_on": ["root"],
+                "branch": "gamma"
+            },
+            {
+                "id": "delta",
+                "step": 5,
+                "action": "delta",
+                "description": "delta",
+                "depends_on": ["root"],
+                "branch": "delta"
+            },
+            {
+                "id": "join",
+                "step": 6,
+                "action": "join",
+                "description": "join",
+                "depends_on": ["alpha", "beta", "gamma", "delta"],
+                "branch": "join"
+            }
+        ]
+    })
+}
+
 fn strict_chain_plan() -> serde_json::Value {
     json!({
         "goal": "strict-chain",
@@ -304,6 +358,18 @@ fn adaptive_team_harness_reports_improvement_and_neutral_results() {
         &["root"],
         BenchmarkStrategy::SequentialBaseline,
     );
+    let harder_adaptive = run_harness(
+        "harder_parallel_fanout",
+        harder_fanout_plan(),
+        &["root"],
+        BenchmarkStrategy::Adaptive,
+    );
+    let harder_sequential = run_harness(
+        "harder_parallel_fanout",
+        harder_fanout_plan(),
+        &["root"],
+        BenchmarkStrategy::SequentialBaseline,
+    );
     let chain_adaptive = run_harness(
         "strict_chain",
         strict_chain_plan(),
@@ -327,6 +393,16 @@ fn adaptive_team_harness_reports_improvement_and_neutral_results() {
     assert_eq!(wide_sequential.selected_workers, 1);
     assert_eq!(wide_sequential.dispatch_rounds, 3);
 
+    assert_eq!(harder_adaptive.ready_branch_count, 4);
+    assert_eq!(harder_adaptive.desired_workers, 4);
+    assert_eq!(harder_adaptive.selected_workers, 3);
+    assert_eq!(harder_adaptive.dispatch_rounds, 2);
+
+    assert_eq!(harder_sequential.ready_branch_count, 4);
+    assert_eq!(harder_sequential.desired_workers, 4);
+    assert_eq!(harder_sequential.selected_workers, 1);
+    assert_eq!(harder_sequential.dispatch_rounds, 4);
+
     assert_eq!(chain_adaptive.ready_branch_count, 1);
     assert_eq!(chain_adaptive.desired_workers, 1);
     assert_eq!(chain_adaptive.selected_workers, 1);
@@ -341,11 +417,14 @@ fn adaptive_team_harness_reports_improvement_and_neutral_results() {
         chain_adaptive.dispatch_rounds,
         chain_sequential.dispatch_rounds
     );
+    assert!(harder_adaptive.dispatch_rounds < harder_sequential.dispatch_rounds);
 
     println!("workload_class,strategy,ready_branch_count,desired_workers,selected_workers,dispatch_rounds");
     for result in [
         &wide_adaptive,
         &wide_sequential,
+        &harder_adaptive,
+        &harder_sequential,
         &chain_adaptive,
         &chain_sequential,
     ] {
@@ -377,6 +456,18 @@ fn adaptive_team_harness_is_repeatable() {
             BenchmarkStrategy::SequentialBaseline,
         ),
         run_harness(
+            "harder_parallel_fanout",
+            harder_fanout_plan(),
+            &["root"],
+            BenchmarkStrategy::Adaptive,
+        ),
+        run_harness(
+            "harder_parallel_fanout",
+            harder_fanout_plan(),
+            &["root"],
+            BenchmarkStrategy::SequentialBaseline,
+        ),
+        run_harness(
             "strict_chain",
             strict_chain_plan(),
             &["step-1"],
@@ -399,6 +490,18 @@ fn adaptive_team_harness_is_repeatable() {
         run_harness(
             "parallel_fanout",
             wide_fanout_plan(),
+            &["root"],
+            BenchmarkStrategy::SequentialBaseline,
+        ),
+        run_harness(
+            "harder_parallel_fanout",
+            harder_fanout_plan(),
+            &["root"],
+            BenchmarkStrategy::Adaptive,
+        ),
+        run_harness(
+            "harder_parallel_fanout",
+            harder_fanout_plan(),
             &["root"],
             BenchmarkStrategy::SequentialBaseline,
         ),
