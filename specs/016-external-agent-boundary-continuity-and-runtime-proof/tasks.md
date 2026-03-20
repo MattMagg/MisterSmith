@@ -43,14 +43,17 @@ ingress continuity, workflow-level projection, and proof.
 
 **⚠️ CRITICAL**: no `[P]` lane may begin until this checkpoint is complete.
 
-- [ ] T001 [US1] Freeze the packet around `POST /api/v1/tasks`,
+This checkpoint was completed during packet creation on 2026-03-20 through the `MS-96`
+pre-spec decision note and the landed packet artifact set.
+
+- [x] T001 [US1] Freeze the packet around `POST /api/v1/tasks`,
   `GET /api/v1/autonomy/status/{workflow_id}`, and CLI parity in
   `specs/016-external-agent-boundary-continuity-and-runtime-proof/spec.md` and
   `specs/016-external-agent-boundary-continuity-and-runtime-proof/plan.md`.
-- [ ] T002 [US1] Freeze the data-model mapping between raw metadata `external_delegation`,
+- [x] T002 [US1] Freeze the data-model mapping between raw metadata `external_delegation`,
   preferred reuse of `external_capability_decisions`, and retained session continuity rules in
   `specs/016-external-agent-boundary-continuity-and-runtime-proof/data-model.md`.
-- [ ] T003 [US1] Decide whether the current operator-visible summary needs a backward-compatible
+- [x] T003 [US1] Decide whether the current operator-visible summary needs a backward-compatible
   discriminator; if not, record “no new contract doc required” in
   `specs/016-external-agent-boundary-continuity-and-runtime-proof/research.md`.
 
