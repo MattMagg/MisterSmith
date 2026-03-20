@@ -1,0 +1,5 @@
+cargo fmt --all
+cargo build --workspace
+cargo test -p mister-smith-app
+git diff --check
+scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync

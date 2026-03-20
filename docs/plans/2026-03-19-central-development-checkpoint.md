@@ -2,7 +2,7 @@
 
 Date: March 19, 2026
 Updated: March 20, 2026
-Status: Packet 015 complete; refresh required before the next frontier implementation lane
+Status: Packet 015 complete; packet 016 pre-spec scope frozen
 
 ## Purpose
 
@@ -52,8 +52,10 @@ Historical support notes:
   - one persisted three-label proof-outcome taxonomy across those result surfaces
   - a durable closure artifact in
     `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
-- The remaining bounded follow-on from this checkpoint, if pursued next, is the post-`MS-77`
-  external-agent interoperability closure rather than a reopening of packet 015.
+- `MS-77` already landed the bounded MCP discovery and enforcement surface, so the remaining
+  follow-on is not “create the first external-agent surface.”
+- The next bounded follow-on from this checkpoint is packet `016`:
+  delegated HTTP task-ingress continuity and runtime proof on top of already-landed surfaces.
 
 ## Scope Guardrails
 
@@ -101,11 +103,28 @@ Closure evidence:
 - `specs/015-complex-multi-agent-proof-and-unified-result-surfaces/`
 - `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
 
-### Milestone 3: External-Agent Interoperability Closure
+### Milestone 3: Packet 016 External-Agent Boundary Continuity And Runtime Proof
 
 Packet 015 did not reopen external-agent interoperability work beyond the bounded non-regression
-decision, so the next bounded epic should do only that remaining work on a bounded surface after
-`MS-77`.
+decision, so the next bounded epic should stay tightly scoped.
+
+Packet `016` should cover only:
+
+- accepted delegated HTTP task ingress via `POST /api/v1/tasks`
+- persisted workflow-metadata continuity for that accepted delegated request
+- compatibility with retained session continuity rules
+- workflow-level inspection via `GET /api/v1/autonomy/status/{workflow_id}`
+- CLI parity via `mister-smith autonomy status --workflow-id ...`
+- deterministic rejection proof for missing, wrong-route, revoked, or mismatched delegated
+  authority
+
+Packet `016` should not cover:
+
+- reopening packet `015`
+- widening into all delegated HTTP ingress routes
+- generic A2A, mesh, CRDT, MPST, distributed-memory, provider-routing, budget, or JetStream KV
+  programs
+- queue staging before the packet is ready
 
 ### Milestone 4: Deferred Frontier Work
 
@@ -122,15 +141,17 @@ These are intentionally deferred until separately spec'd:
 - Start at `docs/current-state.md`, then read this checkpoint before planning new work.
 - Treat this note plus the packet-015 evaluation note as the answer to “what just completed and
   what remains.”
+- Treat `docs/plans/2026-03-20-ms-96-external-agent-pre-spec-decision.md` as the packet-016
+  scope-freeze note.
 - Use Smith-first workflow tools for development control-plane actions, but do not create new
   Smith-first program work unless the repo truth shows a real gap in that control plane.
 - Do not treat Milestone 2 as open anymore.
-- Refresh or supersede this checkpoint before launching a new frontier implementation packet.
+- Launch no new frontier implementation packet without the packet-016 artifact set in `specs/016-`.
 
 ## Validation For This Checkpoint
 
 - repo authority docs align on one forward-development note
 - historical Smith MCP Linear work is archived
 - packet 015 is landed and recorded in the evaluation note
-- the next active planning action is checkpoint refresh or a narrowly justified follow-on packet,
-  not “write packet 015” again
+- the next active planning action is packet-016 continuity-and-proof planning, not “write packet
+  015” again and not “recreate the first bounded external-agent surface”

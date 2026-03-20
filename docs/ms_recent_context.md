@@ -50,7 +50,13 @@ frontier implementation lane.
 
 If the same line of product work continues, the remaining bounded follow-on is:
 
-- the remaining post-`MS-77` external-agent interoperability closure on a bounded surface
+- packet `016`: external-agent boundary continuity and runtime proof
+- scoped to delegated HTTP task ingress via `POST /api/v1/tasks`
+- inspected through `GET /api/v1/autonomy/status/{workflow_id}` and
+  `mister-smith autonomy status --workflow-id ...`
+- grounded in workflow metadata continuity, retained session continuity rules, and workflow-level
+  autonomy status
+- explicitly not a reopening of packet `015` or a new broad external-agent program
 
 Closed frontier packet and recovery issues now include:
 

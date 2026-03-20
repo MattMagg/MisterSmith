@@ -1,0 +1,4 @@
+{
+  "message": "Evaluate packet 015 live behavior after the MS-95 fix. Split the work into three parallel tracks: one worker traces runtime execution markers and proof outcome classification, one worker traces task and session result-surface evidence, and one worker traces autonomy preview and provenance evidence. Then join the findings into one operator memo with sections Runtime, Result Surfaces, Operator View, and a one-line verdict. Use multiple agents. Keep the final memo under 180 words.",
+  "priority": "high"
+}

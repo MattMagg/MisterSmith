@@ -1,0 +1,43 @@
+workflow: 715f60e8-d9a7-4c7b-aae0-71ddb8078932
+graph: 715f60e8-d9a7-4c7b-aae0-71ddb8078932 Completed
+session: 9d86d915-5d89-42d7-ba65-7f020a5b12ed turn=1 coordinator=2f76387d-c89a-4699-b3a7-2535094d64de
+resume provenance: none
+topology: Hybrid width=3 shape=fanout-join structure=roots:3 | max_parallel_width:3 | max_depth:1 | fanout:false | join:true dependency=fanout-join rationale=selected hybrid topology from dependency analysis signals=health:healthy | budget_pressure:normal
+fallback: fallback to sequential preserves dependency order under degraded signals
+team sizing: phase=frontier_rebalance desired=1 selected=1 frontier=1 depth=1 conservative=false budget=0 cap=none rationale=task shape fanout-join with frontier width 1 | dependency depth 1 keeps coordination cost acceptable | frontier budget pressure 0 | selected 1 workers from the available pool of 2 | frontier health Unknown influenced active width
+branches:
+2ecf4132-127e-44fa-a2f1-fc31392780ff Completed checkpoint=none recovery=Resume
+62efd0cd-57cd-4ccc-91bc-74ca433b9742 Completed checkpoint=none recovery=Resume
+d7c3b69a-1e56-4e47-acb1-b84e25b0befa Completed checkpoint=none recovery=Resume
+e60418a2-cd01-4ce4-8e7d-b3450e7a1440 Completed checkpoint=none recovery=Resume
+checkpoints:
+none
+routing:
+2ecf4132-127e-44fa-a2f1-fc31392780ff Unknown budget=0 depth=0 rationale=budget pressure 0% across routed scope | dependency depth 0 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+62efd0cd-57cd-4ccc-91bc-74ca433b9742 Unknown budget=0 depth=0 rationale=budget pressure 0% across routed scope | dependency depth 0 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+e60418a2-cd01-4ce4-8e7d-b3450e7a1440 Unknown budget=0 depth=0 rationale=budget pressure 0% across routed scope | dependency depth 0 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+d7c3b69a-1e56-4e47-acb1-b84e25b0befa Unknown budget=0 depth=1 rationale=budget pressure 0% across routed scope | dependency depth 1 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+step routing:
+planner.step.1#1 kind=planner action=continue previous=none changed=false tier=direct preferred=none cost=1325 confidence=1.00 checkpoints=none reason=Selected via RoundRobin delta=initial step routing decision for workflow-visible control state
+result preview: proof=graph_formed_and_completed location=task.result preview=[{"dependency_results":[],"execution_boundary":"tool_bus","model_id":"gpt-5.4","provider_kind":"openai_chatgpt","status":"completed","task":{"action":"Trace ...
+  provenance:
+  - graph formed and completed before final result publication
+  - provider=openai_chatgpt model=gpt-5.4
+  - runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step
+  - graph state Completed with topology Hybrid (4 branch(es), 4 node(s))
+  - routing history retained 4 decision(s)
+  - canonical result stored in metadata.final_result
+  - aggregated payload nested under metadata.aggregated_result
+  - full payload remains recoverable from task.result
+  - session assistant_result derives from the canonical result object
+  - projection observed graph state Completed with topology Hybrid (4 branch(es), 4 node(s))
+  - projection retained 4 branch detail record(s)
+interventions:
+none
+delegation:
+none
+delegation alerts:
+none
+external capability decisions:
+none
+conservative: none

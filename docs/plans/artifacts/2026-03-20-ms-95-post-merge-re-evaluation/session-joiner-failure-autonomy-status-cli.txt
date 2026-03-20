@@ -1,0 +1,34 @@
+workflow: bae0a79c-5206-4d1a-a334-3b651e9a9b7e
+graph: bae0a79c-5206-4d1a-a334-3b651e9a9b7e Failed
+session: 0ace8398-6066-47b4-8cc2-f09650aba4a9 turn=1 coordinator=573351e3-17ea-4bb4-8c94-c6f150abe346
+resume provenance: none
+topology: Sequential width=0 shape=strict-chain structure=stored_plan_nodes:0 | stored_plan_roots:0 | stored_plan_frontier_width:0 | stored_plan_depth:0 dependency=stored execution plan reconstructed with 0 node(s) rationale=preserve bounded operator-visible parity from persisted failure metadata signals=workflow failed before graph publication | proof_outcome=failed_before_graph | recorded_step_results=0
+fallback: graph compilation failed before a live autonomy snapshot could be published
+team sizing: none
+branches:
+none
+checkpoints:
+none
+routing:
+none
+step routing:
+none
+result preview: proof=failed_before_graph location=task.result preview=planner execution failed: Ask operation timed out
+  provenance:
+  - workflow failed before usable graph formation
+  - provider=openai_chatgpt model=gpt-5.4
+  - runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step
+  - graph state Failed with topology Sequential (0 branch(es), 0 node(s))
+  - canonical result stored in metadata.final_result
+  - aggregated payload nested under metadata.aggregated_result
+  - full payload remains recoverable from task.result
+  - session assistant_result derives from the canonical result object
+interventions:
+none
+delegation:
+none
+delegation alerts:
+none
+external capability decisions:
+none
+conservative: workflow failed before graph publication | autonomy status reconstructed from persisted canonical result

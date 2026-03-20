@@ -122,9 +122,11 @@ Current default runtime limitations to keep in mind:
 - the live runtime path is currently fixed to `openai_chatgpt` and `gpt-5.4`
 - the default runtime router path is currently a plain round-robin router, not the full
   budget-backed control-loop path
-- external delegation metadata, provenance, and operator-visible decisions are landed and
-  non-regression-tested, but there is not yet a first-class external-agent interoperability surface
-  on `main`
+- the bounded MCP discovery and enforcement surface from `MS-77` is already landed on `main`
+- the remaining external-agent gap is narrower:
+  accepted delegated HTTP task ingress via `POST /api/v1/tasks` is not yet carried through
+  persisted workflow metadata and projected onto workflow-level autonomy status as a first-class
+  operator-visible boundary decision with preserved provenance and policy continuity
 
 ## What Is Planned Next
 
@@ -137,18 +139,23 @@ The completed frontier epics are:
 
 The next repo-wide planning action is:
 
-- maintain the March 19 checkpoint plus the packet-015 evaluation note as the current authority
-- refresh the forward-development checkpoint before starting another frontier implementation lane
+- use the March 19 checkpoint, the packet-015 evaluation note, and the `MS-96` decision note as
+  the current authority
+- keep packet `016` planning-only until the bounded continuity-and-proof scope is ready for
+  implementation
 
 The remaining bounded product gap after packet 015 is centered on:
 
-- the exact remaining bounded scope after `MS-77` for external-agent interoperability
-- any newly justified runtime gap that is still visible on `main` after packet-015 closure
+- delegated HTTP task ingress continuity through workflow metadata, retained session continuity,
+  and workflow-level autonomy inspection
+- one live accepted-ingress runtime proof using the supported workflow-level status route and CLI
 
 This direction is tracked in:
 
 - `docs/plans/2026-03-19-central-development-checkpoint.md`
 - `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
+- `docs/plans/2026-03-20-ms-95-post-merge-re-evaluation.md`
+- `docs/plans/2026-03-20-ms-96-external-agent-pre-spec-decision.md`
 
 ## Practical Reading Order
 
