@@ -470,10 +470,21 @@ fn proof_matrix_harness_replays_success_collapse_and_failure_visible_cases() {
             "unexpected proof outcome for {}",
             run.workload_class
         );
+        // Keep the fixture preview aligned with the outcome class it documents.
+        let preview = run
+            .result_preview
+            .expect("benchmark fixtures should include a bounded result preview");
+        let expected_preview_signal = match expected {
+            ProofOutcomeClassification::GraphFormedAndCompleted => "multi-branch graph",
+            ProofOutcomeClassification::CollapsedToSequential => "sequential",
+            ProofOutcomeClassification::FailedBeforeGraph => "failed before graph",
+        };
         assert!(
-            run.result_preview.is_some(),
-            "expected bounded preview for {}",
-            run.workload_class
+            preview.contains(expected_preview_signal),
+            "expected preview for {} to mention {:?}, got {:?}",
+            run.workload_class,
+            expected_preview_signal,
+            preview
         );
     }
 }
