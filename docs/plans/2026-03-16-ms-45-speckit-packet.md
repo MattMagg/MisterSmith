@@ -1,7 +1,12 @@
 # MS-45 SpecKit Packet Build
 
 Date: March 16, 2026
-Status: In Progress
+Status: Completed historical packet-build note for `specs/014-task-shape-aware-orchestration/`
+
+Use `docs/current-state.md` for the current repo-wide overview. Use
+`docs/plans/2026-03-19-central-development-checkpoint.md` and
+`docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md` for
+the current post-packet-015 planning posture.
 
 ## Objective
 
@@ -23,7 +28,7 @@ The target feature is `MS-45` and the packet directory is
 
 ## Assumptions
 
-- `docs/plans/2026-03-16-frontier-direction.md` remains the governing forward-direction note
+- this note is historical packet-build context, not the governing forward-direction note
 - `MS-45` is still the next primary Mister Smith operating-system feature
 - `MS-60` should be reflected as landed current truth inside the new packet, not re-opened as new
   work

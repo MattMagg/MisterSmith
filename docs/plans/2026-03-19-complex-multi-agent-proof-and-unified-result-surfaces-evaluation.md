@@ -4,7 +4,7 @@ Date: March 19, 2026
 Updated: March 20, 2026
 Status: Complete
 Packet: `specs/015-complex-multi-agent-proof-and-unified-result-surfaces/`
-Tasks: `T006` to `T008`, `T027` to `T032`
+Tasks: full packet closure baseline through `T001` to `T032`
 
 ## Objective
 
@@ -25,6 +25,10 @@ The final validation pass ran against `ad209f1` on top of the landed packet sequ
 
 This means the packet closure lane validated the landed implementation baseline rather than
 reopening packet scope with new feature work.
+
+Supporting runtime-capture artifacts from the final packet-015 live evaluation are recorded under:
+
+- `docs/plans/artifacts/2026-03-20-packet-015-live-runtime-evaluation/`
 
 ## Frozen Proof Matrix
 

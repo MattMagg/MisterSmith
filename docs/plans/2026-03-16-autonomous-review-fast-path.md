@@ -1,7 +1,7 @@
 # Autonomous Review Fast Path
 
 Date: March 16, 2026
-Status: In Progress
+Status: Implemented in current workflow contracts; use `WORKFLOW.md` and `docs/linear/LINEAR.md` for the live review posture
 
 ## Objective
 

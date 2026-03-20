@@ -30,7 +30,9 @@ router.
 Document roles in brief:
 
 - `docs/current-state.md`: current repo and OS state
-- `docs/plans/2026-03-16-frontier-direction.md`: current forward direction and next epics
+- `docs/plans/2026-03-19-central-development-checkpoint.md`: current forward-development checkpoint
+- `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`:
+  packet-015 closure evidence
 - `WORKFLOW.md` and `docs/linear/LINEAR.md`: development control-plane contract
 - `ROADMAP.md`: architectural build map
 - `spec/` and `specs/`: architecture and implementation packet truth
@@ -47,11 +49,13 @@ the Mister Smith OS runtime.
 - Live queue contract:
   [`WORKFLOW.md`](WORKFLOW.md) and
   [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md)
-- Current mainline direction and validated-backlog posture:
-  [`docs/plans/2026-03-16-frontier-direction.md`](docs/plans/2026-03-16-frontier-direction.md)
+- Current mainline direction and packet-015 closure posture:
+  [`docs/plans/2026-03-19-central-development-checkpoint.md`](docs/plans/2026-03-19-central-development-checkpoint.md),
+  [`docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`](docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md)
 - Phase 10 design and gate artifacts:
   [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
-  [`docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`](docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md)
+  [`docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`](docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md),
+  [`specs/015-complex-multi-agent-proof-and-unified-result-surfaces/`](specs/015-complex-multi-agent-proof-and-unified-result-surfaces/spec.md)
 - smith MCP rebuild and workflow recovery plans:
   [`docs/plans/2026-03-14-smith-mcp-rebuild.md`](docs/plans/2026-03-14-smith-mcp-rebuild.md),
   [`docs/plans/2026-03-15-smith-mcp-workflow-forensics.md`](docs/plans/2026-03-15-smith-mcp-workflow-forensics.md),
@@ -94,8 +98,8 @@ Phase 10 gate evidence on 2026-03-15:
 
 These are OS runtime surfaces, not Symphony or Linear development workflow surfaces.
 
-The repo now has two real runtime-backed operator paths validated against `openai_chatgpt` /
-`gpt-5.4` on March 16, 2026:
+The repo now has real runtime-backed operator paths plus the packet-015 result-surface closure
+validated against `openai_chatgpt` / `gpt-5.4` through March 20, 2026:
 
 - one-shot task execution:
   - `mister-smith run`
@@ -117,14 +121,15 @@ Current session contract for the first bounded slice:
   status
 - ended sessions stay inspectable and reject later turns
 
-Primary notes for the March 16 operator surfaces:
+Primary notes for the current operator and result-surface baseline:
 
 - runtime-backed task path and first real live proof:
   [`docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`](docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md)
 - bounded same-agent session packet and live validation notes:
   [`docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`](docs/plans/2026-03-16-multi-turn-same-agent-conversations.md)
-- post-recovery operating-system direction and next frontier epics:
-  [`docs/plans/2026-03-16-frontier-direction.md`](docs/plans/2026-03-16-frontier-direction.md)
+- forward checkpoint and packet-015 closure evidence:
+  [`docs/plans/2026-03-19-central-development-checkpoint.md`](docs/plans/2026-03-19-central-development-checkpoint.md),
+  [`docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`](docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md)
 
 ## Architecture
 

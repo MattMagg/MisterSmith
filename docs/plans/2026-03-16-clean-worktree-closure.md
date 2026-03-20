@@ -1,7 +1,7 @@
 # Clean Worktree Closure
 
 Date: March 16, 2026
-Status: In Progress
+Status: Completed on `main`; clean-and-synced closure is now a repo workflow requirement
 
 ## Objective
 

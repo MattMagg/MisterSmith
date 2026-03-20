@@ -13,10 +13,13 @@ implementation phases. Phase 10 is now implemented and validated in the repo, an
 frontier-autonomy artifact set spans
 [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
 [`WORKFLOW.md`](WORKFLOW.md), [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md), and the dated
-plans under [`docs/plans/`](docs/plans/). The current post-Phase-10 direction lives in
-[`docs/plans/2026-03-16-frontier-direction.md`](docs/plans/2026-03-16-frontier-direction.md).
-For a current whole-repo overview, including what is live in the default runtime path versus what
-is landed but not yet fully wired, use [`docs/current-state.md`](docs/current-state.md).
+plans under [`docs/plans/`](docs/plans/). The current post-Phase-10 repo posture lives in
+[`docs/current-state.md`](docs/current-state.md),
+[`docs/plans/2026-03-19-central-development-checkpoint.md`](docs/plans/2026-03-19-central-development-checkpoint.md),
+and
+[`docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`](docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md).
+Use those notes for what is live on the default runtime path, what packet 015 closed, and what
+still remains bounded next.
 
 ## How to Read This
 

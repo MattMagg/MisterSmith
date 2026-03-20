@@ -1,0 +1,38 @@
+workflow: e1eec258-a818-470b-8115-04d2f86dbf86
+graph: e1eec258-a818-470b-8115-04d2f86dbf86 Completed
+session: eb90a1d6-5beb-4ca5-81c7-036a69403b80 turn=1 coordinator=3c4b7936-2b55-4c38-9cfb-af9937412011
+resume provenance: none
+topology: Sequential width=1 shape=strict-chain structure=roots:1 | max_parallel_width:1 | max_depth:0 | fanout:false | join:false dependency=strict-chain rationale=selected sequential topology from compatible planner policy hint signals=health:healthy | budget_pressure:normal
+fallback: none
+team sizing: phase=initial desired=1 selected=1 frontier=1 depth=0 conservative=false budget=0 cap=none rationale=task shape strict-chain with frontier width 1 | dependency depth 0 keeps coordination cost acceptable | frontier budget pressure 0 | selected 1 workers from the available pool of 2 | frontier health Unknown influenced active width
+branches:
+00c4649a-74b5-41f0-b621-7e07a888c2b4 Completed checkpoint=none recovery=Resume
+checkpoints:
+none
+routing:
+00c4649a-74b5-41f0-b621-7e07a888c2b4 Unknown budget=0 depth=0 rationale=budget pressure 0% across routed scope | dependency depth 0 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+step routing:
+planner.step.1#1 kind=planner action=continue previous=none changed=false tier=direct preferred=none cost=1211 confidence=0.80 checkpoints=none reason=Selected via RoundRobin delta=initial step routing decision for workflow-visible control state
+result preview: proof=collapsed_to_sequential location=task.result preview=[{"dependency_results":[],"execution_boundary":"tool_bus","model_id":"gpt-5.4","provider_kind":"openai_chatgpt","status":"completed","task":{"action":"analyz...
+  provenance:
+  - planner emitted one sequential step
+  - provider=openai_chatgpt model=gpt-5.4
+  - runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step
+  - graph state Completed with topology Sequential (1 branch(es), 1 node(s))
+  - routing history retained 1 decision(s)
+  - canonical result stored in metadata.final_result
+  - aggregated payload nested under metadata.aggregated_result
+  - full payload remains recoverable from task.result
+  - session assistant_result derives from the canonical result object
+  - graph formed and completed before final result publication
+  - projection observed graph state Completed with topology Sequential (1 branch(es), 1 node(s))
+  - projection retained 1 branch detail record(s)
+interventions:
+none
+delegation:
+none
+delegation alerts:
+none
+external capability decisions:
+none
+conservative: none

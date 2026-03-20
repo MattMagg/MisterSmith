@@ -1,7 +1,7 @@
 # Mister Smith Current State
 
-Date: March 19, 2026
-Status: Active
+Date: March 20, 2026
+Status: Current
 
 ## Purpose
 
@@ -19,7 +19,8 @@ Use this file when you need one honest answer to:
 | Need | Primary document | Role |
 | ---- | ---------------- | ---- |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
-| What should happen next | `docs/plans/2026-03-19-central-development-checkpoint.md` | Current forward-development authority, epic order, and scope guardrails |
+| What should happen next | `docs/plans/2026-03-19-central-development-checkpoint.md` | Current forward-development checkpoint, packet-015 outcome, and scope guardrails |
+| Packet 015 closure evidence | `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md` | Durable proof and validation artifact for the completed packet-015 epic |
 | Development workflow and watched queue | `WORKFLOW.md`, `docs/linear/LINEAR.md` | Development control plane contract |
 | Architectural build map | `ROADMAP.md` | Phase dependency map and build order |
 | Broad repo orientation | `README.md` | High-level repo surface and operator entry points |
@@ -68,6 +69,8 @@ external workflow services such as Linear or Symphony.
   runner, and a ToolBus-backed execution boundary
 - A real local provider-backed runtime proof has been completed on the current runtime path using
   `openai_chatgpt` with `gpt-5.4`.
+- Packet 015 is landed on `main` through `MS-94`, with the final evidence captured in
+  `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
 
@@ -95,6 +98,11 @@ Read the current state in three layers:
 - bounded same-agent sessions with stable `session_id` and `coordinator_agent_id`
 - supervised planner and executor lifecycles on the default runtime path
 - ToolBus-backed workflow step execution on the default runtime path
+- harder-workload graph proof on the default path when the planner supports it
+- one shared result contract across task, session, and operator-facing result views
+- bounded operator preview and provenance for proof-relevant inspection
+- one persisted proof-outcome taxonomy across task, session, and operator surfaces:
+  `graph_formed_and_completed`, `collapsed_to_sequential`, and `failed_before_graph`
 
 This is the current OS path that has real end-to-end proof.
 
@@ -114,8 +122,9 @@ Current default runtime limitations to keep in mind:
 - the live runtime path is currently fixed to `openai_chatgpt` and `gpt-5.4`
 - the default runtime router path is currently a plain round-robin router, not the full
   budget-backed control-loop path
-- external delegation metadata, provenance, and operator-visible decisions are landed, but there is
-  not yet a first-class external-agent interoperability surface on `main`
+- external delegation metadata, provenance, and operator-visible decisions are landed and
+  non-regression-tested, but there is not yet a first-class external-agent interoperability surface
+  on `main`
 
 ## What Is Planned Next
 
@@ -124,20 +133,22 @@ The completed frontier epics are:
 - `MS-45`: task-shape-aware orchestration and dynamic team sizing
 - `MS-46`: session restart-resume and distributed operating state
 - `MS-47`: step-level intelligence and model routing control loop
+- packet 015: complex multi-agent proof and unified result surfaces (`MS-78` through `MS-94`)
 
 The next repo-wide planning action is:
 
-- maintain this checkpoint as the forward authority
-- write one bounded next SpecKit packet for the remaining differentiation gap between landed
-  substrate and proven runtime behavior
+- maintain the March 19 checkpoint plus the packet-015 evaluation note as the current authority
+- refresh the forward-development checkpoint before starting another frontier implementation lane
 
-The remaining product gap after the March 19 proof cycle is still centered on:
+The remaining bounded product gap after packet 015 is centered on:
 
-- reliable complex multi-agent execution proof under harder workloads
-- final result visibility on operator surfaces
 - the exact remaining bounded scope after `MS-77` for external-agent interoperability
+- any newly justified runtime gap that is still visible on `main` after packet-015 closure
 
-This direction is tracked in `docs/plans/2026-03-19-central-development-checkpoint.md`.
+This direction is tracked in:
+
+- `docs/plans/2026-03-19-central-development-checkpoint.md`
+- `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
 
 ## Practical Reading Order
 
@@ -153,7 +164,9 @@ If you need to understand the repo quickly:
 ## Source Of Truth Rules
 
 - Use this file for the repo's current broad state.
-- Use `docs/plans/2026-03-19-central-development-checkpoint.md` for next-step direction.
+- Use `docs/plans/2026-03-19-central-development-checkpoint.md` for the current forward checkpoint
+  and `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
+  for the completed packet-015 closure evidence.
 - Use `WORKFLOW.md` and `docs/linear/LINEAR.md` for development workflow rules.
 - Use `spec/` for architecture truth.
 - Use `specs/` for implementation packet truth.

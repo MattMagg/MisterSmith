@@ -1,7 +1,7 @@
 # Smith MCP MS-51 Through MS-59 Execution
 
 Date: March 16, 2026
-Status: Active
+Status: Implemented on `main`; use `docs/current-state.md`, `WORKFLOW.md`, and `docs/linear/LINEAR.md` for the live workflow posture
 
 ## Objective
 
@@ -52,7 +52,7 @@ Implemented in the current repo:
 - deterministic coverage for the new workflow families plus live read-side proofs for queue-stage
   planning and Ralph packet preparation
 
-Still pending before claiming end-to-end workflow closure:
+Historical pending items from the March 16 implementation snapshot:
 
 - live apply proof for backlog slicing and Ralph outcome recording
 - real watched-queue staging through `apply_queue_stage`
