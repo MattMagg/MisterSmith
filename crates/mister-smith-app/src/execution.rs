@@ -1399,7 +1399,13 @@ impl RuntimeTaskService {
         metadata: &mut Value,
         task_result: Option<&Value>,
     ) {
-        let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id) else {
+        let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id).or_else(|| {
+            crate::autonomy::synthesize_failed_before_graph_status(
+                workflow_id,
+                metadata,
+                task_result,
+            )
+        }) else {
             return;
         };
         crate::autonomy::enrich_session_linkage(&mut view, metadata);
@@ -1508,8 +1514,15 @@ fn persist_autonomy_status(metadata: &mut Value, view: &AutonomyStatusView) {
 }
 
 fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStatusView> {
-    let raw = record.metadata.get(AUTONOMY_STATUS_METADATA_KEY)?.clone();
-    let mut view = serde_json::from_value::<AutonomyStatusView>(raw).ok()?;
+    let mut view = if let Some(raw) = record.metadata.get(AUTONOMY_STATUS_METADATA_KEY) {
+        serde_json::from_value::<AutonomyStatusView>(raw.clone()).ok()?
+    } else {
+        crate::autonomy::synthesize_failed_before_graph_status(
+            TaskId::from_uuid(record.task_id),
+            &record.metadata,
+            record.result.as_ref(),
+        )?
+    };
     crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
     crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
     crate::autonomy::enrich_result_preview(&mut view, &record.metadata, record.result.as_ref());
@@ -2356,6 +2369,125 @@ mod tests {
         }));
 
         assert!(recover_persisted_autonomy_status(&record).is_none());
+    }
+
+    #[test]
+    fn recover_persisted_autonomy_status_synthesizes_failed_before_graph_without_snapshot() {
+        let workflow_id = TaskId::new();
+        let session_id = SessionId::new();
+        let coordinator_agent_id = AgentId::new();
+        let execution_plan = json!({
+            "steps": [
+                {
+                    "id": "facts",
+                    "step": 1,
+                    "action": "analyze",
+                    "role": "worker",
+                    "branch": "branch-a",
+                    "depends_on": []
+                },
+                {
+                    "id": "hypotheses",
+                    "step": 2,
+                    "action": "analyze",
+                    "role": "worker",
+                    "branch": "branch-b",
+                    "depends_on": []
+                },
+                {
+                    "id": "actions",
+                    "step": 3,
+                    "action": "analyze",
+                    "role": "worker",
+                    "branch": "branch-c",
+                    "depends_on": []
+                },
+                {
+                    "id": "join",
+                    "step": 4,
+                    "action": "summarize",
+                    "role": "coordinator",
+                    "branch": "join",
+                    "depends_on": ["facts", "hypotheses", "actions"]
+                }
+            ]
+        });
+        let canonical_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: "packet 015 failed before graph publication",
+                runtime_execution_mode: json!({
+                    "execution_boundary": "tool_bus",
+                    "workflow_runner": "tokio_task",
+                    "planner_lifecycle": "supervised_actor",
+                    "executor_lifecycle": "supervised_actor",
+                }),
+                planner_output: json!({
+                    "goal": "incident packet",
+                    "steps": 4,
+                }),
+                execution_plan: execution_plan.clone(),
+                step_results: vec![],
+                aggregated_result: json!({
+                    "error": "execution graph compile failed: Unsupported topology contract: unsupported planner role 'joiner'",
+                }),
+                status: "failed",
+            },
+        );
+        let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
+            "failed",
+            canonical_result.clone(),
+        ))
+        .expect("task result should serialize");
+        let mut record = sample_task_with_result(
+            json!({
+                "session_id": session_id,
+                "turn_index": 2,
+                "coordinator_agent_id": coordinator_agent_id,
+                "final_result": serde_json::to_value(canonical_result).expect("final result should serialize"),
+                "execution_plan": execution_plan,
+            }),
+            task_result,
+        );
+        record.task_id = *workflow_id.as_ref();
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("failed-before-graph workflows should synthesize a bounded autonomy status");
+
+        assert_eq!(recovered.graph.workflow_id, workflow_id);
+        assert_eq!(recovered.graph.state, GraphState::Failed);
+        assert_eq!(recovered.graph.branch_count, 3);
+        assert_eq!(recovered.graph.node_count, 4);
+        assert_eq!(recovered.topology.topology_kind, TopologyKind::Hybrid);
+        assert_eq!(recovered.topology.parallelism_width, 3);
+        assert_eq!(
+            recovered.topology.task_shape.kind,
+            TaskShapeKind::FanoutJoin
+        );
+        assert_eq!(recovered.session_id, Some(session_id));
+        assert_eq!(recovered.turn_index, Some(2));
+        assert_eq!(recovered.coordinator_agent_id, Some(coordinator_agent_id));
+        assert!(recovered
+            .conservative_reasons
+            .iter()
+            .any(|line| line.contains("workflow failed before graph publication")));
+
+        let preview = recovered
+            .result_preview
+            .expect("synthesized view should still expose the canonical result preview");
+        assert_eq!(preview.payload_location, "task.result");
+        assert_eq!(
+            preview.proof_outcome,
+            ProofOutcomeClassification::FailedBeforeGraph
+        );
+        assert_eq!(
+            preview.preview_text.as_deref(),
+            Some(
+                "execution graph compile failed: Unsupported topology contract: unsupported planner role 'joiner'"
+            )
+        );
     }
 
     #[test]

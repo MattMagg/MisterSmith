@@ -13,9 +13,10 @@ through a three-case proof matrix:
 The packet is materially working on the default live path. Task status, retained session state, and
 operator autonomy previews now carry a shared proof-outcome/result-projection contract for the
 success and collapse cases, and task plus session surfaces retain the same contract for the
-failure-visible case. The remaining gap is that `failed_before_graph` still does not materialize an
-autonomy status document; the task and session surfaces preserve the failure result, but the
-autonomy endpoint returns `404`.
+failure-visible case. At capture time, the remaining gap was that `failed_before_graph` still did
+not materialize an autonomy status document; the task and session surfaces preserved the failure
+result, but the autonomy endpoint returned `404`. See the `MS-95` follow-up below for the post-fix
+closure evidence.
 
 Artifacts:
 `docs/plans/artifacts/2026-03-20-packet-015-live-runtime-evaluation/`
@@ -170,18 +171,61 @@ Packet 015 is closed honestly for the core result-surface contract it set out to
 - autonomy inspection exposes bounded result preview plus provenance for completed graph and
   sequential-collapse outcomes
 
-The packet is not a full operator-proof closure for failure-visible autonomy parity yet. The live
-runtime still lacks an autonomy status document when graph compilation fails before publication.
+At capture time, the packet was not a full operator-proof closure for failure-visible autonomy
+parity yet. The live runtime still lacked an autonomy status document when graph compilation failed
+before publication. `MS-95` closes that specific gap; see the follow-up below.
 
 ## Remaining Limits
 
 - The stored previews are still compact payload-oriented previews, not a clean operator-written memo
   string. The final result is inspectable, but still closer to structured payload evidence than a
   polished human-facing answer surface.
-- `failed_before_graph` preserves task and session results but does not yet project a corresponding
-  autonomy status document.
+- Historical at capture time: `failed_before_graph` preserved task and session results but did not
+  yet project a corresponding autonomy status document. `MS-95` closes that bounded gap.
 - This evaluation stayed on the direct `openai_chatgpt` / `gpt-5.4` path and did not attempt any
   provider-routing, cross-host, or expanded external-agent scenarios.
+
+## MS-95 Follow-Up
+
+`MS-95` closes the bounded failure-visible parity gap without widening packet 015 scope.
+
+Deterministic validation:
+
+- `cargo test -p mister-smith-app`
+- new coverage: `recover_persisted_autonomy_status_synthesizes_failed_before_graph_without_snapshot`
+- `cargo build --workspace`
+
+Live validation:
+
+- temporary database: `mistersmith_ms95_status_parity_20260320`
+- HTTP port: `63130`
+- session id: `363cd681-cd55-44ca-b114-68b0862b49f0`
+- workflow id: `8b36cf13-d76f-4f50-9722-308a1fb33c29`
+- task status:
+  - `status=failed`
+  - `proof_outcome=failed_before_graph`
+  - `aggregated_result.error=planner execution failed: Ask operation timed out`
+- session inspect:
+  - `last_completed_workflow_id=8b36cf13-d76f-4f50-9722-308a1fb33c29`
+  - retained `last_assistant_result.status=failed`
+  - retained `last_assistant_result.assistant_result.proof_outcome=failed_before_graph`
+  - preview `planner execution failed: Ask operation timed out`
+- autonomy status:
+  - returned `200` instead of `404`
+  - `graph.state=Failed`
+  - `result_preview.proof_outcome=failed_before_graph`
+  - `result_preview.payload_location=task.result`
+  - preview `planner execution failed: Ask operation timed out`
+
+Artifacts:
+`docs/plans/artifacts/2026-03-20-ms-95-failed-before-graph-status-parity/`
+
+Interpretation:
+
+- the original March 20 gap is closed for the bounded `failed_before_graph` taxonomy
+- the live re-check exercised a planner-timeout pre-graph failure rather than the earlier
+  `unsupported planner role 'joiner'` compile error, so the historical capture above remains the
+  pre-fix reproduction for that exact failure string
 
 ## Cleanup
 

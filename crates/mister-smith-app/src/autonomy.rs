@@ -1,5 +1,6 @@
 //! Operator-facing autonomy status helpers.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
@@ -10,8 +11,10 @@ use axum::Json;
 use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{
-    AgentId, OperatorResultPreview, ProofOutcomeClassification, ResultProvenanceSummary, SessionId,
-    SessionRetainedResultView, TaskId, TaskResultView, UnifiedResultEnvelope,
+    AgentId, CoordinationPolicy, ExecutionGraphId, GraphState, OperatorResultPreview,
+    ProofOutcomeClassification, ResultProvenanceSummary, SessionId, SessionRetainedResultView,
+    TaskId, TaskResultView, TaskShapeClassification, TaskShapeKind, TopologyKind,
+    TopologyRationale, UnifiedResultEnvelope,
 };
 use mister_smith_events::autonomy::merge_operator_result_preview;
 use mister_smith_events::{
@@ -642,6 +645,70 @@ pub(crate) fn enrich_result_preview(
     }
 }
 
+pub(crate) fn synthesize_failed_before_graph_status(
+    workflow_id: TaskId,
+    metadata: &Value,
+    task_result: Option<&Value>,
+) -> Option<AutonomyStatusView> {
+    let canonical_result = task_result
+        .and_then(|value| canonical_result_from_value(value, Some("failed")))
+        .or_else(|| {
+            metadata
+                .get("final_result")
+                .and_then(|value| canonical_result_from_value(value, Some("failed")))
+        })?;
+
+    if canonical_result.workflow_id != workflow_id
+        || canonical_result.proof_outcome != ProofOutcomeClassification::FailedBeforeGraph
+    {
+        return None;
+    }
+
+    let plan_summary = failed_before_graph_plan_summary(&canonical_result);
+    let graph_id = ExecutionGraphId::from_uuid(*workflow_id.as_ref());
+
+    Some(AutonomyStatusView {
+        session_id: None,
+        turn_index: None,
+        coordinator_agent_id: None,
+        resume_provenance: None,
+        graph: mister_smith_events::ExecutionGraphSummary {
+            graph_id,
+            workflow_id,
+            state: GraphState::Failed,
+            branch_count: plan_summary.branch_count,
+            node_count: plan_summary.node_count,
+            active_topology: Some(plan_summary.topology_kind),
+        },
+        topology: mister_smith_events::TopologyPlanSummary {
+            graph_id,
+            topology_kind: plan_summary.topology_kind,
+            parallelism_width: plan_summary.parallelism_width,
+            task_shape: plan_summary.task_shape,
+            coordination_policy: plan_summary.coordination_policy,
+            rationale: plan_summary.rationale,
+            fallback_topology: Some(TopologyKind::Sequential),
+        },
+        team_sizing: None,
+        branches: vec![],
+        checkpoint_lineage: vec![],
+        memory_pressure: vec![],
+        routing_history: vec![],
+        step_routing_history: vec![],
+        result_preview: None,
+        interventions: vec![],
+        delegation_capabilities: vec![],
+        delegation_alerts: vec![],
+        external_capability_decisions: vec![],
+        profiles: vec![],
+        guard_decisions: vec![],
+        conservative_reasons: vec![
+            "workflow failed before graph publication".to_string(),
+            "autonomy status reconstructed from persisted canonical result".to_string(),
+        ],
+    })
+}
+
 pub(crate) fn retained_result_view(
     task_result: &Value,
     turn_index: u32,
@@ -690,6 +757,192 @@ fn operator_result_preview(
         payload_location: payload_location.to_string(),
         provenance_lines: result_preview_provenance(canonical_result, payload_location, view),
     }
+}
+
+struct FailedBeforeGraphPlanSummary {
+    branch_count: usize,
+    node_count: usize,
+    topology_kind: TopologyKind,
+    parallelism_width: usize,
+    coordination_policy: CoordinationPolicy,
+    task_shape: TaskShapeClassification,
+    rationale: TopologyRationale,
+}
+
+fn failed_before_graph_plan_summary(
+    canonical_result: &UnifiedResultEnvelope,
+) -> FailedBeforeGraphPlanSummary {
+    let steps = canonical_result
+        .execution_plan
+        .get("steps")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let node_count = steps.len();
+
+    let mut step_ids = Vec::new();
+    let mut dependencies_by_step = BTreeMap::<String, Vec<String>>::new();
+    let mut dependency_fanout = BTreeMap::<String, usize>::new();
+    let mut root_count = 0usize;
+    let mut has_join = false;
+
+    for (index, raw_step) in steps.iter().enumerate() {
+        let Some(step) = raw_step.as_object() else {
+            continue;
+        };
+        let step_id = step
+            .get("id")
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+            .unwrap_or_else(|| format!("step-{}", index + 1));
+        let dependencies = step
+            .get("depends_on")
+            .and_then(Value::as_array)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        if dependencies.is_empty() {
+            root_count += 1;
+        }
+        if dependencies.len() > 1 {
+            has_join = true;
+        }
+        for dependency in &dependencies {
+            *dependency_fanout.entry(dependency.clone()).or_insert(0) += 1;
+        }
+
+        step_ids.push(step_id.clone());
+        dependencies_by_step.insert(step_id, dependencies);
+    }
+
+    let max_depth = max_plan_depth(&step_ids, &dependencies_by_step);
+    let has_fanout = dependency_fanout.values().any(|count| *count > 1);
+    let branch_count = if root_count > 0 {
+        root_count
+    } else if node_count > 0 {
+        1
+    } else {
+        0
+    };
+    let parallelism_width = branch_count.max(1);
+    let topology_kind = if parallelism_width <= 1 {
+        TopologyKind::Sequential
+    } else if has_join {
+        TopologyKind::Hybrid
+    } else {
+        TopologyKind::Parallel
+    };
+    let coordination_policy = if parallelism_width <= 1 {
+        CoordinationPolicy::StrictSequence
+    } else {
+        CoordinationPolicy::Barrier
+    };
+    let task_shape_kind = if node_count <= 1 || (parallelism_width <= 1 && !has_join) {
+        TaskShapeKind::StrictChain
+    } else if has_join {
+        TaskShapeKind::FanoutJoin
+    } else if has_fanout && max_depth > 2 {
+        TaskShapeKind::HierarchicalFanout
+    } else if parallelism_width > 1 {
+        TaskShapeKind::ParallelFanout
+    } else {
+        TaskShapeKind::MixedGraph
+    };
+    let task_shape = TaskShapeClassification {
+        kind: task_shape_kind,
+        root_count,
+        max_parallel_width: parallelism_width,
+        max_depth,
+        has_join,
+        has_fanout,
+        structural_signals: vec![
+            format!("stored_plan_nodes:{node_count}"),
+            format!("stored_plan_roots:{root_count}"),
+            format!("stored_plan_depth:{max_depth}"),
+        ],
+    };
+    let rationale = TopologyRationale {
+        dependency_shape: format!("stored execution plan reconstructed with {node_count} node(s)"),
+        operational_signals: vec![
+            "workflow failed before graph publication".to_string(),
+            format!("proof_outcome={}", canonical_result.proof_outcome.as_str()),
+            format!(
+                "recorded_step_results={}",
+                canonical_result.step_results.len()
+            ),
+        ],
+        selected_for: "preserve bounded operator-visible parity from persisted failure metadata"
+            .to_string(),
+        fallback_reason: Some(
+            "graph compilation failed before a live autonomy snapshot could be published"
+                .to_string(),
+        ),
+    };
+
+    FailedBeforeGraphPlanSummary {
+        branch_count,
+        node_count,
+        topology_kind,
+        parallelism_width,
+        coordination_policy,
+        task_shape,
+        rationale,
+    }
+}
+
+fn max_plan_depth(
+    step_ids: &[String],
+    dependencies_by_step: &BTreeMap<String, Vec<String>>,
+) -> usize {
+    let mut memo = BTreeMap::<String, usize>::new();
+    let mut visiting = BTreeSet::<String>::new();
+
+    step_ids
+        .iter()
+        .map(|step_id| plan_step_depth(step_id, dependencies_by_step, &mut memo, &mut visiting))
+        .max()
+        .unwrap_or(0)
+}
+
+fn plan_step_depth(
+    step_id: &str,
+    dependencies_by_step: &BTreeMap<String, Vec<String>>,
+    memo: &mut BTreeMap<String, usize>,
+    visiting: &mut BTreeSet<String>,
+) -> usize {
+    if let Some(depth) = memo.get(step_id) {
+        return *depth;
+    }
+    if !visiting.insert(step_id.to_string()) {
+        return 1;
+    }
+
+    let depth = dependencies_by_step
+        .get(step_id)
+        .map(|dependencies| {
+            if dependencies.is_empty() {
+                1
+            } else {
+                1 + dependencies
+                    .iter()
+                    .map(|dependency| {
+                        plan_step_depth(dependency, dependencies_by_step, memo, visiting)
+                    })
+                    .max()
+                    .unwrap_or(0)
+            }
+        })
+        .unwrap_or(1);
+
+    visiting.remove(step_id);
+    memo.insert(step_id.to_string(), depth);
+    depth
 }
 
 fn assistant_result_payload(
