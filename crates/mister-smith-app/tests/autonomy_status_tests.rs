@@ -393,6 +393,39 @@ fn enrich_result_preview_prefers_task_result_projection() {
         .provenance_lines
         .iter()
         .any(|line| line.contains("routing history retained 1 decision(s)")));
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| line
+            .contains("session assistant_result derives from the canonical result object")));
+}
+
+#[test]
+fn enrich_result_preview_falls_back_to_metadata_final_result() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    let task_result = sample_task_result_view(
+        view.graph.workflow_id,
+        ProofOutcomeClassification::GraphFormedAndCompleted,
+    );
+    let metadata = serde_json::json!({
+        "final_result": task_result["result"].clone(),
+    });
+
+    autonomy::enrich_result_preview(&mut view, &metadata, None);
+
+    let preview = view
+        .result_preview
+        .expect("metadata.final_result should still produce an operator preview");
+    assert_eq!(preview.payload_location, "metadata.final_result");
+    assert_eq!(
+        preview.proof_outcome,
+        ProofOutcomeClassification::GraphFormedAndCompleted
+    );
+    assert_eq!(
+        preview.preview_text.as_deref(),
+        Some("bounded answer preview")
+    );
 }
 
 #[test]
@@ -436,6 +469,7 @@ fn render_status_surfaces_result_preview_block() {
             "graph formed and completed before final result publication".to_string(),
             "provider=openai_chatgpt model=gpt-5.4".to_string(),
             "canonical result stored in metadata.final_result".to_string(),
+            "session assistant_result derives from the canonical result object".to_string(),
         ],
     });
 
@@ -449,6 +483,7 @@ fn render_status_surfaces_result_preview_block() {
     assert!(rendered.contains("  - graph formed and completed before final result publication"));
     assert!(rendered.contains("  - provider=openai_chatgpt model=gpt-5.4"));
     assert!(rendered.contains("canonical result stored in metadata.final_result"));
+    assert!(rendered.contains("session assistant_result derives from the canonical result object"));
 }
 
 #[test]
