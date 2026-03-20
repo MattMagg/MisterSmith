@@ -21,7 +21,8 @@ use tracing::info;
 
 use crate::config::HttpTransportConfig;
 use crate::middleware::{
-    rate_limit_middleware, request_id_middleware, security_middleware, RateLimiter,
+    rate_limit_middleware, request_id_middleware, security_headers_middleware, security_middleware,
+    RateLimiter,
 };
 use crate::routes::{protected_api_router, public_router};
 use crate::websocket::WsEvent;
@@ -384,6 +385,7 @@ pub fn build_router(config: &HttpTransportConfig, state: AppState) -> Router {
     // Rate limiting must remain outermost to block floods of unauthenticated requests.
     let router = public_router()
         .merge(protected_api_router().layer(axum_mw::from_fn(security_middleware)))
+        .layer(axum_mw::from_fn(security_headers_middleware))
         .layer(axum_mw::from_fn(request_id_middleware));
 
     // Configure CORS based on allowed_origins.

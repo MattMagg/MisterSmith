@@ -152,6 +152,22 @@ fn rate_limited_response() -> Response {
     response
 }
 
+/// Security headers middleware.
+///
+/// Injects basic security headers (e.g., `X-Content-Type-Options: nosniff`)
+/// into all responses to protect against MIME sniffing.
+pub async fn security_headers_middleware(
+    request: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        axum::http::header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    response
+}
+
 /// Security middleware that delegates to the security crate when available.
 ///
 /// When the `security` feature is enabled and a `SecurityLayer` is present
