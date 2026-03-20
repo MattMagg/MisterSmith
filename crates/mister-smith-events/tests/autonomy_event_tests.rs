@@ -7,6 +7,7 @@ use mister_smith_core::{
     ProvenanceLink, ResultProvenanceSummary, RevocationState, TaskId, TaskShapeClassification,
     TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
+use mister_smith_events::autonomy::infer_proof_outcome_from_projection;
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
     CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, EventBus,
@@ -145,6 +146,144 @@ fn sample_result_preview(
     }
 }
 
+fn sample_graph_summary(
+    workflow_id: TaskId,
+    graph_id: ExecutionGraphId,
+    state: GraphState,
+    branch_count: usize,
+    node_count: usize,
+    active_topology: Option<TopologyKind>,
+) -> ExecutionGraphSummary {
+    ExecutionGraphSummary {
+        graph_id,
+        workflow_id,
+        state,
+        branch_count,
+        node_count,
+        active_topology,
+    }
+}
+
+fn sample_topology_summary(
+    graph_id: ExecutionGraphId,
+    topology_kind: TopologyKind,
+    parallelism_width: usize,
+    task_shape_kind: TaskShapeKind,
+) -> TopologyPlanSummary {
+    TopologyPlanSummary {
+        graph_id,
+        topology_kind,
+        parallelism_width,
+        task_shape: sample_task_shape(task_shape_kind),
+        coordination_policy: CoordinationPolicy::Mixed,
+        rationale: TopologyRationale {
+            dependency_shape: "proof matrix".to_string(),
+            operational_signals: vec!["packet-015".to_string()],
+            selected_for: "freeze proof outcome matrix".to_string(),
+            fallback_reason: None,
+        },
+        fallback_topology: Some(TopologyKind::Sequential),
+    }
+}
+
+fn sample_branch_summary(graph_id: ExecutionGraphId) -> BranchSummary {
+    BranchSummary {
+        branch_id: ExecutionBranchId::new(),
+        graph_id,
+        state: BranchState::Running,
+        assigned_agents: vec![AgentId::new()],
+        checkpoint_id: None,
+        recovery_strategy: BranchRecoveryStrategy::Resume,
+    }
+}
+
+fn sample_routing_summary(
+    workflow_id: TaskId,
+    graph_id: ExecutionGraphId,
+    branch_id: ExecutionBranchId,
+) -> RoutingDecisionSummary {
+    RoutingDecisionSummary {
+        graph_id,
+        branch_id,
+        selected_agent: AgentId::new(),
+        task_ids: vec![workflow_id],
+        recovery_strategy: BranchRecoveryStrategy::Resume,
+        checkpoint_id: None,
+        dependency_depth: 2,
+        budget_pressure: 35,
+        health_state: HealthState::Healthy,
+        profile_id: None,
+        rationale: vec!["multi-branch routing remained visible".to_string()],
+    }
+}
+
+async fn publish_projection(
+    event_bus: &EventBus,
+    graph: ExecutionGraphSummary,
+    topology: TopologyPlanSummary,
+    branches: Vec<BranchSummary>,
+    routing_history: Vec<RoutingDecisionSummary>,
+) {
+    event_bus
+        .publish(
+            AutonomyEvent::GraphUpdated(AutonomyEventEnvelope {
+                workflow_id: graph.workflow_id,
+                graph_id: Some(graph.graph_id),
+                branch_id: None,
+                payload: graph.clone(),
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::TopologySelected(AutonomyEventEnvelope {
+                workflow_id: graph.workflow_id,
+                graph_id: Some(graph.graph_id),
+                branch_id: None,
+                payload: topology,
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+
+    for branch in branches {
+        event_bus
+            .publish(
+                AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                    workflow_id: graph.workflow_id,
+                    graph_id: Some(graph.graph_id),
+                    branch_id: Some(branch.branch_id),
+                    payload: branch,
+                    operator_visible: true,
+                })
+                .into_event("autonomy-test"),
+            )
+            .await
+            .unwrap();
+    }
+
+    for routing in routing_history {
+        event_bus
+            .publish(
+                AutonomyEvent::RoutingDecisionRecorded(AutonomyEventEnvelope {
+                    workflow_id: graph.workflow_id,
+                    graph_id: Some(graph.graph_id),
+                    branch_id: Some(routing.branch_id),
+                    payload: routing,
+                    operator_visible: true,
+                })
+                .into_event("autonomy-test"),
+            )
+            .await
+            .unwrap();
+    }
+}
+
 #[test]
 fn autonomy_event_surfaces_compile_with_shared_trait_bounds() {
     assert_event_traits::<OperatorResultPreview>();
@@ -204,6 +343,18 @@ fn autonomy_event_roundtrips_and_converts_to_generic_event() {
         EventType::Autonomy(AutonomyEventType::TopologySelected)
     );
     assert!(generic.payload.is_object());
+}
+
+#[test]
+fn proof_outcome_classification_freezes_the_three_packet_labels() {
+    assert_eq!(
+        ProofOutcomeClassification::ALL.map(ProofOutcomeClassification::as_str),
+        [
+            "graph_formed_and_completed",
+            "collapsed_to_sequential",
+            "failed_before_graph",
+        ]
+    );
 }
 
 #[test]
@@ -801,6 +952,241 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         .conservative_reasons
         .iter()
         .any(|reason| reason.contains("control-plane state unavailable")));
+}
+
+#[tokio::test]
+async fn event_bus_aggregates_the_frozen_proof_outcome_matrix() {
+    let expected_labels = ProofOutcomeClassification::ALL.map(ProofOutcomeClassification::as_str);
+    assert_eq!(
+        expected_labels,
+        [
+            "graph_formed_and_completed",
+            "collapsed_to_sequential",
+            "failed_before_graph",
+        ]
+    );
+
+    let success_bus = EventBus::default();
+    let success_workflow_id = TaskId::new();
+    let success_graph_id = ExecutionGraphId::new();
+    let success_branch = sample_branch_summary(success_graph_id);
+    let success_graph = sample_graph_summary(
+        success_workflow_id,
+        success_graph_id,
+        GraphState::Completed,
+        2,
+        4,
+        Some(TopologyKind::Hybrid),
+    );
+    let success_topology = sample_topology_summary(
+        success_graph_id,
+        TopologyKind::Hybrid,
+        2,
+        TaskShapeKind::FanoutJoin,
+    );
+    let success_routing = sample_routing_summary(
+        success_workflow_id,
+        success_graph_id,
+        success_branch.branch_id,
+    );
+
+    publish_projection(
+        &success_bus,
+        success_graph,
+        success_topology.clone(),
+        vec![success_branch.clone()],
+        vec![success_routing.clone()],
+    )
+    .await;
+
+    let success_view = success_bus
+        .autonomy_status(&success_workflow_id)
+        .await
+        .expect("success projection should assemble");
+    assert_eq!(
+        infer_proof_outcome_from_projection(
+            &success_view.graph,
+            &success_view.topology,
+            &success_view.branches,
+            &success_view.routing_history,
+        ),
+        Some(ProofOutcomeClassification::GraphFormedAndCompleted)
+    );
+    assert_eq!(
+        success_view
+            .result_preview
+            .expect("success case should infer a result preview"),
+        OperatorResultPreview {
+            workflow_id: success_workflow_id,
+            proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+            preview_text: Some("workflow completed with 2 branch(es) across 4 node(s)".to_string()),
+            payload_location: "task.result".to_string(),
+            provenance_lines: vec![
+                "canonical result stored in metadata.final_result".to_string(),
+                "aggregated payload nested under metadata.aggregated_result".to_string(),
+                "full payload remains recoverable from task.result".to_string(),
+                format!(
+                    "projection observed graph state {:?} with topology {:?}",
+                    GraphState::Completed,
+                    TopologyKind::Hybrid
+                ),
+                "routing history retained 1 decision(s)".to_string(),
+            ],
+        }
+    );
+
+    let collapse_bus = EventBus::default();
+    let collapse_workflow_id = TaskId::new();
+    let collapse_graph_id = ExecutionGraphId::new();
+    let collapse_graph = sample_graph_summary(
+        collapse_workflow_id,
+        collapse_graph_id,
+        GraphState::Completed,
+        1,
+        1,
+        Some(TopologyKind::Sequential),
+    );
+    let collapse_topology = sample_topology_summary(
+        collapse_graph_id,
+        TopologyKind::Sequential,
+        1,
+        TaskShapeKind::FanoutJoin,
+    );
+
+    publish_projection(
+        &collapse_bus,
+        collapse_graph,
+        collapse_topology,
+        vec![],
+        vec![],
+    )
+    .await;
+
+    let collapse_view = collapse_bus
+        .autonomy_status(&collapse_workflow_id)
+        .await
+        .expect("collapse projection should assemble");
+    assert_eq!(
+        infer_proof_outcome_from_projection(
+            &collapse_view.graph,
+            &collapse_view.topology,
+            &collapse_view.branches,
+            &collapse_view.routing_history,
+        ),
+        Some(ProofOutcomeClassification::CollapsedToSequential)
+    );
+    let collapse_preview = collapse_view
+        .result_preview
+        .as_ref()
+        .expect("collapsed case should infer a result preview");
+    assert_eq!(
+        collapse_preview.proof_outcome,
+        ProofOutcomeClassification::CollapsedToSequential
+    );
+    assert_eq!(
+        collapse_preview.preview_text.clone(),
+        Some("completed with a sequential execution path".to_string())
+    );
+
+    let failure_bus = EventBus::default();
+    let failure_workflow_id = TaskId::new();
+    let failure_graph_id = ExecutionGraphId::new();
+    let failure_graph = sample_graph_summary(
+        failure_workflow_id,
+        failure_graph_id,
+        GraphState::Failed,
+        0,
+        0,
+        None,
+    );
+    let failure_topology = sample_topology_summary(
+        failure_graph_id,
+        TopologyKind::Sequential,
+        1,
+        TaskShapeKind::StrictChain,
+    );
+
+    publish_projection(
+        &failure_bus,
+        failure_graph,
+        failure_topology,
+        vec![],
+        vec![],
+    )
+    .await;
+
+    let failure_view = failure_bus
+        .autonomy_status(&failure_workflow_id)
+        .await
+        .expect("failed-before-graph projection should assemble");
+    assert_eq!(
+        infer_proof_outcome_from_projection(
+            &failure_view.graph,
+            &failure_view.topology,
+            &failure_view.branches,
+            &failure_view.routing_history,
+        ),
+        Some(ProofOutcomeClassification::FailedBeforeGraph)
+    );
+    let failure_preview = failure_view
+        .result_preview
+        .as_ref()
+        .expect("failed-before-graph case should infer a result preview");
+    assert_eq!(
+        failure_preview.proof_outcome,
+        ProofOutcomeClassification::FailedBeforeGraph
+    );
+    assert_eq!(
+        failure_preview.preview_text.clone(),
+        Some("workflow failed before graph formation".to_string())
+    );
+}
+
+#[tokio::test]
+async fn event_bus_keeps_failed_visible_graph_runs_in_the_frozen_failure_class() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch = sample_branch_summary(graph_id);
+    let graph = sample_graph_summary(
+        workflow_id,
+        graph_id,
+        GraphState::Failed,
+        2,
+        3,
+        Some(TopologyKind::Hybrid),
+    );
+    let topology =
+        sample_topology_summary(graph_id, TopologyKind::Hybrid, 2, TaskShapeKind::FanoutJoin);
+    let routing = sample_routing_summary(workflow_id, graph_id, branch.branch_id);
+
+    publish_projection(&event_bus, graph, topology, vec![branch], vec![routing]).await;
+
+    let view = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .expect("projection should still assemble for failed visible-graph runs");
+
+    assert_eq!(
+        infer_proof_outcome_from_projection(
+            &view.graph,
+            &view.topology,
+            &view.branches,
+            &view.routing_history,
+        ),
+        Some(ProofOutcomeClassification::FailedBeforeGraph)
+    );
+    let preview = view
+        .result_preview
+        .expect("failed visible-graph runs should stay in the frozen failure class");
+    assert_eq!(
+        preview.proof_outcome,
+        ProofOutcomeClassification::FailedBeforeGraph
+    );
+    assert_eq!(
+        preview.preview_text.as_deref(),
+        Some("workflow failed before graph formation")
+    );
 }
 
 #[tokio::test]

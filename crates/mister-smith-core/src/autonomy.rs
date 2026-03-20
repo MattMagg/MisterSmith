@@ -140,7 +140,15 @@ pub enum ProofOutcomeClassification {
 }
 
 impl ProofOutcomeClassification {
+    /// Frozen proof-outcome matrix for packet 015 before runtime proof-path work expands.
+    pub const ALL: [Self; 3] = [
+        Self::GraphFormedAndCompleted,
+        Self::CollapsedToSequential,
+        Self::FailedBeforeGraph,
+    ];
+
     /// Return the stable contract label for this proof classification.
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::GraphFormedAndCompleted => "graph_formed_and_completed",

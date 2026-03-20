@@ -380,6 +380,35 @@ fn enrich_result_preview_prefers_task_result_projection() {
 }
 
 #[test]
+fn classify_proof_outcome_keeps_failed_runs_in_the_single_failure_class() {
+    let execution_plan = serde_json::json!({
+        "steps": [
+            {
+                "id": "step-1"
+            },
+            {
+                "id": "step-2"
+            }
+        ]
+    });
+    let step_results = vec![serde_json::json!({
+        "task_id": TaskId::new(),
+        "result": {
+            "summary": "partial branch output"
+        }
+    })];
+
+    assert_eq!(
+        autonomy::classify_proof_outcome(
+            "failed",
+            Some(&execution_plan),
+            Some(step_results.as_slice()),
+        ),
+        ProofOutcomeClassification::FailedBeforeGraph
+    );
+}
+
+#[test]
 fn render_status_surfaces_result_preview_block() {
     let (mut view, _, _) = sample_view();
     view.result_preview = Some(mister_smith_core::OperatorResultPreview {
