@@ -249,9 +249,22 @@ pub enum ExternalCapabilityDecisionOutcome {
     Rejected,
 }
 
+/// Runtime surface that emitted an external capability boundary decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalCapabilityDecisionSurface {
+    /// Delegated external action at the ToolBus runtime boundary.
+    ToolBus,
+    /// Accepted delegated task ingress at `POST /api/v1/tasks`.
+    TaskIngress,
+}
+
 /// Operator-visible explanation of one external capability boundary decision.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalCapabilityDecisionSummary {
+    /// Runtime surface that emitted the boundary decision, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boundary_surface: Option<ExternalCapabilityDecisionSurface>,
     /// Branch that exercised the external capability boundary, when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch_id: Option<ExecutionBranchId>,

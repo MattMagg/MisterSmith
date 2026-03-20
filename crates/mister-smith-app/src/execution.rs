@@ -1412,6 +1412,7 @@ impl RuntimeTaskService {
             return;
         };
         crate::autonomy::enrich_session_linkage(&mut view, metadata);
+        crate::autonomy::enrich_accepted_task_ingress_continuity(&mut view, metadata);
         crate::autonomy::enrich_step_routing_history(&mut view, metadata);
         crate::autonomy::enrich_result_preview(&mut view, metadata, task_result);
         persist_autonomy_status(metadata, &view);
@@ -1557,6 +1558,7 @@ fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStat
         )?
     };
     crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
+    crate::autonomy::enrich_accepted_task_ingress_continuity(&mut view, &record.metadata);
     crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
     crate::autonomy::enrich_result_preview(&mut view, &record.metadata, record.result.as_ref());
     Some(view)
@@ -2119,9 +2121,47 @@ mod tests {
     }
 
     #[test]
+    fn recover_persisted_autonomy_status_synthesizes_task_ingress_decision_from_frozen_metadata() {
+        let view = sample_autonomy_view();
+        let delegation = sample_external_delegation();
+        let mut metadata = json!({
+            "external_delegation": delegation.clone(),
+            ACCEPTED_TASK_INGRESS_METADATA_KEY: accepted_task_ingress_metadata(&delegation),
+        });
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should synthesize task-ingress continuity");
+        let summary = recovered
+            .external_capability_decisions
+            .first()
+            .expect("accepted task ingress should surface as one boundary decision");
+
+        assert_eq!(
+            summary.boundary_surface,
+            Some(mister_smith_events::ExternalCapabilityDecisionSurface::TaskIngress)
+        );
+        assert_eq!(summary.outcome, ExternalCapabilityDecisionOutcome::Allowed);
+        assert_eq!(summary.branch_id, None);
+        assert_eq!(
+            summary.action_id.as_deref(),
+            Some("tool:app.workflow#execute")
+        );
+        assert!(summary
+            .rationale
+            .iter()
+            .any(|line| line.contains("POST /api/v1/tasks")));
+        assert!(summary.rationale.iter().any(|line| {
+            line.contains("accepted_task_ingress sourced from external_delegation")
+        }));
+    }
+
+    #[test]
     fn recover_persisted_autonomy_status_preserves_allowed_external_capability_decision_snapshot() {
         let mut view = sample_autonomy_view();
         view.external_capability_decisions = vec![ExternalCapabilityDecisionSummary {
+            boundary_surface: Some(mister_smith_events::ExternalCapabilityDecisionSurface::ToolBus),
             branch_id: Some(ExecutionBranchId::new()),
             capability_id: Some(CapabilityId::new()),
             capability_descriptor_id: Some("tool:app.workflow".to_string()),
@@ -2179,6 +2219,7 @@ mod tests {
     {
         let mut view = sample_autonomy_view();
         view.external_capability_decisions = vec![ExternalCapabilityDecisionSummary {
+            boundary_surface: Some(mister_smith_events::ExternalCapabilityDecisionSurface::ToolBus),
             branch_id: Some(ExecutionBranchId::new()),
             capability_id: Some(CapabilityId::new()),
             capability_descriptor_id: Some("tool:app.other".to_string()),

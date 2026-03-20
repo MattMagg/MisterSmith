@@ -7,7 +7,9 @@ use mister_smith_core::{
     AgentId, AuthorityPrincipal, DelegationScope, Tool, ToolCapabilities, ToolError, ToolId,
     ToolSchema,
 };
-use mister_smith_events::{AutonomyEvent, EventBus, ExternalCapabilityDecisionOutcome};
+use mister_smith_events::{
+    AutonomyEvent, EventBus, ExternalCapabilityDecisionOutcome, ExternalCapabilityDecisionSurface,
+};
 use mister_smith_security::audit::{
     events::{AuditEventType, AuditOutcome},
     AuditLogger,
@@ -665,6 +667,10 @@ async fn invoke_publishes_allowed_external_capability_decision_for_privileged_to
 
     let decision = recv_external_capability_decision(&mut rx).await;
     assert_eq!(decision.outcome, ExternalCapabilityDecisionOutcome::Allowed);
+    assert_eq!(
+        decision.boundary_surface,
+        Some(ExternalCapabilityDecisionSurface::ToolBus)
+    );
     assert_eq!(decision.branch_id, Some(branch_id));
     assert!(decision.observed_at.is_some());
     assert_eq!(
