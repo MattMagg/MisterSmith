@@ -1536,16 +1536,17 @@ fn coordinator_id_from_metadata(metadata: &Value) -> Option<AgentId> {
 }
 
 fn planner_output_supports_explicit_runtime_graph(steps: &[Value]) -> bool {
-    steps.iter().any(|raw_step| {
-        raw_step.as_object().is_some_and(|step| {
-            step.get("branch").and_then(Value::as_str).is_some()
-                || step
-                    .get("depends_on")
-                    .and_then(Value::as_array)
-                    .map(|dependencies| !dependencies.is_empty())
-                    .unwrap_or(false)
+    steps.len() > 1
+        && steps.iter().any(|raw_step| {
+            raw_step.as_object().is_some_and(|step| {
+                step.get("branch").and_then(Value::as_str).is_some()
+                    || step
+                        .get("depends_on")
+                        .and_then(Value::as_array)
+                        .map(|dependencies| !dependencies.is_empty())
+                        .unwrap_or(false)
+            })
         })
-    })
 }
 
 fn next_root_branch_label(index: usize) -> String {
@@ -2315,19 +2316,15 @@ fn normalize_runtime_plan(goal: &str, context: &Value, raw_plan: Value) -> Value
         runtime_steps
     };
 
-    let topology_hint = plan
-        .get("topology_hint")
-        .and_then(Value::as_str)
-        .map(ToString::to_string)
-        .or_else(|| {
-            (!preserve_explicit_graph).then(|| {
-                if runtime_steps.len() >= 3 {
-                    "hybrid".to_string()
-                } else {
-                    "sequential".to_string()
-                }
-            })
-        });
+    let topology_hint = if preserve_explicit_graph {
+        plan.get("topology_hint")
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+    } else if runtime_steps.len() >= 3 {
+        Some("hybrid".to_string())
+    } else {
+        Some("sequential".to_string())
+    };
 
     if let Some(object) = plan.as_object_mut() {
         object.insert("goal".to_string(), json!(goal));
@@ -2536,6 +2533,36 @@ mod runtime_plan_tests {
                         "step": 4,
                         "action": "answer",
                         "description": "one bounded answer"
+                    }
+                ]
+            }),
+        );
+
+        let steps = plan["steps"].as_array().expect("normalized steps array");
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0]["id"], json!("single-step"));
+        assert_eq!(steps[0]["step"], json!(1));
+        assert_eq!(steps[0]["branch"], json!("branch-a"));
+        assert_eq!(steps[0]["depends_on"], json!([]));
+        assert_eq!(plan["topology_hint"], json!("sequential"));
+        assert_eq!(plan["runtime_normalized"], json!(false));
+    }
+
+    #[test]
+    fn normalize_runtime_plan_keeps_single_explicit_branch_step_sequential() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "topology_hint": "parallel",
+                "steps": [
+                    {
+                        "id": "single-step",
+                        "step": 4,
+                        "action": "answer",
+                        "description": "one bounded answer",
+                        "branch": "research",
+                        "depends_on": ["earlier-step"]
                     }
                 ]
             }),
