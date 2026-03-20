@@ -412,6 +412,7 @@ async fn step_routing_benchmark_harness_is_repeatable() {
 #[test]
 fn proof_matrix_harness_replays_success_collapse_and_failure_visible_cases() {
     let expected_labels = ProofOutcomeClassification::ALL.map(ProofOutcomeClassification::as_str);
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     assert_eq!(
         expected_labels,
         [
@@ -459,7 +460,7 @@ fn proof_matrix_harness_replays_success_collapse_and_failure_visible_cases() {
 
     for (run, expected) in cases {
         assert!(
-            Path::new(run.evidence_note_path).is_file(),
+            repo_root.join(run.evidence_note_path).is_file(),
             "missing evidence note for {}",
             run.workload_class
         );
