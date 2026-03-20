@@ -219,14 +219,15 @@ Instructions:
    - if the current session already has explicit operator review/merge authority, continue straight
      into the `Human Review` checklist in the same session instead of waiting for another pass
 
-### Merge posture for GitHub automation
+### Merge posture without GitHub Actions
 
-- Treat `.github/workflows/ci.yml` (`Check`) as the substantive repository
-  merge gate.
-- Treat optional `@claude` interactions from `.github/workflows/claude.yml` as
-  manual assistance, not as required review automation.
-- Merge may proceed only when required repository validation is green and there
-  are no unresolved review findings.
+- GitHub Actions are intentionally disabled in this repository; do not block on
+  hosted `Check` or `@claude` workflow results.
+- Treat repo-local validation evidence recorded in the branch, PR, and workpad
+  as the substantive merge gate.
+- Merge may proceed only when local validation is current and there are no
+  unresolved review findings from human or delegated review surfaces such as
+  CodeRabbit.
 
 ## Step 3: Human review and merge handling
 
