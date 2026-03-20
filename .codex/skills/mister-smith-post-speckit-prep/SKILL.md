@@ -19,6 +19,7 @@ Trigger this skill when the user wants any of the following after a packet alrea
 - materialize the packet into Linear
 - preserve blocker chains from `tasks.md`
 - stage only the honest runnable slices for the watched queue
+- reconcile status-bearing docs, notes, logs, readmes, and artifact indexes so they match the landed packet
 - stop at “ready for Symphony”
 - optionally launch Symphony only if the user explicitly asks
 
@@ -53,6 +54,7 @@ Optional:
 - Verify first, mutate second.
 - Use [$mister-smith-git-closure](/Users/macmain/MisterSmith/.codex/skills/mister-smith-git-closure/SKILL.md) for git closure.
 - Use [$stage-mister-smith-phase](/Users/macmain/MisterSmith/.codex/skills/stage-mister-smith-phase/SKILL.md) plus Smith MCP tools for packet-to-Linear translation and queue staging.
+- Check and refresh status-bearing repo docs, notes, logs, readmes, and artifact indexes before calling the packet closed.
 - Do not widen into implementation.
 - Do not stage blocked slices just to keep Symphony busy.
 - Do not touch unrelated worktrees, PRs, or branches.
@@ -73,6 +75,20 @@ Read, in order:
 7. `<packet>/plan.md`
 8. `<packet>/tasks.md`
 9. `<packet>/analyze.md`
+
+Also inspect the current status-bearing repo surfaces that may need reconciliation when the packet
+lands:
+
+- `README.md`
+- `ROADMAP.md`
+- `CLAUDE.md`
+- `docs/current-state.md`
+- `docs/ms_recent_context.md`
+- the active forward checkpoint note
+- relevant packet evaluation or closure notes under `docs/plans/`
+- relevant `docs/plans/artifacts/.../README.md` files for proof bundles
+- `WORKFLOW.md` and `docs/linear/LINEAR.md` only when the packet changed workflow contract or
+  queue semantics
 
 Then audit local state:
 
@@ -98,6 +114,50 @@ If current repo truth shows the packet is stale or materially wrong:
 - stop
 - report the mismatch
 - do not force closure or Linear materialization
+
+### 2a. Status-surface audit
+
+Before declaring the packet closed, identify all status-bearing docs, notes, logs, readmes, and
+artifact indexes that mention the packet, its issue lineage, or “current” repo state.
+
+Minimum audit targets:
+
+- repo entry points:
+  - `README.md`
+  - `ROADMAP.md`
+  - `CLAUDE.md`
+- current-state routers:
+  - `docs/current-state.md`
+  - `docs/ms_recent_context.md`
+  - the active forward checkpoint note
+- packet proof or closure notes:
+  - packet evaluation or closure notes under `docs/plans/`
+  - any follow-up note that became current authority
+- artifact indexes:
+  - `docs/plans/artifacts/.../README.md` for logs, JSON captures, screenshots, or proof bundles
+- workflow docs:
+  - `WORKFLOW.md`
+  - `docs/linear/LINEAR.md`
+  - only when the packet changed development workflow contract
+
+What to verify:
+
+- no status-bearing doc still describes the packet as upcoming after it landed
+- no doc claims a surface is still missing when it was landed by the packet
+- no doc claims runtime proof or implementation happened when the packet stopped at planning-only or
+  deterministic-only proof
+- packet numbers, issue identifiers, and closure state are consistent
+- artifact bundles have an index README instead of leaving raw files unframed
+
+Useful search pattern:
+
+```sh
+rg -n "Status:|Current State|Current Direction|What Is Planned Next|packet 0|MS-" \
+  README.md ROADMAP.md CLAUDE.md docs specs
+```
+
+If the landed packet changed current repo truth, update the affected status surfaces in the same
+closure session unless the user explicitly narrows scope.
 
 ### 3. Git closure
 
@@ -168,7 +228,25 @@ If there are no runnable slices yet:
 - stop
 - report that clearly
 
-### 6. Symphony readiness
+### 6. Repo-status reconciliation
+
+Before stopping, update the status-bearing docs and artifact indexes identified in the status audit
+when the landed packet changed what is true on `main`.
+
+Rules:
+
+- update only the surfaces actually affected by the packet
+- keep historical notes honest instead of silently rewriting history
+- if a packet produced live proof artifacts, ensure the artifact directory has a readable
+  `README.md` explaining what the files are and how they relate to the packet
+- if a note became authority, point the router docs to it
+
+Validation:
+
+- narrow `markdownlint` on every changed doc or skill file
+- `git diff --check`
+
+### 7. Symphony readiness
 
 Default stop point:
 
@@ -198,6 +276,7 @@ Always include:
 - child slice identifiers created
 - blocker-chain summary
 - which slices were staged into the watched queue
+- which status-bearing docs or artifact indexes were updated
 - whether Symphony was launched or intentionally not launched
 - any blockers preventing the next execution stage
 
@@ -233,7 +312,8 @@ By the end of this session, you must have:
 4. synchronized the packet into Linear as one parent epic issue plus child slices
 5. preserved blocker chains and placed slices in the correct project and state
 6. staged only the honest runnable slices into the watched queue for Symphony
-7. stopped with the repo clean and with a clear report of what is now ready for Symphony
+7. reconciled status-bearing docs, notes, logs, readmes, and artifact indexes so they reflect the current state honestly
+8. stopped with the repo clean and with a clear report of what is now ready for Symphony
 
 ## Core Rules
 
@@ -243,6 +323,7 @@ By the end of this session, you must have:
 - Use the existing packet as the source of truth. Do not rewrite scope unless current repo truth proves the packet is wrong.
 - Use [$mister-smith-git-closure](/Users/macmain/MisterSmith/.codex/skills/mister-smith-git-closure/SKILL.md) for git closure.
 - Use [$stage-mister-smith-phase](/Users/macmain/MisterSmith/.codex/skills/stage-mister-smith-phase/SKILL.md) plus Smith control-plane tools for translating and staging work.
+- identify and refresh all status-bearing docs, notes, logs, readmes, and artifact indexes touched by the packet so they match the landed repo truth
 - Do not stage blocked slices just to keep Symphony busy.
 - Do not widen into implementation, provider work, JetStream KV work, or unrelated cleanup.
 - Do not touch unrelated worktrees, PRs, or branches.
@@ -260,6 +341,18 @@ Read these in order:
 7. `<PACKET_PATH>/plan.md`
 8. `<PACKET_PATH>/tasks.md`
 9. `<PACKET_PATH>/analyze.md`
+
+Also inspect the status-bearing repo surfaces that may need updates:
+
+- `README.md`
+- `ROADMAP.md`
+- `CLAUDE.md`
+- `docs/current-state.md`
+- `docs/ms_recent_context.md`
+- `<FORWARD_CHECKPOINT_PATH>`
+- relevant packet closure or evaluation notes under `docs/plans/`
+- relevant `docs/plans/artifacts/.../README.md` files
+- `WORKFLOW.md` and `docs/linear/LINEAR.md` when workflow contract changed
 
 Then audit current local state:
 
@@ -280,6 +373,21 @@ Run the narrow validation for this packet only.
 
 If current repo truth shows the packet is stale or materially wrong, stop and report that instead
 of forcing closure.
+
+## Phase 1a: Status Audit
+
+Before closure, audit all status-bearing docs, readmes, instructions, notes, logs, and artifact
+indexes that mention the packet, issue lineage, or current repo direction.
+
+Verify:
+
+- they do not describe landed packet work as still upcoming
+- they do not omit newly landed proof or closure notes
+- they do not claim proof or implementation happened when it did not
+- packet numbers, issue identifiers, and closure state are consistent
+- raw logs or proof bundles are indexed by a readable artifact `README.md`
+
+If the packet changed current repo truth, update those surfaces in the same session.
 
 ## Phase 2: Git Closure
 
@@ -337,7 +445,17 @@ Rules:
 
 If there are no runnable slices yet, stop and report that clearly.
 
-## Phase 5: Symphony Readiness
+## Phase 5: Repo-Status Reconciliation
+
+Before stopping, update the docs, notes, logs, readmes, and artifact indexes identified in the
+status audit.
+
+Use narrow validation:
+
+- `markdownlint-cli2` on every changed doc
+- `git diff --check`
+
+## Phase 6: Symphony Readiness
 
 Do not start implementation work automatically unless explicitly instructed to do so.
 
@@ -368,6 +486,7 @@ Your final response must include:
 - child slice identifiers created
 - blocker-chain summary
 - which slices were staged into the watched queue
+- which status-bearing docs or artifact indexes were updated
 - whether Symphony was launched or intentionally not launched
 - any blockers that prevent the next execution stage
 
