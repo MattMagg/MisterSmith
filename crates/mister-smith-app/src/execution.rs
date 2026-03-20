@@ -19,8 +19,9 @@ use mister_smith_agents::scheduler::{
 };
 use mister_smith_agents::{AgentConfig, Orchestrator, ToolBus, TopologyCompiler, TopologySignals};
 use mister_smith_core::{
-    AgentId, AgentType, BranchState, EscalationPolicy, GraphState, GuardTarget, NodeState,
-    SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema,
+    AgentId, AgentType, BranchState, EscalationPolicy, ExternalDelegationEnvelope, GraphState,
+    GuardTarget, NodeState, SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId,
+    ToolSchema,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -51,6 +52,8 @@ pub(crate) const MODEL_ID: &str = "gpt-5.4";
 const WORKFLOW_STREAM: &str = "mister_smith_workflows";
 const WORKFLOW_SUBJECT_PATTERN: &str = "workflow.>";
 const AUTONOMY_STATUS_METADATA_KEY: &str = "autonomy_status";
+const ACCEPTED_TASK_INGRESS_METADATA_KEY: &str = "accepted_task_ingress";
+const TASK_INGRESS_REQUEST_SURFACE: &str = "POST /api/v1/tasks";
 const WORKFLOW_TOOL_NAMESPACE: &str = "workflow";
 const WORKFLOW_EXECUTE_STEP_TOOL: &str = "execute_step";
 
@@ -1501,9 +1504,39 @@ fn initial_metadata(
             "external_delegation",
             serde_json::to_value(delegation).unwrap_or(Value::Null),
         );
+
+        if request.conversation.is_none() {
+            put_metadata(
+                &mut metadata,
+                ACCEPTED_TASK_INGRESS_METADATA_KEY,
+                accepted_task_ingress_metadata(delegation),
+            );
+        }
     }
 
     metadata
+}
+
+fn accepted_task_ingress_metadata(delegation: &ExternalDelegationEnvelope) -> Value {
+    let action = delegation.action.as_ref();
+
+    json!({
+        "request_surface": TASK_INGRESS_REQUEST_SURFACE,
+        "source_metadata_key": "external_delegation",
+        "capability_id": delegation.capability.capability_id,
+        "capability_descriptor_id": delegation.capability.descriptor_id,
+        "action_descriptor_id": action.map(|action| action.descriptor_id.clone()),
+        "action_id": action.map(|action| action.action_id.clone()),
+        "action_title": action.map(|action| action.title.clone()),
+        "scope": delegation.capability.scope,
+        "required_scope": action.and_then(|action| action.required_scope),
+        "policy_action": action.map(|action| action.policy.action.clone()),
+        "policy_resource": action.map(|action| action.policy.resource.clone()),
+        "policy_scope": action.map(|action| action.policy.scope.clone()),
+        "policy_resource_id": action.and_then(|action| action.policy.resource_id.clone()),
+        "revocation_state": delegation.capability.revocation_state,
+        "chain_depth": delegation.provenance.links.len(),
+    })
 }
 
 fn persist_autonomy_status(metadata: &mut Value, view: &AutonomyStatusView) {
@@ -1982,6 +2015,87 @@ mod tests {
         assert_eq!(
             metadata["external_delegation"]["action"]["revocation_key"],
             "tool:app.workflow#execute"
+        );
+    }
+
+    #[test]
+    fn initial_metadata_persists_accepted_task_ingress_continuity_for_delegated_http_submission() {
+        let delegation = sample_external_delegation();
+        let request = TaskSubmissionRequest {
+            description: "delegated workflow".to_string(),
+            agent_type: None,
+            priority: Some("high".to_string()),
+            conversation: None,
+            delegation: Some(delegation.clone()),
+        };
+
+        let metadata = initial_metadata(&request, AgentId::new(), &[], "queued");
+        let accepted = metadata
+            .get(ACCEPTED_TASK_INGRESS_METADATA_KEY)
+            .expect("delegated HTTP submission should persist accepted task ingress continuity");
+
+        assert_eq!(
+            accepted["request_surface"],
+            json!(TASK_INGRESS_REQUEST_SURFACE)
+        );
+        assert_eq!(
+            accepted["source_metadata_key"],
+            json!("external_delegation")
+        );
+        assert_eq!(
+            accepted["capability_id"],
+            json!(delegation.capability.capability_id)
+        );
+        assert_eq!(
+            accepted["capability_descriptor_id"],
+            json!(delegation.capability.descriptor_id)
+        );
+        assert_eq!(
+            accepted["action_id"],
+            json!(delegation
+                .action
+                .as_ref()
+                .map(|action| action.action_id.clone()))
+        );
+        assert_eq!(
+            accepted["policy_resource_id"],
+            json!(delegation
+                .action
+                .as_ref()
+                .and_then(|action| action.policy.resource_id.clone()))
+        );
+        assert_eq!(
+            accepted["chain_depth"],
+            json!(delegation.provenance.links.len())
+        );
+    }
+
+    #[test]
+    fn initial_metadata_keeps_accepted_task_ingress_scope_frozen_to_http_task_submissions() {
+        let request = TaskSubmissionRequest {
+            description: "delegated session turn".to_string(),
+            agent_type: None,
+            priority: Some("high".to_string()),
+            conversation: Some(mister_smith_http::server::ConversationTurnContext {
+                session_id: SessionId::new(),
+                turn_index: 1,
+                coordinator_agent_id: AgentId::new(),
+                retained_context: json!({
+                    "transcript_summary": []
+                }),
+            }),
+            delegation: Some(sample_external_delegation()),
+        };
+
+        let metadata = initial_metadata(&request, AgentId::new(), &[], "queued");
+
+        assert!(
+            metadata.get("external_delegation").is_some(),
+            "raw delegation context should still persist for session continuity"
+        );
+        assert!(
+            metadata.get(ACCEPTED_TASK_INGRESS_METADATA_KEY).is_none(),
+            "accepted task ingress continuity must remain frozen to POST /api/v1/tasks"
         );
     }
 
