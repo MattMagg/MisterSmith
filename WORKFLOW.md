@@ -219,17 +219,14 @@ Instructions:
    - if the current session already has explicit operator review/merge authority, continue straight
      into the `Human Review` checklist in the same session instead of waiting for another pass
 
-### Merge posture for Claude review automation
+### Merge posture for GitHub automation
 
-- Treat `.github/workflows/ci.yml` (`Check`) and the other required repository validation checks as the substantive merge gate.
-- Treat `.github/workflows/claude-code-review.yml` as advisory automation.
-  Only treat a `claude-review` failure as advisory when the log
-  shows the known SDK crash signature (`SDK execution error:
-  Error: Claude Code process exited with code 1`) and the PR does
-  not change that workflow or its plugin configuration.
-- Merge may proceed only when required repository validation is green and there are no unresolved
-  review findings.
-- Otherwise, treat a `claude-review` failure as potentially repo-local until the workflow change or failure mode is reviewed.
+- Treat `.github/workflows/ci.yml` (`Check`) as the substantive repository
+  merge gate.
+- Treat optional `@claude` interactions from `.github/workflows/claude.yml` as
+  manual assistance, not as required review automation.
+- Merge may proceed only when required repository validation is green and there
+  are no unresolved review findings.
 
 ## Step 3: Human review and merge handling
 
