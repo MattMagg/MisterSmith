@@ -12,7 +12,7 @@ updated: 2026-03-20
 > **Current Action**: Research phase complete. Use
 > `docs/current-state.md` for the current repo-wide overview,
 > `docs/plans/2026-03-19-central-development-checkpoint.md` for forward-development authority, and
-> `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md` for
+> `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md` for
 > the packet-015 closure proof.
 
 ## Historical March 16 Direction

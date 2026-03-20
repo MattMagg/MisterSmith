@@ -10,7 +10,7 @@ evaluation pass.
 
 These files support the packet-015 closure note in:
 
-- `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
+- `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
 
 ## Contents
 

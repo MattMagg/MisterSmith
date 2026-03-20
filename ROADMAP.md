@@ -17,7 +17,7 @@ plans under [`docs/plans/`](docs/plans/). The current post-Phase-10 repo posture
 [`docs/current-state.md`](docs/current-state.md),
 [`docs/plans/2026-03-19-central-development-checkpoint.md`](docs/plans/2026-03-19-central-development-checkpoint.md),
 and
-[`docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`](docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md).
+[`docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`](docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md).
 Use those notes for what is live on the default runtime path, what packet 015 closed, and what
 still remains bounded next.
 

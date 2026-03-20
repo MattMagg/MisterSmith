@@ -31,7 +31,7 @@ Document roles in brief:
 
 - `docs/current-state.md`: current repo and OS state
 - `docs/plans/2026-03-19-central-development-checkpoint.md`: current forward-development checkpoint
-- `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`:
+- `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`:
   packet-015 closure evidence
 - `WORKFLOW.md` and `docs/linear/LINEAR.md`: development control-plane contract
 - `ROADMAP.md`: architectural build map
@@ -51,7 +51,7 @@ the Mister Smith OS runtime.
   [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md)
 - Current mainline direction and packet-015 closure posture:
   [`docs/plans/2026-03-19-central-development-checkpoint.md`](docs/plans/2026-03-19-central-development-checkpoint.md),
-  [`docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`](docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md)
+  [`docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`](docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md)
 - Phase 10 design and gate artifacts:
   [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
   [`docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`](docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md),
@@ -129,7 +129,7 @@ Primary notes for the current operator and result-surface baseline:
   [`docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`](docs/plans/2026-03-16-multi-turn-same-agent-conversations.md)
 - forward checkpoint and packet-015 closure evidence:
   [`docs/plans/2026-03-19-central-development-checkpoint.md`](docs/plans/2026-03-19-central-development-checkpoint.md),
-  [`docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`](docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md)
+  [`docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`](docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md)
 
 ## Architecture
 

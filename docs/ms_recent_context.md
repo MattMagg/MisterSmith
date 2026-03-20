@@ -21,7 +21,7 @@ Status: Current
 1. `AGENTS.md`
 2. `docs/current-state.md`
 3. `docs/plans/2026-03-19-central-development-checkpoint.md`
-4. `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
+4. `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
 5. `WORKFLOW.md`
 6. `docs/linear/LINEAR.md`
 7. `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`
@@ -41,7 +41,7 @@ supporting history rather than the primary direction router:
 
 - `docs/current-state.md` is the current repo-wide router
 - `docs/plans/2026-03-19-central-development-checkpoint.md` is the current forward checkpoint
-- `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
+- `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
   records the completed packet-015 closure
 
 The next frontier planning action is no longer “write packet 015.” Packet 015 is closed. The next
@@ -76,6 +76,6 @@ Closed frontier packet and recovery issues now include:
   the first direction read
 - use `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the source of truth for the
   currently implemented Smith workflow-family surface
-- use `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
+- use `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
   when packet-015 closure evidence matters
 - update Linear and repo docs together when the direction changes

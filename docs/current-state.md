@@ -20,7 +20,7 @@ Use this file when you need one honest answer to:
 | ---- | ---------------- | ---- |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
 | What should happen next | `docs/plans/2026-03-19-central-development-checkpoint.md` | Current forward-development checkpoint, packet-015 outcome, and scope guardrails |
-| Packet 015 closure evidence | `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md` | Durable proof and validation artifact for the completed packet-015 epic |
+| Packet 015 closure evidence | `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md` | Durable live-proof and validation artifact for the completed packet-015 epic |
 | Development workflow and watched queue | `WORKFLOW.md`, `docs/linear/LINEAR.md` | Development control plane contract |
 | Architectural build map | `ROADMAP.md` | Phase dependency map and build order |
 | Broad repo orientation | `README.md` | High-level repo surface and operator entry points |
@@ -70,7 +70,7 @@ external workflow services such as Linear or Symphony.
 - A real local provider-backed runtime proof has been completed on the current runtime path using
   `openai_chatgpt` with `gpt-5.4`.
 - Packet 015 is landed on `main` through `MS-94`, with the final evidence captured in
-  `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`.
+  `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
 
@@ -148,7 +148,7 @@ The remaining bounded product gap after packet 015 is centered on:
 This direction is tracked in:
 
 - `docs/plans/2026-03-19-central-development-checkpoint.md`
-- `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
+- `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
 
 ## Practical Reading Order
 
@@ -165,7 +165,7 @@ If you need to understand the repo quickly:
 
 - Use this file for the repo's current broad state.
 - Use `docs/plans/2026-03-19-central-development-checkpoint.md` for the current forward checkpoint
-  and `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
+  and `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
   for the completed packet-015 closure evidence.
 - Use `WORKFLOW.md` and `docs/linear/LINEAR.md` for development workflow rules.
 - Use `spec/` for architecture truth.

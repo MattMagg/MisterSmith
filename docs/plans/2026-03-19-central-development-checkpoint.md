@@ -51,7 +51,7 @@ Historical support notes:
   - bounded operator preview and provenance for proof-relevant inspection
   - one persisted three-label proof-outcome taxonomy across those result surfaces
   - a durable closure artifact in
-    `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
+    `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
 - The remaining bounded follow-on from this checkpoint, if pursued next, is the post-`MS-77`
   external-agent interoperability closure rather than a reopening of packet 015.
 
@@ -99,7 +99,7 @@ Packet 015 covered:
 Closure evidence:
 
 - `specs/015-complex-multi-agent-proof-and-unified-result-surfaces/`
-- `docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md`
+- `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
 
 ### Milestone 3: External-Agent Interoperability Closure
 
