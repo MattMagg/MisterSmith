@@ -443,6 +443,43 @@ fn enrich_result_preview_falls_back_to_metadata_final_result() {
 }
 
 #[test]
+fn enrich_result_preview_prefers_stored_proof_outcome_over_structural_inference() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    view.topology.topology_kind = TopologyKind::Hybrid;
+    view.topology.parallelism_width = 2;
+    view.topology.task_shape.kind = TaskShapeKind::FanoutJoin;
+    view.topology.task_shape.max_parallel_width = 2;
+    view.graph.branch_count = 2;
+    view.graph.node_count = 2;
+
+    let task_result = sample_task_result_payload(
+        view.graph.workflow_id,
+        "completed",
+        2,
+        2,
+        Some(ProofOutcomeClassification::CollapsedToSequential),
+    );
+    let metadata = serde_json::json!({
+        "final_result": task_result["result"].clone(),
+    });
+
+    autonomy::enrich_result_preview(&mut view, &metadata, Some(&task_result));
+
+    let preview = view
+        .result_preview
+        .expect("stored task result should produce an operator preview");
+    assert_eq!(
+        preview.proof_outcome,
+        ProofOutcomeClassification::CollapsedToSequential
+    );
+    assert!(preview
+        .provenance_lines
+        .iter()
+        .any(|line| line.contains("planner emitted one sequential step")));
+}
+
+#[test]
 fn classify_proof_outcome_keeps_failed_runs_in_the_single_failure_class() {
     let execution_plan = serde_json::json!({
         "steps": [

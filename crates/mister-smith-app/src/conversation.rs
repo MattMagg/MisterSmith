@@ -395,16 +395,25 @@ async fn build_session_view(
         .map(|record| (record.task_id, record.metadata))
         .collect::<HashMap<_, _>>();
     let mut turn_summaries = Vec::with_capacity(turns.len());
-    let mut last_assistant_result = None;
+    let retained_context = &session.retained_context;
+    let mut last_assistant_result = last_retained_result_from_context(retained_context);
     for turn in turns {
         let workflow_id = TaskId::from_uuid(turn.workflow_id);
-        let assistant_result = u32::try_from(turn.turn_index).ok().and_then(|turn_index| {
-            turn.result_summary.as_ref().and_then(|task_result| {
-                crate::autonomy::retained_result_view(task_result, turn_index, &turn.status)
-            })
-        });
+        let turn_index = turn.turn_index.max(0) as u32;
+        let assistant_result = retained_result_for_turn(retained_context, workflow_id, turn_index)
+            .or_else(|| {
+                turn.result_summary.as_ref().and_then(|task_result| {
+                    crate::autonomy::retained_result_view(task_result, turn_index, &turn.status)
+                })
+            });
         if let Some(retained_result) = assistant_result.clone() {
-            last_assistant_result = Some(retained_result);
+            let should_replace_last = last_assistant_result
+                .as_ref()
+                .map(|current| retained_result.turn_index >= current.turn_index)
+                .unwrap_or(true);
+            if should_replace_last {
+                last_assistant_result = Some(retained_result);
+            }
         }
         let resume_provenance = task_metadata_by_workflow
             .get(&turn.workflow_id)
@@ -483,6 +492,45 @@ fn empty_retained_context() -> Value {
         "transcript_summary": [],
         "latest_workflow_id": Value::Null,
     })
+}
+
+fn retained_result_projection_from_value(value: &Value) -> Option<SessionRetainedResultView> {
+    serde_json::from_value(value.clone()).ok()
+}
+
+fn retained_result_for_turn(
+    retained_context: &Value,
+    workflow_id: TaskId,
+    turn_index: u32,
+) -> Option<SessionRetainedResultView> {
+    let workflow_id = workflow_id.to_string();
+    retained_context
+        .get("transcript_summary")
+        .and_then(Value::as_array)?
+        .iter()
+        .rev()
+        .find_map(|entry| {
+            let entry_turn = entry
+                .get("turn_index")
+                .and_then(Value::as_u64)
+                .and_then(|value| u32::try_from(value).ok())?;
+            let entry_workflow_id = entry.get("workflow_id").and_then(Value::as_str)?;
+            if entry_turn != turn_index || entry_workflow_id != workflow_id {
+                return None;
+            }
+
+            entry
+                .get("assistant_result")
+                .and_then(retained_result_projection_from_value)
+        })
+}
+
+fn last_retained_result_from_context(
+    retained_context: &Value,
+) -> Option<SessionRetainedResultView> {
+    retained_context
+        .get("last_assistant_result")
+        .and_then(retained_result_projection_from_value)
 }
 
 fn retained_context_after_turn(
@@ -1046,6 +1094,94 @@ mod tests {
         );
         assert_eq!(
             retained["last_assistant_result"]["assistant_result"]["proof_outcome"],
+            json!("failed_before_graph")
+        );
+    }
+
+    #[test]
+    fn retained_result_for_turn_uses_stored_projection_with_proof_outcome() {
+        let workflow_id = TaskId::new();
+        let retained_context = json!({
+            "transcript_summary": [
+                {
+                    "turn_index": 2,
+                    "workflow_id": workflow_id,
+                    "assistant_result": {
+                        "workflow_id": workflow_id,
+                        "turn_index": 2,
+                        "status": "completed",
+                        "assistant_result": {
+                            "preview": "bounded answer preview",
+                            "aggregated_result": {
+                                "summary": "bounded answer preview"
+                            },
+                            "proof_outcome": "collapsed_to_sequential"
+                        },
+                        "preview": "bounded answer preview",
+                        "provenance": {
+                            "runtime_execution_mode": {
+                                "execution_boundary": "tool_bus"
+                            },
+                            "graph_state": "completed",
+                            "graph_id": null,
+                            "source_fields": [
+                                "metadata.final_result",
+                                "metadata.aggregated_result"
+                            ]
+                        }
+                    }
+                }
+            ]
+        });
+
+        let retained_result = retained_result_for_turn(&retained_context, workflow_id, 2)
+            .expect("stored retained projection should round-trip");
+
+        assert_eq!(retained_result.workflow_id, workflow_id);
+        assert_eq!(retained_result.turn_index, 2);
+        assert_eq!(
+            retained_result.assistant_result["proof_outcome"],
+            json!("collapsed_to_sequential")
+        );
+    }
+
+    #[test]
+    fn last_retained_result_from_context_preserves_stored_proof_outcome() {
+        let workflow_id = TaskId::new();
+        let retained_context = json!({
+            "last_assistant_result": {
+                "workflow_id": workflow_id,
+                "turn_index": 3,
+                "status": "failed",
+                "assistant_result": {
+                    "preview": "planner failed before graph formation",
+                    "aggregated_result": {
+                        "error": "planner failed before graph formation"
+                    },
+                    "proof_outcome": "failed_before_graph"
+                },
+                "preview": "planner failed before graph formation",
+                "provenance": {
+                    "runtime_execution_mode": {
+                        "execution_boundary": "tool_bus"
+                    },
+                    "graph_state": null,
+                    "graph_id": null,
+                    "source_fields": [
+                        "metadata.final_result",
+                        "metadata.aggregated_result"
+                    ]
+                }
+            }
+        });
+
+        let retained_result = last_retained_result_from_context(&retained_context)
+            .expect("last retained result should round-trip");
+
+        assert_eq!(retained_result.workflow_id, workflow_id);
+        assert_eq!(retained_result.turn_index, 3);
+        assert_eq!(
+            retained_result.assistant_result["proof_outcome"],
             json!("failed_before_graph")
         );
     }

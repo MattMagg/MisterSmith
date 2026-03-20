@@ -1695,8 +1695,8 @@ mod tests {
         AuthorityPrincipal, BranchRecoveryStrategy, BranchState, CapabilityActionKind,
         CapabilityId, CoordinationPolicy, DelegatedAction, DelegatedActionPolicy, DelegationScope,
         ExecutionBranchId, ExecutionGraphId, ExternalDelegationEnvelope, GraphState,
-        RevocationState, SessionId, TaskShapeClassification, TaskShapeKind, TopologyKind,
-        TopologyRationale,
+        ProofOutcomeClassification, RevocationState, SessionId, TaskShapeClassification,
+        TaskShapeKind, TopologyKind, TopologyRationale,
     };
     use mister_smith_events::{
         BranchSummary, ExecutionGraphSummary, ExternalCapabilityDecisionOutcome,
@@ -1829,6 +1829,101 @@ mod tests {
         let mut record = sample_task_with_metadata(metadata);
         record.result = Some(result);
         record
+    }
+
+    #[test]
+    fn terminal_result_views_preserve_proof_outcome_across_task_and_final_results() {
+        let workflow_id = TaskId::new();
+        let cases = [
+            (
+                "success",
+                "completed",
+                json!({
+                    "steps": [{"id": "step-1"}, {"id": "step-2"}]
+                }),
+                vec![
+                    json!({
+                        "task_id": TaskId::new(),
+                        "result": { "summary": "parallel branch alpha" }
+                    }),
+                    json!({
+                        "task_id": TaskId::new(),
+                        "result": { "summary": "parallel branch beta" }
+                    }),
+                ],
+                ProofOutcomeClassification::GraphFormedAndCompleted,
+            ),
+            (
+                "collapse",
+                "completed",
+                json!({
+                    "steps": [{"id": "step-1"}]
+                }),
+                vec![json!({
+                    "task_id": TaskId::new(),
+                    "result": { "summary": "single sequential branch" }
+                })],
+                ProofOutcomeClassification::CollapsedToSequential,
+            ),
+            (
+                "failure",
+                "failed",
+                json!({
+                    "steps": [{"id": "step-1"}, {"id": "step-2"}]
+                }),
+                vec![json!({
+                    "task_id": TaskId::new(),
+                    "result": { "summary": "partial branch output" }
+                })],
+                ProofOutcomeClassification::FailedBeforeGraph,
+            ),
+        ];
+
+        for (label, status, execution_plan, step_results, expected_outcome) in cases {
+            let canonical_result = crate::autonomy::build_canonical_result_envelope(
+                crate::autonomy::CanonicalResultEnvelopeInput {
+                    workflow_id,
+                    provider_kind: PROVIDER_KIND_NAME,
+                    model_id: MODEL_ID,
+                    description: "freeze the result contract",
+                    runtime_execution_mode: json!({
+                        "execution_boundary": "tool_bus",
+                        "workflow_runner": "tokio_task"
+                    }),
+                    planner_output: json!({
+                        "steps": execution_plan
+                            .get("steps")
+                            .and_then(Value::as_array)
+                            .map(|steps| steps.len())
+                    }),
+                    execution_plan,
+                    step_results,
+                    aggregated_result: json!({
+                        "summary": format!("{label} bounded answer preview")
+                    }),
+                    status,
+                },
+            );
+
+            let result_views = terminal_result_views(status, canonical_result)
+                .expect("canonical task and final result envelopes should serialize");
+
+            assert_eq!(
+                result_views.final_result["proof_outcome"],
+                json!(expected_outcome.as_str()),
+                "final_result should retain proof outcome for {label}"
+            );
+            assert_eq!(
+                result_views.task_result["proof_outcome"],
+                json!(expected_outcome.as_str()),
+                "task.result wrapper should retain proof outcome for {label}"
+            );
+            assert_eq!(
+                result_views.task_result["result"]["proof_outcome"],
+                json!(expected_outcome.as_str()),
+                "task.result canonical envelope should retain proof outcome for {label}"
+            );
+        }
     }
 
     #[test]
