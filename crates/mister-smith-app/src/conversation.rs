@@ -8,7 +8,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 use mister_smith_config::FrameworkConfig;
-use mister_smith_core::{AgentId, SessionId, SessionStatus, TaskId};
+use mister_smith_core::{AgentId, SessionId, SessionRetainedResultView, SessionStatus, TaskId};
 use mister_smith_http::server::{
     ConversationContinueRequest, ConversationCreateRequest, ConversationEndView,
     ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionService,
@@ -395,8 +395,17 @@ async fn build_session_view(
         .map(|record| (record.task_id, record.metadata))
         .collect::<HashMap<_, _>>();
     let mut turn_summaries = Vec::with_capacity(turns.len());
+    let mut last_assistant_result = None;
     for turn in turns {
         let workflow_id = TaskId::from_uuid(turn.workflow_id);
+        let assistant_result = u32::try_from(turn.turn_index).ok().and_then(|turn_index| {
+            turn.result_summary.as_ref().and_then(|task_result| {
+                crate::autonomy::retained_result_view(task_result, turn_index, &turn.status)
+            })
+        });
+        if let Some(retained_result) = assistant_result.clone() {
+            last_assistant_result = Some(retained_result);
+        }
         let resume_provenance = task_metadata_by_workflow
             .get(&turn.workflow_id)
             .and_then(resume_provenance_from_metadata)
@@ -413,6 +422,7 @@ async fn build_session_view(
             workflow_id,
             status: turn.status,
             user_message: turn.user_message,
+            assistant_result,
             resume_provenance,
         });
     }
@@ -426,6 +436,7 @@ async fn build_session_view(
         active_workflow_id: session.active_workflow_id.map(TaskId::from_uuid),
         last_completed_workflow_id: session.last_completed_workflow_id.map(TaskId::from_uuid),
         turn_count: session.turn_count.max(0) as u32,
+        last_assistant_result,
         turns: turn_summaries,
         ended_at: session.ended_at,
     })
@@ -497,10 +508,17 @@ fn retained_context_after_turn(
         .as_ref()
         .and_then(|value| {
             u32::try_from(turn.turn_index).ok().and_then(|turn_index| {
-                crate::autonomy::retained_assistant_result(value, turn_index, &turn.status)
+                crate::autonomy::retained_result_view(value, turn_index, &turn.status)
             })
         })
-        .or(result_summary)
+        .and_then(|projection| serde_json::to_value(projection).ok())
+        .or_else(|| {
+            result_summary.as_ref().and_then(|value| {
+                u32::try_from(turn.turn_index).ok().and_then(|turn_index| {
+                    crate::autonomy::retained_assistant_result(value, turn_index, &turn.status)
+                })
+            })
+        })
         .unwrap_or_else(|| json!({ "status": turn.status }));
     let summary_entry = json!({
         "turn_index": turn.turn_index,
@@ -566,6 +584,8 @@ pub(crate) struct ConversationCliSessionView {
     pub last_completed_workflow_id: Option<String>,
     pub turn_count: u32,
     #[serde(default)]
+    pub last_assistant_result: Option<SessionRetainedResultView>,
+    #[serde(default)]
     pub turns: Vec<ConversationCliTurnSummary>,
     pub ended_at: Option<String>,
 }
@@ -589,6 +609,8 @@ pub(crate) struct ConversationCliTurnSummary {
     pub workflow_id: String,
     pub status: String,
     pub user_message: String,
+    #[serde(default)]
+    pub assistant_result: Option<SessionRetainedResultView>,
     #[serde(default)]
     pub resume_provenance: Option<ConversationCliResumeProvenanceView>,
 }
@@ -747,25 +769,36 @@ pub(crate) fn render_session(view: &ConversationCliSessionView) -> String {
         .turns
         .iter()
         .map(|turn| {
+            let assistant_result = turn
+                .assistant_result
+                .as_ref()
+                .map(render_retained_result)
+                .unwrap_or_else(|| "none".to_string());
             let resume_provenance = turn
                 .resume_provenance
                 .as_ref()
                 .map(render_resume_provenance)
                 .unwrap_or_else(|| "none".to_string());
             format!(
-                "  {} {} {} resume={} {}",
+                "  {} {} {} resume={} result={} {}",
                 turn.turn_index,
                 turn.workflow_id,
                 turn.status,
                 resume_provenance,
+                assistant_result,
                 turn.user_message
             )
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let last_assistant_result = view
+        .last_assistant_result
+        .as_ref()
+        .map(render_retained_result)
+        .unwrap_or_else(|| "none".to_string());
 
     format!(
-        "session_id: {}\nstatus: {}\ncoordinator_agent_id: {}\nprovider_kind: {}\nmodel_id: {}\nactive_workflow_id: {}\nlast_completed_workflow_id: {}\nturn_count: {}\nended_at: {}\nturns:\n{}",
+        "session_id: {}\nstatus: {}\ncoordinator_agent_id: {}\nprovider_kind: {}\nmodel_id: {}\nactive_workflow_id: {}\nlast_completed_workflow_id: {}\nlast_assistant_result: {}\nturn_count: {}\nended_at: {}\nturns:\n{}",
         view.session_id,
         view.status,
         view.coordinator_agent_id,
@@ -773,6 +806,7 @@ pub(crate) fn render_session(view: &ConversationCliSessionView) -> String {
         view.model_id,
         view.active_workflow_id.as_deref().unwrap_or("none"),
         view.last_completed_workflow_id.as_deref().unwrap_or("none"),
+        last_assistant_result,
         view.turn_count,
         view.ended_at.as_deref().unwrap_or("none"),
         if turns.is_empty() { "none".to_string() } else { turns }
@@ -813,6 +847,34 @@ fn render_resume_provenance(view: &ConversationCliResumeProvenanceView) -> Strin
     } else {
         parts.join(" ")
     }
+}
+
+fn render_retained_result(view: &SessionRetainedResultView) -> String {
+    let proof_outcome = view
+        .assistant_result
+        .get("proof_outcome")
+        .and_then(Value::as_str)
+        .unwrap_or("none");
+    let preview = view
+        .preview
+        .clone()
+        .or_else(|| {
+            view.assistant_result
+                .get("preview")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "none".to_string());
+    let source_fields = if view.provenance.source_fields.is_empty() {
+        "none".to_string()
+    } else {
+        view.provenance.source_fields.join("|")
+    };
+
+    format!(
+        "workflow={} status={} proof={} preview={} sources={}",
+        view.workflow_id, view.status, proof_outcome, preview, source_fields
+    )
 }
 
 #[cfg(test)]
@@ -913,16 +975,26 @@ mod tests {
         );
 
         let assistant_result = retained["transcript_summary"][0]["assistant_result"].clone();
+        assert_eq!(
+            assistant_result["workflow_id"],
+            json!(workflow_id.to_string())
+        );
+        assert_eq!(assistant_result["turn_index"], json!(2));
+        assert_eq!(assistant_result["status"], json!("completed"));
         assert_eq!(assistant_result["preview"], json!("bounded answer preview"));
         assert_eq!(
-            assistant_result["proof_outcome"],
+            assistant_result["assistant_result"]["proof_outcome"],
             json!("graph_formed_and_completed")
         );
         assert_eq!(
-            assistant_result["aggregated_result"]["summary"],
+            assistant_result["assistant_result"]["aggregated_result"]["summary"],
             json!("bounded answer preview")
         );
-        assert!(assistant_result.get("result").is_none());
+        assert_eq!(
+            assistant_result["provenance"]["source_fields"],
+            json!(["metadata.final_result", "metadata.aggregated_result"])
+        );
+        assert!(assistant_result["assistant_result"].get("result").is_none());
     }
 
     #[test]
@@ -969,11 +1041,11 @@ mod tests {
         );
 
         assert_eq!(
-            retained["last_assistant_result"]["recovered_after_restart"],
+            retained["last_assistant_result"]["assistant_result"]["recovered_after_restart"],
             json!(true)
         );
         assert_eq!(
-            retained["last_assistant_result"]["proof_outcome"],
+            retained["last_assistant_result"]["assistant_result"]["proof_outcome"],
             json!("failed_before_graph")
         );
     }
@@ -1007,7 +1079,22 @@ mod tests {
                         "turn_index": 1,
                         "workflow_id": "44444444-4444-4444-4444-444444444444",
                         "assistant_result": {
-                            "recovered_after_restart": true
+                            "workflow_id": "44444444-4444-4444-4444-444444444444",
+                            "turn_index": 1,
+                            "status": "failed",
+                            "assistant_result": {
+                                "recovered_after_restart": true
+                            },
+                            "preview": "workflow interrupted",
+                            "provenance": {
+                                "runtime_execution_mode": {
+                                    "execution_boundary": "tool_bus"
+                                },
+                                "source_fields": [
+                                    "metadata.final_result",
+                                    "metadata.aggregated_result"
+                                ]
+                            }
                         }
                     }
                 ]
@@ -1038,12 +1125,69 @@ mod tests {
             active_workflow_id: None,
             last_completed_workflow_id: Some("55555555-5555-5555-5555-555555555555".to_string()),
             turn_count: 2,
+            last_assistant_result: Some(SessionRetainedResultView {
+                workflow_id: TaskId::from_uuid(
+                    Uuid::parse_str("55555555-5555-5555-5555-555555555555").unwrap(),
+                ),
+                turn_index: 2,
+                status: "completed".to_string(),
+                assistant_result: json!({
+                    "preview": "bounded answer preview",
+                    "aggregated_result": {
+                        "summary": "bounded answer preview"
+                    },
+                    "proof_outcome": "collapsed_to_sequential"
+                }),
+                preview: Some("bounded answer preview".to_string()),
+                provenance: mister_smith_core::ResultProvenanceSummary {
+                    runtime_execution_mode: json!({
+                        "execution_boundary": "tool_bus"
+                    }),
+                    graph_state: None,
+                    graph_id: None,
+                    source_fields: vec![
+                        "metadata.final_result".to_string(),
+                        "metadata.aggregated_result".to_string(),
+                    ],
+                },
+            }),
             turns: vec![
                 ConversationCliTurnSummary {
                     turn_index: 1,
                     workflow_id: "44444444-4444-4444-4444-444444444444".to_string(),
                     status: "failed".to_string(),
                     user_message: "turn one".to_string(),
+                    assistant_result: Some(SessionRetainedResultView {
+                        workflow_id: TaskId::from_uuid(
+                            Uuid::parse_str("44444444-4444-4444-4444-444444444444").unwrap(),
+                        ),
+                        turn_index: 1,
+                        status: "failed".to_string(),
+                        assistant_result: json!({
+                            "preview": "workflow interrupted by runtime restart before session sync",
+                            "aggregated_result": {
+                                "error": "workflow interrupted by runtime restart before session sync",
+                                "recovered_after_restart": true
+                            },
+                            "proof_outcome": "failed_before_graph",
+                            "recovered_after_restart": true
+                        }),
+                        preview: Some(
+                            "workflow interrupted by runtime restart before session sync"
+                                .to_string(),
+                        ),
+                        provenance: mister_smith_core::ResultProvenanceSummary {
+                            runtime_execution_mode: json!({
+                                "execution_boundary": "tool_bus"
+                            }),
+                            graph_state: None,
+                            graph_id: None,
+                            source_fields: vec![
+                                "metadata.final_result".to_string(),
+                                "metadata.aggregated_result".to_string(),
+                            ],
+                        },
+                    }),
                     resume_provenance: Some(ConversationCliResumeProvenanceView {
                         recovered_after_restart: true,
                         resumed_after_restart: false,
@@ -1061,6 +1205,32 @@ mod tests {
                     workflow_id: "55555555-5555-5555-5555-555555555555".to_string(),
                     status: "completed".to_string(),
                     user_message: "turn two".to_string(),
+                    assistant_result: Some(SessionRetainedResultView {
+                        workflow_id: TaskId::from_uuid(
+                            Uuid::parse_str("55555555-5555-5555-5555-555555555555").unwrap(),
+                        ),
+                        turn_index: 2,
+                        status: "completed".to_string(),
+                        assistant_result: json!({
+                            "preview": "bounded answer preview",
+                            "aggregated_result": {
+                                "summary": "bounded answer preview"
+                            },
+                            "proof_outcome": "collapsed_to_sequential"
+                        }),
+                        preview: Some("bounded answer preview".to_string()),
+                        provenance: mister_smith_core::ResultProvenanceSummary {
+                            runtime_execution_mode: json!({
+                                "execution_boundary": "tool_bus"
+                            }),
+                            graph_state: None,
+                            graph_id: None,
+                            source_fields: vec![
+                                "metadata.final_result".to_string(),
+                                "metadata.aggregated_result".to_string(),
+                            ],
+                        },
+                    }),
                     resume_provenance: Some(ConversationCliResumeProvenanceView {
                         recovered_after_restart: false,
                         resumed_after_restart: true,
@@ -1084,5 +1254,9 @@ mod tests {
         );
         assert!(rendered.contains("resume=resumed_after_restart=true resumed_from_turn=1"));
         assert!(rendered.contains("resumed_from_workflow=44444444-4444-4444-4444-444444444444"));
+        assert!(rendered
+            .contains("last_assistant_result: workflow=55555555-5555-5555-5555-555555555555"));
+        assert!(rendered.contains("result=workflow=55555555-5555-5555-5555-555555555555 status=completed proof=collapsed_to_sequential preview=bounded answer preview"));
+        assert!(rendered.contains("sources=metadata.final_result|metadata.aggregated_result"));
     }
 }

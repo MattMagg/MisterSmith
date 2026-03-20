@@ -166,6 +166,32 @@ fn persist_step_routing_history(metadata: &mut Value, history: &[StepRoutingDeci
     }
 }
 
+struct TerminalResultViews {
+    aggregated_result: Value,
+    final_result: Value,
+    task_result: Value,
+}
+
+fn terminal_result_views(
+    status: &str,
+    canonical_result: mister_smith_core::UnifiedResultEnvelope,
+) -> Result<TerminalResultViews, String> {
+    let aggregated_result = canonical_result.aggregated_result.clone();
+    let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
+        status,
+        canonical_result.clone(),
+    ))
+    .map_err(|error| format!("failed to serialize task result view: {error}"))?;
+    let final_result = serde_json::to_value(canonical_result)
+        .map_err(|error| format!("failed to serialize canonical result: {error}"))?;
+
+    Ok(TerminalResultViews {
+        aggregated_result,
+        final_result,
+        task_result,
+    })
+}
+
 #[derive(Clone)]
 pub(crate) struct RuntimeTaskService {
     pool: PgPool,
@@ -387,21 +413,33 @@ impl RuntimeTaskService {
                 status: "failed",
             },
         );
-        let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
-            "failed",
-            final_result.clone(),
-        ))
-        .unwrap_or(Value::Null);
-        let final_result = serde_json::to_value(final_result).unwrap_or(Value::Null);
-        put_metadata(&mut metadata, "aggregated_result", aggregated_result);
-        put_metadata(&mut metadata, "final_result", final_result);
-        self.capture_autonomy_status_metadata(workflow_id, &mut metadata, Some(&task_result));
+        let result_views =
+            terminal_result_views("failed", final_result.clone()).unwrap_or(TerminalResultViews {
+                aggregated_result: aggregated_result.clone(),
+                final_result: Value::Null,
+                task_result: Value::Null,
+            });
+        put_metadata(
+            &mut metadata,
+            "aggregated_result",
+            result_views.aggregated_result.clone(),
+        );
+        put_metadata(
+            &mut metadata,
+            "final_result",
+            result_views.final_result.clone(),
+        );
+        self.capture_autonomy_status_metadata(
+            workflow_id,
+            &mut metadata,
+            Some(&result_views.task_result),
+        );
 
         self.update_root_record(
             workflow_id,
             "failed",
             metadata,
-            Some(task_result),
+            Some(result_views.task_result),
             record.started_at.or(Some(record.created_at)),
             Some(failed_at),
         )
@@ -747,23 +785,29 @@ impl RuntimeTaskService {
                 status: "completed",
             },
         );
-        let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
-            "completed",
-            final_result.clone(),
-        ))
-        .map_err(|error| format!("failed to serialize task result view: {error}"))?;
-        let final_result = serde_json::to_value(final_result)
-            .map_err(|error| format!("failed to serialize canonical result: {error}"))?;
+        let result_views = terminal_result_views("completed", final_result)?;
 
-        put_metadata(&mut metadata, "aggregated_result", aggregated_result);
-        put_metadata(&mut metadata, "final_result", final_result.clone());
+        put_metadata(
+            &mut metadata,
+            "aggregated_result",
+            result_views.aggregated_result.clone(),
+        );
+        put_metadata(
+            &mut metadata,
+            "final_result",
+            result_views.final_result.clone(),
+        );
         self.transition_workflow_complete(workflow_id);
-        self.capture_autonomy_status_metadata(workflow_id, &mut metadata, Some(&task_result));
+        self.capture_autonomy_status_metadata(
+            workflow_id,
+            &mut metadata,
+            Some(&result_views.task_result),
+        );
         self.update_root_record(
             workflow_id,
             "completed",
             metadata.clone(),
-            Some(task_result),
+            Some(result_views.task_result),
             Some(Utc::now()),
             Some(Utc::now()),
         )
@@ -773,7 +817,7 @@ impl RuntimeTaskService {
             "workflow.completed",
             "workflow.completed",
             workflow_id,
-            final_result,
+            result_views.final_result,
         )
         .await?;
 
@@ -1114,15 +1158,27 @@ impl RuntimeTaskService {
             },
         );
         let aggregated_result = final_result.aggregated_result.clone();
-        let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
-            "failed",
-            final_result.clone(),
-        ))
-        .unwrap_or(Value::Null);
-        let final_result = serde_json::to_value(final_result).unwrap_or(Value::Null);
-        put_metadata(&mut metadata, "aggregated_result", aggregated_result);
-        put_metadata(&mut metadata, "final_result", final_result);
-        self.capture_autonomy_status_metadata(workflow_id, &mut metadata, Some(&task_result));
+        let result_views =
+            terminal_result_views("failed", final_result).unwrap_or(TerminalResultViews {
+                aggregated_result: aggregated_result.clone(),
+                final_result: Value::Null,
+                task_result: Value::Null,
+            });
+        put_metadata(
+            &mut metadata,
+            "aggregated_result",
+            result_views.aggregated_result.clone(),
+        );
+        put_metadata(
+            &mut metadata,
+            "final_result",
+            result_views.final_result.clone(),
+        );
+        self.capture_autonomy_status_metadata(
+            workflow_id,
+            &mut metadata,
+            Some(&result_views.task_result),
+        );
         let coordinator_id =
             coordinator_id_from_metadata(&metadata).unwrap_or(self.default_coordinator_id);
         let _ = self
@@ -1130,7 +1186,7 @@ impl RuntimeTaskService {
                 workflow_id,
                 "failed",
                 metadata.clone(),
-                Some(task_result),
+                Some(result_views.task_result),
                 Some(Utc::now()),
                 Some(Utc::now()),
             )
@@ -1879,7 +1935,22 @@ mod tests {
                         "turn_index": 1,
                         "workflow_id": resumed_from_workflow_id,
                         "assistant_result": {
-                            "recovered_after_restart": true
+                            "workflow_id": resumed_from_workflow_id,
+                            "turn_index": 1,
+                            "status": "failed",
+                            "assistant_result": {
+                                "recovered_after_restart": true
+                            },
+                            "preview": "workflow interrupted by runtime restart before session sync",
+                            "provenance": {
+                                "runtime_execution_mode": {
+                                    "execution_boundary": "tool_bus"
+                                },
+                                "source_fields": [
+                                    "metadata.final_result",
+                                    "metadata.aggregated_result"
+                                ]
+                            }
                         }
                     }
                 ]
