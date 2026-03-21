@@ -3763,7 +3763,7 @@ impl SmithCompatibilityServer {
         };
         let workflow_requirements = vec![
             "Use Smith-first control-plane boundaries; do not replace Linear, Symphony, Ralph, or SpecKit.".to_string(),
-            "Rewrite PROMPT.md from the current issue and workpad packet immediately before running Ralph.".to_string(),
+            "Generate the current issue/workpad packet, run ./scripts/ralph prompt --packet <packet.json>, and only then run Ralph.".to_string(),
             "Keep execution grounded in the active issue, the durable workpad, and current repo contracts.".to_string(),
         ];
         let validation_requirements = vec![

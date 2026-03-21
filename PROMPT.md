@@ -2,8 +2,10 @@
 
 This file is intentionally ephemeral.
 
-Before every `./scripts/ralph run`, rewrite `PROMPT.md` from the current issue, workpad, or plan
-packet.
+Before every `./scripts/ralph run`, generate the current issue, workpad, or plan packet and run
+`./scripts/ralph prompt --packet <packet.json>` to regenerate `PROMPT.md`.
+Each successful `./scripts/ralph run` consumes that prep marker, so rerun the prompt step before
+every subsequent `run`.
 Do not treat the checked-in contents of this file as the source of truth for any active workflow.
 
 ## Required Inputs
@@ -34,4 +36,5 @@ Use this structure when generating the active prompt:
 - Smith owns task-type routing and decides when Ralph is used.
 - SpecKit remains the upstream spec and task-pack scaffold.
 - The active issue, workpad, or plan packet owns the live task context.
-- If `PROMPT.md` has not been regenerated from the current task context, do not run Ralph.
+- If `PROMPT.md` has not been freshly regenerated with `./scripts/ralph prompt --packet <packet.json>`
+  from the current task context, do not run Ralph.

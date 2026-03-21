@@ -77,7 +77,10 @@ Use Smith as the default control-plane entrypoint for repo development work.
   `translate_speckit_tasks`
 - Managed Ralph entrypoint:
   `./scripts/bootstrap_ralph.sh` updates the upstream checkout and `./scripts/ralph`
-  is the only supported Ralph command path for Mister Smith sessions
+  is the only supported Ralph command path for Mister Smith sessions. Before
+  every `./scripts/ralph run`, prepare the current packet/workpad context with
+  `./scripts/ralph prompt --packet <packet.json>`; the prep marker is one-shot,
+  so rerun the prompt step before every subsequent `run`.
 
 Default operator sequence:
 

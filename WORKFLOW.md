@@ -105,9 +105,13 @@ Instructions:
 - Ralph is only a loop runner. It must complement SpecKit and repo-native
   instructions, never replace the required SpecKit flow or the guidance in
   `AGENTS.md` and this file.
-- If an issue calls for Ralph, rewrite `PROMPT.md` from the current
-  issue/workpad context inside the workspace before running `./scripts/ralph run`;
-  do not trust stale prompt content from earlier phases.
+- If an issue calls for Ralph, generate the current Smith packet/workpad
+  context, run `./scripts/ralph prompt --packet <packet.json>` inside the
+  workspace, and then immediately run `./scripts/ralph run`; do not trust stale
+  prompt content from earlier phases.
+- The prompt prep marker is one-shot and consumed by `./scripts/ralph run`, so
+  rerun `./scripts/ralph prompt --packet <packet.json>` before every subsequent
+  `run` invocation and any time the packet or tracked source docs change.
 - This repository forbids git worktrees. For this unattended Symphony session
   only, you are explicitly authorized to create, switch, and push
   issue-specific branches inside this isolated workspace when the Linear/PR

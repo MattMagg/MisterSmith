@@ -76,6 +76,10 @@ real gap.
 
 When a task explicitly calls for Ralph, use `./scripts/ralph` instead of bare `ralph`. The wrapper
 bootstraps the managed upstream install under `~/.local/share/mister-smith/ralph-orchestrator`.
+Before every `./scripts/ralph run`, generate the current Smith packet/workpad context, run
+`./scripts/ralph prompt --packet <packet.json>`, and only then invoke `./scripts/ralph run`.
+Each successful `run` consumes the prep marker, so rerun `./scripts/ralph prompt` for every
+subsequent run attempt.
 
 ## State Semantics
 
