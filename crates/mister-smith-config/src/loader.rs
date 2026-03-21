@@ -82,6 +82,33 @@ pub fn apply_env_overlay(config: &mut FrameworkConfig, prefix: &str) {
             config.security.auth.enabled = b;
         }
     }
+    if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__AUTH__ALGORITHM")) {
+        config.security.auth.algorithm = val;
+    }
+    if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__AUTH__ACCESS_TOKEN_TTL_SECS")) {
+        if let Ok(n) = val.parse() {
+            config.security.auth.access_token_ttl_secs = n;
+        }
+    }
+    if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__AUTH__REFRESH_TOKEN_TTL_SECS")) {
+        if let Ok(n) = val.parse() {
+            config.security.auth.refresh_token_ttl_secs = n;
+        }
+    }
+    if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__AUTH__ISSUER")) {
+        config.security.auth.issuer = Some(val);
+    }
+    if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__AUTH__AUDIENCE")) {
+        config.security.auth.audience = val
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string)
+            .collect();
+    }
+    if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__AUTH__HMAC_SECRET")) {
+        config.security.auth.hmac_secret = Some(val);
+    }
 }
 
 /// Discover configuration file paths in priority order.

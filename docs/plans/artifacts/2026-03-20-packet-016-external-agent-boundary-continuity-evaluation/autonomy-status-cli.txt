@@ -1,0 +1,42 @@
+workflow: 45cb5f0c-4b13-41bc-9fb5-c8e8207ddc3b
+graph: 45cb5f0c-4b13-41bc-9fb5-c8e8207ddc3b Completed
+session: none
+resume provenance: none
+topology: Hybrid width=2 shape=fanout-join structure=roots:1 | max_parallel_width:2 | max_depth:2 | fanout:true | join:true dependency=fanout-join rationale=selected hybrid topology from compatible planner policy hint signals=health:healthy | budget_pressure:normal
+fallback: fallback to sequential preserves dependency order under degraded signals
+team sizing: phase=frontier_rebalance desired=1 selected=1 frontier=1 depth=2 conservative=false budget=0 cap=none rationale=task shape fanout-join with frontier width 1 | dependency depth 2 keeps coordination cost acceptable | frontier budget pressure 0 | selected 1 workers from the available pool of 2 | frontier health Unknown influenced active width
+branches:
+4f900a3b-447f-4cf5-8dd8-e2166f421371 Completed checkpoint=none recovery=Resume
+5c909042-fe62-46d5-9c8c-93004bd8efa6 Completed checkpoint=none recovery=Resume
+bac3082c-2d68-4602-a0e6-a049ab66a269 Completed checkpoint=none recovery=Resume
+checkpoints:
+none
+routing:
+4f900a3b-447f-4cf5-8dd8-e2166f421371 Unknown budget=0 depth=0 rationale=budget pressure 0% across routed scope | dependency depth 0 across ready branch frontier | checkpoint recovery scope covers 2 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+5c909042-fe62-46d5-9c8c-93004bd8efa6 Unknown budget=0 depth=1 rationale=budget pressure 0% across routed scope | dependency depth 1 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+bac3082c-2d68-4602-a0e6-a049ab66a269 Unknown budget=0 depth=1 rationale=budget pressure 0% across routed scope | dependency depth 1 across ready branch frontier | checkpoint recovery scope covers 1 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+4f900a3b-447f-4cf5-8dd8-e2166f421371 Unknown budget=0 depth=2 rationale=budget pressure 0% across routed scope | dependency depth 2 across ready branch frontier | checkpoint recovery scope covers 2 nodes | checkpoint unavailable; routing original branch scope | profile unavailable; defaulting to unknown health
+step routing:
+planner.step.1#1 kind=planner action=continue previous=none changed=false tier=direct preferred=none cost=1485 confidence=1.00 checkpoints=none reason=Selected via RoundRobin delta=initial step routing decision for workflow-visible control state
+result preview: proof=graph_formed_and_completed location=task.result preview=[{"dependency_results":[{"action":"Verify accepted task-ingress continuity","branch_id":"5c909042-fe62-46d5-9c8c-93004bd8efa6","result":{"dependency_results"...
+  provenance:
+  - graph formed and completed before final result publication
+  - provider=openai_chatgpt model=gpt-5.4
+  - runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step
+  - graph state Completed with topology Hybrid (3 branch(es), 4 node(s))
+  - routing history retained 4 decision(s)
+  - canonical result stored in metadata.final_result
+  - aggregated payload nested under metadata.aggregated_result
+  - full payload remains recoverable from task.result
+  - session assistant_result derives from the canonical result object
+  - projection observed graph state Completed with topology Hybrid (3 branch(es), 4 node(s))
+  - projection retained 3 branch detail record(s)
+interventions:
+none
+delegation:
+none
+delegation alerts:
+none
+external capability decisions:
+08f18e36-0737-42a4-a493-dcc1c5d1a124 surface=task_ingress branch=none observed_at=none outcome=allowed capability_descriptor=http:post:/api/v1/tasks action_descriptor=http:post:/api/v1/tasks action_id=http:post:/api/v1/tasks#execute title=execute post /api/v1/tasks scope=InvokeTool required_scope=InvokeTool state=Active depth=1 policy=post//api/v1/tasks/http resource_id=/api/v1/tasks rationale=accepted delegated task ingress remained authorized at POST /api/v1/tasks | continuity projected from workflow metadata accepted_task_ingress sourced from external_delegation | capability descriptor at accepted task ingress was 'http:post:/api/v1/tasks' | accepted task ingress requested descriptor 'http:post:/api/v1/tasks' | accepted task ingress required scope InvokeTool while the capability carried Some(InvokeTool) | policy continuity preserved as post//api/v1/tasks/http
+conservative: none

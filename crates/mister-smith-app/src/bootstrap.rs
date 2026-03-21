@@ -267,12 +267,21 @@ async fn start_http_server(
     };
     let autonomy_pool = services.task_service.pool();
     let autonomy_task_service = services.task_service.clone();
-    let app_state = mister_smith_http::AppState::new()
+    let mut app_state = mister_smith_http::AppState::new()
         .with_transport_health(Arc::new(mister_smith_http::server::NatsHealthCheck::new(
             nats_transport.is_some(),
         )))
         .with_task_service(services.task_service)
         .with_conversation_service(services.conversation_service);
+
+    if config.security.enabled {
+        let security =
+            mister_smith_security::middleware::SecurityLayer::new((&config.security).into())
+                .map_err(|error| format!("security layer initialization failed: {error}"))?;
+        app_state = app_state.with_security(Arc::new(security));
+        info!("Security layer initialized");
+    }
+
     let mut app = mister_smith_http::server::build_router(&http_config, app_state);
 
     // Add Kubernetes health probe endpoints

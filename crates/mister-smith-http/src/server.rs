@@ -544,6 +544,16 @@ mod tests {
         method: &str,
         route: &str,
     ) -> (String, mister_smith_core::CapabilityId, String) {
+        delegated_bearer_token_with_scope(security, method, route, DelegationScope::InvokeTool)
+    }
+
+    #[cfg(feature = "security")]
+    fn delegated_bearer_token_with_scope(
+        security: &Arc<SecurityLayer>,
+        method: &str,
+        route: &str,
+        scope: DelegationScope,
+    ) -> (String, mister_smith_core::CapabilityId, String) {
         let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
         let delegation_service = security
             .delegation_service
@@ -555,7 +565,7 @@ mod tests {
             .issue_capability(
                 AuthorityPrincipal::Policy("operator".to_string()),
                 recipient,
-                DelegationScope::InvokeTool,
+                scope,
                 Some(descriptor_id.clone()),
                 Duration::from_secs(300),
                 None,
@@ -792,9 +802,35 @@ mod tests {
 
     #[cfg(feature = "security")]
     #[tokio::test]
-    async fn build_router_rejects_revoked_delegation_action_for_route() {
+    async fn build_router_rejects_mismatched_delegation_scope_for_route() {
         let config = HttpTransportConfig::default();
         let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40129);
+        let security = delegation_test_security_layer();
+        let (token, _, _) = delegated_bearer_token_with_scope(
+            &security,
+            "GET",
+            "/api/v1/agents",
+            DelegationScope::ExecuteWorkflow,
+        );
+
+        let app = build_router(&config, AppState::new().with_security(security));
+
+        let request = Request::builder()
+            .uri("/api/v1/agents")
+            .header("authorization", format!("Bearer {token}"))
+            .extension(ConnectInfo(client_addr))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn build_router_rejects_revoked_delegation_action_for_route() {
+        let config = HttpTransportConfig::default();
+        let client_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 40130);
         let security = delegation_test_security_layer();
         let (token, _, revocation_key) = delegated_bearer_token(&security, "GET", "/api/v1/agents");
         security

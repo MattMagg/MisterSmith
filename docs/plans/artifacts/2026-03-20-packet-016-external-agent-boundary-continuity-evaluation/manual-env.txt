@@ -1,0 +1,11 @@
+database_name=mistersmith_ms99_packet016_20260320
+nats_url=nats://127.0.0.1:4222
+http_port=63140
+security_enabled=true
+auth_enabled=true
+auth_issuer=mister-smith-ms99-proof
+auth_audience=ms99-proof
+auth_hmac_secret=[redacted]
+provider=openai_chatgpt
+model=gpt-5.4
+auth_algorithm=HS256
