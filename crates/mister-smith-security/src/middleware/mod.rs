@@ -91,7 +91,7 @@ impl From<&RuntimeSecurityConfig> for SecurityLayerConfig {
     fn from(value: &RuntimeSecurityConfig) -> Self {
         #[cfg(feature = "jwt")]
         let jwt_config = if value.enabled && value.auth.enabled {
-            let algorithm = value.auth.algorithm.to_ascii_uppercase();
+            let algorithm = canonical_jwt_algorithm(&value.auth.algorithm);
             let key_source = match (
                 value.auth.private_key_path.as_deref(),
                 value.auth.public_key_path.as_deref(),
@@ -117,7 +117,7 @@ impl From<&RuntimeSecurityConfig> for SecurityLayerConfig {
                         public_pem: public_pem.into(),
                     }
                 }
-                (Some(_), Some(_), Some(secret)) | (_, _, Some(secret)) => KeySource::Hmac {
+                (_, _, Some(secret)) => KeySource::Hmac {
                     secret: decode_hmac_secret(secret),
                 },
                 (Some(_), Some(_), None) => {
@@ -131,7 +131,7 @@ impl From<&RuntimeSecurityConfig> for SecurityLayerConfig {
             };
 
             Some(config::JwtConfig {
-                algorithm: value.auth.algorithm.clone(),
+                algorithm,
                 access_token_ttl: Duration::from_secs(value.auth.access_token_ttl_secs),
                 refresh_token_ttl: Duration::from_secs(value.auth.refresh_token_ttl_secs),
                 issuer: value.auth.issuer.clone(),
@@ -174,6 +174,14 @@ impl From<&RuntimeSecurityConfig> for SecurityLayerConfig {
             }),
             ..Default::default()
         }
+    }
+}
+
+#[cfg(feature = "jwt")]
+fn canonical_jwt_algorithm(algorithm: &str) -> String {
+    match algorithm.to_ascii_uppercase().as_str() {
+        "EDDSA" => "EdDSA".to_string(),
+        other => other.to_string(),
     }
 }
 
@@ -344,5 +352,22 @@ mod tests {
             }
             other => panic!("expected RSA PEM key source for PS256, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn runtime_security_config_conversion_normalizes_jwt_algorithm() {
+        let mut runtime = RuntimeSecurityConfig::default();
+        runtime.enabled = true;
+        runtime.auth.enabled = true;
+        runtime.auth.algorithm = "hs256".to_string();
+        runtime.auth.hmac_secret = Some("c2hhcmVkLXNlY3JldA==".to_string());
+
+        let converted = SecurityLayerConfig::from(&runtime);
+        let jwt = converted
+            .jwt_config
+            .as_ref()
+            .expect("runtime auth config should produce jwt config");
+
+        assert_eq!(jwt.algorithm, "HS256");
     }
 }
