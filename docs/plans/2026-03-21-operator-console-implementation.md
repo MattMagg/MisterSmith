@@ -121,3 +121,23 @@ Validation:
 - `npm test -- --run`
 - `cargo test --manifest-path apps/operator-console/src-tauri/Cargo.toml`
 - `npm run build`
+
+## Lint Cleanup Follow-Up
+
+Objective:
+
+- Make the frontend validation story literally true after the refactor: remove obsolete ESLint 9
+  ignore configuration and rewrite the top-level dashboard/timeline effects so hook dependencies
+  are explicit and `npm run lint` exits without warnings.
+
+Scope:
+
+- `apps/operator-console/eslint.config.js`
+- `apps/operator-console/.eslintignore`
+- `apps/operator-console/src/App.tsx`
+
+Validation:
+
+- `npm run lint`
+- `npm test -- --run`
+- `npm run build`

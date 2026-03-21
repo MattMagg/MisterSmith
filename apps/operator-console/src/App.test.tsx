@@ -5,7 +5,6 @@ import type {
   AgentDetail,
   AgentSummary,
   AuthSnapshot,
-  DashboardSelection,
   DashboardSnapshot,
   RunSummary,
   SessionInspectResponse,
@@ -177,7 +176,7 @@ function createServices(options?: {
   return {
     loadSettings: () => createSettings(),
     saveSettings: () => undefined,
-    fetchDashboard: async (_settings: StoredSettings, _selection: DashboardSelection) =>
+    fetchDashboard: async () =>
       dashboard,
     fetchAuthSnapshot: async () => auth,
     loginOpenAiChatGpt: async () => auth,
