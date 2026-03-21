@@ -2,7 +2,8 @@
 
 This file is intentionally ephemeral.
 
-Before every `ralph run`, rewrite `PROMPT.md` from the current issue, workpad, or plan packet.
+Before every `./scripts/ralph run`, rewrite `PROMPT.md` from the current issue, workpad, or plan
+packet.
 Do not treat the checked-in contents of this file as the source of truth for any active workflow.
 
 ## Required Inputs

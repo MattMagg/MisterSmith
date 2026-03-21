@@ -29,3 +29,8 @@ agenterra/
 # Claude Code
 .mcp.json
 2026-*.txt
+
+# Ralph runtime state
+.ralph/*
+!.ralph/README.md
+.worktrees/

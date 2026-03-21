@@ -6,7 +6,7 @@ cli:
   backend: "codex"
 
 event_loop:
-  prompt_file: "PROMPT.md"   # Rewrite from the active issue/workpad before every ralph run.
+  prompt_file: "PROMPT.md"   # Rewrite from the active issue/workpad before every ./scripts/ralph run.
   completion_promise: "LOOP_COMPLETE"
   max_iterations: 100
   # max_runtime_seconds: 14400    # 4 hours max
@@ -31,4 +31,4 @@ event_loop:
 #     triggers: ["review.request"]
 #     publishes: ["review.approved", "review.changes_requested"]
 
-# Regenerate PROMPT.md from the active issue/workpad context, then run: ralph run
+# Regenerate PROMPT.md from the active issue/workpad context, then run: ./scripts/ralph run

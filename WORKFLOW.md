@@ -22,9 +22,7 @@ hooks:
     git clone --depth 1 "$SOURCE_REPO_URL" .
     if command -v cargo >/dev/null 2>&1; then
       cargo fetch
-    fi
-    if command -v ralph >/dev/null 2>&1; then
-      ralph --version || true
+      ./scripts/ralph --version || true
     fi
 agent:
   max_concurrent_agents: 10
@@ -100,15 +98,16 @@ Instructions:
   issue explicitly requires full-workspace proof.
 - Keep `spec/` and `specs/` distinct. `spec/` is canonical architecture; `specs/` contains per-phase implementation artifacts.
 - Avoid editing `archive/` unless the issue explicitly requires it.
-- `ralph` is expected to be available through the inherited shell environment,
-  and the repo's `ralph.yml` plus `PROMPT.md` are available when an issue
-  explicitly calls for Ralph-assisted execution.
+- Use `./scripts/ralph` as the Ralph entrypoint. It bootstraps and runs the
+  managed upstream install under `~/.local/share/mister-smith/ralph-orchestrator`,
+  alongside the repo's `ralph.yml` and `PROMPT.md`, when an issue explicitly
+  calls for Ralph-assisted execution.
 - Ralph is only a loop runner. It must complement SpecKit and repo-native
   instructions, never replace the required SpecKit flow or the guidance in
   `AGENTS.md` and this file.
 - If an issue calls for Ralph, rewrite `PROMPT.md` from the current
-  issue/workpad context inside the workspace before running `ralph run`; do not
-  trust stale prompt content from earlier phases.
+  issue/workpad context inside the workspace before running `./scripts/ralph run`;
+  do not trust stale prompt content from earlier phases.
 - This repository forbids git worktrees. For this unattended Symphony session
   only, you are explicitly authorized to create, switch, and push
   issue-specific branches inside this isolated workspace when the Linear/PR

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BOOTSTRAP_SCRIPT="$SCRIPT_DIR/bootstrap_ralph.sh"
+
+RALPH_STATE_ROOT="${RALPH_STATE_ROOT:-$HOME/.local/share/mister-smith/ralph-orchestrator}"
+RALPH_INSTALL_ROOT="${RALPH_INSTALL_ROOT:-$RALPH_STATE_ROOT/install}"
+MANAGED_RALPH_BIN="${MISTER_SMITH_RALPH_BIN:-$RALPH_INSTALL_ROOT/bin/ralph}"
+
+if [[ ! -x "$MANAGED_RALPH_BIN" ]]; then
+  if [[ "${RALPH_AUTO_BOOTSTRAP:-1}" != "1" ]]; then
+    echo "Managed Ralph binary is missing at $MANAGED_RALPH_BIN." >&2
+    echo "Run ./scripts/bootstrap_ralph.sh or set MISTER_SMITH_RALPH_BIN." >&2
+    exit 1
+  fi
+  "$BOOTSTRAP_SCRIPT" >/dev/null
+fi
+
+if [[ ! -x "$MANAGED_RALPH_BIN" ]]; then
+  echo "Managed Ralph binary is missing at $MANAGED_RALPH_BIN after bootstrap." >&2
+  exit 1
+fi
+
+exec "$MANAGED_RALPH_BIN" "$@"

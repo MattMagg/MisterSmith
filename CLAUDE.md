@@ -74,6 +74,9 @@ real gap.
 4. Fall back to raw Linear, shell, or one-off repo glue only when Smith does not yet model the
    operation.
 
+When a task explicitly calls for Ralph, use `./scripts/ralph` instead of bare `ralph`. The wrapper
+bootstraps the managed upstream install under `~/.local/share/mister-smith/ralph-orchestrator`.
+
 ## State Semantics
 
 Phase completion in this repo means the relevant substrate and validation artifacts are landed. It
