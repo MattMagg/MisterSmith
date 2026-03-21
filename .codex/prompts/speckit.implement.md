@@ -16,7 +16,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 - Check if `.specify/extensions.yml` exists in the project root.
 - If it exists, read it and look for entries under the `hooks.before_implement` key
 - If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
-- Filter to only hooks where `enabled: true`
+- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
 - For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
   - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
@@ -150,17 +150,6 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Core development**: Implement models, services, CLI commands, endpoints
    - **Integration work**: Database connections, middleware, logging, external services
    - **Polish and validation**: Unit tests, performance optimization, documentation
-   - **Mister Smith subagent wiring**:
-     - start with `smith_repo_grounder` when repo grounding is incomplete
-     - add `smith_control_plane_auditor` when workflow, queue, issue, or PR state matters
-     - add `smith_docs_researcher` when external docs or provider behavior are relevant
-     - use one `smith_crate_worker` per disjoint write scope
-     - pair each write worker with `smith_validator`
-     - run `smith_reviewer` before final parent-thread finalization
-     - use `smith_ralph_packet_builder` for Ralph flows and `smith_speckit_router`
-       plus `smith_slice_planner` for SpecKit flows
-     - keep `save_linear_issue`, `save_issue_workpad`, `apply_queue_stage`,
-       PR merge/push/land, and final state transitions in the parent thread
 
 8. Progress tracking and error handling:
    - Report progress after each completed task
@@ -182,7 +171,7 @@ Note: This command assumes a complete task breakdown exists in tasks.md. If task
 10. **Check for extension hooks**: After completion validation, check if `.specify/extensions.yml` exists in the project root.
     - If it exists, read it and look for entries under the `hooks.after_implement` key
     - If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
-    - Filter to only hooks where `enabled: true`
+    - Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
     - For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
       - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
       - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
