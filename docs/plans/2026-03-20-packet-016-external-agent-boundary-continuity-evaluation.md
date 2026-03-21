@@ -2,7 +2,7 @@
 
 Date: March 20, 2026
 Status: Completed
-Issue: `MS-99`
+Issues: `MS-99` live proof, `MS-100` final validation
 
 ## Objective
 
@@ -166,6 +166,50 @@ cargo test -p mister-smith-http
 cargo test -p mister-smith-app --test autonomy_status_tests
 cargo build --workspace
 ```
+
+## Final Validation Refresh (`MS-100`)
+
+Date: March 20, 2026 at 22:21:40 EDT
+
+- repo workspace: `/Users/macmain/.local/share/symphony-workspaces/MS-100`
+- branch: `ms-100-packet-016-validation`
+- validation base: fresh local branch from `origin/main` after recovering the provided workspace
+  from an invalid `HEAD`
+- packet note basis: packet `016` landed on `main` at `21f46f3`; this refresh revalidates the
+  bounded HTTP, app, and event surfaces on `51a9ba1`
+
+### Refresh Commands Run
+
+```bash
+cargo test -p mister-smith-http
+cargo test -p mister-smith-app --test autonomy_status_tests
+cargo test -p mister-smith-events --test autonomy_event_tests
+cargo build --workspace
+```
+
+### Refresh Results
+
+- `cargo test -p mister-smith-http`
+  - passed: `59` unit tests, `0` failures
+  - includes the delegated-ingress forwarding path plus the deterministic route, scope, and
+    revocation rejection coverage added for packet `016`
+- `cargo test -p mister-smith-app --test autonomy_status_tests`
+  - passed: `17` tests, `0` failures
+  - confirms accepted task-ingress continuity, operator-visible rationale/history, and CLI-facing
+    autonomy projection remain green
+- `cargo test -p mister-smith-events --test autonomy_event_tests`
+  - passed: `15` tests, `0` failures
+  - confirms event-bus autonomy projection, accepted-ingress decision continuity, and frozen proof
+    outcome summaries remain green
+- `cargo build --workspace`
+  - succeeded with no compile errors across the full Rust workspace
+
+### Final Slice Outcome
+
+- `T017`: complete; the targeted HTTP, app, and event validation set is current and green
+- `T018`: complete; `cargo build --workspace` succeeded on the refreshed packet branch
+- `T019`: complete; this note now carries both the original accepted-ingress proof and the
+  final-validation refresh needed for review without widening packet `016`
 
 ## Conclusion
 
