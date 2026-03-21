@@ -77,3 +77,7 @@ Validation:
 - wrapper proof:
   `bash -x ./scripts/ralph --version` executed
   `~/.local/share/mister-smith/ralph-orchestrator/install/bin/ralph --version`
+- adversarial proof:
+  `env MISTER_SMITH_RALPH_BIN=/var/tmp/mister-smith-missing-ralph RALPH_AUTO_BOOTSTRAP=0 ./scripts/ralph --version`
+  failed fast with managed-binary guidance
+  `./scripts/ralph --version` executed and returned `ralph 2.8.1`
