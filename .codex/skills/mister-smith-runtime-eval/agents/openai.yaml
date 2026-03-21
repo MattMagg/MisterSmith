@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mister Smith Runtime Eval"
+  short_description: "Run full live runtime proof and evidence capture"
+  default_prompt: "Use $mister-smith-runtime-eval to run a complete Mister Smith runtime session evaluation and leave a durable proof note."
