@@ -3,6 +3,7 @@
 //! Orchestrates process lifecycle: deterministic startup, graceful shutdown,
 //! signal handling, observability initialization, and cross-phase integration wiring.
 
+mod agent_inspection;
 mod auth;
 mod autonomy;
 mod bootstrap;

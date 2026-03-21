@@ -1,0 +1,216 @@
+export type TabId = 'runs' | 'sessions' | 'agents' | 'health';
+
+export interface StoredSettings {
+  runtimeBaseUrl: string;
+  natsMonitorUrl: string;
+  reconnectEnabled: boolean;
+  activeTab: TabId;
+}
+
+export type TimelineConnectionState = 'connecting' | 'connected' | 'disconnected';
+
+export interface ComponentHealth {
+  name: string;
+  status: string;
+  message?: string | null;
+}
+
+export interface HealthResponse {
+  status: string;
+  components: ComponentHealth[];
+}
+
+export interface ConfigResponse {
+  version: string;
+  config: Record<string, unknown>;
+}
+
+export interface ResultPreview {
+  workflow_id: string;
+  proof_outcome: string;
+  preview_text?: string | null;
+  payload_location: string;
+  provenance_lines: string[];
+}
+
+export interface RunSummary {
+  task_id: string;
+  status: string;
+  priority: number;
+  description: string;
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  session_id?: string | null;
+  turn_index?: number | null;
+  proof_outcome?: string | null;
+  result_preview?: ResultPreview | null;
+}
+
+export interface TaskInspectResponse {
+  task_id: string;
+  status: string;
+  result?: unknown;
+}
+
+export interface CreateTaskResponse {
+  task_id: string;
+  assigned_agent_id: string;
+  status: string;
+}
+
+export interface SessionSummary {
+  session_id: string;
+  status: string;
+  coordinator_agent_id: string;
+  provider_kind: string;
+  model_id: string;
+  active_workflow_id?: string | null;
+  last_completed_workflow_id?: string | null;
+  turn_count: number;
+  updated_at: string;
+  ended_at?: string | null;
+  last_preview?: string | null;
+}
+
+export interface SessionResumeProvenance {
+  recovered_after_restart?: boolean;
+  resumed_after_restart?: boolean;
+  recovered_at?: string | null;
+  recovery_reason?: string | null;
+  resumed_from_workflow_id?: string | null;
+  resumed_from_turn_index?: number | null;
+}
+
+export interface SessionRetainedResult {
+  workflow_id: string;
+  turn_index: number;
+  status: string;
+  assistant_result: Record<string, unknown>;
+  preview?: string | null;
+  provenance: {
+    runtime_execution_mode: Record<string, unknown>;
+    graph_state?: string | null;
+    graph_id?: string | null;
+    source_fields: string[];
+  };
+}
+
+export interface SessionTurnSummary {
+  turn_index: number;
+  workflow_id: string;
+  status: string;
+  user_message: string;
+  assistant_result?: SessionRetainedResult | null;
+  resume_provenance?: SessionResumeProvenance | null;
+}
+
+export interface SessionInspectResponse {
+  session_id: string;
+  status: string;
+  coordinator_agent_id: string;
+  provider_kind: string;
+  model_id: string;
+  active_workflow_id?: string | null;
+  last_completed_workflow_id?: string | null;
+  turn_count: number;
+  last_assistant_result?: SessionRetainedResult | null;
+  turns: SessionTurnSummary[];
+  ended_at?: string | null;
+}
+
+export interface SessionTurnAcceptedResponse {
+  session_id: string;
+  workflow_id: string;
+  coordinator_agent_id: string;
+  turn_index: number;
+  status: string;
+}
+
+export interface EndSessionResponse {
+  session_id: string;
+  status: string;
+  ended_at: string;
+}
+
+export interface AgentSummary {
+  agent_id: string;
+  agent_type: string;
+  availability: string;
+  name: string;
+  status: string;
+  last_heartbeat?: string | null;
+}
+
+export interface AgentDetail extends AgentSummary {
+  metadata: Record<string, unknown>;
+}
+
+export interface TimelineEvent {
+  event_type: string;
+  payload: Record<string, unknown> | string | number[] | null;
+  timestamp: string;
+}
+
+export interface OpenAiChatGptStatusPayload {
+  authenticated: boolean;
+  account_type?: string | null;
+  email?: string | null;
+  plan_type?: string | null;
+  requires_openai_auth: boolean;
+  summary: string;
+}
+
+export interface ClaudeSubscriptionStatusPayload {
+  authenticated: boolean;
+  expired: boolean;
+  source?: string | null;
+  masked_token?: string | null;
+  summary: string;
+}
+
+export interface NatsMonitorSnapshot {
+  available: boolean;
+  degraded: boolean;
+  summary: string;
+  varz?: Record<string, unknown> | null;
+  connz?: Record<string, unknown> | null;
+  jsz?: Record<string, unknown> | null;
+  errors: string[];
+}
+
+export interface DashboardSelection {
+  runId: string | null;
+  sessionId: string | null;
+  agentId: string | null;
+}
+
+export interface RuntimeProbeSnapshot {
+  health: HealthResponse | null;
+  config: ConfigResponse | null;
+  live: boolean;
+  ready: boolean;
+}
+
+export interface DashboardSnapshot {
+  runtimeReachable: boolean;
+  runtimeSummary: string;
+  probes: RuntimeProbeSnapshot;
+  runs: RunSummary[];
+  selectedRunId: string | null;
+  runDetail: TaskInspectResponse | null;
+  sessions: SessionSummary[];
+  selectedSessionId: string | null;
+  sessionDetail: SessionInspectResponse | null;
+  agents: AgentSummary[];
+  selectedAgentId: string | null;
+  agentDetail: AgentDetail | null;
+  nats: NatsMonitorSnapshot;
+  errors: string[];
+}
+
+export interface AuthSnapshot {
+  openAi: OpenAiChatGptStatusPayload;
+  claude: ClaudeSubscriptionStatusPayload;
+  errors: string[];
+}

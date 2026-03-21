@@ -214,6 +214,26 @@ pub async fn find_agents_by_status(
     .map_err(from_sqlx_error)
 }
 
+/// List all agents from the registry ordered by freshest activity first.
+pub async fn list_agents(pool: &PgPool) -> Result<Vec<AgentRecord>, PersistenceError> {
+    sqlx::query_as::<_, AgentRecord>(
+        r#"
+        SELECT
+            agent_id, agent_type, agent_name, status::TEXT AS status,
+            capabilities, configuration, metadata,
+            parent_agent_id, created_at, updated_at, last_heartbeat
+        FROM agents.registry
+        ORDER BY
+            COALESCE(last_heartbeat, updated_at, created_at) DESC,
+            created_at DESC,
+            agent_id DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
 // ---------------------------------------------------------------------------
 // Agent State CRUD
 // ---------------------------------------------------------------------------
@@ -720,6 +740,36 @@ pub async fn list_workflows_with_persisted_autonomy_status(
     .map_err(from_sqlx_error)
 }
 
+/// List root workflow task records for operator collection views.
+pub async fn list_root_workflows(
+    pool: &PgPool,
+    status: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<TaskRecord>, PersistenceError> {
+    sqlx::query_as::<_, TaskRecord>(
+        r#"
+        SELECT
+            task_id, task_type, agent_id, payload, result,
+            metadata, status::TEXT AS status, priority, correlation_id,
+            parent_task_id, created_at, started_at,
+            completed_at, expires_at
+        FROM tasks.records
+        WHERE task_type = 'workflow'
+          AND parent_task_id IS NULL
+          AND ($1::task_status_type IS NULL OR status = $1::task_status_type)
+        ORDER BY created_at DESC, task_id DESC
+        LIMIT $2 OFFSET $3
+        "#,
+    )
+    .bind(status)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
 // ---------------------------------------------------------------------------
 // Conversation session CRUD
 // ---------------------------------------------------------------------------
@@ -783,6 +833,34 @@ pub async fn find_session(
     )
     .bind(session_id)
     .fetch_optional(pool)
+    .await
+    .map_err(from_sqlx_error)
+}
+
+/// List durable conversation sessions for operator collection views.
+pub async fn list_sessions(
+    pool: &PgPool,
+    status: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<SessionRecord>, PersistenceError> {
+    sqlx::query_as::<_, SessionRecord>(
+        r#"
+        SELECT
+            session_id, coordinator_agent_id, status::TEXT AS status,
+            provider_kind, model_id, active_workflow_id,
+            last_completed_workflow_id, turn_count, retained_context,
+            created_at, updated_at, ended_at
+        FROM tasks.sessions
+        WHERE ($1::session_status_type IS NULL OR status = $1::session_status_type)
+        ORDER BY updated_at DESC, created_at DESC, session_id DESC
+        LIMIT $2 OFFSET $3
+        "#,
+    )
+    .bind(status)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
     .await
     .map_err(from_sqlx_error)
 }

@@ -1,0 +1,76 @@
+:root {
+  color-scheme: light;
+  font-family: 'Avenir Next', 'Trebuchet MS', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #201b14;
+  background:
+    radial-gradient(circle at top left, rgba(241, 196, 111, 0.36), transparent 28%),
+    radial-gradient(circle at top right, rgba(82, 130, 122, 0.2), transparent 24%),
+    linear-gradient(180deg, #fbf6ed 0%, #f2e8da 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  --panel-copy: #201b14;
+  --muted-copy: #6f6254;
+  --panel-border: rgba(74, 58, 29, 0.14);
+  --accent-strong: #f0b35f;
+  --accent-soft: #d9d38f;
+  --danger-copy: #8f3628;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  appearance: none;
+}
+
+h1,
+h2,
+h3,
+strong {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', serif;
+}
+
+h1 {
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  line-height: 1.02;
+}
+
+h2 {
+  font-size: 1.45rem;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+a {
+  color: inherit;
+}
+
+pre,
+code {
+  font-family: 'SF Mono', 'IBM Plex Mono', monospace;
+  font-size: 0.88rem;
+}

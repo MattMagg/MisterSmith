@@ -139,6 +139,17 @@ impl TaskRepository {
         queries::find_tasks_by_correlation(&self.pool, correlation_id).await
     }
 
+    /// List root workflow tasks for operator collection views.
+    #[cfg(feature = "sqlx")]
+    pub async fn list_root_workflows(
+        &self,
+        status: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<TaskRecord>, PersistenceError> {
+        queries::list_root_workflows(&self.pool, status, limit, offset).await
+    }
+
     /// Persist managed-memory indexes onto the task metadata document.
     #[cfg(feature = "sqlx")]
     pub async fn persist_managed_memory_metadata(

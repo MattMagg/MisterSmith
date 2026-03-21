@@ -15,19 +15,21 @@
 //! 9. Set state to Ready
 
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use mister_smith_agents::AgentRegistry;
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::ProcessLifecycle;
-use mister_smith_events::EventBus;
+use mister_smith_events::{AutonomyEventType, EventBus, EventType};
 use mister_smith_monitoring::{HealthMonitor, MetricsCollector};
 use mister_smith_nats::{NatsTransport, NatsTransportConfig};
 use mister_smith_supervision::SupervisedSystem;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
+use crate::agent_inspection::RegistryAgentInspectionService;
 use crate::autonomy;
 use crate::conversation::ConversationRuntimeService;
 use crate::execution::RuntimeTaskService;
@@ -62,11 +64,13 @@ pub struct BootstrapContext {
     pub shutdown_flag: Arc<AtomicBool>,
     pub monitor_handle: Option<tokio::task::JoinHandle<()>>,
     pub metrics_handle: Option<tokio::task::JoinHandle<()>>,
+    pub websocket_bridge_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 struct HttpServerServices {
     task_service: Arc<RuntimeTaskService>,
     conversation_service: Arc<ConversationRuntimeService>,
+    agent_service: Arc<RegistryAgentInspectionService>,
 }
 
 /// Run the full bootstrap sequence with startup timeout enforcement.
@@ -109,6 +113,7 @@ async fn bootstrap_inner(
 
     // Shutdown coordination
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
+    let (event_tx, _) = broadcast::channel::<mister_smith_http::WsEvent>(1024);
     let shutdown_flag = Arc::new(AtomicBool::new(false));
 
     // Step 1: Initialize EventBus
@@ -142,10 +147,12 @@ async fn bootstrap_inner(
         event_bus.clone(),
         nats_transport.clone(),
         supervised_system.clone(),
+        event_tx.clone(),
     )
     .await
     .map_err(|error| format!("runtime task service bootstrap failed: {error}"))?;
     let conversation_service = ConversationRuntimeService::new(task_service.clone());
+    let agent_service = RegistryAgentInspectionService::new(task_service.pool());
     info!("Runtime task service initialized");
 
     // Step 6: Initialize agent registry
@@ -170,6 +177,12 @@ async fn bootstrap_inner(
     };
     info!("Background monitors started");
 
+    let websocket_bridge_handle = Some(spawn_autonomy_websocket_bridge(
+        event_bus.clone(),
+        event_tx.clone(),
+        shutdown_flag.clone(),
+    ));
+
     // Step 8: Start HTTP server (with /metrics endpoint if prometheus enabled)
     let http_handle = start_http_server(
         config,
@@ -178,9 +191,11 @@ async fn bootstrap_inner(
         state_tracker,
         event_bus.clone(),
         nats_transport.clone(),
+        event_tx,
         HttpServerServices {
             task_service,
             conversation_service,
+            agent_service,
         },
     )
     .await?;
@@ -206,6 +221,7 @@ async fn bootstrap_inner(
         shutdown_flag,
         monitor_handle,
         metrics_handle,
+        websocket_bridge_handle,
     })
 }
 
@@ -256,6 +272,7 @@ async fn start_http_server(
     state_tracker: &ProcessStateTracker,
     event_bus: Arc<EventBus>,
     nats_transport: Option<Arc<NatsTransport>>,
+    event_tx: broadcast::Sender<mister_smith_http::WsEvent>,
     services: HttpServerServices,
 ) -> Result<Option<tokio::task::JoinHandle<()>>, Box<dyn std::error::Error + Send + Sync>> {
     let port = config.transport.http_port.unwrap_or(8080);
@@ -268,11 +285,13 @@ async fn start_http_server(
     let autonomy_pool = services.task_service.pool();
     let autonomy_task_service = services.task_service.clone();
     let mut app_state = mister_smith_http::AppState::new()
+        .with_event_tx(event_tx)
         .with_transport_health(Arc::new(mister_smith_http::server::NatsHealthCheck::new(
             nats_transport.is_some(),
         )))
         .with_task_service(services.task_service)
-        .with_conversation_service(services.conversation_service);
+        .with_conversation_service(services.conversation_service)
+        .with_agent_service(services.agent_service);
 
     if config.security.enabled {
         let security =
@@ -418,4 +437,60 @@ async fn start_http_server(
     });
 
     Ok(Some(handle))
+}
+
+fn spawn_autonomy_websocket_bridge(
+    event_bus: Arc<EventBus>,
+    event_tx: broadcast::Sender<mister_smith_http::WsEvent>,
+    shutdown_flag: Arc<AtomicBool>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut rx = event_bus.subscribe_broadcast();
+        while !shutdown_flag.load(Ordering::SeqCst) {
+            match rx.recv().await {
+                Ok(event) => {
+                    let Some(event_type) = autonomy_websocket_event_type(&event.event_type) else {
+                        continue;
+                    };
+                    mister_smith_http::websocket::broadcast_event(
+                        &event_tx,
+                        mister_smith_http::WsEvent {
+                            event_type,
+                            payload: event.payload,
+                            timestamp: chrono::DateTime::<chrono::Utc>::from(event.timestamp)
+                                .to_rfc3339(),
+                        },
+                    );
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                    warn!(skipped, "Autonomy websocket bridge lagged behind EventBus");
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    })
+}
+
+fn autonomy_websocket_event_type(event_type: &EventType) -> Option<String> {
+    match event_type {
+        EventType::Autonomy(kind) => Some(format!("autonomy.{}", autonomy_event_slug(*kind))),
+        _ => None,
+    }
+}
+
+fn autonomy_event_slug(kind: AutonomyEventType) -> &'static str {
+    match kind {
+        AutonomyEventType::GraphUpdated => "graph_updated",
+        AutonomyEventType::TopologySelected => "topology_selected",
+        AutonomyEventType::BranchUpdated => "branch_updated",
+        AutonomyEventType::ContextPressureObserved => "context_pressure_observed",
+        AutonomyEventType::ProfileSnapshotRecorded => "profile_snapshot_recorded",
+        AutonomyEventType::GuardDecisionEvaluated => "guard_decision_evaluated",
+        AutonomyEventType::InterventionRecorded => "intervention_recorded",
+        AutonomyEventType::CheckpointRecorded => "checkpoint_recorded",
+        AutonomyEventType::RoutingDecisionRecorded => "routing_decision_recorded",
+        AutonomyEventType::DelegationUpdated => "delegation_updated",
+        AutonomyEventType::DelegationDecisionRecorded => "delegation_decision_recorded",
+        AutonomyEventType::StatusUpdated => "status_updated",
+    }
 }

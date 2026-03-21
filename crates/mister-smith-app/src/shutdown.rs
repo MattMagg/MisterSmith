@@ -119,6 +119,9 @@ pub async fn graceful_shutdown(
     if let Some(handle) = ctx.metrics_handle {
         let _ = tokio::time::timeout(Duration::from_secs(5), handle).await;
     }
+    if let Some(handle) = ctx.websocket_bridge_handle {
+        let _ = tokio::time::timeout(Duration::from_secs(5), handle).await;
+    }
     info!("Background monitors stopped");
 
     // Step 4: Wait for HTTP server to finish draining
@@ -173,6 +176,9 @@ pub async fn forced_shutdown(ctx: BootstrapContext, state_tracker: &ProcessState
 
     let _ = ctx.supervised_system.shutdown().await;
     if let Some(handle) = ctx.supervision_handle {
+        handle.abort();
+    }
+    if let Some(handle) = ctx.websocket_bridge_handle {
         handle.abort();
     }
 

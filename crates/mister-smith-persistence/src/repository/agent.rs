@@ -95,6 +95,12 @@ impl AgentRepository {
         queries::find_agents_by_status(&self.pool, status).await
     }
 
+    /// List all agents from the registry ordered by freshest activity first.
+    #[cfg(feature = "sqlx")]
+    pub async fn list_agents(&self) -> Result<Vec<AgentRecord>, PersistenceError> {
+        queries::list_agents(&self.pool).await
+    }
+
     /// Save an agent state key-value pair after quarantining the
     /// agent-to-shared-state transfer.
     #[cfg(feature = "security")]

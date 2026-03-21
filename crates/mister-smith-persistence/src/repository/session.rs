@@ -95,4 +95,15 @@ impl SessionRepository {
     ) -> Result<Vec<SessionTurnRecord>, PersistenceError> {
         queries::list_session_turns(&self.pool, *session_id.as_ref()).await
     }
+
+    /// List conversation sessions ordered by freshest updates first.
+    #[cfg(feature = "sqlx")]
+    pub async fn list_sessions(
+        &self,
+        status: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<SessionRecord>, PersistenceError> {
+        queries::list_sessions(&self.pool, status, limit, offset).await
+    }
 }

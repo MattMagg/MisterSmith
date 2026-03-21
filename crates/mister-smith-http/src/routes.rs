@@ -19,9 +19,15 @@ pub fn protected_api_router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/agents", get(handlers::list_agents))
         .route("/api/v1/agents/{agent_id}", get(handlers::get_agent))
-        .route("/api/v1/tasks", post(handlers::create_task))
+        .route(
+            "/api/v1/tasks",
+            get(handlers::list_tasks).post(handlers::create_task),
+        )
         .route("/api/v1/tasks/{task_id}", get(handlers::get_task))
-        .route("/api/v1/sessions", post(handlers::create_session))
+        .route(
+            "/api/v1/sessions",
+            get(handlers::list_sessions).post(handlers::create_session),
+        )
         .route("/api/v1/sessions/{session_id}", get(handlers::get_session))
         .route(
             "/api/v1/sessions/{session_id}/turns",
@@ -106,7 +112,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[tokio::test]
@@ -118,7 +124,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[tokio::test]

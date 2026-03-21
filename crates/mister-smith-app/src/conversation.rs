@@ -12,8 +12,9 @@ use mister_smith_core::{AgentId, SessionId, SessionRetainedResultView, SessionSt
 use mister_smith_http::server::{
     ConversationContinueRequest, ConversationCreateRequest, ConversationEndView,
     ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionService,
-    ConversationSessionView, ConversationTurnAccepted, ConversationTurnContext,
-    ConversationTurnSummaryView, TaskSubmissionRequest,
+    ConversationSessionSummaryView, ConversationSessionView, ConversationTurnAccepted,
+    ConversationTurnContext, ConversationTurnSummaryView, SessionListRequest,
+    TaskSubmissionRequest,
 };
 use mister_smith_persistence::postgres::queries::{self, TaskRecord};
 use mister_smith_persistence::{SessionRecord, SessionRepository, SessionTurnRecord};
@@ -377,6 +378,37 @@ impl ConversationSessionService for ConversationRuntimeService {
             ended_at: session.ended_at.unwrap_or(ended_at),
         })
     }
+
+    async fn list_sessions(
+        &self,
+        request: SessionListRequest,
+    ) -> Result<Vec<ConversationSessionSummaryView>, ConversationServiceError> {
+        let limit = i64::try_from(request.limit).map_err(|_| {
+            ConversationServiceError::BadRequest("session list limit is invalid".to_string())
+        })?;
+        let offset = i64::try_from(request.offset).map_err(|_| {
+            ConversationServiceError::BadRequest("session list offset is invalid".to_string())
+        })?;
+        let rows = self
+            .session_repository
+            .list_sessions(request.status.as_deref(), limit, offset)
+            .await
+            .map_err(persistence_error)?;
+
+        let mut summaries = Vec::with_capacity(rows.len());
+        for session in rows {
+            let session = if session.active_workflow_id.is_some() {
+                self.sync_session(SessionId::from_uuid(session.session_id))
+                    .await?
+                    .0
+            } else {
+                session
+            };
+            summaries.push(build_session_summary_view(&session));
+        }
+
+        Ok(summaries)
+    }
 }
 
 async fn build_session_view(
@@ -531,6 +563,33 @@ fn last_retained_result_from_context(
     retained_context
         .get("last_assistant_result")
         .and_then(retained_result_projection_from_value)
+}
+
+fn last_preview_from_context(retained_context: &Value) -> Option<String> {
+    last_retained_result_from_context(retained_context).and_then(|view| {
+        view.preview.or_else(|| {
+            view.assistant_result
+                .get("preview")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+    })
+}
+
+fn build_session_summary_view(session: &SessionRecord) -> ConversationSessionSummaryView {
+    ConversationSessionSummaryView {
+        session_id: SessionId::from_uuid(session.session_id),
+        status: parse_session_status(&session.status),
+        coordinator_agent_id: AgentId::from_uuid(session.coordinator_agent_id),
+        provider_kind: session.provider_kind.clone(),
+        model_id: session.model_id.clone(),
+        active_workflow_id: session.active_workflow_id.map(TaskId::from_uuid),
+        last_completed_workflow_id: session.last_completed_workflow_id.map(TaskId::from_uuid),
+        turn_count: session.turn_count.max(0) as u32,
+        updated_at: session.updated_at,
+        ended_at: session.ended_at,
+        last_preview: last_preview_from_context(&session.retained_context),
+    }
 }
 
 fn retained_context_after_turn(

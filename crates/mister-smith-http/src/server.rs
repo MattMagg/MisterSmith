@@ -9,8 +9,8 @@ use axum::middleware as axum_mw;
 use axum::Router;
 use chrono::{DateTime, Utc};
 use mister_smith_core::{
-    AgentId, AgentType, ExternalDelegationEnvelope, SessionId, SessionRetainedResultView,
-    SessionStatus, TaskId,
+    AgentAvailability, AgentId, AgentType, ExternalDelegationEnvelope, OperatorResultPreview,
+    ProofOutcomeClassification, SessionId, SessionRetainedResultView, SessionStatus, TaskId,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -72,6 +72,44 @@ pub struct TaskStatusView {
     pub result: Option<serde_json::Value>,
 }
 
+/// Query shape for root workflow collection views.
+#[derive(Debug, Clone, Default)]
+pub struct TaskListRequest {
+    /// Optional persisted workflow status filter.
+    pub status: Option<String>,
+    /// Maximum number of rows to return.
+    pub limit: usize,
+    /// Number of rows to skip from the head of the ordered result set.
+    pub offset: usize,
+}
+
+/// Summary row for the operator workflow collection.
+#[derive(Debug, Clone)]
+pub struct TaskSummaryView {
+    /// Stable workflow identifier.
+    pub task_id: TaskId,
+    /// Persisted workflow status.
+    pub status: String,
+    /// Persisted numeric priority.
+    pub priority: i32,
+    /// Operator-visible workflow description.
+    pub description: String,
+    /// Creation timestamp.
+    pub created_at: DateTime<Utc>,
+    /// Start timestamp once execution begins.
+    pub started_at: Option<DateTime<Utc>>,
+    /// Completion timestamp once execution ends.
+    pub completed_at: Option<DateTime<Utc>>,
+    /// Linked retained session, when this workflow is part of one.
+    pub session_id: Option<SessionId>,
+    /// Accepted turn index when the workflow belongs to a retained session.
+    pub turn_index: Option<u32>,
+    /// Shared proof-outcome classification when available.
+    pub proof_outcome: Option<ProofOutcomeClassification>,
+    /// Compact operator-facing result preview when available.
+    pub result_preview: Option<OperatorResultPreview>,
+}
+
 /// Runtime execution contract for task submission and lookup.
 #[async_trait]
 pub trait TaskExecutionService: Send + Sync {
@@ -83,6 +121,9 @@ pub trait TaskExecutionService: Send + Sync {
 
     /// Look up the latest task state by its stable identifier.
     async fn get_task(&self, task_id: TaskId) -> Result<Option<TaskStatusView>, String>;
+
+    /// List root workflow runs for operator collection views.
+    async fn list_tasks(&self, request: TaskListRequest) -> Result<Vec<TaskSummaryView>, String>;
 }
 
 /// Session context attached to a workflow submission.
@@ -198,6 +239,44 @@ pub struct ConversationSessionView {
     pub ended_at: Option<DateTime<Utc>>,
 }
 
+/// Query shape for durable session collection views.
+#[derive(Debug, Clone, Default)]
+pub struct SessionListRequest {
+    /// Optional session lifecycle filter.
+    pub status: Option<String>,
+    /// Maximum number of rows to return.
+    pub limit: usize,
+    /// Number of rows to skip from the head of the ordered result set.
+    pub offset: usize,
+}
+
+/// Summary row for one retained session in an operator collection.
+#[derive(Debug, Clone)]
+pub struct ConversationSessionSummaryView {
+    /// Stable session identifier.
+    pub session_id: SessionId,
+    /// Session lifecycle state.
+    pub status: SessionStatus,
+    /// Stable coordinator identity.
+    pub coordinator_agent_id: AgentId,
+    /// Provider currently attributed to the session.
+    pub provider_kind: String,
+    /// Model currently attributed to the session.
+    pub model_id: String,
+    /// Active root workflow when the session is busy.
+    pub active_workflow_id: Option<TaskId>,
+    /// Most recent completed or failed root workflow.
+    pub last_completed_workflow_id: Option<TaskId>,
+    /// Number of accepted turns.
+    pub turn_count: u32,
+    /// Most recent update timestamp.
+    pub updated_at: DateTime<Utc>,
+    /// Logical close time when ended.
+    pub ended_at: Option<DateTime<Utc>>,
+    /// Compact preview of the most recent retained assistant result.
+    pub last_preview: Option<String>,
+}
+
 /// Operator-facing response after logically ending a session.
 #[derive(Debug, Clone)]
 pub struct ConversationEndView {
@@ -266,6 +345,61 @@ pub trait ConversationSessionService: Send + Sync {
         &self,
         session_id: SessionId,
     ) -> Result<ConversationEndView, ConversationServiceError>;
+
+    /// List durable sessions for operator collection views.
+    async fn list_sessions(
+        &self,
+        request: SessionListRequest,
+    ) -> Result<Vec<ConversationSessionSummaryView>, ConversationServiceError>;
+}
+
+/// Summary row for one agent inspection record.
+#[derive(Debug, Clone)]
+pub struct AgentInspectionSummaryView {
+    /// Agent identifier.
+    pub agent_id: AgentId,
+    /// Agent type/role.
+    pub agent_type: AgentType,
+    /// Derived availability signal for operator displays.
+    pub availability: AgentAvailability,
+    /// Human-readable name.
+    pub name: String,
+    /// Raw persisted lifecycle status from the registry.
+    pub status: String,
+    /// Latest recorded heartbeat.
+    pub last_heartbeat: Option<DateTime<Utc>>,
+}
+
+/// Detailed inspection view for one agent.
+#[derive(Debug, Clone)]
+pub struct AgentInspectionDetailView {
+    /// Agent identifier.
+    pub agent_id: AgentId,
+    /// Agent type/role.
+    pub agent_type: AgentType,
+    /// Derived availability signal for operator displays.
+    pub availability: AgentAvailability,
+    /// Human-readable name.
+    pub name: String,
+    /// Raw persisted lifecycle status from the registry.
+    pub status: String,
+    /// Latest recorded heartbeat.
+    pub last_heartbeat: Option<DateTime<Utc>>,
+    /// Additional metadata.
+    pub metadata: serde_json::Value,
+}
+
+/// Runtime inspection contract for registry-backed agents.
+#[async_trait]
+pub trait AgentInspectionService: Send + Sync {
+    /// List all agents available to the local runtime.
+    async fn list_agents(&self) -> Result<Vec<AgentInspectionSummaryView>, String>;
+
+    /// Load one agent detail by stable identifier.
+    async fn get_agent(
+        &self,
+        agent_id: AgentId,
+    ) -> Result<Option<AgentInspectionDetailView>, String>;
 }
 
 /// NATS transport health check implementation backed by an atomic connection flag.
@@ -305,6 +439,8 @@ pub struct AppState {
     pub task_service: Option<Arc<dyn TaskExecutionService>>,
     /// Optional runtime-backed conversation session service.
     pub conversation_service: Option<Arc<dyn ConversationSessionService>>,
+    /// Optional registry-backed agent inspection service.
+    pub agent_service: Option<Arc<dyn AgentInspectionService>>,
     /// Optional security layer for JWT authentication.
     #[cfg(feature = "security")]
     pub security: Option<Arc<mister_smith_security::middleware::SecurityLayer>>,
@@ -319,6 +455,7 @@ impl AppState {
             transport_health: Arc::new(NatsHealthCheck::new(true)),
             task_service: None,
             conversation_service: None,
+            agent_service: None,
             #[cfg(feature = "security")]
             security: None,
         }
@@ -332,6 +469,7 @@ impl AppState {
             transport_health: Arc::new(NatsHealthCheck::new(true)),
             task_service: None,
             conversation_service: None,
+            agent_service: None,
             #[cfg(feature = "security")]
             security: None,
         }
@@ -340,6 +478,12 @@ impl AppState {
     /// Set a custom transport health checker implementation.
     pub fn with_transport_health(mut self, transport_health: Arc<dyn TransportHealth>) -> Self {
         self.transport_health = transport_health;
+        self
+    }
+
+    /// Set a shared WebSocket event broadcast sender.
+    pub fn with_event_tx(mut self, event_tx: broadcast::Sender<WsEvent>) -> Self {
+        self.event_tx = event_tx;
         self
     }
 
@@ -355,6 +499,12 @@ impl AppState {
         conversation_service: Arc<dyn ConversationSessionService>,
     ) -> Self {
         self.conversation_service = Some(conversation_service);
+        self
+    }
+
+    /// Set the registry-backed agent inspection service.
+    pub fn with_agent_service(mut self, agent_service: Arc<dyn AgentInspectionService>) -> Self {
+        self.agent_service = Some(agent_service);
         self
     }
 

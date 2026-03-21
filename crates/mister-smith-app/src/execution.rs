@@ -25,8 +25,10 @@ use mister_smith_core::{
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
-    TaskExecutionService, TaskStatusView, TaskSubmissionRequest, TaskSubmissionResponse,
+    TaskExecutionService, TaskListRequest, TaskStatusView, TaskSubmissionRequest,
+    TaskSubmissionResponse, TaskSummaryView,
 };
+use mister_smith_http::websocket::{broadcast_event, WsEvent};
 use mister_smith_llm::{
     CircuitBreakerConfig, ModelRouter, OpenAiChatGptProvider, ProviderConfig, ProviderKind,
     RoutingPolicy,
@@ -40,6 +42,7 @@ use mister_smith_supervision::SupervisedSystem;
 use mister_smith_transport::{MessageEnvelope, MessagePriority};
 use serde_json::{json, Value};
 use sqlx::PgPool;
+use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use uuid::Uuid;
@@ -200,6 +203,7 @@ pub(crate) struct RuntimeTaskService {
     pool: PgPool,
     repository: Arc<TaskRepository>,
     jetstream: Arc<JetStreamManager>,
+    event_tx: broadcast::Sender<WsEvent>,
     router: Arc<ModelRouter>,
     orchestrator: Arc<Orchestrator>,
     supervised_system: Arc<SupervisedSystem>,
@@ -215,6 +219,7 @@ impl RuntimeTaskService {
         event_bus: Arc<EventBus>,
         nats_transport: Option<Arc<NatsTransport>>,
         supervised_system: Arc<SupervisedSystem>,
+        event_tx: broadcast::Sender<WsEvent>,
     ) -> Result<Arc<Self>, String> {
         let boot_started_at = Utc::now();
         let database_url = env::var("DATABASE_URL")
@@ -303,6 +308,7 @@ impl RuntimeTaskService {
             pool: pool.clone(),
             repository: Arc::new(TaskRepository::new(pool)),
             jetstream,
+            event_tx,
             router,
             orchestrator,
             supervised_system,
@@ -1230,7 +1236,18 @@ impl RuntimeTaskService {
         self.jetstream
             .publish_and_ack(subject, envelope)
             .await
-            .map_err(|error| format!("failed to publish JetStream event on {subject}: {error}"))
+            .map_err(|error| format!("failed to publish JetStream event on {subject}: {error}"))?;
+
+        broadcast_event(
+            &self.event_tx,
+            WsEvent {
+                event_type: subject.to_string(),
+                payload,
+                timestamp: Utc::now().to_rfc3339(),
+            },
+        );
+
+        Ok(())
     }
 
     async fn record_completed_step(
@@ -1462,6 +1479,79 @@ impl TaskExecutionService for RuntimeTaskService {
             result: record.result,
         }))
     }
+
+    async fn list_tasks(&self, request: TaskListRequest) -> Result<Vec<TaskSummaryView>, String> {
+        let limit = i64::try_from(request.limit)
+            .map_err(|_| format!("invalid task list limit {}", request.limit))?;
+        let offset = i64::try_from(request.offset)
+            .map_err(|_| format!("invalid task list offset {}", request.offset))?;
+        let records = self
+            .repository
+            .list_root_workflows(request.status.as_deref(), limit, offset)
+            .await
+            .map_err(|error| format!("failed to list root workflows: {error}"))?;
+
+        Ok(records
+            .into_iter()
+            .map(|record| build_task_summary_view(&record))
+            .collect())
+    }
+}
+
+fn build_task_summary_view(record: &TaskRecord) -> TaskSummaryView {
+    let result_preview =
+        recover_persisted_autonomy_status(record).and_then(|view| view.result_preview);
+    let proof_outcome = result_preview
+        .as_ref()
+        .map(|preview| preview.proof_outcome)
+        .or_else(|| task_proof_outcome(record.result.as_ref()));
+
+    TaskSummaryView {
+        task_id: TaskId::from_uuid(record.task_id),
+        status: record.status.clone(),
+        priority: record.priority,
+        description: workflow_description(record),
+        created_at: record.created_at,
+        started_at: record.started_at,
+        completed_at: record.completed_at,
+        session_id: metadata_session_id(&record.metadata),
+        turn_index: metadata_turn_index(&record.metadata),
+        proof_outcome,
+        result_preview,
+    }
+}
+
+fn workflow_description(record: &TaskRecord) -> String {
+    record
+        .metadata
+        .get("description")
+        .and_then(Value::as_str)
+        .or_else(|| record.payload.get("description").and_then(Value::as_str))
+        .unwrap_or("workflow")
+        .to_string()
+}
+
+fn metadata_session_id(metadata: &Value) -> Option<mister_smith_core::SessionId> {
+    metadata
+        .get("session_id")
+        .and_then(Value::as_str)
+        .and_then(|raw| Uuid::parse_str(raw).ok())
+        .map(mister_smith_core::SessionId::from_uuid)
+}
+
+fn metadata_turn_index(metadata: &Value) -> Option<u32> {
+    metadata
+        .get("turn_index")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+}
+
+fn task_proof_outcome(
+    result: Option<&Value>,
+) -> Option<mister_smith_core::ProofOutcomeClassification> {
+    result
+        .and_then(|value| value.get("proof_outcome").cloned())
+        .and_then(|raw| serde_json::from_value(raw).ok())
 }
 
 fn initial_metadata(

@@ -16,12 +16,15 @@ use uuid::Uuid;
 use crate::errors::HttpError;
 use crate::server::{
     AppState, ConversationContinueRequest, ConversationCreateRequest, ConversationServiceError,
-    TaskSubmissionRequest,
+    SessionListRequest, TaskListRequest, TaskSubmissionRequest,
 };
 
 fn is_false(value: &bool) -> bool {
     !*value
 }
+
+const DEFAULT_COLLECTION_LIMIT: usize = 50;
+const MAX_COLLECTION_LIMIT: usize = 200;
 
 /// Optional external delegation envelope attached by transport auth middleware.
 pub struct ExternalDelegationBoundary(pub Option<ExternalDelegationEnvelope>);
@@ -81,6 +84,11 @@ pub struct AgentSummary {
     pub availability: AgentAvailability,
     /// Human-readable name.
     pub name: String,
+    /// Raw persisted lifecycle status from the registry.
+    pub status: String,
+    /// Latest recorded heartbeat.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_heartbeat: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Agent detail response.
@@ -94,8 +102,60 @@ pub struct AgentDetail {
     pub availability: AgentAvailability,
     /// Human-readable name.
     pub name: String,
+    /// Raw persisted lifecycle status from the registry.
+    pub status: String,
+    /// Latest recorded heartbeat.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_heartbeat: Option<chrono::DateTime<chrono::Utc>>,
     /// Additional metadata.
     pub metadata: serde_json::Value,
+}
+
+/// Root workflow collection query parameters.
+#[derive(Debug, Deserialize, Default)]
+pub struct TaskListQuery {
+    /// Optional task status filter.
+    #[serde(default)]
+    pub status: Option<String>,
+    /// Max rows to return.
+    #[serde(default)]
+    pub limit: Option<usize>,
+    /// Rows to skip from the head of the result set.
+    #[serde(default)]
+    pub offset: Option<usize>,
+}
+
+/// Root workflow summary for list responses.
+#[derive(Debug, Serialize)]
+pub struct TaskSummaryResponse {
+    /// Stable workflow identifier.
+    pub task_id: TaskId,
+    /// Persisted workflow status.
+    pub status: String,
+    /// Persisted numeric priority.
+    pub priority: i32,
+    /// Operator-visible workflow description.
+    pub description: String,
+    /// Workflow creation timestamp.
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Workflow start timestamp when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Workflow completion timestamp when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Linked retained session when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<SessionId>,
+    /// Accepted turn index when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turn_index: Option<u32>,
+    /// Shared proof-outcome classification when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof_outcome: Option<mister_smith_core::ProofOutcomeClassification>,
+    /// Compact operator-facing result preview when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_preview: Option<mister_smith_core::OperatorResultPreview>,
 }
 
 /// Task submission request.
@@ -242,6 +302,51 @@ pub struct SessionInspectResponse {
     pub ended_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// Session collection query parameters.
+#[derive(Debug, Deserialize, Default)]
+pub struct SessionListQuery {
+    /// Optional session lifecycle filter.
+    #[serde(default)]
+    pub status: Option<String>,
+    /// Max rows to return.
+    #[serde(default)]
+    pub limit: Option<usize>,
+    /// Rows to skip from the head of the result set.
+    #[serde(default)]
+    pub offset: Option<usize>,
+}
+
+/// Session summary for collection responses.
+#[derive(Debug, Serialize)]
+pub struct SessionSummaryResponse {
+    /// Stable session identifier.
+    pub session_id: SessionId,
+    /// Session lifecycle state.
+    pub status: mister_smith_core::SessionStatus,
+    /// Stable coordinator identity.
+    pub coordinator_agent_id: AgentId,
+    /// Provider currently attributed to the session.
+    pub provider_kind: String,
+    /// Model currently attributed to the session.
+    pub model_id: String,
+    /// Active workflow when the session is busy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_workflow_id: Option<TaskId>,
+    /// Most recent terminal workflow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_completed_workflow_id: Option<TaskId>,
+    /// Number of accepted turns.
+    pub turn_count: u32,
+    /// Most recent update timestamp.
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// Logical close time when ended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Compact preview of the most recent retained assistant result.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_preview: Option<String>,
+}
+
 /// End-session response.
 #[derive(Debug, Serialize)]
 pub struct EndSessionResponse {
@@ -321,11 +426,16 @@ pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse>
 
 /// `GET /api/v1/agents` — List agents with optional filters.
 pub async fn list_agents(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Query(query): Query<AgentListQuery>,
-) -> Json<Vec<AgentSummary>> {
-    // Placeholder: return mock agents, applying filters if provided.
-    let agents = mock_agents();
+) -> Result<Json<Vec<AgentSummary>>, HttpError> {
+    let agent_service = state.agent_service.as_ref().ok_or_else(|| {
+        HttpError::InternalError("agent inspection service unavailable".to_string())
+    })?;
+    let agents = agent_service
+        .list_agents()
+        .await
+        .map_err(HttpError::InternalError)?;
     let filtered: Vec<AgentSummary> = agents
         .into_iter()
         .filter(|a| {
@@ -343,37 +453,84 @@ pub async fn list_agents(
             }
             true
         })
+        .map(|agent| AgentSummary {
+            agent_id: agent.agent_id,
+            agent_type: agent.agent_type,
+            availability: agent.availability,
+            name: agent.name,
+            status: agent.status,
+            last_heartbeat: agent.last_heartbeat,
+        })
         .collect();
 
-    Json(filtered)
+    Ok(Json(filtered))
 }
 
 /// `GET /api/v1/agents/{agent_id}` — Single agent detail.
 pub async fn get_agent(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(agent_id): Path<String>,
 ) -> Result<Json<AgentDetail>, HttpError> {
-    // Try to parse agent_id as UUID.
     let uuid = Uuid::parse_str(&agent_id)
         .map_err(|_| HttpError::BadRequest(format!("Invalid agent ID: {agent_id}")))?;
+    let agent_service = state.agent_service.as_ref().ok_or_else(|| {
+        HttpError::InternalError("agent inspection service unavailable".to_string())
+    })?;
+    let found = agent_service
+        .get_agent(AgentId::from_uuid(uuid))
+        .await
+        .map_err(HttpError::InternalError)?;
 
-    // Placeholder: check mock agents.
-    let agents = mock_agents();
-    let found = agents.iter().find(|a| *a.agent_id.as_ref() == uuid);
+    found
+        .map(|agent| {
+            Json(AgentDetail {
+                agent_id: agent.agent_id,
+                agent_type: agent.agent_type,
+                availability: agent.availability,
+                name: agent.name,
+                status: agent.status,
+                last_heartbeat: agent.last_heartbeat,
+                metadata: agent.metadata,
+            })
+        })
+        .ok_or_else(|| HttpError::NotFound(format!("Agent {agent_id} not found")))
+}
 
-    match found {
-        Some(agent) => Ok(Json(AgentDetail {
-            agent_id: agent.agent_id,
-            agent_type: agent.agent_type,
-            availability: agent.availability,
-            name: agent.name.clone(),
-            metadata: serde_json::json!({
-                "uptime_seconds": 3600,
-                "tasks_completed": 42,
-            }),
-        })),
-        None => Err(HttpError::NotFound(format!("Agent {agent_id} not found"))),
-    }
+/// `GET /api/v1/tasks` — List root workflow runs.
+pub async fn list_tasks(
+    State(state): State<AppState>,
+    Query(query): Query<TaskListQuery>,
+) -> Result<Json<Vec<TaskSummaryResponse>>, HttpError> {
+    let task_service = state
+        .task_service
+        .as_ref()
+        .ok_or_else(|| HttpError::InternalError("runtime task service unavailable".to_string()))?;
+    let rows = task_service
+        .list_tasks(TaskListRequest {
+            status: query.status,
+            limit: normalize_collection_limit(query.limit),
+            offset: query.offset.unwrap_or(0),
+        })
+        .await
+        .map_err(HttpError::InternalError)?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|row| TaskSummaryResponse {
+                task_id: row.task_id,
+                status: row.status,
+                priority: row.priority,
+                description: row.description,
+                created_at: row.created_at,
+                started_at: row.started_at,
+                completed_at: row.completed_at,
+                session_id: row.session_id,
+                turn_index: row.turn_index,
+                proof_outcome: row.proof_outcome,
+                result_preview: row.result_preview,
+            })
+            .collect(),
+    ))
 }
 
 /// `POST /api/v1/tasks` — Submit a task, returns 202 Accepted.
@@ -524,6 +681,43 @@ pub async fn get_session(
     }))
 }
 
+/// `GET /api/v1/sessions` — List durable conversation sessions.
+pub async fn list_sessions(
+    State(state): State<AppState>,
+    Query(query): Query<SessionListQuery>,
+) -> Result<Json<Vec<SessionSummaryResponse>>, HttpError> {
+    let conversation_service = state.conversation_service.as_ref().ok_or_else(|| {
+        HttpError::InternalError("runtime conversation service unavailable".to_string())
+    })?;
+
+    let rows = conversation_service
+        .list_sessions(SessionListRequest {
+            status: query.status,
+            limit: normalize_collection_limit(query.limit),
+            offset: query.offset.unwrap_or(0),
+        })
+        .await
+        .map_err(map_conversation_error)?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|row| SessionSummaryResponse {
+                session_id: row.session_id,
+                status: row.status,
+                coordinator_agent_id: row.coordinator_agent_id,
+                provider_kind: row.provider_kind,
+                model_id: row.model_id,
+                active_workflow_id: row.active_workflow_id,
+                last_completed_workflow_id: row.last_completed_workflow_id,
+                turn_count: row.turn_count,
+                updated_at: row.updated_at,
+                ended_at: row.ended_at,
+                last_preview: row.last_preview,
+            })
+            .collect(),
+    ))
+}
+
 /// `POST /api/v1/sessions/{session_id}/end` — Logically end one idle session.
 pub async fn end_session(
     State(state): State<AppState>,
@@ -591,36 +785,16 @@ pub async fn get_config(State(_state): State<AppState>) -> Json<ConfigResponse> 
     })
 }
 
-// ---------------------------------------------------------------------------
-// Mock data helpers
-// ---------------------------------------------------------------------------
-
-/// Generate mock agents for placeholder responses.
-fn mock_agents() -> Vec<AgentSummary> {
-    vec![
-        AgentSummary {
-            agent_id: AgentId::from_uuid(
-                Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
-            ),
-            agent_type: AgentType::Worker,
-            availability: AgentAvailability::Idle,
-            name: "worker-1".to_string(),
-        },
-        AgentSummary {
-            agent_id: AgentId::from_uuid(
-                Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
-            ),
-            agent_type: AgentType::Supervisor,
-            availability: AgentAvailability::Busy,
-            name: "supervisor-1".to_string(),
-        },
-    ]
-}
-
 fn parse_session_path(raw: &str) -> Result<SessionId, HttpError> {
     Uuid::parse_str(raw)
         .map(SessionId::from_uuid)
         .map_err(|_| HttpError::BadRequest(format!("Invalid session ID: {raw}")))
+}
+
+fn normalize_collection_limit(requested: Option<usize>) -> usize {
+    requested
+        .unwrap_or(DEFAULT_COLLECTION_LIMIT)
+        .clamp(1, MAX_COLLECTION_LIMIT)
 }
 
 fn map_conversation_error(error: ConversationServiceError) -> HttpError {
@@ -664,10 +838,12 @@ mod tests {
     use std::sync::Arc;
 
     use crate::server::{
-        AppState, ConversationContinueRequest, ConversationEndView,
-        ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionService,
+        AgentInspectionDetailView, AgentInspectionService, AgentInspectionSummaryView, AppState,
+        ConversationContinueRequest, ConversationEndView, ConversationResumeProvenanceView,
+        ConversationServiceError, ConversationSessionService, ConversationSessionSummaryView,
         ConversationSessionView, ConversationTurnAccepted, ConversationTurnSummaryView,
-        NatsHealthCheck, TaskExecutionService, TaskStatusView, TaskSubmissionResponse,
+        NatsHealthCheck, SessionListRequest, TaskExecutionService, TaskListRequest, TaskStatusView,
+        TaskSubmissionResponse, TaskSummaryView,
     };
     use mister_smith_core::{
         AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
@@ -677,6 +853,7 @@ mod tests {
     #[derive(Clone)]
     struct FixedConversationService {
         view: ConversationSessionView,
+        summaries: Vec<ConversationSessionSummaryView>,
     }
 
     #[async_trait::async_trait]
@@ -718,12 +895,94 @@ mod tests {
                 "end_session not used in handler test".to_string(),
             ))
         }
+
+        async fn list_sessions(
+            &self,
+            _request: SessionListRequest,
+        ) -> Result<Vec<ConversationSessionSummaryView>, ConversationServiceError> {
+            Ok(self.summaries.clone())
+        }
+    }
+
+    #[derive(Clone)]
+    struct FixedAgentService {
+        summaries: Vec<AgentInspectionSummaryView>,
+        details: std::collections::HashMap<AgentId, AgentInspectionDetailView>,
+    }
+
+    impl Default for FixedAgentService {
+        fn default() -> Self {
+            let worker_id = AgentId::from_uuid(
+                Uuid::parse_str("00000000-0000-0000-0000-000000000001")
+                    .expect("fixed worker id should parse"),
+            );
+            let supervisor_id = AgentId::from_uuid(
+                Uuid::parse_str("00000000-0000-0000-0000-000000000002")
+                    .expect("fixed supervisor id should parse"),
+            );
+            let worker = AgentInspectionDetailView {
+                agent_id: worker_id,
+                agent_type: AgentType::Worker,
+                availability: AgentAvailability::Idle,
+                name: "worker-1".to_string(),
+                status: "idle".to_string(),
+                last_heartbeat: None,
+                metadata: serde_json::json!({ "tasks_completed": 3 }),
+            };
+            let supervisor = AgentInspectionDetailView {
+                agent_id: supervisor_id,
+                agent_type: AgentType::Supervisor,
+                availability: AgentAvailability::Busy,
+                name: "supervisor-1".to_string(),
+                status: "active".to_string(),
+                last_heartbeat: None,
+                metadata: serde_json::json!({ "tasks_completed": 7 }),
+            };
+            Self {
+                summaries: vec![
+                    AgentInspectionSummaryView {
+                        agent_id: worker_id,
+                        agent_type: AgentType::Worker,
+                        availability: AgentAvailability::Idle,
+                        name: "worker-1".to_string(),
+                        status: "idle".to_string(),
+                        last_heartbeat: None,
+                    },
+                    AgentInspectionSummaryView {
+                        agent_id: supervisor_id,
+                        agent_type: AgentType::Supervisor,
+                        availability: AgentAvailability::Busy,
+                        name: "supervisor-1".to_string(),
+                        status: "active".to_string(),
+                        last_heartbeat: None,
+                    },
+                ],
+                details: [(worker_id, worker), (supervisor_id, supervisor)]
+                    .into_iter()
+                    .collect(),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl AgentInspectionService for FixedAgentService {
+        async fn list_agents(&self) -> Result<Vec<AgentInspectionSummaryView>, String> {
+            Ok(self.summaries.clone())
+        }
+
+        async fn get_agent(
+            &self,
+            agent_id: AgentId,
+        ) -> Result<Option<AgentInspectionDetailView>, String> {
+            Ok(self.details.get(&agent_id).cloned())
+        }
     }
 
     #[derive(Clone)]
     struct RecordingTaskService {
         last_request: Arc<tokio::sync::Mutex<Option<TaskSubmissionRequest>>>,
         response: TaskSubmissionResponse,
+        list_rows: Vec<TaskSummaryView>,
     }
 
     impl Default for RecordingTaskService {
@@ -741,6 +1000,24 @@ mod tests {
                     ),
                     status: "queued".to_string(),
                 },
+                list_rows: vec![TaskSummaryView {
+                    task_id: TaskId::from_uuid(
+                        Uuid::parse_str("00000000-0000-0000-0000-000000000010")
+                            .expect("fixed task id should parse"),
+                    ),
+                    status: "completed".to_string(),
+                    priority: 2,
+                    description: "Operator task".to_string(),
+                    created_at: chrono::Utc::now(),
+                    started_at: None,
+                    completed_at: None,
+                    session_id: None,
+                    turn_index: None,
+                    proof_outcome: Some(
+                        mister_smith_core::ProofOutcomeClassification::CollapsedToSequential,
+                    ),
+                    result_preview: None,
+                }],
             }
         }
     }
@@ -767,6 +1044,13 @@ mod tests {
 
         async fn get_task(&self, _task_id: TaskId) -> Result<Option<TaskStatusView>, String> {
             Ok(None)
+        }
+
+        async fn list_tasks(
+            &self,
+            _request: TaskListRequest,
+        ) -> Result<Vec<TaskSummaryView>, String> {
+            Ok(self.list_rows.clone())
         }
     }
 
@@ -837,27 +1121,31 @@ mod tests {
 
     #[tokio::test]
     async fn list_agents_returns_agents() {
-        let state = test_state();
+        let state = test_state().with_agent_service(Arc::new(FixedAgentService::default()));
         let query = Query(AgentListQuery::default());
-        let Json(agents) = list_agents(State(state), query).await;
+        let Json(agents) = list_agents(State(state), query)
+            .await
+            .expect("agent list should succeed");
         assert_eq!(agents.len(), 2);
     }
 
     #[tokio::test]
     async fn list_agents_filter_by_type() {
-        let state = test_state();
+        let state = test_state().with_agent_service(Arc::new(FixedAgentService::default()));
         let query = Query(AgentListQuery {
             agent_type: Some("Worker".to_string()),
             availability: None,
         });
-        let Json(agents) = list_agents(State(state), query).await;
+        let Json(agents) = list_agents(State(state), query)
+            .await
+            .expect("filtered agent list should succeed");
         assert_eq!(agents.len(), 1);
         assert_eq!(agents[0].name, "worker-1");
     }
 
     #[tokio::test]
     async fn get_agent_found() {
-        let state = test_state();
+        let state = test_state().with_agent_service(Arc::new(FixedAgentService::default()));
         let result = get_agent(
             State(state),
             Path("00000000-0000-0000-0000-000000000001".to_string()),
@@ -870,7 +1158,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_agent_not_found() {
-        let state = test_state();
+        let state = test_state().with_agent_service(Arc::new(FixedAgentService::default()));
         let result = get_agent(
             State(state),
             Path("00000000-0000-0000-0000-000000000099".to_string()),
@@ -881,7 +1169,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_agent_invalid_id() {
-        let state = test_state();
+        let state = test_state().with_agent_service(Arc::new(FixedAgentService::default()));
         let result = get_agent(State(state), Path("not-a-uuid".to_string())).await;
         assert!(result.is_err());
     }
@@ -957,6 +1245,24 @@ mod tests {
         let task_id = Uuid::new_v4().to_string();
         let result = get_task(State(state), Path(task_id)).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn list_tasks_returns_runtime_rows() {
+        let state = test_state().with_task_service(Arc::new(RecordingTaskService::default()));
+        let Json(tasks) = list_tasks(
+            State(state),
+            Query(TaskListQuery {
+                status: None,
+                limit: None,
+                offset: None,
+            }),
+        )
+        .await
+        .expect("task list should succeed");
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].description, "Operator task");
     }
 
     #[tokio::test]
@@ -1047,6 +1353,21 @@ mod tests {
                 ],
                 ended_at: None,
             },
+            summaries: vec![ConversationSessionSummaryView {
+                session_id,
+                status: mister_smith_core::SessionStatus::Active,
+                coordinator_agent_id: AgentId::new(),
+                provider_kind: "openai_chatgpt".to_string(),
+                model_id: "gpt-5.4".to_string(),
+                active_workflow_id: Some(active_workflow_id),
+                last_completed_workflow_id: Some(resumed_from_workflow_id),
+                turn_count: 2,
+                updated_at: chrono::Utc::now(),
+                ended_at: None,
+                last_preview: Some(
+                    "workflow interrupted by runtime restart before session sync".to_string(),
+                ),
+            }],
         }));
 
         let Json(response) = get_session(State(state), Path(session_id.to_string()))
@@ -1083,5 +1404,52 @@ mod tests {
             value["turns"][1]["resume_provenance"]["resumed_from_workflow_id"],
             resumed_from_workflow_id.to_string()
         );
+    }
+
+    #[tokio::test]
+    async fn list_sessions_returns_runtime_rows() {
+        let session_id = SessionId::new();
+        let state = test_state().with_conversation_service(Arc::new(FixedConversationService {
+            view: ConversationSessionView {
+                session_id,
+                status: mister_smith_core::SessionStatus::Active,
+                coordinator_agent_id: AgentId::new(),
+                provider_kind: "openai_chatgpt".to_string(),
+                model_id: "gpt-5.4".to_string(),
+                active_workflow_id: None,
+                last_completed_workflow_id: None,
+                turn_count: 1,
+                last_assistant_result: None,
+                turns: vec![],
+                ended_at: None,
+            },
+            summaries: vec![ConversationSessionSummaryView {
+                session_id,
+                status: mister_smith_core::SessionStatus::Active,
+                coordinator_agent_id: AgentId::new(),
+                provider_kind: "openai_chatgpt".to_string(),
+                model_id: "gpt-5.4".to_string(),
+                active_workflow_id: None,
+                last_completed_workflow_id: None,
+                turn_count: 1,
+                updated_at: chrono::Utc::now(),
+                ended_at: None,
+                last_preview: Some("READY".to_string()),
+            }],
+        }));
+
+        let Json(sessions) = list_sessions(
+            State(state),
+            Query(SessionListQuery {
+                status: None,
+                limit: None,
+                offset: None,
+            }),
+        )
+        .await
+        .expect("session list should succeed");
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].last_preview.as_deref(), Some("READY"));
     }
 }
