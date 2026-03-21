@@ -8,8 +8,10 @@ Read, in order:
 
 1. `AGENTS.md`
 2. `docs/current-state.md`
-3. the active checkpoint or the closest current evaluation note
-4. the specific packet, issue, or closure note named by the user
+3. `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` when the task is about proving
+   real end-to-end execution
+4. the active checkpoint or the closest current evaluation note
+5. the specific packet, issue, or closure note named by the user
 
 For direct runtime asks, stay on the product/runtime side unless the user explicitly asks for
 Linear, Symphony, or other development-workflow tracking.
@@ -119,9 +121,9 @@ Recommended sections:
 ## Evaluation Rules
 
 - State what happened on the current head, not what older notes expected.
-- If an old prompt no longer reproduces collapse or failure, say so.
-- If the live path improves, record that as improvement, not as a missing proof.
-- If the live path regresses, identify exactly which surface disagreed:
+- Note when an old prompt no longer reproduces collapse or failure.
+- Record live-path improvements as improvements, not as missing proof.
+- When the live path regresses, identify exactly which surface disagreed:
   - task
   - session
   - autonomy
@@ -137,4 +139,4 @@ At the end:
 - report any remaining worktree delta caused by the new note or artifacts
 
 If the user also wants repo closure, hand off to
-`/Users/macmain/MisterSmith/.codex/skills/mister-smith-git-closure/SKILL.md`.
+[`mister-smith-git-closure`](../../mister-smith-git-closure/SKILL.md).

@@ -56,8 +56,10 @@ Read, in order:
 
 1. `AGENTS.md`
 2. `docs/current-state.md`
-3. the active checkpoint or current evaluation note relevant to the ask
-4. any packet or closure note directly named by the user
+3. `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` when the ask is about proving
+   real end-to-end execution
+4. the active checkpoint or current evaluation note relevant to the ask
+5. any packet or closure note directly named by the user
 
 If the user is asking for a rerun of a known proof lane, also read the closest existing note under
 `docs/plans/` before starting the live run.
@@ -186,14 +188,16 @@ report of any remaining worktree delta created by the evaluation artifacts.
 - Do not widen into implementation or backlog work unless the user explicitly asks.
 - Redact secrets from captured env files, tokens, or delegated-request artifacts before keeping
   them.
-- If the request is actually about the development workflow rather than the runtime product, switch
-  to the appropriate Smith control-plane skill instead of forcing a runtime-eval flow.
+- If the request is actually about the development workflow rather than the runtime product, route
+  it with `route_workflow_request`, pull state with `get_control_plane_snapshot` or
+  `get_issue_execution_snapshot`, then continue with the Smith workflow-family tools instead of
+  forcing a runtime-eval flow.
 
 ## Related Skills
 
-- [$mister-smith-control-plane-router](/Users/macmain/MisterSmith/.codex/skills/mister-smith-control-plane-router/SKILL.md)
+- [$mister-smith-control-plane-router](../mister-smith-control-plane-router/SKILL.md)
   for repo workflow and control-plane routing
-- [$mister-smith-git-closure](/Users/macmain/MisterSmith/.codex/skills/mister-smith-git-closure/SKILL.md)
+- [$mister-smith-git-closure](../mister-smith-git-closure/SKILL.md)
   when the user explicitly wants the evaluation artifacts landed and the repo cleaned end to end
 
 ## Reference
