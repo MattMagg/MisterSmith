@@ -185,6 +185,8 @@ cargo test -p mister-smith-http
 cargo test -p mister-smith-app --test autonomy_status_tests
 cargo test -p mister-smith-events --test autonomy_event_tests
 cargo build --workspace
+npx markdownlint-cli2 docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md --config .markdownlint.json
+scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync
 ```
 
 ### Refresh Results
@@ -203,6 +205,11 @@ cargo build --workspace
     outcome summaries remain green
 - `cargo build --workspace`
   - succeeded with no compile errors across the full Rust workspace
+- `npx markdownlint-cli2 docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md --config .markdownlint.json`
+  - passed with no markdownlint violations in the refreshed packet-016 proof note
+- `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`
+  - passed after the refreshed validation-evidence branch was pushed, confirming the task-owned
+    worktree stayed synced and reviewable
 
 ### Final Slice Outcome
 
