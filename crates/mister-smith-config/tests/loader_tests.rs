@@ -179,6 +179,49 @@ fn env_overlay_security() {
 }
 
 #[test]
+fn env_overlay_security_auth_fields() {
+    let mut config = FrameworkConfig::default();
+    let _env = EnvGuard::new(&[
+        ("TEST_PREFIX6_SECURITY__AUTH__ALGORITHM", Some("HS512")),
+        (
+            "TEST_PREFIX6_SECURITY__AUTH__ACCESS_TOKEN_TTL_SECS",
+            Some("120"),
+        ),
+        (
+            "TEST_PREFIX6_SECURITY__AUTH__REFRESH_TOKEN_TTL_SECS",
+            Some("7200"),
+        ),
+        (
+            "TEST_PREFIX6_SECURITY__AUTH__ISSUER",
+            Some("mister-smith-tests"),
+        ),
+        ("TEST_PREFIX6_SECURITY__AUTH__AUDIENCE", Some("ops,proof")),
+        (
+            "TEST_PREFIX6_SECURITY__AUTH__HMAC_SECRET",
+            Some("shared-secret"),
+        ),
+    ]);
+
+    apply_env_overlay(&mut config, "TEST_PREFIX6");
+
+    assert_eq!(config.security.auth.algorithm, "HS512");
+    assert_eq!(config.security.auth.access_token_ttl_secs, 120);
+    assert_eq!(config.security.auth.refresh_token_ttl_secs, 7200);
+    assert_eq!(
+        config.security.auth.issuer.as_deref(),
+        Some("mister-smith-tests")
+    );
+    assert_eq!(
+        config.security.auth.audience,
+        vec!["ops".to_string(), "proof".to_string()]
+    );
+    assert_eq!(
+        config.security.auth.hmac_secret.as_deref(),
+        Some("shared-secret")
+    );
+}
+
+#[test]
 fn discover_config_paths_without_home_or_environment() {
     let _env = EnvGuard::new(&[("HOME", None), ("MS_ENVIRONMENT", None)]);
     let paths = discover_config_paths();

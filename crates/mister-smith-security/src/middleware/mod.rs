@@ -13,9 +13,11 @@ pub mod nats_mw;
 pub mod tonic_mw;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 #[cfg(feature = "audit")]
 use crate::audit::AuditLogger;
+use crate::config::KeySource;
 #[cfg(feature = "jwt")]
 use crate::delegation::DelegationService;
 #[cfg(feature = "jwt")]
@@ -86,12 +88,85 @@ pub struct SecurityLayerConfig {
 
 impl From<&RuntimeSecurityConfig> for SecurityLayerConfig {
     fn from(value: &RuntimeSecurityConfig) -> Self {
+        #[cfg(feature = "jwt")]
+        let jwt_config = if value.enabled && value.auth.enabled {
+            let key_source = match (
+                value.auth.private_key_path.as_deref(),
+                value.auth.public_key_path.as_deref(),
+                value.auth.hmac_secret.as_ref(),
+            ) {
+                (Some(private_pem), Some(public_pem), _) => {
+                    match value.auth.algorithm.to_ascii_uppercase().as_str() {
+                        algorithm if algorithm.starts_with("RS") => KeySource::RsaPem {
+                            private_pem: private_pem.into(),
+                            public_pem: public_pem.into(),
+                        },
+                        algorithm if algorithm.starts_with("ES") => KeySource::EcPem {
+                            private_pem: private_pem.into(),
+                            public_pem: public_pem.into(),
+                        },
+                        algorithm if algorithm.starts_with("ED") => KeySource::EdPem {
+                            private_pem: private_pem.into(),
+                            public_pem: public_pem.into(),
+                        },
+                        _ => KeySource::Hmac {
+                            secret: value
+                                .auth
+                                .hmac_secret
+                                .clone()
+                                .unwrap_or_default()
+                                .into_bytes(),
+                        },
+                    }
+                }
+                (_, _, Some(secret)) => KeySource::Hmac {
+                    secret: secret.clone().into_bytes(),
+                },
+                _ => config::JwtConfig::default().key_source,
+            };
+
+            Some(config::JwtConfig {
+                algorithm: value.auth.algorithm.clone(),
+                access_token_ttl: Duration::from_secs(value.auth.access_token_ttl_secs),
+                refresh_token_ttl: Duration::from_secs(value.auth.refresh_token_ttl_secs),
+                issuer: value.auth.issuer.clone(),
+                audience: value.auth.audience.clone(),
+                delegation_chain_max_depth: DEFAULT_MAX_DELEGATION_CHAIN_DEPTH,
+                key_source,
+            })
+        } else {
+            None
+        };
+
         Self {
             enabled: value.enabled,
             auth_enabled: value.auth.enabled,
             authz_enabled: value.authz.enabled,
             audit_enabled: value.audit.enabled,
             tls_enabled: value.tls.enabled,
+            #[cfg(feature = "jwt")]
+            jwt_config,
+            #[cfg(feature = "rbac")]
+            rbac_config: Some(config::RbacConfig {
+                default_role: value.authz.default_role.clone(),
+            }),
+            #[cfg(feature = "audit")]
+            audit_config: Some(config::AuditConfig {
+                enabled: value.audit.enabled,
+                max_events: value.audit.max_events,
+                auth_failure_alert_threshold: value.audit.auth_failure_alert_threshold,
+            }),
+            #[cfg(feature = "tls")]
+            tls_config: Some(config::TlsConfig {
+                enabled: value.tls.enabled,
+                cert_path: value.tls.cert_path.clone().map(Into::into),
+                key_path: value.tls.key_path.clone().map(Into::into),
+                ca_path: value.tls.ca_path.clone().map(Into::into),
+                mtls_enabled: value.tls.mtls_enabled,
+                generate_self_signed: value.tls.generate_self_signed,
+                reload_interval: value.tls.reload_interval_secs.map(Duration::from_secs),
+                expiry_warning_days: value.tls.expiry_warning_days,
+            }),
             ..Default::default()
         }
     }
@@ -191,5 +266,40 @@ impl std::fmt::Debug for SecurityLayer {
         f.debug_struct("SecurityLayer")
             .field("enabled", &self.enabled)
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_security_config_conversion_populates_jwt_config() {
+        let mut runtime = RuntimeSecurityConfig::default();
+        runtime.enabled = true;
+        runtime.auth.enabled = true;
+        runtime.auth.algorithm = "HS256".to_string();
+        runtime.auth.access_token_ttl_secs = 60;
+        runtime.auth.refresh_token_ttl_secs = 3600;
+        runtime.auth.issuer = Some("mister-smith-tests".to_string());
+        runtime.auth.audience = vec!["ops".to_string(), "proof".to_string()];
+        runtime.auth.hmac_secret = Some("shared-secret".to_string());
+        runtime.authz.default_role = Some("observer".to_string());
+
+        let converted = SecurityLayerConfig::from(&runtime);
+        let jwt = converted
+            .jwt_config
+            .as_ref()
+            .expect("runtime auth config should produce jwt config");
+
+        assert_eq!(jwt.algorithm, "HS256");
+        assert_eq!(jwt.access_token_ttl, Duration::from_secs(60));
+        assert_eq!(jwt.refresh_token_ttl, Duration::from_secs(3600));
+        assert_eq!(jwt.issuer.as_deref(), Some("mister-smith-tests"));
+        assert_eq!(jwt.audience, vec!["ops".to_string(), "proof".to_string()]);
+        match &jwt.key_source {
+            KeySource::Hmac { secret } => assert_eq!(secret, b"shared-secret"),
+            other => panic!("expected HMAC key source, got {other:?}"),
+        }
     }
 }
