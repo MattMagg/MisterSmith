@@ -12,6 +12,10 @@ GENERATED_AT_PREFIX = "<!-- ralph:generated-at:"
 SOURCE_PREFIX = "<!-- ralph:source:"
 HELP_FLAGS = {"-h", "--help"}
 VERSION_FLAGS = {"-V", "--version"}
+REFRESH_HINT = (
+    "Re-run ./scripts/ralph prompt --packet <packet.json> or "
+    "./scripts/prepare_ralph_prompt.py before ./scripts/ralph run."
+)
 
 
 def default_repo_root() -> Path:
@@ -88,12 +92,13 @@ def parse_metadata(prompt_text: str) -> tuple[datetime, list[str]]:
     if generated_at is None:
         raise ValueError(
             "Prompt freshness metadata is missing a generated-at line. "
-            "Re-run ./scripts/prepare_ralph_prompt.py before ./scripts/ralph run."
+            f"{REFRESH_HINT}"
         )
     if not sources:
         raise ValueError(
             "Prompt freshness metadata is missing source paths. "
-            "Re-run ./scripts/prepare_ralph_prompt.py with one or more --source values."
+            "Re-run ./scripts/ralph prompt --packet <packet.json> or "
+            "./scripts/prepare_ralph_prompt.py with one or more --source values."
         )
 
     return generated_at, sources
@@ -110,7 +115,7 @@ def validate_prompt(prompt_path: Path, repo_root: Path) -> None:
     if not prompt_path.is_file():
         raise ValueError(
             f"Prompt file is missing at {prompt_path}. "
-            "Re-run ./scripts/prepare_ralph_prompt.py before ./scripts/ralph run."
+            f"{REFRESH_HINT}"
         )
 
     prompt_text = prompt_path.read_text(encoding="utf-8")
@@ -131,7 +136,7 @@ def validate_prompt(prompt_path: Path, repo_root: Path) -> None:
             raise ValueError(
                 f"Prompt is stale: source {source_path} is newer than generated-at "
                 f"{generated_at.replace(microsecond=0).isoformat().replace('+00:00', 'Z')}. "
-                "Re-run ./scripts/prepare_ralph_prompt.py before ./scripts/ralph run."
+                f"{REFRESH_HINT}"
             )
 
 

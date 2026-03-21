@@ -4,11 +4,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BOOTSTRAP_SCRIPT="$SCRIPT_DIR/bootstrap_ralph.sh"
+PROMPT_PREPARER="$SCRIPT_DIR/prepare_ralph_prompt.py"
 PROMPT_VALIDATOR="$SCRIPT_DIR/validate_ralph_prompt.py"
 
 RALPH_STATE_ROOT="${RALPH_STATE_ROOT:-$HOME/.local/share/mister-smith/ralph-orchestrator}"
 RALPH_INSTALL_ROOT="${RALPH_INSTALL_ROOT:-$RALPH_STATE_ROOT/install}"
 MANAGED_RALPH_BIN="${MISTER_SMITH_RALPH_BIN:-$RALPH_INSTALL_ROOT/bin/ralph}"
+
+if [[ "${1:-}" == "prompt" ]]; then
+  shift
+  exec python3 "$PROMPT_PREPARER" "$@"
+fi
 
 if [[ ! -x "$MANAGED_RALPH_BIN" ]]; then
   if [[ "${RALPH_AUTO_BOOTSTRAP:-1}" != "1" ]]; then

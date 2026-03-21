@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,10 +23,17 @@ def parse_args() -> argparse.Namespace:
             "Render PROMPT.md from a prepared prompt input and prepend Ralph freshness metadata."
         )
     )
-    parser.add_argument(
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument(
         "--input",
-        required=True,
         help="Path to the prepared prompt input file, or '-' to read the prompt body from stdin.",
+    )
+    input_group.add_argument(
+        "--packet",
+        help=(
+            "Path to a Ralph packet JSON file. Supports either the raw packet object or a Smith "
+            "tool response envelope with the packet under top-level 'data'."
+        ),
     )
     parser.add_argument(
         "--source",
@@ -88,6 +96,37 @@ def read_prompt_body(input_value: str) -> tuple[str, Path | None]:
     return prompt_body, input_path
 
 
+def read_packet_prompt(packet_value: str) -> tuple[str, Path, list[str]]:
+    packet_path = Path(packet_value).expanduser().resolve(strict=True)
+
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Packet JSON is invalid: {packet_path}") from exc
+
+    if not isinstance(packet, dict):
+        raise ValueError("Packet JSON must be an object.")
+
+    packet_data = packet.get("data", packet)
+    if not isinstance(packet_data, dict):
+        raise ValueError("Packet JSON must contain an object packet under 'data' or at the top level.")
+
+    rendered_prompt = packet_data.get("rendered_prompt")
+    if not isinstance(rendered_prompt, str) or not rendered_prompt.strip():
+        raise ValueError("Packet JSON is missing a non-empty 'rendered_prompt' field.")
+
+    source_docs = packet_data.get("source_docs", [])
+    if not isinstance(source_docs, list) or not all(isinstance(item, str) for item in source_docs):
+        raise ValueError("Packet JSON 'source_docs' must be a list of strings when present.")
+
+    prompt_body = strip_managed_metadata(rendered_prompt)
+    if not prompt_body.strip():
+        raise ValueError("Packet rendered_prompt is empty after removing helper-managed metadata.")
+
+    packet_sources = [str(packet_path), *source_docs]
+    return prompt_body, packet_path, packet_sources
+
+
 def format_source_path(source_path: Path, resolved_repo_root: Path) -> str:
     try:
         return source_path.relative_to(resolved_repo_root).as_posix()
@@ -128,8 +167,13 @@ def main() -> int:
     args = parse_args()
 
     try:
-        prompt_body, input_path = read_prompt_body(args.input)
-        sources = collect_sources(args.source, input_path)
+        if args.packet is not None:
+            prompt_body, packet_path, packet_sources = read_packet_prompt(args.packet)
+            source_values = args.source or packet_sources
+            sources = collect_sources(source_values, packet_path)
+        else:
+            prompt_body, input_path = read_prompt_body(args.input)
+            sources = collect_sources(args.source, input_path)
         generated_at = normalize_generated_at(args.generated_at)
         rendered_prompt = render_prompt(prompt_body, generated_at, sources)
     except (OSError, ValueError) as exc:

@@ -13,6 +13,8 @@ Make prompt regeneration from the active issue, workpad, or plan packet explicit
 - add a repo-owned prompt freshness assertion step for default Ralph runs
 - update the wrapper so default `run` invocations fail fast when `PROMPT.md` is stale or still at the
   checked-in contract form
+- add a repo-owned `./scripts/ralph prompt --packet <packet.json>` bridge so Smith packet output can
+  regenerate `PROMPT.md` without pretending upstream Ralph ships that subcommand
 - document the required prompt metadata block in live workflow surfaces
 
 ## Assumptions
@@ -50,7 +52,8 @@ Validation:
 
 Execution status:
 
-- completed on March 21, 2026 via `scripts/prepare_ralph_prompt.py`
+- completed on March 21, 2026 via `scripts/prepare_ralph_prompt.py` and the repo-owned
+  `./scripts/ralph prompt --packet <packet.json>` bridge
 - verified with `python3 -m unittest scripts.tests.test_prepare_ralph_prompt`
 - verified with one real render proof and one stdin failure-path proof for missing `--source`
 
