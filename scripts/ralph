@@ -2,7 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BOOTSTRAP_SCRIPT="$SCRIPT_DIR/bootstrap_ralph.sh"
+PROMPT_VALIDATOR="$SCRIPT_DIR/validate_ralph_prompt.py"
 
 RALPH_STATE_ROOT="${RALPH_STATE_ROOT:-$HOME/.local/share/mister-smith/ralph-orchestrator}"
 RALPH_INSTALL_ROOT="${RALPH_INSTALL_ROOT:-$RALPH_STATE_ROOT/install}"
@@ -21,5 +23,7 @@ if [[ ! -x "$MANAGED_RALPH_BIN" ]]; then
   echo "Managed Ralph binary is missing at $MANAGED_RALPH_BIN after bootstrap." >&2
   exit 1
 fi
+
+python3 "$PROMPT_VALIDATOR" guard-run --prompt-path "$REPO_ROOT/PROMPT.md" --repo-root "$REPO_ROOT" -- "$@"
 
 exec "$MANAGED_RALPH_BIN" "$@"
