@@ -90,6 +90,17 @@ function createSnapshot(
   };
 
   return {
+    localRuntime: {
+      state: 'managed_ready',
+      summary: 'Managed local runtime ready',
+      managed_by_app: true,
+      dependencies_managed: true,
+      runtime_url: 'http://127.0.0.1:8080',
+      database_target: 'postgres://127.0.0.1:5432/mistersmith',
+      nats_target: 'nats://127.0.0.1:4222',
+      last_error: null,
+      last_log_line: 'runtime ready',
+    },
     runtimeReachable: true,
     runtimeSummary: 'Runtime healthy',
     probes: {
@@ -217,10 +228,22 @@ function createServices(options?: {
 
 describe('App', () => {
   it('renders disconnected runtime state', async () => {
+    const onConnectTimeline = vi.fn();
     const services = createServices({
       dashboard: createSnapshot({
+        localRuntime: {
+          state: 'starting_dependencies',
+          summary: 'Starting local postgres and nats',
+          managed_by_app: true,
+          dependencies_managed: false,
+          runtime_url: 'http://127.0.0.1:8080',
+          database_target: 'postgres://127.0.0.1:5432/mistersmith',
+          nats_target: 'nats://127.0.0.1:4222',
+          last_error: null,
+          last_log_line: null,
+        },
         runtimeReachable: false,
-        runtimeSummary: 'Runtime offline',
+        runtimeSummary: 'Starting local postgres and nats',
         runs: [],
         selectedRunId: null,
         runDetail: null,
@@ -237,18 +260,19 @@ describe('App', () => {
           errors: ['NATS /varz: 503 Service Unavailable'],
         },
       }),
-      onConnectTimeline: (_onEvent, onStateChange) => {
-        onStateChange('disconnected');
-      },
+      onConnectTimeline,
     });
 
     render(<App services={services} initialSettings={createSettings()} />);
 
     await waitFor(() =>
       expect(screen.getByTestId('runtime-status')).toHaveTextContent(
-        'Runtime offline',
+        'Starting local postgres and nats',
       ),
     );
+    expect(onConnectTimeline).not.toHaveBeenCalled();
+    expect(screen.getAllByText('waiting on runtime').length).toBeGreaterThan(0);
+    expect(screen.getByText('Launcher')).toBeInTheDocument();
     expect(screen.getByText('No runs available')).toBeInTheDocument();
   });
 

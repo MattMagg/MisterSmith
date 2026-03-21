@@ -66,6 +66,8 @@ external workflow services such as Linear or Symphony.
   - one-shot workflow execution through `mister-smith run` and `POST /api/v1/tasks`
   - autonomy inspection through `mister-smith autonomy list` and `mister-smith autonomy status`
   - bounded same-agent session handling through `POST /api/v1/sessions` and related session routes
+  - the local macOS Tauri operator cockpit under `apps/operator-console/`, including managed
+    runtime bootstrap, list/detail inspection, task/session actions, and websocket timeline
 - the default runtime path now uses supervised planner and executor lifecycles, a Tokio workflow
   runner, and a ToolBus-backed execution boundary
 - A real local provider-backed runtime proof has been completed on the current runtime path using
@@ -99,6 +101,9 @@ Read the current state in three layers:
 
 - runtime boot, health probes, and shutdown behavior
 - NATS/JetStream plus PostgreSQL local runtime prerequisites
+- repo-native local stack bootstrap for `postgres`, `nats`, and the bundled `mister-smith`
+  runtime from the macOS operator cockpit
+- the NATS HTTP monitor on `http://127.0.0.1:8222` for local operator health views
 - real workflow submission and terminal completion tracking
 - autonomy inspection surfaces keyed by `workflow_id`
 - bounded same-agent sessions with stable `session_id` and `coordinator_agent_id`

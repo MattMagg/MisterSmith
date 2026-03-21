@@ -191,10 +191,13 @@ Changes to these files cascade across the architecture:
 
 ## Local Development Environment
 
-**NATS server**: Docker container `NATS` running nats-server v2.12.4
-- Ports: 4222 (client), 6222 (cluster), 8222 (monitoring) — container-internal only, not published to host
-- Start: `docker start NATS`
-- To publish ports: `docker run -d --name NATS -p 4222:4222 -p 8222:8222 nats:2.12.4-alpine`
+**Local runtime dependencies**: repo-native Docker Compose stack under `deploy/docker-compose.yml`
+- Services: `postgres` and `nats`
+- Published ports: `4222` (NATS client), `8222` (NATS HTTP monitor), `5432` (PostgreSQL)
+- Start: `docker compose -f deploy/docker-compose.yml up -d postgres nats`
+- Recreate when the local stack drifts: `docker compose -f deploy/docker-compose.yml up -d --force-recreate postgres nats`
+- The NATS container is configured with `--http_port 8222`, so local monitor endpoints such as
+  `http://127.0.0.1:8222/varz` are expected to work for operator health views
 - Minimum safe version: `nats-server` must be `>= v2.11.1` for CVE-2025-30215 mitigation
 - Version check: `docker run --rm nats:2.12.4-alpine --version`
 

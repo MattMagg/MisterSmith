@@ -1,3 +1,6 @@
+mod managed_runtime;
+
+use managed_runtime::{ManagedRuntimeManager, ManagedRuntimeStatusPayload};
 use mister_smith_app::auth;
 use mister_smith_llm::LlmError;
 use serde::Serialize;
@@ -76,16 +79,43 @@ fn claude_subscription_status() -> Result<ClaudeSubscriptionStatusPayload, Strin
     }
 }
 
+#[tauri::command]
+async fn managed_runtime_status(
+    runtime_manager: tauri::State<'_, ManagedRuntimeManager>,
+) -> Result<ManagedRuntimeStatusPayload, String> {
+    Ok(runtime_manager.snapshot().await)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let runtime_manager = ManagedRuntimeManager::new();
+    let setup_runtime_manager = runtime_manager.clone();
+    let shutdown_runtime_manager = runtime_manager.clone();
+
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_websocket::init())
+        .manage(runtime_manager)
+        .setup(move |app| {
+            setup_runtime_manager.ensure_started(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             openai_chatgpt_status,
             login_openai_chatgpt,
-            claude_subscription_status
+            claude_subscription_status,
+            managed_runtime_status
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running operator console");
+        .build(tauri::generate_context!())
+        .expect("error while building operator console");
+
+    app.run(move |_app_handle, event| {
+        if matches!(
+            event,
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+        ) {
+            shutdown_runtime_manager.shutdown();
+        }
+    });
 }

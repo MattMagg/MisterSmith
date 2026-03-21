@@ -119,6 +119,11 @@ validated against `openai_chatgpt` / `gpt-5.4` through March 20, 2026:
   - `POST /api/v1/sessions/{session_id}/turns`
   - `GET /api/v1/sessions/{session_id}`
   - `POST /api/v1/sessions/{session_id}/end`
+- local macOS operator cockpit:
+  - built under `apps/operator-console/`
+  - boots the repo-native local `postgres` + `nats` stack when needed
+  - launches the bundled `mister-smith-runtime` sidecar
+  - reads the NATS HTTP monitor from `http://127.0.0.1:8222/{varz,connz,jsz}`
 
 Current session contract for the first bounded slice:
 
@@ -134,6 +139,8 @@ Primary notes for the current operator and result-surface baseline:
   [`docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`](docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md)
 - bounded same-agent session packet and live validation notes:
   [`docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`](docs/plans/2026-03-16-multi-turn-same-agent-conversations.md)
+- local macOS operator cockpit:
+  [`apps/operator-console/README.md`](apps/operator-console/README.md)
 - forward checkpoint and packet-016 closure evidence:
   [`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`](docs/plans/2026-03-21-post-packet-016-development-checkpoint.md),
   [`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`](docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md)

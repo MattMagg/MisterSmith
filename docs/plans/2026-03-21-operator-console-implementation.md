@@ -2,9 +2,11 @@
 
 ## Objective
 
-Implement the attach-first local Tauri 2 operator cockpit for Mister Smith with the minimum
-runtime/backend additions needed to support live operator lists, detail inspection, runtime event
-timeline streaming, and the existing task/session action flows from a desktop shell.
+Implement the local Tauri 2 operator cockpit for Mister Smith as a real desktop executable that
+can bootstrap the repo-native local runtime path on launch: start the existing `postgres` and
+`nats` development dependencies, launch the bundled `mister-smith` runtime binary, and preserve
+the existing operator lists, detail inspection, runtime event timeline streaming, and task/session
+action flows from the desktop shell.
 
 ## Scope
 
@@ -16,14 +18,16 @@ timeline streaming, and the existing task/session action flows from a desktop sh
 ## Assumptions
 
 - The existing local runtime remains the authority for task/session submission and execution.
-- The desktop shell targets loopback runtime access only and does not own the runtime process in
-  v1.
+- The desktop shell continues to target loopback runtime access only.
 - Existing session/task write routes remain unchanged and are the action surface for the cockpit.
+- The repo-native local dependency path remains `deploy/docker-compose.yml` for `postgres` and
+  `nats`.
 
 ## Constraints
 
-- Keep the implementation attach-first and local-only.
-- Do not add runtime lifecycle ownership, sidecars, Langfuse, or broader observability products.
+- Keep the implementation local-only and single-user.
+- Use the existing Docker Compose development stack and the existing `mister-smith` runtime binary
+  instead of introducing new infrastructure products or alternate runtime hosts.
 - Do not widen this slice into signing, notarization, sandbox hardening, or shared multi-user
   concerns.
 - Avoid touching unrelated local modifications already present in the worktree.
@@ -31,7 +35,7 @@ timeline streaming, and the existing task/session action flows from a desktop sh
 ## Non-Goals
 
 - Hosted/web operator access
-- Runtime process start/stop controls
+- User-facing runtime lifecycle controls beyond booting the local stack on app launch
 - Prometheus parsing in the desktop shell
 - New auth HTTP endpoints
 
@@ -47,20 +51,22 @@ Validation:
 - targeted `mister-smith-http` and `mister-smith-app` tests for list routes and websocket bridging
 - `cargo build --workspace`
 
-### 2. Desktop Rust Bridge
+### 2. Desktop Runtime Bootstrap
 
-Expose the existing auth helpers to a Tauri shell without changing the runtime HTTP contract.
+Bundle the existing `mister-smith` binary as a Tauri sidecar, bundle the repo-local Compose file
+as a resource, and let the app bring up `postgres` + `nats` before launching the runtime when no
+loopback runtime is already reachable.
 
 Validation:
 
-- targeted desktop command tests if added
+- targeted desktop helper tests for launch-state helpers
 - Tauri Rust backend build succeeds
 
 ### 3. Tauri Operator Shell
 
-Scaffold the Tauri 2 app under `apps/operator-console/`, wire loopback HTTP/WebSocket flows,
-persist local operator settings, and build the runs/sessions/agents/health views plus task/session
-actions.
+Keep the operator UI under `apps/operator-console/`, wire loopback HTTP/WebSocket flows, surface
+launcher state alongside runtime health, persist local operator settings, and preserve the
+runs/sessions/agents/health views plus task/session actions.
 
 Validation:
 
@@ -73,5 +79,45 @@ Validation:
   routes.
 - Runtime events still only publish to JetStream and do not reach the websocket feed.
 - Agent list/detail remain mock-backed after the slice.
-- The app cannot inspect or act on local runtime state without widening scope beyond the attach-first
-  cockpit model.
+- The app cannot bootstrap the repo-native local runtime path without inventing new infra beyond
+  the existing Compose services and bundled `mister-smith` binary.
+
+## UI Polish Addendum
+
+Objective:
+
+- Tighten the operator-console presentation without changing the runtime/action model: reduce hero
+  dominance, compact the status/control strip, clean up auth-card copy density, and soften noisy
+  degraded-state banners that are expected in local managed-runtime use.
+
+Scope:
+
+- `apps/operator-console/src/App.tsx`
+- `apps/operator-console/src/App.css`
+- `apps/operator-console/src/index.css`
+
+Validation:
+
+- `npm test -- --run`
+- `npm run build`
+
+## Launcher Status Follow-Up
+
+Objective:
+
+- Keep startup-state reporting honest: do not show derivative websocket or NATS-monitor failures
+  while the launcher is still booting local dependencies, and wait for the NATS HTTP monitor that
+  the desktop shell actually queries before advertising managed readiness.
+
+Scope:
+
+- `apps/operator-console/src/App.tsx`
+- `apps/operator-console/src/services.ts`
+- `apps/operator-console/src/App.test.tsx`
+- `apps/operator-console/src-tauri/src/managed_runtime.rs`
+
+Validation:
+
+- `npm test -- --run`
+- `cargo test --manifest-path apps/operator-console/src-tauri/Cargo.toml`
+- `npm run build`

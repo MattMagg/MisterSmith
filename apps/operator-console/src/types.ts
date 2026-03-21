@@ -193,6 +193,7 @@ export interface RuntimeProbeSnapshot {
 }
 
 export interface DashboardSnapshot {
+  localRuntime: LocalRuntimeSnapshot | null;
   runtimeReachable: boolean;
   runtimeSummary: string;
   probes: RuntimeProbeSnapshot;
@@ -213,4 +214,16 @@ export interface AuthSnapshot {
   openAi: OpenAiChatGptStatusPayload;
   claude: ClaudeSubscriptionStatusPayload;
   errors: string[];
+}
+
+export interface LocalRuntimeSnapshot {
+  state: string;
+  summary: string;
+  managed_by_app: boolean;
+  dependencies_managed: boolean;
+  runtime_url: string;
+  database_target: string;
+  nats_target: string;
+  last_error?: string | null;
+  last_log_line?: string | null;
 }

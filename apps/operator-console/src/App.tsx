@@ -10,6 +10,7 @@ import type {
   AuthSnapshot,
   DashboardSelection,
   DashboardSnapshot,
+  LocalRuntimeSnapshot,
   ResultPreview,
   RunSummary,
   SessionInspectResponse,
@@ -130,6 +131,21 @@ function App({
   }, [services, authRefreshToken]);
 
   useEffect(() => {
+    if (snapshot === null) {
+      setTimelineConnection('connecting');
+      return;
+    }
+
+    const localRuntime = snapshot.localRuntime ?? null;
+    const startupPending = isRuntimeStartupPending(localRuntime);
+    const startupFailed =
+      localRuntime?.state === 'failed' && !snapshot.runtimeReachable;
+
+    if (startupPending || startupFailed) {
+      setTimelineConnection(startupPending ? 'connecting' : 'disconnected');
+      return;
+    }
+
     let cancelled = false;
     let reconnectTimeout: number | undefined;
     let disconnect:
@@ -202,6 +218,8 @@ function App({
     settings.runtimeBaseUrl,
     settings.reconnectEnabled,
     timelineRefreshToken,
+    snapshot?.runtimeReachable,
+    snapshot?.localRuntime?.state,
   ]);
 
   const selectedRunSummary = snapshot?.runs.find(
@@ -341,92 +359,131 @@ function App({
   };
 
   const activeTab = settings.activeTab;
+  const localRuntime = snapshot?.localRuntime ?? null;
+  const runtimeStartupPending = isRuntimeStartupPending(localRuntime);
+  const runtimeStartupFailed =
+    localRuntime?.state === 'failed' && !snapshot?.runtimeReachable;
   const runtimeSummary = snapshot?.runtimeSummary ?? 'Loading runtime state';
-  const runtimeClass = snapshot?.runtimeReachable ? 'good' : 'bad';
+  const runtimeClass = snapshot?.runtimeReachable
+    ? 'good'
+    : runtimeStartupPending
+      ? 'warn'
+      : 'bad';
+  const launcherSummary =
+    localRuntime?.summary ?? 'Launcher unavailable in browser preview';
+  const launcherClass = toneForLauncher(localRuntime);
   const natsSummary = snapshot?.nats.summary ?? 'Loading NATS monitor';
-  const natsClass =
-    snapshot?.nats.available && !snapshot.nats.degraded
-      ? 'good'
-      : snapshot?.nats.available
-        ? 'warn'
-        : 'bad';
+  const natsClass = runtimeStartupPending
+    ? 'warn'
+    : runtimeStartupFailed
+      ? 'bad'
+      : snapshot?.nats.available && !snapshot.nats.degraded
+        ? 'good'
+        : snapshot?.nats.available
+          ? 'warn'
+          : 'bad';
+  const timelineSummary = runtimeStartupPending
+    ? 'waiting on runtime'
+    : runtimeStartupFailed
+      ? 'blocked by launcher failure'
+      : timelineConnection;
   const timelineClass =
-    timelineConnection === 'connected'
+    runtimeStartupPending
+      ? 'warn'
+      : runtimeStartupFailed
+        ? 'bad'
+        : timelineConnection === 'connected'
       ? 'good'
-      : timelineConnection === 'connecting'
-        ? 'warn'
-        : 'bad';
+        : timelineConnection === 'connecting'
+          ? 'warn'
+          : 'bad';
+  const refreshSummary = dashboardBusy ? 'Syncing dashboard' : 'Steady';
 
   return (
     <div className="console-shell">
       <header className="topbar">
         <div className="topbar-main">
-          <div>
+          <div className="topbar-hero">
             <p className="eyebrow">Mister Smith Operator Console</p>
-            <h1>Attach-first local cockpit</h1>
+            <h1>Local operator cockpit</h1>
+            <p className="hero-copy">
+              Attach to the local stack, inspect workflow state, and keep session
+              handoffs visible without dropping into raw runtime logs.
+            </p>
           </div>
-          <div className="status-strip">
-            <StatusPill
-              label="Runtime"
-              tone={runtimeClass}
-              value={runtimeSummary}
-              testId="runtime-status"
-            />
-            <StatusPill
-              label="Timeline"
-              tone={timelineClass}
-              value={timelineConnection}
-            />
-            <StatusPill label="NATS" tone={natsClass} value={natsSummary} />
-            <StatusPill
-              label="Refresh"
-              tone={dashboardBusy ? 'warn' : 'neutral'}
-              value={dashboardBusy ? 'syncing' : 'steady'}
-            />
-          </div>
-        </div>
+          <div className="topbar-aside">
+            <div className="status-strip">
+              <StatusPill label="Launcher" tone={launcherClass} value={launcherSummary} />
+              <StatusPill
+                label="Runtime"
+                tone={runtimeClass}
+                value={runtimeSummary}
+                testId="runtime-status"
+              />
+              <StatusPill
+                label="Timeline"
+                tone={timelineClass}
+                value={timelineSummary}
+              />
+              <StatusPill label="NATS" tone={natsClass} value={natsSummary} />
+            </div>
 
-        <div className="topbar-controls">
-          <label className="field">
-            <span>Runtime URL</span>
-            <input
-              value={settings.runtimeBaseUrl}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  runtimeBaseUrl: event.target.value,
-                }))
-              }
-            />
-          </label>
-          <label className="field">
-            <span>NATS monitor URL</span>
-            <input
-              value={settings.natsMonitorUrl}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  natsMonitorUrl: event.target.value,
-                }))
-              }
-            />
-          </label>
-          <label className="toggle-field">
-            <input
-              type="checkbox"
-              checked={settings.reconnectEnabled}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  reconnectEnabled: event.target.checked,
-                }))
-              }
-            />
-            <span>Reconnect websocket</span>
-          </label>
-          <button className="secondary-button" onClick={handleManualRefresh}>
-            Refresh
-          </button>
+            <section className="control-panel">
+              <div className="control-panel-header">
+                <div>
+                  <p className="eyebrow">Connection</p>
+                  <h2>Loopback runtime settings</h2>
+                </div>
+                <div className={`refresh-chip ${dashboardBusy ? 'warn' : 'neutral'}`}>
+                  <span>Refresh</span>
+                  <strong>{refreshSummary}</strong>
+                </div>
+              </div>
+
+              <div className="topbar-controls">
+                <label className="field">
+                  <span>Runtime URL</span>
+                  <input
+                    value={settings.runtimeBaseUrl}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        runtimeBaseUrl: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>NATS monitor URL</span>
+                  <input
+                    value={settings.natsMonitorUrl}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        natsMonitorUrl: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label className="toggle-field">
+                  <input
+                    type="checkbox"
+                    checked={settings.reconnectEnabled}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        reconnectEnabled: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Reconnect websocket</span>
+                </label>
+                <button className="secondary-button control-button" onClick={handleManualRefresh}>
+                  Refresh
+                </button>
+              </div>
+            </section>
+          </div>
         </div>
 
         <div className="auth-strip">
@@ -554,7 +611,7 @@ function App({
               <StatusPill
                 label="WebSocket"
                 tone={timelineClass}
-                value={timelineConnection}
+                value={timelineSummary}
               />
             </div>
             <div className="timeline-list" data-testid="timeline-list">
@@ -1021,6 +1078,8 @@ interface HealthViewProps {
 }
 
 function HealthView({ snapshot, auth }: HealthViewProps) {
+  const localRuntime = snapshot?.localRuntime ?? null;
+
   return (
     <div className="health-layout">
       <section className="panel detail-panel">
@@ -1033,6 +1092,17 @@ function HealthView({ snapshot, auth }: HealthViewProps) {
         <KeyValueGrid
           rows={[
             ['Runtime summary', snapshot?.runtimeSummary ?? 'Loading'],
+            ['Launcher', localRuntime?.summary ?? 'unavailable'],
+            ['Launch state', localRuntime?.state ?? 'unknown'],
+            [
+              'Runtime owner',
+              localRuntime
+                ? localRuntime.managed_by_app
+                  ? 'desktop app'
+                  : 'existing local process'
+                : 'unknown',
+            ],
+            ['Runtime URL', localRuntime?.runtime_url ?? 'unknown'],
             [
               'Health status',
               snapshot?.probes.health?.status ?? 'unavailable',
@@ -1053,6 +1123,21 @@ function HealthView({ snapshot, auth }: HealthViewProps) {
               </div>
             ))}
           </div>
+        </section>
+        <section className="subpanel">
+          <h3>Executable bootstrap</h3>
+          <KeyValueGrid
+            rows={[
+              [
+                'Dependencies bootstrapped',
+                localRuntime?.dependencies_managed ? 'yes' : 'no',
+              ],
+              ['Database target', localRuntime?.database_target ?? 'unknown'],
+              ['NATS target', localRuntime?.nats_target ?? 'unknown'],
+              ['Last error', localRuntime?.last_error ?? 'none'],
+            ]}
+          />
+          <pre>{prettyJson(localRuntime?.last_log_line ?? 'No runtime log line captured yet.')}</pre>
         </section>
       </section>
 
@@ -1131,20 +1216,27 @@ interface AuthCardProps {
 
 function AuthCard(props: AuthCardProps) {
   const { title, summary, tone, meta, actionLabel, onAction, disabled } = props;
+  const metaValues = Array.from(
+    new Set(meta.map((value) => value.trim()).filter((value) => value.length > 0)),
+  );
 
   return (
     <section className={`auth-card ${tone}`}>
       <div>
         <p className="eyebrow">{title}</p>
-        <strong>{summary}</strong>
+        <p className="auth-summary">{summary}</p>
       </div>
       <div className="auth-meta">
-        {meta.map((value) => (
+        {metaValues.map((value) => (
           <span key={value}>{value}</span>
         ))}
       </div>
       {actionLabel && onAction ? (
-        <button className="secondary-button" onClick={onAction} disabled={disabled}>
+        <button
+          className="secondary-button auth-action"
+          onClick={onAction}
+          disabled={disabled}
+        >
           {actionLabel}
         </button>
       ) : null}
@@ -1258,6 +1350,40 @@ function tabSummary(tab: TabId, snapshot: DashboardSnapshot | null): string {
     default:
       return '';
   }
+}
+
+function toneForLauncher(
+  localRuntime: LocalRuntimeSnapshot | null,
+): 'good' | 'warn' | 'bad' | 'neutral' {
+  if (!localRuntime) {
+    return 'neutral';
+  }
+
+  switch (localRuntime.state) {
+    case 'external_ready':
+    case 'managed_ready':
+      return 'good';
+    case 'checking':
+    case 'starting_dependencies':
+    case 'starting_runtime':
+      return 'warn';
+    case 'failed':
+      return 'bad';
+    default:
+      return 'neutral';
+  }
+}
+
+function isRuntimeStartupPending(localRuntime: LocalRuntimeSnapshot | null): boolean {
+  if (!localRuntime) {
+    return false;
+  }
+
+  return (
+    localRuntime.state === 'checking' ||
+    localRuntime.state === 'starting_dependencies' ||
+    localRuntime.state === 'starting_runtime'
+  );
 }
 
 function formatTimestamp(value?: string | null): string {

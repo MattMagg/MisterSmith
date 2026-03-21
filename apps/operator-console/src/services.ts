@@ -10,6 +10,7 @@ import type {
   DashboardSnapshot,
   EndSessionResponse,
   HealthResponse,
+  LocalRuntimeSnapshot,
   NatsMonitorSnapshot,
   OpenAiChatGptStatusPayload,
   RunSummary,
@@ -72,7 +73,51 @@ async function fetchDashboard(
   selection: DashboardSelection,
 ): Promise<DashboardSnapshot> {
   const runtimeBaseUrl = normalizeUrl(settings.runtimeBaseUrl, 'http://127.0.0.1:8080');
+  const localRuntime = await fetchManagedRuntimeStatus();
   const errors: string[] = [];
+  const runtimeStartPending = isRuntimeStartupPending(localRuntime);
+  const runtimeStartFailed = localRuntime?.state === 'failed';
+
+  if (runtimeStartPending && localRuntime) {
+    const nats = pendingNatsSnapshot(localRuntime);
+    return {
+      localRuntime,
+      runtimeReachable: false,
+      runtimeSummary: localRuntime.summary,
+      probes: emptyRuntimeProbes(),
+      runs: [],
+      selectedRunId: null,
+      runDetail: null,
+      sessions: [],
+      selectedSessionId: null,
+      sessionDetail: null,
+      agents: [],
+      selectedAgentId: null,
+      agentDetail: null,
+      nats,
+      errors: localRuntime.last_error ? [localRuntime.last_error] : [],
+    };
+  }
+
+  if (runtimeStartFailed && localRuntime) {
+    return {
+      localRuntime,
+      runtimeReachable: false,
+      runtimeSummary: localRuntime.summary,
+      probes: emptyRuntimeProbes(),
+      runs: [],
+      selectedRunId: null,
+      runDetail: null,
+      sessions: [],
+      selectedSessionId: null,
+      sessionDetail: null,
+      agents: [],
+      selectedAgentId: null,
+      agentDetail: null,
+      nats: failedNatsSnapshot(localRuntime),
+      errors: localRuntime.last_error ? [localRuntime.last_error] : [],
+    };
+  }
 
   const runtimeResults = await Promise.allSettled([
     requestJson<HealthResponse>(buildUrl(runtimeBaseUrl, '/api/v1/health')),
@@ -144,10 +189,14 @@ async function fetchDashboard(
   if (nats.errors.length > 0) {
     errors.push(...nats.errors);
   }
+  if (runtimeStartFailed && localRuntime?.last_error) {
+    errors.unshift(localRuntime.last_error);
+  }
 
   return {
+    localRuntime,
     runtimeReachable,
-    runtimeSummary: summarizeRuntime(runtimeReachable, health, ready),
+    runtimeSummary: summarizeRuntime(runtimeReachable, health, ready, localRuntime),
     probes: {
       health,
       config,
@@ -373,6 +422,36 @@ async function fetchNatsSnapshot(rawBaseUrl: string): Promise<NatsMonitorSnapsho
   };
 }
 
+function pendingNatsSnapshot(localRuntime: LocalRuntimeSnapshot): NatsMonitorSnapshot {
+  return {
+    available: false,
+    degraded: false,
+    summary:
+      localRuntime.state === 'starting_runtime'
+        ? 'NATS monitor warming while runtime starts'
+        : 'Waiting for local NATS monitor',
+    varz: null,
+    connz: null,
+    jsz: null,
+    errors: [],
+  };
+}
+
+function failedNatsSnapshot(localRuntime: LocalRuntimeSnapshot): NatsMonitorSnapshot {
+  return {
+    available: false,
+    degraded: false,
+    summary:
+      localRuntime.last_error && localRuntime.last_error.length > 0
+        ? 'Unavailable because launcher failed'
+        : 'NATS monitor unavailable',
+    varz: null,
+    connz: null,
+    jsz: null,
+    errors: [],
+  };
+}
+
 async function requestJson<T>(
   url: string,
   init?: RequestInit,
@@ -407,6 +486,14 @@ async function invokeCommand<T>(command: string): Promise<T> {
   return coreModule.invoke<T>(command);
 }
 
+async function fetchManagedRuntimeStatus(): Promise<LocalRuntimeSnapshot | null> {
+  try {
+    return await invokeCommand<LocalRuntimeSnapshot>('managed_runtime_status');
+  } catch {
+    return null;
+  }
+}
+
 function unwrapSettled<T>(
   result: PromiseSettledResult<T>,
   errors: string[],
@@ -437,17 +524,59 @@ function summarizeRuntime(
   runtimeReachable: boolean,
   health: HealthResponse | null,
   ready: boolean,
+  localRuntime: LocalRuntimeSnapshot | null,
 ): string {
+  if (localRuntime && isRuntimeStartupPending(localRuntime)) {
+    return localRuntime.summary;
+  }
   if (!runtimeReachable) {
-    return 'Runtime offline';
+    return localRuntime?.summary ?? 'Runtime offline';
   }
   if (!health) {
-    return ready ? 'Runtime reachable' : 'Runtime reachable, probes pending';
+    return localRuntime?.state === 'managed_ready'
+      ? 'Managed runtime reachable, probes pending'
+      : ready
+        ? 'Runtime reachable'
+        : 'Runtime reachable, probes pending';
   }
   if (health.status === 'healthy' && ready) {
+    if (localRuntime?.state === 'managed_ready') {
+      return 'Managed runtime healthy';
+    }
+    if (localRuntime?.state === 'external_ready') {
+      return 'Existing runtime healthy';
+    }
     return 'Runtime healthy';
   }
   return `Runtime ${health.status}`;
+}
+
+function emptyRuntimeProbes(): {
+  health: null;
+  config: null;
+  live: false;
+  ready: false;
+} {
+  return {
+    health: null,
+    config: null,
+    live: false,
+    ready: false,
+  };
+}
+
+function isRuntimeStartupPending(
+  localRuntime: LocalRuntimeSnapshot | null,
+): boolean {
+  if (!localRuntime) {
+    return false;
+  }
+
+  return (
+    localRuntime.state === 'checking' ||
+    localRuntime.state === 'starting_dependencies' ||
+    localRuntime.state === 'starting_runtime'
+  );
 }
 
 function parseTextPayload(text: string): unknown {

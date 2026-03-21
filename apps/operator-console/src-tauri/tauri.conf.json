@@ -9,6 +9,10 @@
     "devUrl": "http://127.0.0.1:1420",
     "frontendDist": "../dist"
   },
+  "bundle": {
+    "externalBin": ["binaries/mister-smith-runtime"],
+    "resources": ["../../../deploy/docker-compose.yml"]
+  },
   "app": {
     "windows": [
       {
