@@ -18,7 +18,7 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 Use `docs/current-state.md` as the stable repo-wide state summary and document router.
 
 - `docs/current-state.md`: current repo and OS state
-- `docs/plans/2026-03-16-frontier-direction.md`: current forward direction
+- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`: current forward direction
 - `WORKFLOW.md` and `docs/linear/LINEAR.md`: development workflow contract
 - `ROADMAP.md`: architectural build map
 
@@ -49,7 +49,10 @@ runtime.
   `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md`
 - Runtime contract: `WORKFLOW.md`
 - Linear operating model: `docs/linear/LINEAR.md`
-- Current operating-system direction: `docs/plans/2026-03-16-frontier-direction.md`
+- Current forward-development checkpoint:
+  `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`
+- Current packet-016 closure evidence:
+  `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
 - Current repo-wide overview and document router: `docs/current-state.md`
 - Phase 10 artifact set and gate evidence: `specs/012-phase10-frontier-autonomy/`,
   `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`

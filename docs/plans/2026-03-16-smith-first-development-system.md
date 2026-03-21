@@ -5,7 +5,9 @@ Status: Historical
 
 This note remains useful background for the Smith-first control-plane build-out, but it is no
 longer the forward-development authority. Use
-`docs/plans/2026-03-19-central-development-checkpoint.md` for current repo-wide direction.
+`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` for current repo-wide
+direction and `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
+for the latest completed frontier-packet closure evidence.
 
 ## Objective
 
@@ -31,6 +33,8 @@ to build the repo-backed workflow system itself.
 
 - `WORKFLOW.md`: Symphony runtime contract and issue lifecycle
 - `docs/linear/LINEAR.md`: Linear taxonomy, queue boundary, and project roles
+- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`: current forward-development
+  checkpoint
 - `docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md`: recovered Smith workflow design
 - `docs/plans/2026-03-15-smith-mcp-workflow-forensics.md`: evidence for the workflow model
 - `docs/plans/2026-03-16-frontier-direction.md`: current mainline direction note, useful as

@@ -30,9 +30,10 @@ router.
 Document roles in brief:
 
 - `docs/current-state.md`: current repo and OS state
-- `docs/plans/2026-03-19-central-development-checkpoint.md`: current forward-development checkpoint
-- `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`:
-  packet-015 closure evidence
+- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`:
+  current forward-development checkpoint
+- `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`:
+  packet-016 closure evidence
 - `WORKFLOW.md` and `docs/linear/LINEAR.md`: development control-plane contract
 - `ROADMAP.md`: architectural build map
 - `spec/` and `specs/`: architecture and implementation packet truth
@@ -49,9 +50,9 @@ the Mister Smith OS runtime.
 - Live queue contract:
   [`WORKFLOW.md`](WORKFLOW.md) and
   [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md)
-- Current mainline direction and packet-015 closure posture:
-  [`docs/plans/2026-03-19-central-development-checkpoint.md`](docs/plans/2026-03-19-central-development-checkpoint.md),
-  [`docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`](docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md)
+- Current forward-development direction and packet-016 closure posture:
+  [`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`](docs/plans/2026-03-21-post-packet-016-development-checkpoint.md),
+  [`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`](docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md)
 - Phase 10 design and gate artifacts:
   [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
   [`docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`](docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md),
@@ -133,9 +134,9 @@ Primary notes for the current operator and result-surface baseline:
   [`docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`](docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md)
 - bounded same-agent session packet and live validation notes:
   [`docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`](docs/plans/2026-03-16-multi-turn-same-agent-conversations.md)
-- forward checkpoint and packet-015 closure evidence:
-  [`docs/plans/2026-03-19-central-development-checkpoint.md`](docs/plans/2026-03-19-central-development-checkpoint.md),
-  [`docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`](docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md)
+- forward checkpoint and packet-016 closure evidence:
+  [`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`](docs/plans/2026-03-21-post-packet-016-development-checkpoint.md),
+  [`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`](docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md)
 
 ## Architecture
 

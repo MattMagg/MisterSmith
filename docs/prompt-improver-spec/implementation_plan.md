@@ -1,5 +1,10 @@
 # Implementation Plan — Mister Smith Next SpecKit Epic Handoff Prompt
 
+Status: Historical prompt-improver artifact used to shape the packet-016 pre-spec session. Do not
+use this file as the current forward-development router; use
+`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` and
+`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` instead.
+
 ## Step 1: Example Identification
 
 ### Source Prompt (normalized from user request)

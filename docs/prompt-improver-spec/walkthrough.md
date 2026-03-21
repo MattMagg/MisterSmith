@@ -1,5 +1,10 @@
 # Walkthrough — Mister Smith Next SpecKit Epic Handoff Prompt
 
+Status: Historical prompt-improver walkthrough for the packet-016 planning session. Do not use
+this file as a current routing document; use
+`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` for the current forward
+checkpoint.
+
 ## Original Request Summary
 
 Generate a handoff prompt for a new Codex session that starts the next phase of development by

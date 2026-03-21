@@ -11,9 +11,10 @@ updated: 2026-03-20
 > **Governing directive**: Frontier-first — optimize for strategic advantage, not comprehensiveness
 > **Current Action**: Research phase complete. Use
 > `docs/current-state.md` for the current repo-wide overview,
-> `docs/plans/2026-03-19-central-development-checkpoint.md` for forward-development authority, and
-> `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md` for
-> the packet-015 closure proof.
+> `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` for
+> forward-development authority, and
+> `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` for
+> the packet-016 closure proof.
 
 ## Historical March 16 Direction
 
@@ -27,7 +28,8 @@ research corpus into bounded backlog epics that preserve the frontier mandate:
 
 Those directions were consolidated in
 `docs/plans/2026-03-16-frontier-direction.md`, which now serves as historical context only. The
-current planning authority moved forward to the March 19 checkpoint and packet-015 closure notes.
+current planning authority moved forward to the March 21 checkpoint and the packet-016 closure
+note.
 
 ---
 

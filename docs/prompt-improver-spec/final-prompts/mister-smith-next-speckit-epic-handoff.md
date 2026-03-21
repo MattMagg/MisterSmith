@@ -1,6 +1,10 @@
 # Mister Smith Next SpecKit Epic Handoff
 
-Use this prompt to start a new Codex session in the Mister Smith repo.
+Historical artifact: this prompt was used to start the packet-016 pre-spec session. Do not use it
+as the current forward-development router; use
+`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` and
+`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` for the
+current checkpoint and closure posture.
 
 ---
 

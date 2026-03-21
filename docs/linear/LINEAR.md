@@ -19,22 +19,27 @@ Initiative (strategic goal)
 
 Use initiatives as the strategic layer, not as Symphony's dispatch boundary. Historical initiatives
 remain useful for reporting and status updates, but the current forward-development authority is
-`docs/plans/2026-03-19-central-development-checkpoint.md`.
+`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`.
 
 ### Current Strategy
 
 - `MS-45`, `MS-46`, and `MS-47` are complete post-recovery operating-system epics; treat them as
   backlog history rather than current runnable direction.
+- the packet-016 family (`MS-96` parent, `MS-97` through `MS-100` child slices) is complete on
+  `main`; treat it as closed backlog history rather than current runnable direction
 - the historical `Smith MCP Development` project is archived and should not be reopened as a
   separate forward program
-- the next active planning move is one bounded SpecKit packet from the central checkpoint, not a
-  restart of the Smith-first control-plane backlog
-- `MisterSmith Validated Backlog` should hold only genuinely open frontier work in `Backlog` until
-  it is explicitly staged.
+- the next active planning move is not an automatic queue refill; start from the March 21
+  post-packet-016 checkpoint, identify one fresh bounded gap, and only then create a new bounded
+  packet
+- `MisterSmith Validated Backlog` should hold only genuinely open frontier work in `Backlog` after
+  fresh repo-grounded validation and explicit packet framing
 - Do not move these issues into the watched queue just to keep Symphony busy. Stage only the next
   bounded runnable slice.
-- The current repo-owned direction note is
-  `docs/plans/2026-03-19-central-development-checkpoint.md`.
+- the watched queue should remain empty until that next bounded slice is explicitly staged
+- the current repo-owned direction notes are
+  `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` and
+  `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
 
 ### Projects
 

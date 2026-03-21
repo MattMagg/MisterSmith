@@ -2,7 +2,7 @@
 
 Date: March 19, 2026
 Updated: March 20, 2026
-Status: Packet 015 complete; packet 016 pre-spec scope frozen
+Status: Historical checkpoint; superseded by `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`
 
 ## Purpose
 
@@ -10,15 +10,15 @@ Freeze one repo-wide development checkpoint after the March 19 runtime, session,
 evaluation work so future development stays on the operating-system path and does not drift into
 side programs, stale control-plane cleanup, or framework-parity scope creep.
 
-This note remained the forward-development authority through packet 015. Packet 015 is now
-complete on `main`, so this checkpoint should be refreshed before another frontier implementation
-lane starts.
+This note remained the forward-development authority through packet 015 and packet-016 pre-spec
+freezing. Packet 016 is now complete on `main`, so this checkpoint is historical and should no
+longer be treated as the active forward-development router.
 
 ## Development Authority
 
 - `docs/current-state.md`: broad repo and product truth
-- `docs/plans/2026-03-19-central-development-checkpoint.md`: forward-development authority,
-  epic ordering, and scope guardrails
+- `docs/plans/2026-03-19-central-development-checkpoint.md`: historical forward-development
+  authority at the time, plus epic ordering and scope guardrails
 - `WORKFLOW.md` and `docs/linear/LINEAR.md`: development control-plane contract
 - `spec/`: architecture truth
 - `specs/`: implementation-packet truth
@@ -78,7 +78,7 @@ Historical support notes:
 
 This milestone is complete when:
 
-- this note is the forward-development authority
+- this note has become the forward-development authority for the checkpoint window
 - `docs/current-state.md`, `AGENTS.md`, `WORKFLOW.md`, and `docs/linear/LINEAR.md` all point to
   the same development structure
 - the historical Smith MCP Linear project and its issues are archived

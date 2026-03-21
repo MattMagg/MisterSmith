@@ -1,7 +1,7 @@
 # 2026-03-20 MS-96 External-Agent Pre-Spec Decision
 
 Issue: `MS-96`  
-Status: planning-only; packet `016` initialized
+Status: historical pre-spec note; packet `016` completed on `main`
 
 ## Summary
 

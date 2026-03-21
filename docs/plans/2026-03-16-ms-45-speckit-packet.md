@@ -4,9 +4,9 @@ Date: March 16, 2026
 Status: Completed historical packet-build note for `specs/014-task-shape-aware-orchestration/`
 
 Use `docs/current-state.md` for the current repo-wide overview. Use
-`docs/plans/2026-03-19-central-development-checkpoint.md` and
-`docs/plans/2026-03-19-complex-multi-agent-proof-and-unified-result-surfaces-evaluation.md` for
-the current post-packet-015 planning posture.
+`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` and
+`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` for the
+current post-packet-016 planning and closure posture.
 
 ## Objective
 
