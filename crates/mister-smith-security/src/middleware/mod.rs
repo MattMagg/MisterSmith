@@ -26,6 +26,7 @@ use crate::jwt::{JwtManager, DEFAULT_MAX_DELEGATION_CHAIN_DEPTH};
 use crate::rbac::PolicyEngine;
 #[cfg(feature = "tls")]
 use crate::tls::CertificateManager;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use mister_smith_config::SecurityConfig as RuntimeSecurityConfig;
 
 use crate::config;
@@ -90,38 +91,42 @@ impl From<&RuntimeSecurityConfig> for SecurityLayerConfig {
     fn from(value: &RuntimeSecurityConfig) -> Self {
         #[cfg(feature = "jwt")]
         let jwt_config = if value.enabled && value.auth.enabled {
+            let algorithm = value.auth.algorithm.to_ascii_uppercase();
             let key_source = match (
                 value.auth.private_key_path.as_deref(),
                 value.auth.public_key_path.as_deref(),
                 value.auth.hmac_secret.as_ref(),
             ) {
-                (Some(private_pem), Some(public_pem), _) => {
-                    match value.auth.algorithm.to_ascii_uppercase().as_str() {
-                        algorithm if algorithm.starts_with("RS") => KeySource::RsaPem {
-                            private_pem: private_pem.into(),
-                            public_pem: public_pem.into(),
-                        },
-                        algorithm if algorithm.starts_with("ES") => KeySource::EcPem {
-                            private_pem: private_pem.into(),
-                            public_pem: public_pem.into(),
-                        },
-                        algorithm if algorithm.starts_with("ED") => KeySource::EdPem {
-                            private_pem: private_pem.into(),
-                            public_pem: public_pem.into(),
-                        },
-                        _ => KeySource::Hmac {
-                            secret: value
-                                .auth
-                                .hmac_secret
-                                .clone()
-                                .unwrap_or_default()
-                                .into_bytes(),
-                        },
+                (Some(private_pem), Some(public_pem), _)
+                    if algorithm.starts_with("RS") || algorithm.starts_with("PS") =>
+                {
+                    KeySource::RsaPem {
+                        private_pem: private_pem.into(),
+                        public_pem: public_pem.into(),
                     }
                 }
-                (_, _, Some(secret)) => KeySource::Hmac {
-                    secret: secret.clone().into_bytes(),
+                (Some(private_pem), Some(public_pem), _) if algorithm.starts_with("ES") => {
+                    KeySource::EcPem {
+                        private_pem: private_pem.into(),
+                        public_pem: public_pem.into(),
+                    }
+                }
+                (Some(private_pem), Some(public_pem), _) if algorithm.starts_with("ED") => {
+                    KeySource::EdPem {
+                        private_pem: private_pem.into(),
+                        public_pem: public_pem.into(),
+                    }
+                }
+                (Some(_), Some(_), Some(secret)) | (_, _, Some(secret)) => KeySource::Hmac {
+                    secret: decode_hmac_secret(secret),
                 },
+                (Some(_), Some(_), None) => {
+                    tracing::warn!(
+                        algorithm = %value.auth.algorithm,
+                        "Ignoring JWT PEM key paths because the algorithm requires an HMAC secret"
+                    );
+                    config::JwtConfig::default().key_source
+                }
                 _ => config::JwtConfig::default().key_source,
             };
 
@@ -170,6 +175,17 @@ impl From<&RuntimeSecurityConfig> for SecurityLayerConfig {
             ..Default::default()
         }
     }
+}
+
+#[cfg(feature = "jwt")]
+fn decode_hmac_secret(secret: &str) -> Vec<u8> {
+    STANDARD.decode(secret).unwrap_or_else(|error| {
+        tracing::warn!(
+            error = %error,
+            "Failed to decode base64 JWT HMAC secret; falling back to raw secret bytes"
+        );
+        secret.as_bytes().to_vec()
+    })
 }
 
 impl SecurityLayer {
@@ -283,7 +299,7 @@ mod tests {
         runtime.auth.refresh_token_ttl_secs = 3600;
         runtime.auth.issuer = Some("mister-smith-tests".to_string());
         runtime.auth.audience = vec!["ops".to_string(), "proof".to_string()];
-        runtime.auth.hmac_secret = Some("shared-secret".to_string());
+        runtime.auth.hmac_secret = Some("c2hhcmVkLXNlY3JldA==".to_string());
         runtime.authz.default_role = Some("observer".to_string());
 
         let converted = SecurityLayerConfig::from(&runtime);
@@ -300,6 +316,33 @@ mod tests {
         match &jwt.key_source {
             KeySource::Hmac { secret } => assert_eq!(secret, b"shared-secret"),
             other => panic!("expected HMAC key source, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn runtime_security_config_conversion_maps_ps_algorithms_to_rsa_pem() {
+        let mut runtime = RuntimeSecurityConfig::default();
+        runtime.enabled = true;
+        runtime.auth.enabled = true;
+        runtime.auth.algorithm = "PS256".to_string();
+        runtime.auth.private_key_path = Some("/tmp/private.pem".to_string());
+        runtime.auth.public_key_path = Some("/tmp/public.pem".to_string());
+
+        let converted = SecurityLayerConfig::from(&runtime);
+        let jwt = converted
+            .jwt_config
+            .as_ref()
+            .expect("runtime auth config should produce jwt config");
+
+        match &jwt.key_source {
+            KeySource::RsaPem {
+                private_pem,
+                public_pem,
+            } => {
+                assert_eq!(private_pem, &std::path::PathBuf::from("/tmp/private.pem"));
+                assert_eq!(public_pem, &std::path::PathBuf::from("/tmp/public.pem"));
+            }
+            other => panic!("expected RSA PEM key source for PS256, got {other:?}"),
         }
     }
 }

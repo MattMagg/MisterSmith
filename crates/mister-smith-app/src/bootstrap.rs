@@ -279,6 +279,7 @@ async fn start_http_server(
             mister_smith_security::middleware::SecurityLayer::new((&config.security).into())
                 .map_err(|error| format!("security layer initialization failed: {error}"))?;
         app_state = app_state.with_security(Arc::new(security));
+        info!("Security layer initialized");
     }
 
     let mut app = mister_smith_http::server::build_router(&http_config, app_state);
