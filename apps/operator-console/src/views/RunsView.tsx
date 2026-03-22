@@ -44,11 +44,7 @@ export function RunsView(props: RunsViewProps) {
             <p className="eyebrow">Runs</p>
             <h2>Root workflow queue</h2>
           </div>
-          <StatusPill
-            label="Count"
-            tone="neutral"
-            value={`${runs.length} loaded`}
-          />
+          <StatusPill label="Count" tone="neutral" value={`${runs.length} loaded`} />
         </div>
 
         <form className="compose-form" onSubmit={onSubmit}>
@@ -61,10 +57,7 @@ export function RunsView(props: RunsViewProps) {
             />
           </label>
           <div className="compose-actions">
-            <PrioritySelect
-              value={taskPriority}
-              onChange={onTaskPriorityChange}
-            />
+            <PrioritySelect value={taskPriority} onChange={onTaskPriorityChange} />
             <button className="primary-button" disabled={busy || !taskDescription.trim()}>
               {busy ? 'Submitting' : 'Submit task'}
             </button>
@@ -84,7 +77,7 @@ export function RunsView(props: RunsViewProps) {
                 className={`list-row ${run.task_id === selectedRunId ? 'selected' : ''}`}
                 onClick={() => onSelect(run.task_id)}
               >
-                <div>
+                <div className="list-row-copy">
                   <strong>{run.description}</strong>
                   <p>{run.task_id}</p>
                 </div>
@@ -107,27 +100,47 @@ export function RunsView(props: RunsViewProps) {
         </div>
         {selectedRunSummary ? (
           <div className="detail-stack">
+            <section className="detail-hero">
+              <div className="detail-hero-copy">
+                <p className="eyebrow">Workflow focus</p>
+                <h3>{selectedRunSummary.description}</h3>
+                <p>
+                  Root workflow {selectedRunSummary.task_id} is currently{' '}
+                  {selectedRunSummary.status}.
+                </p>
+              </div>
+              <div className="detail-hero-aside">
+                <StatusPill
+                  label="Status"
+                  tone={toneForRun(selectedRunSummary.status)}
+                  value={selectedRunSummary.status}
+                />
+                <StatusPill
+                  label="Proof"
+                  tone={selectedRunSummary.proof_outcome ? 'good' : 'neutral'}
+                  value={selectedRunSummary.proof_outcome ?? 'Not recorded'}
+                />
+              </div>
+            </section>
+
             <KeyValueGrid
               rows={[
                 ['Task ID', selectedRunSummary.task_id],
-                ['Status', selectedRunSummary.status],
                 ['Priority', String(selectedRunSummary.priority)],
                 ['Created', formatTimestamp(selectedRunSummary.created_at)],
                 ['Started', formatTimestamp(selectedRunSummary.started_at)],
                 ['Completed', formatTimestamp(selectedRunSummary.completed_at)],
                 ['Session', selectedRunSummary.session_id ?? 'none'],
-                [
-                  'Proof outcome',
-                  selectedRunSummary.proof_outcome ?? 'not available',
-                ],
               ]}
             />
+
             <PreviewCard preview={selectedRunSummary.result_preview} />
+
             <section className="subpanel">
-              <h3>Runtime task response</h3>
+              <h3>Transcript and evidence</h3>
               <div className="terminal-shell">
                 <div className="terminal-header">
-                  <strong>command transcript</strong>
+                  <strong>workflow transcript</strong>
                   <span>{selectedRunSummary.status}</span>
                 </div>
                 <div className="terminal-body">
@@ -162,7 +175,7 @@ export function RunsView(props: RunsViewProps) {
                   <input
                     className="terminal-input"
                     readOnly
-                    value="inspect selected workflow payload"
+                    value="selected workflow inspect route"
                   />
                   <button className="ghost-button" type="button" disabled>
                     locked
@@ -170,18 +183,41 @@ export function RunsView(props: RunsViewProps) {
                 </div>
               </div>
             </section>
-            <section className="subpanel">
-              <h3>Inspect payload</h3>
+
+            <details className="payload-disclosure payload-disclosure-block">
+              <summary>Inspect payload</summary>
               <pre>{prettyJson(taskDetail ?? selectedRunSummary)}</pre>
-            </section>
+            </details>
           </div>
         ) : (
           <EmptyState
             title="Select a run"
-            body="The detail pane shows the canonical inspect route plus the shared preview projection."
+            body="Choose a root workflow to inspect its timeline, preview, and payload."
           />
         )}
       </section>
     </div>
   );
+}
+
+function toneForRun(status: string): 'good' | 'warn' | 'bad' | 'neutral' {
+  const normalized = status.toLowerCase();
+
+  if (normalized.includes('complete') || normalized.includes('success')) {
+    return 'good';
+  }
+
+  if (normalized.includes('fail') || normalized.includes('error')) {
+    return 'bad';
+  }
+
+  if (
+    normalized.includes('queue') ||
+    normalized.includes('pending') ||
+    normalized.includes('running')
+  ) {
+    return 'warn';
+  }
+
+  return 'neutral';
 }

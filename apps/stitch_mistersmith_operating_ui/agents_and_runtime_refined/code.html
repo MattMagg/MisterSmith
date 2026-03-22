@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-fixed-dim": "#e5e5e5",
+              "surface-variant": "#1c1c1c",
+              "on-error": "#ffffff",
+              "error-container": "#450a0a",
+              "on-tertiary": "#ffffff",
+              "surface-container-lowest": "#000000",
+              "surface-bright": "#1c1c1c",
+              "surface": "#121212",
+              "outline": "#2e2e2e",
+              "surface-tint": "#3b82f6",
+              "error-dim": "#ef4444",
+              "surface-container-highest": "#2e2e2e",
+              "background": "#121212",
+              "inverse-primary": "#3b82f6",
+              "on-background": "#ededed",
+              "inverse-on-surface": "#121212",
+              "surface-container-low": "#171717",
+              "secondary": "#a1a1a1",
+              "error": "#ef4444",
+              "secondary-fixed": "#f5f5f5",
+              "secondary-dim": "#a1a1a1",
+              "on-tertiary-fixed": "#171717",
+              "on-surface-variant": "#a1a1a1",
+              "on-primary-container": "#dbeafe",
+              "on-primary-fixed": "#1e3a8a",
+              "surface-container-high": "#242424",
+              "primary-fixed": "#dbeafe",
+              "on-surface": "#ededed",
+              "inverse-surface": "#ededed",
+              "on-secondary-container": "#ededed",
+              "on-primary-fixed-variant": "#1d4ed8",
+              "on-secondary-fixed-variant": "#404040",
+              "on-secondary-fixed": "#171717",
+              "surface-dim": "#0c0c0c",
+              "primary": "#3b82f6",
+              "secondary-container": "#2e2e2e",
+              "tertiary-dim": "#707070",
+              "on-tertiary-container": "#a1a1a1",
+              "on-secondary": "#121212",
+              "on-tertiary-fixed-variant": "#525252",
+              "outline-variant": "#404040",
+              "on-error-container": "#f87171",
+              "primary-container": "#1e3a8a",
+              "primary-dim": "#3b82f6",
+              "tertiary": "#707070",
+              "tertiary-container": "#1c1c1c",
+              "on-primary": "#ffffff",
+              "tertiary-fixed": "#e5e5e5",
+              "tertiary-fixed-dim": "#d4d4d4",
+              "primary-fixed-dim": "#bfdbfe",
+              "surface-container": "#1c1c1c"
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "mono": ["JetBrains Mono"]
+            },
+            borderRadius: {"DEFAULT": "0px", "sm": "2px", "lg": "4px", "xl": "8px", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-size: 18px;
+        }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #121212; }
+        ::-webkit-scrollbar-thumb { background: #2e2e2e; border-radius: 0px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+        .mono-text { font-family: 'JetBrains Mono', monospace; }
+        .glass-header { backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body class="bg-background text-on-surface selection:bg-primary selection:text-on-primary overflow-hidden h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-4 h-12 bg-[#171717] dark:bg-[#171717] opacity-95 backdrop-blur-sm border-b border-[#2e2e2e] shadow-none">
+<div class="flex items-center gap-6">
+<span class="text-sm font-black tracking-tighter text-slate-100 dark:text-slate-100 font-mono">MS_OPERATOR</span>
+<nav class="hidden md:flex items-center gap-4 h-full">
+<a class="text-slate-500 dark:text-slate-500 hover:text-slate-300 text-xs font-bold uppercase Inter tracking-widest px-2" href="#">CONSOLE</a>
+<a class="text-slate-500 dark:text-slate-500 hover:text-slate-300 text-xs font-bold uppercase Inter tracking-widest px-2" href="#">SESSIONS</a>
+<a class="text-blue-500 dark:text-blue-500 border-b-2 border-blue-500 pb-1 text-xs font-bold uppercase Inter tracking-widest px-2" href="#">RUNTIME</a>
+<a class="text-slate-500 dark:text-slate-500 hover:text-slate-300 text-xs font-bold uppercase Inter tracking-widest px-2" href="#">HEALTH</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1 bg-[#1c1c1c] border border-[#2e2e2e] rounded-sm">
+<span class="material-symbols-outlined text-primary scale-75">search</span>
+<input class="bg-transparent border-none outline-none text-[11px] font-mono JetBrains Mono text-on-surface-variant w-48 placeholder:text-tertiary-dim uppercase" placeholder="QUERY_SYSTEM..." type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="hover:bg-[#1c1c1c] transition-colors duration-150 p-1.5"><span class="material-symbols-outlined text-slate-400" data-icon="settings_input_component">settings_input_component</span></button>
+<button class="hover:bg-[#1c1c1c] transition-colors duration-150 p-1.5"><span class="material-symbols-outlined text-slate-400" data-icon="terminal">terminal</span></button>
+<button class="hover:bg-[#1c1c1c] transition-colors duration-150 p-1.5 relative">
+<span class="material-symbols-outlined text-slate-400" data-icon="notifications">notifications</span>
+<span class="absolute top-1 right-1 w-1.5 h-1.5 bg-error rounded-full animate-pulse"></span>
+</button>
+</div>
+<img alt="MisterSmith Operator Avatar" class="w-7 h-7 rounded-sm border border-[#2e2e2e]" data-alt="Operator avatar showing a stylized tech character" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDICWB9J7y0TxN3d2GS9u3b0QMq1YbLbzyZPyaTo4EniJKF6nn-K2-9YhRXjX15BFA1oz2yMM-9eZRnkIJer7nv71ADBi_083I7AsF1wzV_diX4lZK4e-hsKgkT9lKAahGiJB3MFJVfO3rc7rrLtNrgSDU37Sf2rAC17wPgsWTDhJyz8Q3FbbA7JT4664-tTxWskWk5LV_dEXDT94jV8hW1-fQ3GhpP-XHzj13juxaKLMuJl6X2xREXQMqD9jG_K321pltd7bKu1HV"/>
+</div>
+</header>
+<div class="flex flex-1 pt-12">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-12 bottom-0 w-16 z-40 flex flex-col items-center py-4 bg-[#121212] dark:bg-[#121212] border-r border-[#2e2e2e]">
+<div class="flex flex-col gap-6 items-center flex-1">
+<div class="group relative flex flex-col items-center gap-1 cursor-pointer text-slate-600 dark:text-slate-600 hover:text-slate-200 hover:bg-[#1c1c1c] w-full py-2">
+<span class="material-symbols-outlined" data-icon="terminal">terminal</span>
+<span class="text-[10px] uppercase font-bold Inter">Console</span>
+</div>
+<div class="group relative flex flex-col items-center gap-1 cursor-pointer text-slate-600 dark:text-slate-600 hover:text-slate-200 hover:bg-[#1c1c1c] w-full py-2">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="text-[10px] uppercase font-bold Inter">Sessions</span>
+</div>
+<div class="group relative flex flex-col items-center gap-1 cursor-pointer text-blue-500 dark:text-blue-500 border-l-2 border-blue-500 bg-blue-500/5 w-full py-2">
+<span class="material-symbols-outlined" data-icon="memory">memory</span>
+<span class="text-[10px] uppercase font-bold Inter">Agents</span>
+</div>
+<div class="group relative flex flex-col items-center gap-1 cursor-pointer text-slate-600 dark:text-slate-600 hover:text-slate-200 hover:bg-[#1c1c1c] w-full py-2">
+<span class="material-symbols-outlined" data-icon="monitor_heart">monitor_heart</span>
+<span class="text-[10px] uppercase font-bold Inter">Health</span>
+</div>
+</div>
+<div class="flex flex-col gap-4 items-center mb-4">
+<div class="flex flex-col items-center gap-1 cursor-pointer text-slate-600 hover:text-slate-200">
+<span class="material-symbols-outlined" data-icon="history_edu">history_edu</span>
+<span class="text-[10px] uppercase font-bold Inter">Logs</span>
+</div>
+<div class="flex flex-col items-center gap-1 cursor-pointer text-slate-600 hover:text-slate-200">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+<span class="text-[10px] uppercase font-bold Inter">Docs</span>
+</div>
+<div class="mt-4 border-t border-[#2e2e2e] pt-4 flex flex-col items-center gap-1 opacity-40">
+<span class="text-[9px] font-mono JetBrains Mono">v2.4.0</span>
+<span class="text-[9px] font-mono JetBrains Mono">STABLE</span>
+</div>
+</div>
+</aside>
+<!-- Main Workspace -->
+<main class="ml-16 flex-1 flex flex-col overflow-hidden bg-background">
+<!-- Secondary Header / Sub-Nav -->
+<div class="h-10 border-b border-[#2e2e2e] bg-[#171717] flex items-center px-4 justify-between">
+<div class="flex items-center gap-3">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">CURRENT_VIEW /</span>
+<span class="text-[10px] font-bold uppercase tracking-wider text-primary">AGENT_ORCHESTRATION</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+<span class="text-[9px] font-mono text-emerald-500">SYSTEM_READY</span>
+</div>
+<div class="text-[9px] font-mono text-slate-500">UPTIME: 44D 12H 04M</div>
+<div class="text-[9px] font-mono text-slate-500">THREADS: 1,024 [STABLE]</div>
+</div>
+</div>
+<div class="flex-1 flex overflow-hidden">
+<!-- Table Section: Agent Roster -->
+<section class="flex-1 flex flex-col min-w-0 border-r border-[#2e2e2e]">
+<div class="p-4 bg-surface-container-low border-b border-[#2e2e2e] flex justify-between items-end">
+<div>
+<h2 class="text-sm font-bold uppercase tracking-widest text-on-surface">Agent Deployment</h2>
+<p class="text-[10px] text-tertiary-dim font-mono mt-1">TOTAL_NODES: 12 | ACTIVE: 08 | ERR: 00</p>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1 bg-primary text-on-primary text-[10px] font-bold uppercase flex items-center gap-2 rounded-sm hover:brightness-110 transition-all">
+<span class="material-symbols-outlined !text-[14px]">add</span>
+                                PROVISION_NEW
+                            </button>
+</div>
+</div>
+<div class="flex-1 overflow-auto">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-[#171717] z-10 border-b border-[#2e2e2e]">
+<tr>
+<th class="px-4 py-2 text-[9px] font-bold uppercase text-slate-500 tracking-tighter">Status</th>
+<th class="px-4 py-2 text-[9px] font-bold uppercase text-slate-500 tracking-tighter">Agent ID</th>
+<th class="px-4 py-2 text-[9px] font-bold uppercase text-slate-500 tracking-tighter">Model / Spec</th>
+<th class="px-4 py-2 text-[9px] font-bold uppercase text-slate-500 tracking-tighter">Latency</th>
+<th class="px-4 py-2 text-[9px] font-bold uppercase text-slate-500 tracking-tighter">Thread Load</th>
+<th class="px-4 py-2 text-[9px] font-bold uppercase text-slate-500 tracking-tighter text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#2e2e2e]">
+<!-- Active Row -->
+<tr class="bg-primary/5 border-l-2 border-primary hover:bg-primary/10 transition-colors cursor-pointer group">
+<td class="px-4 py-2.5">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="text-[10px] font-mono text-emerald-500 uppercase">Executing</span>
+</div>
+</td>
+<td class="px-4 py-2.5">
+<div class="flex flex-col">
+<span class="text-[11px] font-mono text-slate-100 uppercase tracking-tight">SIGMA-01-DELTA</span>
+<span class="text-[9px] font-mono text-slate-500">0x7F...44A2</span>
+</div>
+</td>
+<td class="px-4 py-2.5">
+<div class="text-[10px] font-mono text-slate-400">GPT-4o-REASONING-V2</div>
+</td>
+<td class="px-4 py-2.5">
+<span class="text-[10px] font-mono text-slate-300">124ms</span>
+</td>
+<td class="px-4 py-2.5">
+<div class="w-24 h-1.5 bg-[#1c1c1c] border border-[#2e2e2e] rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[72%]"></div>
+</div>
+</td>
+<td class="px-4 py-2.5 text-right">
+<div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1 hover:text-primary"><span class="material-symbols-outlined !text-sm">analytics</span></button>
+<button class="p-1 hover:text-error"><span class="material-symbols-outlined !text-sm">stop_circle</span></button>
+</div>
+</td>
+</tr>
+<!-- Idle Row -->
+<tr class="hover:bg-[#1c1c1c] transition-colors cursor-pointer group border-l-2 border-transparent">
+<td class="px-4 py-2.5">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+<span class="text-[10px] font-mono text-slate-500 uppercase">Idle</span>
+</div>
+</td>
+<td class="px-4 py-2.5">
+<div class="flex flex-col">
+<span class="text-[11px] font-mono text-slate-100 uppercase tracking-tight">OMEGA-09-THETA</span>
+<span class="text-[9px] font-mono text-slate-500">0x1B...EE39</span>
+</div>
+</td>
+<td class="px-4 py-2.5">
+<div class="text-[10px] font-mono text-slate-400">CLAUDE-3.5-SONNET</div>
+</td>
+<td class="px-4 py-2.5">
+<span class="text-[10px] font-mono text-slate-300">340ms</span>
+</td>
+<td class="px-4 py-2.5">
+<div class="w-24 h-1.5 bg-[#1c1c1c] border border-[#2e2e2e] rounded-full overflow-hidden">
+<div class="h-full bg-slate-600 w-[5%]"></div>
+</div>
+</td>
+<td class="px-4 py-2.5 text-right">
+<div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1 hover:text-primary"><span class="material-symbols-outlined !text-sm">analytics</span></button>
+<button class="p-1 hover:text-error"><span class="material-symbols-outlined !text-sm">stop_circle</span></button>
+</div>
+</td>
+</tr>
+<!-- Error State -->
+<tr class="hover:bg-[#1c1c1c] transition-colors cursor-pointer group border-l-2 border-transparent">
+<td class="px-4 py-2.5">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+<span class="text-[10px] font-mono text-error uppercase">Refused</span>
+</div>
+</td>
+<td class="px-4 py-2.5">
+<div class="flex flex-col">
+<span class="text-[11px] font-mono text-slate-100 uppercase tracking-tight">KAPPA-04-ALPHA</span>
+<span class="text-[9px] font-mono text-slate-500">0x99...FF12</span>
+</div>
+</td>
+<td class="px-4 py-2.5">
+<div class="text-[10px] font-mono text-slate-400">LLAMA-3-70B-FP16</div>
+</td>
+<td class="px-4 py-2.5">
+<span class="text-[10px] font-mono text-error">N/A</span>
+</td>
+<td class="px-4 py-2.5">
+<div class="w-24 h-1.5 bg-error/10 border border-error/20 rounded-full overflow-hidden">
+<div class="h-full bg-error w-0"></div>
+</div>
+</td>
+<td class="px-4 py-2.5 text-right">
+<div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1 text-primary"><span class="material-symbols-outlined !text-sm">refresh</span></button>
+</div>
+</td>
+</tr>
+<!-- Repeat Rows to fill height -->
+<script>
+                                    for(let i=0; i<8; i++) {
+                                        document.write(`
+                                            <tr class="hover:bg-[#1c1c1c] transition-colors cursor-pointer group border-l-2 border-transparent">
+                                                <td class="px-4 py-2.5"><div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="text-[10px] font-mono text-emerald-500 uppercase">Standby</span></div></td>
+                                                <td class="px-4 py-2.5"><div class="flex flex-col"><span class="text-[11px] font-mono text-slate-100 uppercase tracking-tight">RO-NODE-${10+i}</span><span class="text-[9px] font-mono text-slate-500">0x...${Math.floor(Math.random()*9999)}</span></div></td>
+                                                <td class="px-4 py-2.5"><div class="text-[10px] font-mono text-slate-400">SMALL_MISTRAL_0.1</div></td>
+                                                <td class="px-4 py-2.5"><span class="text-[10px] font-mono text-slate-300">88ms</span></td>
+                                                <td class="px-4 py-2.5"><div class="w-24 h-1.5 bg-[#1c1c1c] border border-[#2e2e2e] rounded-full overflow-hidden"><div class="h-full bg-slate-600 w-[12%]"></div></div></td>
+                                                <td class="px-4 py-2.5 text-right"><div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button class="p-1 hover:text-primary"><span class="material-symbols-outlined !text-sm">analytics</span></button></div></td>
+                                            </tr>
+                                        `);
+                                    }
+                                </script>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Detailed View / Sidebar Panels -->
+<aside class="w-96 flex flex-col bg-[#0c0c0c]">
+<!-- Real-time Transcript Drawer -->
+<div class="flex-1 flex flex-col border-b border-[#2e2e2e]">
+<div class="h-9 px-4 flex items-center justify-between bg-[#171717] border-b border-[#2e2e2e]">
+<span class="text-[10px] font-bold uppercase tracking-wider">LIVE_TRANSCRIPT</span>
+<span class="text-[9px] font-mono text-primary animate-pulse">REC ●</span>
+</div>
+<div class="flex-1 p-4 font-mono text-[11px] overflow-auto space-y-4">
+<div class="space-y-1">
+<div class="flex justify-between text-tertiary-dim text-[9px]">
+<span>SYSTEM_ORCHESTRATOR</span>
+<span>14:22:01.002</span>
+</div>
+<div class="text-slate-300 bg-[#1c1c1c] p-2 rounded-sm border-l border-primary">
+                                    Initializing multi-vector search on provided dataset [UUID: 98-XQ]. Distributing shards to SIGMA-01-DELTA.
+                                </div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-primary text-[9px]">
+<span>SIGMA-01-DELTA</span>
+<span>14:22:01.045</span>
+</div>
+<div class="text-on-surface bg-primary/5 p-2 rounded-sm border-l-2 border-primary">
+                                    Vector shards received. Running FAISS index reconstruction. Memory pressure at 4.2GB. ETA 0.8s.
+                                </div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-slate-500 text-[9px]">
+<span>KERNEL_LOGGER</span>
+<span>14:22:02.110</span>
+</div>
+<div class="text-tertiary-dim italic">
+                                    Garbage collection triggered in worker thread #22... Done.
+                                </div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-primary text-[9px]">
+<span>SIGMA-01-DELTA</span>
+<span>14:22:02.890</span>
+</div>
+<div class="text-on-surface bg-primary/5 p-2 rounded-sm border-l-2 border-primary">
+                                    Search complete. 14 matches identified above confidence threshold 0.89. Generating summary evidence...
+                                </div>
+</div>
+</div>
+<div class="p-2 bg-[#171717] border-t border-[#2e2e2e]">
+<div class="flex items-center gap-2 bg-[#121212] p-2 rounded-sm border border-[#2e2e2e] focus-within:border-primary transition-all">
+<span class="text-primary text-[10px] font-mono">_</span>
+<input class="bg-transparent border-none outline-none flex-1 text-[11px] font-mono uppercase text-on-surface" placeholder="COMMAND_OVERRIDE..." type="text"/>
+<span class="material-symbols-outlined text-slate-600 scale-75">keyboard_return</span>
+</div>
+</div>
+</div>
+<!-- Evidence / Runtime Shelf -->
+<div class="h-64 flex flex-col bg-surface">
+<div class="h-9 px-4 flex items-center justify-between bg-[#171717] border-b border-[#2e2e2e]">
+<span class="text-[10px] font-bold uppercase tracking-wider">EVIDENCE_ARTEFACTS</span>
+<span class="text-[9px] font-mono text-slate-500">4 FILES</span>
+</div>
+<div class="flex-1 p-3 overflow-x-auto flex gap-3 items-center">
+<!-- Code Artefact -->
+<div class="min-w-[140px] h-full bg-[#1c1c1c] border border-[#2e2e2e] flex flex-col rounded-sm hover:border-primary transition-colors cursor-pointer group">
+<div class="p-2 border-b border-[#2e2e2e] flex items-center gap-2">
+<span class="material-symbols-outlined !text-[14px] text-blue-400">code</span>
+<span class="text-[9px] font-mono text-slate-200">query.sql</span>
+</div>
+<div class="flex-1 p-2 bg-[#121212] overflow-hidden">
+<pre class="text-[8px] font-mono text-slate-500 leading-tight">SELECT * FROM vectors WHERE dist &lt; 0.22 ORDER BY timestamp DESC LIMIT 10...</pre>
+</div>
+<div class="p-1 text-[8px] text-center text-slate-600 group-hover:text-primary uppercase font-bold">Preview</div>
+</div>
+<!-- JSON Data -->
+<div class="min-w-[140px] h-full bg-[#1c1c1c] border border-[#2e2e2e] flex flex-col rounded-sm hover:border-primary transition-colors cursor-pointer group">
+<div class="p-2 border-b border-[#2e2e2e] flex items-center gap-2">
+<span class="material-symbols-outlined !text-[14px] text-emerald-400">data_object</span>
+<span class="text-[9px] font-mono text-slate-200">result.json</span>
+</div>
+<div class="flex-1 p-2 bg-[#121212] overflow-hidden">
+<pre class="text-[8px] font-mono text-slate-500 leading-tight">{ "status": 200, "took": "890ms", "hits": 14, "cluster": "aws-east" }</pre>
+</div>
+<div class="p-1 text-[8px] text-center text-slate-600 group-hover:text-primary uppercase font-bold">Preview</div>
+</div>
+<!-- Trace Image -->
+<div class="min-w-[140px] h-full bg-[#1c1c1c] border border-[#2e2e2e] flex flex-col rounded-sm hover:border-primary transition-colors cursor-pointer group">
+<div class="p-2 border-b border-[#2e2e2e] flex items-center gap-2">
+<span class="material-symbols-outlined !text-[14px] text-purple-400">image</span>
+<span class="text-[9px] font-mono text-slate-200">heatmap.png</span>
+</div>
+<div class="flex-1 bg-neutral-900 flex items-center justify-center">
+<div class="w-10 h-10 border border-slate-700 rounded-full animate-pulse flex items-center justify-center">
+<div class="w-6 h-6 border border-slate-800 rounded-full"></div>
+</div>
+</div>
+<div class="p-1 text-[8px] text-center text-slate-600 group-hover:text-primary uppercase font-bold">Preview</div>
+</div>
+</div>
+</div>
+</aside>
+</div>
+</main>
+</div>
+<!-- System Status Bar -->
+<footer class="h-6 bg-[#171717] border-t border-[#2e2e2e] flex items-center justify-between px-4 z-50">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="text-[8px] font-bold text-slate-500 uppercase">SYS_LOG:</span>
+<span class="text-[8px] font-mono text-slate-400">SHARD_REBALANCE_SUCCESS [0.002s]</span>
+</div>
+</div>
+<div class="flex items-center gap-4 divide-x divide-[#2e2e2e]">
+<div class="flex items-center gap-2 px-3">
+<span class="text-[8px] font-bold text-slate-500 uppercase">LATENCY:</span>
+<span class="text-[8px] font-mono text-emerald-500">22MS</span>
+</div>
+<div class="flex items-center gap-2 px-3">
+<span class="text-[8px] font-bold text-slate-500 uppercase">REGION:</span>
+<span class="text-[8px] font-mono text-slate-400">US-EAST-1</span>
+</div>
+<div class="flex items-center gap-2 pl-3">
+<span class="text-[8px] font-mono text-primary">ENC: AES-256-GCM</span>
+</div>
+</div>
+</footer>
+</body></html>

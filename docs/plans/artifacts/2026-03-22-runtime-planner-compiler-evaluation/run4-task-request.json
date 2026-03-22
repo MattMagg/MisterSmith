@@ -1,0 +1,4 @@
+{
+  "description": "For /Users/macmain/hi-pro-ops-dash, create a coding-workflow style plan with two parallel workers and one final join step that merges their findings into a patch recommendation. Keep the run concrete and repo-aware.",
+  "priority": "high"
+}

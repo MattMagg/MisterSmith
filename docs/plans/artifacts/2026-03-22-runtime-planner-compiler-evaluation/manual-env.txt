@@ -1,0 +1,5 @@
+database_url=postgres://mistersmith:mistersmith_dev@127.0.0.1:5432/mistersmith_runtime_planner_eval_20260322
+nats_url=nats://127.0.0.1:4222
+provider_kind=openai_chatgpt
+model_id=gpt-5.4
+http_port=63140

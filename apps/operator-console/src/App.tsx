@@ -413,9 +413,9 @@ function App({
         : timelineConnection === 'connecting'
           ? 'warn'
           : 'bad';
-  const refreshSummary = dashboardBusy ? 'Syncing dashboard' : 'Steady';
+  const refreshSummary = dashboardBusy ? 'Syncing dashboard' : 'Idle refresh';
   const openAiReady = auth?.openAi.authenticated ?? false;
-  const activeTabName = tabLabel(activeTab).toUpperCase();
+  const activeTabName = tabLabel(activeTab);
 
   return (
     <div className="console-shell">
@@ -425,12 +425,6 @@ function App({
             <span>MISTERSMITH</span>
             <small>operator cockpit</small>
           </div>
-          <div className="topbar-nav" aria-hidden="true">
-            <span className={activeTab === 'runs' ? 'active' : ''}>Console</span>
-            <span className={activeTab === 'sessions' ? 'active' : ''}>Sessions</span>
-            <span className={activeTab === 'agents' ? 'active' : ''}>Runtime</span>
-            <span className={activeTab === 'health' ? 'active' : ''}>Health</span>
-          </div>
         </div>
         <div className="topbar-tools">
           <div className="topbar-chip">
@@ -439,11 +433,14 @@ function App({
           </div>
           <div className="topbar-chip">
             <span className={`status-dot tone-${openAiReady ? 'good' : 'warn'}`}></span>
-            <strong>{openAiReady ? 'CHATGPT READY' : 'AUTH NEEDED'}</strong>
+            <strong>
+              {openAiReady ? 'OpenAI authenticated' : 'OpenAI login required'}
+            </strong>
           </div>
-          <button className="secondary-button" onClick={handleManualRefresh}>
-            Refresh
-          </button>
+          <div className="topbar-chip topbar-chip-muted">
+            <span className={`status-dot tone-${dashboardBusy ? 'warn' : 'neutral'}`}></span>
+            <strong>{refreshSummary}</strong>
+          </div>
           {!openAiReady ? (
             <button className="ghost-button" onClick={handleOpenAiLogin}>
               OpenAI login
@@ -478,7 +475,7 @@ function App({
 
         <div className="workspace">
           <section className="workspace-strip">
-            <div className="strip-main">
+            <div className="strip-status">
               <StatusPill label="Launcher" tone={launcherClass} value={launcherSummary} />
               <StatusPill
                 label="Runtime"
@@ -531,9 +528,9 @@ function App({
                 />
                 <span>Reconnect websocket</span>
               </label>
-              <div className="topbar-chip">
-                <strong>{refreshSummary}</strong>
-              </div>
+              <button className="secondary-button" onClick={handleManualRefresh}>
+                Refresh
+              </button>
             </div>
           </section>
 
@@ -626,7 +623,7 @@ function App({
                   {timeline.length === 0 ? (
                     <EmptyState
                       title="No events yet"
-                      body="Connect to the runtime websocket and event updates will accumulate here."
+                      body="Runtime events appear here once the websocket feed starts emitting."
                     />
                   ) : (
                     timeline.map((event, index) => (
@@ -635,7 +632,13 @@ function App({
                           <strong>{event.event_type}</strong>
                           <span>{formatTimestamp(event.timestamp)}</span>
                         </div>
-                        <pre>{prettyJson(event.payload)}</pre>
+                        <p className="timeline-copy">
+                          {summarizeTimelinePayload(event.payload)}
+                        </p>
+                        <details className="payload-disclosure">
+                          <summary>Payload</summary>
+                          <pre>{prettyJson(event.payload)}</pre>
+                        </details>
                       </article>
                     ))
                   )}
@@ -667,16 +670,54 @@ function tabLabel(tab: TabId): string {
 function tabSummary(tab: TabId, snapshot: DashboardSnapshot | null): string {
   switch (tab) {
     case 'runs':
-      return `${snapshot?.runs.length ?? 0} root workflows`;
+      return `${snapshot?.runs.length ?? 0} workflows`;
     case 'sessions':
-      return `${snapshot?.sessions.length ?? 0} retained sessions`;
+      return `${snapshot?.sessions.length ?? 0} retained`;
     case 'agents':
-      return `${snapshot?.agents.length ?? 0} registry rows`;
+      return `${snapshot?.agents.length ?? 0} registered`;
     case 'health':
       return snapshot?.runtimeSummary ?? 'runtime probes';
     default:
       return '';
   }
+}
+
+function summarizeTimelinePayload(payload: TimelineEvent['payload']): string {
+  if (payload == null) {
+    return 'No payload details recorded.';
+  }
+
+  if (typeof payload === 'string') {
+    return payload;
+  }
+
+  if (Array.isArray(payload)) {
+    return payload.slice(0, 6).join(', ');
+  }
+
+  const summaryPairs = Object.entries(payload)
+    .slice(0, 3)
+    .map(([key, value]) => {
+      if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        return `${key}: ${value}`;
+      }
+
+      if (Array.isArray(value)) {
+        return `${key}: ${value.length} items`;
+      }
+
+      if (value && typeof value === 'object') {
+        return `${key}: object`;
+      }
+
+      return `${key}: ${String(value)}`;
+    });
+
+  return summaryPairs.join(' · ') || 'Structured payload attached.';
 }
 
 function toneForLauncher(
