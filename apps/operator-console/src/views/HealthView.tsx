@@ -2,18 +2,26 @@
 import type { DashboardSnapshot, AuthSnapshot } from '../types';
 import { prettyJson, readMetric } from '../utils/format';
 import { KeyValueGrid } from '../components/KeyValueGrid';
+import { AuthCard } from '../components/AuthCard';
 
 export interface HealthViewProps {
   snapshot: DashboardSnapshot | null;
   auth: AuthSnapshot | null;
+  actionBusy: string | null;
+  onOpenAiLogin: () => void;
 }
 
-export function HealthView({ snapshot, auth }: HealthViewProps) {
+export function HealthView({
+  snapshot,
+  auth,
+  actionBusy,
+  onOpenAiLogin,
+}: HealthViewProps) {
   const localRuntime = snapshot?.localRuntime ?? null;
 
   return (
     <div className="health-layout">
-      <section className="panel detail-panel">
+      <section className="panel detail-panel health-scroll">
         <div className="panel-header">
           <div>
             <p className="eyebrow">Runtime health</p>
@@ -72,7 +80,7 @@ export function HealthView({ snapshot, auth }: HealthViewProps) {
         </section>
       </section>
 
-      <section className="panel detail-panel">
+      <section className="panel detail-panel health-scroll">
         <div className="panel-header">
           <div>
             <p className="eyebrow">NATS monitor</p>
@@ -95,19 +103,38 @@ export function HealthView({ snapshot, auth }: HealthViewProps) {
         </section>
       </section>
 
-      <section className="panel detail-panel">
+      <section className="panel detail-panel health-scroll">
         <div className="panel-header">
           <div>
             <p className="eyebrow">Auth panel</p>
             <h2>Desktop auth state</h2>
           </div>
         </div>
-        <KeyValueGrid
-          rows={[
-            ['OpenAI', auth?.openAi.summary ?? 'Loading'],
-            ['OpenAI email', auth?.openAi.email ?? 'unknown'],
-            ['Claude', auth?.claude.summary ?? 'Loading'],
-            ['Claude source', auth?.claude.source ?? 'unknown'],
+        <AuthCard
+          title="OpenAI ChatGPT"
+          summary={auth?.openAi.summary ?? 'Loading OpenAI session'}
+          tone={auth?.openAi.authenticated ? 'good' : 'warn'}
+          meta={[
+            auth?.openAi.email ?? 'email unavailable',
+            auth?.openAi.plan_type ?? 'plan unavailable',
+          ]}
+          actionLabel="Login"
+          onAction={onOpenAiLogin}
+          disabled={actionBusy !== null}
+        />
+        <AuthCard
+          title="Claude subscription"
+          summary={auth?.claude.summary ?? 'Loading Claude credentials'}
+          tone={
+            auth?.claude.authenticated
+              ? auth?.claude.expired
+                ? 'warn'
+                : 'good'
+              : 'warn'
+          }
+          meta={[
+            auth?.claude.source ?? 'source unavailable',
+            auth?.claude.masked_token ?? 'token unavailable',
           ]}
         />
         <section className="subpanel">

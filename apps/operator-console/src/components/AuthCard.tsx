@@ -30,6 +30,7 @@ export function AuthCard(props: AuthCardProps) {
       {actionLabel && onAction ? (
         <button
           className="secondary-button auth-action"
+          type="button"
           onClick={onAction}
           disabled={disabled}
         >

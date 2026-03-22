@@ -141,3 +141,35 @@ Validation:
 - `npm run lint`
 - `npm test -- --run`
 - `npm run build`
+
+## Stitch Frontend Overhaul
+
+Objective:
+
+- Replace the prior glass-heavy cockpit shell with the imported Stitch graphite industrial screen
+  family, using `apps/stitch_mistersmith_operating_ui/` as the design source of truth while
+  preserving the existing runtime data model, task/session actions, and websocket timeline wiring.
+
+Source Screens:
+
+- `apps/stitch_mistersmith_operating_ui/mistersmith_operator_console_production_polish/`
+- `apps/stitch_mistersmith_operating_ui/session_detail_refined/`
+- `apps/stitch_mistersmith_operating_ui/agents_and_runtime_refined/`
+- `apps/stitch_mistersmith_operating_ui/infrastructure_health_refined/`
+
+Scope:
+
+- `apps/operator-console/src/App.tsx`
+- `apps/operator-console/src/App.css`
+- `apps/operator-console/src/index.css`
+- `apps/operator-console/src/views/RunsView.tsx`
+- `apps/operator-console/src/views/SessionsView.tsx`
+- `apps/operator-console/src/views/AgentsView.tsx`
+- `apps/operator-console/src/views/HealthView.tsx`
+- `apps/operator-console/src/components/AuthCard.tsx`
+
+Validation:
+
+- `npm run lint`
+- `npm test -- --run`
+- `npm run build`

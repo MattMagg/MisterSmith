@@ -81,6 +81,50 @@ export function AgentsView(props: AgentsViewProps) {
               ]}
             />
             <section className="subpanel">
+              <h3>Runtime posture</h3>
+              <div className="metric-grid">
+                <div className="metric-card">
+                  <span>Availability</span>
+                  <strong>{selectedAgentSummary.availability}</strong>
+                  <small>{selectedAgentSummary.status}</small>
+                </div>
+                <div className="metric-card">
+                  <span>Agent type</span>
+                  <strong>{selectedAgentSummary.agent_type}</strong>
+                  <small>{selectedAgentSummary.name}</small>
+                </div>
+              </div>
+            </section>
+            <section className="subpanel">
+              <h3>Recent agent output</h3>
+              <div className="terminal-shell">
+                <div className="terminal-header">
+                  <strong>agent command stream</strong>
+                  <span>{selectedAgentSummary.status}</span>
+                </div>
+                <div className="terminal-body">
+                  <div className="terminal-entry">
+                    <span className="terminal-entry-time">agent</span>
+                    <span className="terminal-entry-line emphasis">
+                      {selectedAgentSummary.name}
+                    </span>
+                  </div>
+                  <div className="terminal-entry">
+                    <span className="terminal-entry-time">heartbeat</span>
+                    <span className="terminal-entry-line">
+                      {formatTimestamp(selectedAgentSummary.last_heartbeat)}
+                    </span>
+                  </div>
+                  <div className="terminal-entry">
+                    <span className="terminal-entry-time">status</span>
+                    <span className="terminal-entry-line">
+                      {selectedAgentSummary.availability} / {selectedAgentSummary.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+            <section className="subpanel">
               <h3>Metadata</h3>
               <pre>{prettyJson(agentDetail.metadata)}</pre>
             </section>

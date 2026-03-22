@@ -125,6 +125,53 @@ export function RunsView(props: RunsViewProps) {
             <PreviewCard preview={selectedRunSummary.result_preview} />
             <section className="subpanel">
               <h3>Runtime task response</h3>
+              <div className="terminal-shell">
+                <div className="terminal-header">
+                  <strong>command transcript</strong>
+                  <span>{selectedRunSummary.status}</span>
+                </div>
+                <div className="terminal-body">
+                  <div className="terminal-entry">
+                    <span className="terminal-entry-time">created</span>
+                    <span className="terminal-entry-line">
+                      {formatTimestamp(selectedRunSummary.created_at)}
+                    </span>
+                  </div>
+                  <div className="terminal-entry">
+                    <span className="terminal-entry-time">task</span>
+                    <span className="terminal-entry-line emphasis">
+                      {selectedRunSummary.description}
+                    </span>
+                  </div>
+                  <div className="terminal-entry">
+                    <span className="terminal-entry-time">workflow</span>
+                    <span className="terminal-entry-line">
+                      {selectedRunSummary.task_id}
+                    </span>
+                  </div>
+                  {selectedRunSummary.result_preview?.preview_text ? (
+                    <div className="terminal-entry">
+                      <span className="terminal-entry-time">preview</span>
+                      <span className="terminal-entry-line">
+                        {selectedRunSummary.result_preview.preview_text}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="terminal-footer">
+                  <input
+                    className="terminal-input"
+                    readOnly
+                    value="inspect selected workflow payload"
+                  />
+                  <button className="ghost-button" type="button" disabled>
+                    locked
+                  </button>
+                </div>
+              </div>
+            </section>
+            <section className="subpanel">
+              <h3>Inspect payload</h3>
               <pre>{prettyJson(taskDetail ?? selectedRunSummary)}</pre>
             </section>
           </div>

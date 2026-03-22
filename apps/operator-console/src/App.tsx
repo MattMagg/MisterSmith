@@ -5,7 +5,6 @@ import { SessionsView } from './views/SessionsView';
 import { AgentsView } from './views/AgentsView';
 import { HealthView } from './views/HealthView';
 import { StatusPill } from './components/StatusPill';
-import { AuthCard } from './components/AuthCard';
 import { EmptyState } from './components/EmptyState';
 import { formatTimestamp, prettyJson, formatError } from './utils/format';
 
@@ -415,129 +414,42 @@ function App({
           ? 'warn'
           : 'bad';
   const refreshSummary = dashboardBusy ? 'Syncing dashboard' : 'Steady';
+  const openAiReady = auth?.openAi.authenticated ?? false;
+  const activeTabName = tabLabel(activeTab).toUpperCase();
 
   return (
     <div className="console-shell">
       <header className="topbar">
-        <div className="topbar-main">
-          <div className="topbar-hero">
-            <p className="eyebrow">Mister Smith Operator Console</p>
-            <h1>Local operator cockpit</h1>
-            <p className="hero-copy">
-              Attach to the local stack, inspect workflow state, and keep session
-              handoffs visible without dropping into raw runtime logs.
-            </p>
+        <div className="topbar-brand">
+          <div className="brand-mark">
+            <span>MISTERSMITH</span>
+            <small>operator cockpit</small>
           </div>
-          <div className="topbar-aside">
-            <div className="status-strip">
-              <StatusPill label="Launcher" tone={launcherClass} value={launcherSummary} />
-              <StatusPill
-                label="Runtime"
-                tone={runtimeClass}
-                value={runtimeSummary}
-                testId="runtime-status"
-              />
-              <StatusPill
-                label="Timeline"
-                tone={timelineClass}
-                value={timelineSummary}
-              />
-              <StatusPill label="NATS" tone={natsClass} value={natsSummary} />
-            </div>
-
-            <section className="control-panel">
-              <div className="control-panel-header">
-                <div>
-                  <p className="eyebrow">Connection</p>
-                  <h2>Loopback runtime settings</h2>
-                </div>
-                <div className={`refresh-chip ${dashboardBusy ? 'warn' : 'neutral'}`}>
-                  <span>Refresh</span>
-                  <strong>{refreshSummary}</strong>
-                </div>
-              </div>
-
-              <div className="topbar-controls">
-                <label className="field">
-                  <span>Runtime URL</span>
-                  <input
-                    value={settings.runtimeBaseUrl}
-                    onChange={(event) =>
-                      setSettings((current) => ({
-                        ...current,
-                        runtimeBaseUrl: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>NATS monitor URL</span>
-                  <input
-                    value={settings.natsMonitorUrl}
-                    onChange={(event) =>
-                      setSettings((current) => ({
-                        ...current,
-                        natsMonitorUrl: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <label className="toggle-field">
-                  <input
-                    type="checkbox"
-                    checked={settings.reconnectEnabled}
-                    onChange={(event) =>
-                      setSettings((current) => ({
-                        ...current,
-                        reconnectEnabled: event.target.checked,
-                      }))
-                    }
-                  />
-                  <span>Reconnect websocket</span>
-                </label>
-                <button className="secondary-button control-button" onClick={handleManualRefresh}>
-                  Refresh
-                </button>
-              </div>
-            </section>
+          <div className="topbar-nav" aria-hidden="true">
+            <span className={activeTab === 'runs' ? 'active' : ''}>Console</span>
+            <span className={activeTab === 'sessions' ? 'active' : ''}>Sessions</span>
+            <span className={activeTab === 'agents' ? 'active' : ''}>Runtime</span>
+            <span className={activeTab === 'health' ? 'active' : ''}>Health</span>
           </div>
         </div>
-
-        <div className="auth-strip">
-          <AuthCard
-            title="OpenAI ChatGPT"
-            summary={auth?.openAi.summary ?? 'Loading OpenAI session'}
-            tone={auth?.openAi.authenticated ? 'good' : 'warn'}
-            meta={[
-              auth?.openAi.email ?? 'email unavailable',
-              auth?.openAi.plan_type ?? 'plan unavailable',
-            ]}
-            actionLabel="Login"
-            onAction={handleOpenAiLogin}
-            disabled={actionBusy !== null}
-          />
-          <AuthCard
-            title="Claude subscription"
-            summary={auth?.claude.summary ?? 'Loading Claude credentials'}
-            tone={
-              auth?.claude.authenticated
-                ? auth?.claude.expired
-                  ? 'warn'
-                  : 'good'
-                : 'warn'
-            }
-            meta={[
-              auth?.claude.source ?? 'source unavailable',
-              auth?.claude.masked_token ?? 'token unavailable',
-            ]}
-          />
-        </div>
-
-        {bannerError ? (
-          <div className="banner-error" role="alert">
-            {bannerError}
+        <div className="topbar-tools">
+          <div className="topbar-chip">
+            <span className={`status-dot tone-${runtimeClass}`}></span>
+            <strong>{activeTabName}</strong>
           </div>
-        ) : null}
+          <div className="topbar-chip">
+            <span className={`status-dot tone-${openAiReady ? 'good' : 'warn'}`}></span>
+            <strong>{openAiReady ? 'CHATGPT READY' : 'AUTH NEEDED'}</strong>
+          </div>
+          <button className="secondary-button" onClick={handleManualRefresh}>
+            Refresh
+          </button>
+          {!openAiReady ? (
+            <button className="ghost-button" onClick={handleOpenAiLogin}>
+              OpenAI login
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <div className="console-grid">
@@ -556,101 +468,182 @@ function App({
               </button>
             ))}
           </nav>
+          <div className="nav-footer">
+            <div className="nav-version">
+              <span>v2.4.0</span>
+              <span>local</span>
+            </div>
+          </div>
         </aside>
 
-        <main className="main-pane">
-          {activeTab === 'runs' ? (
-            <RunsView
-              busy={actionBusy === 'Submitting task'}
-              taskDescription={taskDescription}
-              taskPriority={taskPriority}
-              onTaskDescriptionChange={setTaskDescription}
-              onTaskPriorityChange={setTaskPriority}
-              onSubmit={handleTaskSubmit}
-              runs={snapshot?.runs ?? []}
-              selectedRunId={snapshot?.selectedRunId ?? null}
-              onSelect={(runId) =>
-                setSelection((current) => ({ ...current, runId }))
-              }
-              selectedRunSummary={selectedRunSummary}
-              taskDetail={snapshot?.runDetail ?? null}
-            />
-          ) : null}
-
-          {activeTab === 'sessions' ? (
-            <SessionsView
-              busy={actionBusy}
-              createMessage={sessionMessage}
-              createPriority={sessionPriority}
-              continueMessage={continueMessage}
-              continuePriority={continuePriority}
-              onCreateMessageChange={setSessionMessage}
-              onCreatePriorityChange={setSessionPriority}
-              onContinueMessageChange={setContinueMessage}
-              onContinuePriorityChange={setContinuePriority}
-              onCreateSession={handleSessionCreate}
-              onContinueSession={handleSessionContinue}
-              onEndSession={handleSessionEnd}
-              sessions={snapshot?.sessions ?? []}
-              selectedSessionId={snapshot?.selectedSessionId ?? null}
-              onSelect={(sessionId) =>
-                setSelection((current) => ({ ...current, sessionId }))
-              }
-              selectedSessionSummary={selectedSessionSummary}
-              sessionDetail={snapshot?.sessionDetail ?? null}
-            />
-          ) : null}
-
-          {activeTab === 'agents' ? (
-            <AgentsView
-              agents={snapshot?.agents ?? []}
-              selectedAgentId={snapshot?.selectedAgentId ?? null}
-              onSelect={(agentId) =>
-                setSelection((current) => ({ ...current, agentId }))
-              }
-              selectedAgentSummary={selectedAgentSummary}
-              agentDetail={snapshot?.agentDetail ?? null}
-            />
-          ) : null}
-
-          {activeTab === 'health' ? (
-            <HealthView snapshot={snapshot} auth={auth} />
-          ) : null}
-        </main>
-
-        <aside className="timeline-pane">
-          <section className="panel timeline-panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Live timeline</p>
-                <h2>Runtime event stream</h2>
-              </div>
+        <div className="workspace">
+          <section className="workspace-strip">
+            <div className="strip-main">
+              <StatusPill label="Launcher" tone={launcherClass} value={launcherSummary} />
               <StatusPill
-                label="WebSocket"
+                label="Runtime"
+                tone={runtimeClass}
+                value={runtimeSummary}
+                testId="runtime-status"
+              />
+              <StatusPill
+                label="Timeline"
                 tone={timelineClass}
                 value={timelineSummary}
               />
+              <StatusPill label="NATS" tone={natsClass} value={natsSummary} />
             </div>
-            <div className="timeline-list" data-testid="timeline-list">
-              {timeline.length === 0 ? (
-                <EmptyState
-                  title="No events yet"
-                  body="Connect to the runtime websocket and event updates will accumulate here."
+            <div className="strip-controls">
+              <label className="field">
+                <span>Runtime URL</span>
+                <input
+                  value={settings.runtimeBaseUrl}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      runtimeBaseUrl: event.target.value,
+                    }))
+                  }
                 />
-              ) : (
-                timeline.map((event, index) => (
-                  <article className="timeline-item" key={`${event.timestamp}-${index}`}>
-                    <div className="timeline-meta">
-                      <strong>{event.event_type}</strong>
-                      <span>{formatTimestamp(event.timestamp)}</span>
-                    </div>
-                    <pre>{prettyJson(event.payload)}</pre>
-                  </article>
-                ))
-              )}
+              </label>
+              <label className="field">
+                <span>NATS monitor URL</span>
+                <input
+                  value={settings.natsMonitorUrl}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      natsMonitorUrl: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+              <label className="toggle-field">
+                <input
+                  type="checkbox"
+                  checked={settings.reconnectEnabled}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      reconnectEnabled: event.target.checked,
+                    }))
+                  }
+                />
+                <span>Reconnect websocket</span>
+              </label>
+              <div className="topbar-chip">
+                <strong>{refreshSummary}</strong>
+              </div>
             </div>
           </section>
-        </aside>
+
+          {bannerError ? (
+            <div className="banner-error" role="alert">
+              {bannerError}
+            </div>
+          ) : null}
+
+          <div className="workspace-body">
+            <main className="main-pane">
+              {activeTab === 'runs' ? (
+                <RunsView
+                  busy={actionBusy === 'Submitting task'}
+                  taskDescription={taskDescription}
+                  taskPriority={taskPriority}
+                  onTaskDescriptionChange={setTaskDescription}
+                  onTaskPriorityChange={setTaskPriority}
+                  onSubmit={handleTaskSubmit}
+                  runs={snapshot?.runs ?? []}
+                  selectedRunId={snapshot?.selectedRunId ?? null}
+                  onSelect={(runId) =>
+                    setSelection((current) => ({ ...current, runId }))
+                  }
+                  selectedRunSummary={selectedRunSummary}
+                  taskDetail={snapshot?.runDetail ?? null}
+                />
+              ) : null}
+
+              {activeTab === 'sessions' ? (
+                <SessionsView
+                  busy={actionBusy}
+                  createMessage={sessionMessage}
+                  createPriority={sessionPriority}
+                  continueMessage={continueMessage}
+                  continuePriority={continuePriority}
+                  onCreateMessageChange={setSessionMessage}
+                  onCreatePriorityChange={setSessionPriority}
+                  onContinueMessageChange={setContinueMessage}
+                  onContinuePriorityChange={setContinuePriority}
+                  onCreateSession={handleSessionCreate}
+                  onContinueSession={handleSessionContinue}
+                  onEndSession={handleSessionEnd}
+                  sessions={snapshot?.sessions ?? []}
+                  selectedSessionId={snapshot?.selectedSessionId ?? null}
+                  onSelect={(sessionId) =>
+                    setSelection((current) => ({ ...current, sessionId }))
+                  }
+                  selectedSessionSummary={selectedSessionSummary}
+                  sessionDetail={snapshot?.sessionDetail ?? null}
+                />
+              ) : null}
+
+              {activeTab === 'agents' ? (
+                <AgentsView
+                  agents={snapshot?.agents ?? []}
+                  selectedAgentId={snapshot?.selectedAgentId ?? null}
+                  onSelect={(agentId) =>
+                    setSelection((current) => ({ ...current, agentId }))
+                  }
+                  selectedAgentSummary={selectedAgentSummary}
+                  agentDetail={snapshot?.agentDetail ?? null}
+                />
+              ) : null}
+
+              {activeTab === 'health' ? (
+                <HealthView
+                  snapshot={snapshot}
+                  auth={auth}
+                  actionBusy={actionBusy}
+                  onOpenAiLogin={handleOpenAiLogin}
+                />
+              ) : null}
+            </main>
+
+            <aside className="timeline-pane">
+              <section className="panel timeline-panel">
+                <div className="panel-header">
+                  <div>
+                    <p className="eyebrow">Live signal rail</p>
+                    <h2>Runtime event stream</h2>
+                  </div>
+                  <StatusPill
+                    label="WebSocket"
+                    tone={timelineClass}
+                    value={timelineSummary}
+                  />
+                </div>
+                <div className="timeline-list" data-testid="timeline-list">
+                  {timeline.length === 0 ? (
+                    <EmptyState
+                      title="No events yet"
+                      body="Connect to the runtime websocket and event updates will accumulate here."
+                    />
+                  ) : (
+                    timeline.map((event, index) => (
+                      <article className="timeline-item" key={`${event.timestamp}-${index}`}>
+                        <div className="timeline-meta">
+                          <strong>{event.event_type}</strong>
+                          <span>{formatTimestamp(event.timestamp)}</span>
+                        </div>
+                        <pre>{prettyJson(event.payload)}</pre>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </section>
+            </aside>
+          </div>
+        </div>
       </div>
     </div>
   );

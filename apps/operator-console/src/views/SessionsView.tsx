@@ -186,6 +186,38 @@ export function SessionsView(props: SessionsViewProps) {
 
             <section className="subpanel">
               <h3>Retained result</h3>
+              <div className="terminal-shell">
+                <div className="terminal-header">
+                  <strong>session transcript</strong>
+                  <span>{selectedSessionSummary.status}</span>
+                </div>
+                <div className="terminal-body">
+                  {sessionDetail.turns.map((turn) => (
+                    <div className="terminal-entry" key={turn.workflow_id}>
+                      <span className="terminal-entry-time">
+                        turn {turn.turn_index}
+                      </span>
+                      <span className="terminal-entry-line">
+                        {turn.user_message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="terminal-footer">
+                  <input
+                    className="terminal-input"
+                    readOnly
+                    value={sessionEnded ? 'session ended' : 'continue selected session'}
+                  />
+                  <button className="ghost-button" type="button" disabled={sessionEnded}>
+                    armed
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="subpanel">
+              <h3>Retained payload</h3>
               <pre>{prettyJson(sessionDetail.last_assistant_result)}</pre>
             </section>
 
