@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use mister_smith_core::{
@@ -345,11 +345,6 @@ fn parse_steps(planner_output: &Value) -> Result<Vec<PlannerStepSpec>, TopologyE
             .and_then(Value::as_str)
             .unwrap_or(action.as_str())
             .to_string();
-        let role = parse_agent_type(object.get("role"))?;
-        let branch_label = object
-            .get("branch")
-            .and_then(Value::as_str)
-            .map(str::to_string);
         let dependency_keys = object
             .get("depends_on")
             .and_then(Value::as_array)
@@ -364,6 +359,17 @@ fn parse_steps(planner_output: &Value) -> Result<Vec<PlannerStepSpec>, TopologyE
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        let role = parse_agent_type(object.get("role"), dependency_keys.len())?;
+        if dependency_keys.len() > 1 && role != AgentType::Coordinator {
+            return Err(TopologyError::Invalid(format!(
+                "merge step '{}' must use coordinator role",
+                key
+            )));
+        }
+        let branch_label = object
+            .get("branch")
+            .and_then(Value::as_str)
+            .map(str::to_string);
         let budget = parse_budget(object.get("budget"))?;
         let delegation_requirement = parse_delegation_scope(object.get("delegation_requirement"))?;
         let metadata = object
@@ -404,7 +410,7 @@ fn parse_budget(raw_budget: Option<&Value>) -> Result<ContextBudget, TopologyErr
             Some(_) => {
                 return Err(TopologyError::Invalid(
                     "budget must be an integer or object".into(),
-                ))
+                ));
             }
             None => 2048,
         };
@@ -442,9 +448,16 @@ fn parse_topology_kind(value: &str) -> Result<TopologyKind, TopologyError> {
     }
 }
 
-fn parse_agent_type(raw_role: Option<&Value>) -> Result<AgentType, TopologyError> {
+fn parse_agent_type(
+    raw_role: Option<&Value>,
+    dependency_count: usize,
+) -> Result<AgentType, TopologyError> {
     let Some(raw_role) = raw_role else {
-        return Ok(AgentType::Executor);
+        return Ok(if dependency_count > 1 {
+            AgentType::Coordinator
+        } else {
+            AgentType::Executor
+        });
     };
     let role = raw_role
         .as_str()
@@ -484,7 +497,7 @@ fn parse_delegation_scope(
         other => {
             return Err(TopologyError::Unsupported(format!(
                 "unsupported delegation scope '{other}'"
-            )))
+            )));
         }
     };
     Ok(Some(scope))
