@@ -18,7 +18,7 @@ export function AuthCard(props: AuthCardProps) {
 
   return (
     <section className={`auth-card ${tone}`}>
-      <div>
+      <div className="auth-header">
         <p className="eyebrow">{title}</p>
         <p className="auth-summary">{summary}</p>
       </div>

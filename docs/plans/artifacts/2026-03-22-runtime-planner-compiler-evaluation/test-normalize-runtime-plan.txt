@@ -1,0 +1,27 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling mister-smith-app v0.1.0 (/Users/macmain/MisterSmith/crates/mister-smith-app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.01s
+     Running unittests src/lib.rs (target/debug/deps/mister_smith_app-7f321b30835aec62)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/mister_smith-8efa37e9c26c87e3)
+
+running 4 tests
+test execution::runtime_plan_tests::normalize_runtime_plan_preserves_one_shot_runtime_compatibility ... ok
+test execution::runtime_plan_tests::normalize_runtime_plan_keeps_single_explicit_branch_step_sequential ... ok
+test execution::runtime_plan_tests::normalize_runtime_plan_reindexes_duplicate_numeric_steps ... ok
+test execution::runtime_plan_tests::normalize_runtime_plan_preserves_explicit_harder_workload_graph ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 51 filtered out; finished in 0.00s
+
+     Running tests/autonomy_status_tests.rs (target/debug/deps/autonomy_status_tests-44660a835508585f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 0.00s
+

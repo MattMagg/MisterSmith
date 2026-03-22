@@ -111,6 +111,39 @@ fn join_plan() -> serde_json::Value {
     })
 }
 
+fn invalid_merge_worker_role_plan() -> serde_json::Value {
+    json!({
+        "goal": "invalid-merge-worker-role",
+        "steps": [
+            {
+                "id": "left",
+                "step": 1,
+                "action": "left",
+                "description": "Left",
+                "role": "worker",
+                "branch": "left"
+            },
+            {
+                "id": "right",
+                "step": 2,
+                "action": "right",
+                "description": "Right",
+                "role": "worker",
+                "branch": "right"
+            },
+            {
+                "id": "join",
+                "step": 3,
+                "action": "join",
+                "description": "Join",
+                "role": "worker",
+                "branch": "join",
+                "depends_on": ["left", "right"]
+            }
+        ]
+    })
+}
+
 fn hierarchical_hint_plan() -> serde_json::Value {
     json!({
         "goal": "hierarchical-review",
@@ -246,6 +279,38 @@ fn topology_compiler_selects_pipeline_for_streaming_chain() {
 }
 
 #[test]
+fn topology_compiler_defaults_merge_nodes_to_coordinator_when_role_missing() {
+    let compiler = TopologyCompiler::default();
+    let graph = compiler
+        .compile(TaskId::new(), &join_plan(), &TopologySignals::default())
+        .expect("join plan should compile");
+
+    let join = graph
+        .nodes
+        .iter()
+        .find(|node| node.step_key == "join")
+        .expect("join node should exist");
+    assert_eq!(join.role, mister_smith_core::AgentType::Coordinator);
+}
+
+#[test]
+fn topology_compiler_rejects_worker_role_for_merge_node() {
+    let compiler = TopologyCompiler::default();
+    let error = compiler
+        .compile(
+            TaskId::new(),
+            &invalid_merge_worker_role_plan(),
+            &TopologySignals::default(),
+        )
+        .expect_err("merge node with worker role should fail");
+
+    assert_eq!(
+        error.to_string(),
+        "Invalid topology contract: merge step 'join' must use coordinator role"
+    );
+}
+
+#[test]
 fn topology_compiler_selects_hybrid_for_join_graph() {
     let compiler = TopologyCompiler::default();
     let graph = compiler
@@ -291,11 +356,13 @@ fn topology_compiler_honors_compatible_hierarchical_hint() {
         CoordinationPolicy::HierarchicalReduce
     );
     assert!(!graph.topology_plan.task_shape.structural_signals.is_empty());
-    assert!(graph
-        .topology_plan
-        .rationale
-        .selected_for
-        .contains("hierarchical"));
+    assert!(
+        graph
+            .topology_plan
+            .rationale
+            .selected_for
+            .contains("hierarchical")
+    );
 }
 
 #[tokio::test]
@@ -405,20 +472,28 @@ async fn orchestrator_routes_ready_branches_with_health_budget_depth_and_profile
     assert_eq!(decisions.len(), 2);
     assert_eq!(decisions[0].branch_id, left_branch);
     assert_eq!(decisions[0].health_state, HealthState::Healthy);
-    assert!(decisions[0]
-        .rationale
-        .iter()
-        .any(|line| line.contains("budget pressure")));
-    assert!(decisions[0]
-        .rationale
-        .iter()
-        .any(|line| line.contains("dependency depth")));
-    assert!(decisions[0]
-        .rationale
-        .iter()
-        .any(|line| line.contains("profile")));
-    assert!(orchestrator
-        .autonomy_events(&workflow_id)
-        .iter()
-        .any(|event| matches!(event, AutonomyEvent::RoutingDecisionRecorded(_))));
+    assert!(
+        decisions[0]
+            .rationale
+            .iter()
+            .any(|line| line.contains("budget pressure"))
+    );
+    assert!(
+        decisions[0]
+            .rationale
+            .iter()
+            .any(|line| line.contains("dependency depth"))
+    );
+    assert!(
+        decisions[0]
+            .rationale
+            .iter()
+            .any(|line| line.contains("profile"))
+    );
+    assert!(
+        orchestrator
+            .autonomy_events(&workflow_id)
+            .iter()
+            .any(|event| matches!(event, AutonomyEvent::RoutingDecisionRecorded(_)))
+    );
 }

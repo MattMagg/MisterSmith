@@ -59,11 +59,7 @@ export function SessionsView(props: SessionsViewProps) {
             <p className="eyebrow">Sessions</p>
             <h2>Persistent conversations</h2>
           </div>
-          <StatusPill
-            label="Count"
-            tone="neutral"
-            value={`${sessions.length} loaded`}
-          />
+          <StatusPill label="Count" tone="neutral" value={`${sessions.length} loaded`} />
         </div>
 
         <form className="compose-form" onSubmit={onCreateSession}>
@@ -76,10 +72,7 @@ export function SessionsView(props: SessionsViewProps) {
             />
           </label>
           <div className="compose-actions">
-            <PrioritySelect
-              value={createPriority}
-              onChange={onCreatePriorityChange}
-            />
+            <PrioritySelect value={createPriority} onChange={onCreatePriorityChange} />
             <button
               className="primary-button"
               disabled={busy === 'Starting session' || !createMessage.trim()}
@@ -93,7 +86,7 @@ export function SessionsView(props: SessionsViewProps) {
           {sessions.length === 0 ? (
             <EmptyState
               title="No sessions available"
-              body="Start a session to get a retained coordinator, turn history, and restart-aware lineage."
+              body="Start a session to retain a coordinator, turn lineage, and restart-aware state."
             />
           ) : (
             sessions.map((session) => (
@@ -102,7 +95,7 @@ export function SessionsView(props: SessionsViewProps) {
                 className={`list-row ${session.session_id === selectedSessionId ? 'selected' : ''}`}
                 onClick={() => onSelect(session.session_id)}
               >
-                <div>
+                <div className="list-row-copy">
                   <strong>{session.session_id}</strong>
                   <p>{session.last_preview ?? 'No retained preview yet'}</p>
                 </div>
@@ -126,18 +119,37 @@ export function SessionsView(props: SessionsViewProps) {
 
         {selectedSessionSummary && sessionDetail ? (
           <div className="detail-stack">
+            <section className="detail-hero">
+              <div className="detail-hero-copy">
+                <p className="eyebrow">Session focus</p>
+                <h3>{selectedSessionSummary.session_id}</h3>
+                <p>
+                  Coordinator {selectedSessionSummary.coordinator_agent_id} is retaining{' '}
+                  {selectedSessionSummary.turn_count} turns on{' '}
+                  {selectedSessionSummary.model_id}.
+                </p>
+              </div>
+              <div className="detail-hero-aside">
+                <StatusPill
+                  label="Status"
+                  tone={sessionEnded ? 'neutral' : 'good'}
+                  value={selectedSessionSummary.status}
+                />
+                <StatusPill
+                  label="Turns"
+                  tone="neutral"
+                  value={String(selectedSessionSummary.turn_count)}
+                />
+              </div>
+            </section>
+
             <KeyValueGrid
               rows={[
-                ['Session ID', selectedSessionSummary.session_id],
-                ['Status', selectedSessionSummary.status],
                 ['Coordinator', selectedSessionSummary.coordinator_agent_id],
                 ['Provider', selectedSessionSummary.provider_kind],
                 ['Model', selectedSessionSummary.model_id],
-                ['Turns', String(selectedSessionSummary.turn_count)],
-                [
-                  'Active workflow',
-                  selectedSessionSummary.active_workflow_id ?? 'none',
-                ],
+                ['Updated', formatTimestamp(selectedSessionSummary.updated_at)],
+                ['Active workflow', selectedSessionSummary.active_workflow_id ?? 'none'],
                 [
                   'Last completed',
                   selectedSessionSummary.last_completed_workflow_id ?? 'none',
@@ -151,12 +163,10 @@ export function SessionsView(props: SessionsViewProps) {
                 <textarea
                   placeholder="Add the next prompt to the selected session."
                   value={continueMessage}
-                  onChange={(event) =>
-                    onContinueMessageChange(event.target.value)
-                  }
+                  onChange={(event) => onContinueMessageChange(event.target.value)}
                 />
               </label>
-              <div className="compose-actions">
+              <div className="compose-actions compose-actions-wrap">
                 <PrioritySelect
                   value={continuePriority}
                   onChange={onContinuePriorityChange}
@@ -169,9 +179,7 @@ export function SessionsView(props: SessionsViewProps) {
                     !continueMessage.trim()
                   }
                 >
-                  {busy === 'Continuing session'
-                    ? 'Sending'
-                    : 'Continue session'}
+                  {busy === 'Continuing session' ? 'Sending' : 'Continue session'}
                 </button>
                 <button
                   type="button"
@@ -185,7 +193,7 @@ export function SessionsView(props: SessionsViewProps) {
             </form>
 
             <section className="subpanel">
-              <h3>Retained result</h3>
+              <h3>Retained transcript</h3>
               <div className="terminal-shell">
                 <div className="terminal-header">
                   <strong>session transcript</strong>
@@ -194,12 +202,8 @@ export function SessionsView(props: SessionsViewProps) {
                 <div className="terminal-body">
                   {sessionDetail.turns.map((turn) => (
                     <div className="terminal-entry" key={turn.workflow_id}>
-                      <span className="terminal-entry-time">
-                        turn {turn.turn_index}
-                      </span>
-                      <span className="terminal-entry-line">
-                        {turn.user_message}
-                      </span>
+                      <span className="terminal-entry-time">turn {turn.turn_index}</span>
+                      <span className="terminal-entry-line">{turn.user_message}</span>
                     </div>
                   ))}
                 </div>
@@ -217,11 +221,6 @@ export function SessionsView(props: SessionsViewProps) {
             </section>
 
             <section className="subpanel">
-              <h3>Retained payload</h3>
-              <pre>{prettyJson(sessionDetail.last_assistant_result)}</pre>
-            </section>
-
-            <section className="subpanel">
               <h3>Turn history</h3>
               <div className="turn-list">
                 {sessionDetail.turns.map((turn) => (
@@ -231,16 +230,24 @@ export function SessionsView(props: SessionsViewProps) {
                       <span>{turn.status}</span>
                     </div>
                     <p>{turn.user_message}</p>
-                    <pre>{prettyJson(turn.assistant_result ?? turn.resume_provenance)}</pre>
+                    <details className="payload-disclosure">
+                      <summary>Turn payload</summary>
+                      <pre>{prettyJson(turn.assistant_result ?? turn.resume_provenance)}</pre>
+                    </details>
                   </article>
                 ))}
               </div>
             </section>
+
+            <details className="payload-disclosure payload-disclosure-block">
+              <summary>Retained payload</summary>
+              <pre>{prettyJson(sessionDetail.last_assistant_result)}</pre>
+            </details>
           </div>
         ) : (
           <EmptyState
             title="Select a session"
-            body="The session detail pane exposes retained result state, resume provenance, and turn lineage."
+            body="Choose a retained session to inspect transcript, actions, and restart-aware payloads."
           />
         )}
       </section>

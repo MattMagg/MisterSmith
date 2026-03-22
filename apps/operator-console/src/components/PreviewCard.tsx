@@ -28,7 +28,10 @@ export function PreviewCard({ preview }: PreviewCardProps) {
         ]}
       />
       <p className="preview-copy">{preview.preview_text ?? 'No preview text recorded.'}</p>
-      <pre>{prettyJson(preview.provenance_lines)}</pre>
+      <details className="payload-disclosure">
+        <summary>Provenance lines</summary>
+        <pre>{prettyJson(preview.provenance_lines)}</pre>
+      </details>
     </section>
   );
 }

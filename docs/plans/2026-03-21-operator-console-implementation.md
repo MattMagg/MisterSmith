@@ -173,3 +173,30 @@ Validation:
 - `npm run lint`
 - `npm test -- --run`
 - `npm run build`
+
+## Shell Stabilization and Layout Overhaul
+
+Objective:
+
+- Stabilize the graphite operator shell after the Stitch adoption by replacing the brittle
+  pseudo-fixed grid with one deterministic desktop layout: compact labeled sidebar, stacked status
+  and control rows, stable master-detail tab content, and a secondary timeline rail that never
+  overlays the active pane.
+
+Scope:
+
+- `apps/operator-console/src/App.tsx`
+- `apps/operator-console/src/App.css`
+- `apps/operator-console/src/views/RunsView.tsx`
+- `apps/operator-console/src/views/SessionsView.tsx`
+- `apps/operator-console/src/views/AgentsView.tsx`
+- `apps/operator-console/src/views/HealthView.tsx`
+- `apps/operator-console/src/components/AuthCard.tsx`
+- `apps/operator-console/src/components/PreviewCard.tsx`
+
+Validation:
+
+- `npm run lint`
+- `npm test -- --run`
+- `npm run build`
+- `npm run tauri build -- --debug`

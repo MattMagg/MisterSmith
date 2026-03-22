@@ -13,7 +13,7 @@ use mister_smith_agents::config::TaskState;
 use mister_smith_agents::orchestrator::{LlmSupervision, LlmSupervisionConfig};
 use mister_smith_agents::roles::executor::{ExecutorAgent, ExecutorMessage, ExecutorState};
 use mister_smith_agents::roles::planner::PlannerAgent;
-use mister_smith_agents::roles::planner::{normalize_planner_output, PlannerMessage, PlannerState};
+use mister_smith_agents::roles::planner::{PlannerMessage, PlannerState, normalize_planner_output};
 use mister_smith_agents::scheduler::{
     ArrayAggregator, IdentityDecomposer, TaskAssignment, TaskScheduler,
 };
@@ -28,7 +28,7 @@ use mister_smith_http::server::{
     TaskExecutionService, TaskListRequest, TaskStatusView, TaskSubmissionRequest,
     TaskSubmissionResponse, TaskSummaryView,
 };
-use mister_smith_http::websocket::{broadcast_event, WsEvent};
+use mister_smith_http::websocket::{WsEvent, broadcast_event};
 use mister_smith_llm::{
     CircuitBreakerConfig, ModelRouter, OpenAiChatGptProvider, ProviderConfig, ProviderKind,
     RoutingPolicy,
@@ -40,7 +40,7 @@ use mister_smith_persistence::repository::task::TaskRepository;
 use mister_smith_persistence::{PostgresConnection, Repository};
 use mister_smith_supervision::SupervisedSystem;
 use mister_smith_transport::{MessageEnvelope, MessagePriority};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::PgPool;
 use tokio::sync::broadcast;
 use tokio::task::JoinSet;
@@ -548,6 +548,14 @@ impl RuntimeTaskService {
         persist_step_routing_history(&mut metadata, &planner_step_routing_history);
         put_metadata(&mut metadata, "planner_output", planner_output.clone());
         put_metadata(&mut metadata, "execution_plan", execution_plan.clone());
+        let mut graph = match compile_execution_plan(workflow_id, &execution_plan) {
+            Ok(graph) => graph,
+            Err(error) => {
+                self.update_task_metadata(workflow_id, metadata.clone())
+                    .await?;
+                return Err(error);
+            }
+        };
         self.update_task_metadata(workflow_id, metadata.clone())
             .await?;
         self.publish_event(
@@ -565,15 +573,6 @@ impl RuntimeTaskService {
             }),
         )
         .await?;
-
-        let compiler = TopologyCompiler;
-        let mut graph = compiler
-            .compile(
-                workflow_id,
-                metadata.get("execution_plan").unwrap(),
-                &TopologySignals::default(),
-            )
-            .map_err(|error| format!("execution graph compile failed: {error}"))?;
         graph.state = GraphState::Running;
         self.orchestrator.register_execution_graph(graph.clone());
         self.capture_autonomy_status_metadata(workflow_id, &mut metadata, None);
@@ -1758,6 +1757,51 @@ fn next_join_branch_label(index: usize) -> String {
     }
 }
 
+fn is_supported_planner_role(role: &str) -> bool {
+    matches!(
+        role.to_ascii_lowercase().as_str(),
+        "supervisor"
+            | "worker"
+            | "coordinator"
+            | "monitor"
+            | "planner"
+            | "executor"
+            | "critic"
+            | "router"
+            | "memory"
+    )
+}
+
+fn canonicalize_topology_hint(raw_hint: &str) -> String {
+    let lowered = raw_hint.trim().to_ascii_lowercase();
+    if lowered.starts_with("sequential") {
+        "sequential".to_string()
+    } else if lowered.starts_with("parallel") {
+        "parallel".to_string()
+    } else if lowered.starts_with("pipeline") {
+        "pipeline".to_string()
+    } else if lowered.starts_with("hierarchical") {
+        "hierarchical".to_string()
+    } else if lowered.starts_with("hybrid") {
+        "hybrid".to_string()
+    } else {
+        raw_hint.to_string()
+    }
+}
+
+fn compile_execution_plan(
+    workflow_id: TaskId,
+    execution_plan: &Value,
+) -> Result<mister_smith_agents::ExecutionGraph, String> {
+    let compiler = TopologyCompiler;
+    compiler.compile(workflow_id, execution_plan, &TopologySignals::default())
+        .map_err(|error| {
+            format!(
+                "workflow planning produced an invalid execution graph during topology compilation: {error}"
+            )
+        })
+}
+
 fn normalize_explicit_runtime_steps(goal: &str, steps: &[Value]) -> Vec<Value> {
     let mut runtime_steps = Vec::new();
     let mut branch_by_step_id = BTreeMap::<String, String>::new();
@@ -1784,39 +1828,47 @@ fn normalize_explicit_runtime_steps(goal: &str, steps: &[Value]) -> Vec<Value> {
         step.entry("description".to_string())
             .or_insert_with(|| json!(goal));
         step.insert("depends_on".to_string(), Value::Array(dependencies.clone()));
+        let is_merge_node = dependencies.len() > 1;
 
-        let branch = step
-            .get("branch")
-            .and_then(Value::as_str)
-            .map(ToString::to_string)
-            .unwrap_or_else(|| {
-                if dependencies.len() > 1 {
-                    let label = next_join_branch_label(join_branch_index);
-                    join_branch_index += 1;
-                    label
-                } else if let Some(parent_step_id) = dependencies.first().and_then(Value::as_str) {
-                    branch_by_step_id
-                        .get(parent_step_id)
-                        .cloned()
-                        .unwrap_or_else(|| {
-                            let label = next_root_branch_label(root_branch_index);
-                            root_branch_index += 1;
-                            label
-                        })
-                } else {
-                    let label = next_root_branch_label(root_branch_index);
-                    root_branch_index += 1;
-                    label
-                }
-            });
+        let branch = if is_merge_node {
+            let label = next_join_branch_label(join_branch_index);
+            join_branch_index += 1;
+            label
+        } else {
+            step.get("branch")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+                .unwrap_or_else(|| {
+                    if let Some(parent_step_id) = dependencies.first().and_then(Value::as_str) {
+                        branch_by_step_id
+                            .get(parent_step_id)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                let label = next_root_branch_label(root_branch_index);
+                                root_branch_index += 1;
+                                label
+                            })
+                    } else {
+                        let label = next_root_branch_label(root_branch_index);
+                        root_branch_index += 1;
+                        label
+                    }
+                })
+        };
 
-        step.entry("role".to_string()).or_insert_with(|| {
-            json!(if dependencies.len() > 1 {
-                "coordinator"
-            } else {
-                "worker"
-            })
-        });
+        if is_merge_node {
+            let should_coerce_role = step
+                .get("role")
+                .and_then(Value::as_str)
+                .map(is_supported_planner_role)
+                .unwrap_or(true);
+            if should_coerce_role {
+                step.insert("role".to_string(), json!("coordinator"));
+            }
+        } else {
+            step.entry("role".to_string())
+                .or_insert_with(|| json!("worker"));
+        }
         step.insert("branch".to_string(), json!(branch.clone()));
         branch_by_step_id.insert(step_id, branch);
         runtime_steps.push(Value::Object(step));
@@ -2144,17 +2196,21 @@ mod tests {
         );
         assert_eq!(
             accepted["action_id"],
-            json!(delegation
-                .action
-                .as_ref()
-                .map(|action| action.action_id.clone()))
+            json!(
+                delegation
+                    .action
+                    .as_ref()
+                    .map(|action| action.action_id.clone())
+            )
         );
         assert_eq!(
             accepted["policy_resource_id"],
-            json!(delegation
-                .action
-                .as_ref()
-                .and_then(|action| action.policy.resource_id.clone()))
+            json!(
+                delegation
+                    .action
+                    .as_ref()
+                    .and_then(|action| action.policy.resource_id.clone())
+            )
         );
         assert_eq!(
             accepted["chain_depth"],
@@ -2238,10 +2294,12 @@ mod tests {
             summary.action_id.as_deref(),
             Some("tool:app.workflow#execute")
         );
-        assert!(summary
-            .rationale
-            .iter()
-            .any(|line| line.contains("POST /api/v1/tasks")));
+        assert!(
+            summary
+                .rationale
+                .iter()
+                .any(|line| line.contains("POST /api/v1/tasks"))
+        );
         assert!(summary.rationale.iter().any(|line| {
             line.contains("accepted_task_ingress sourced from external_delegation")
         }));
@@ -2293,15 +2351,15 @@ mod tests {
             summary.action_descriptor_id.as_deref(),
             Some("tool:app.workflow")
         );
-        assert!(summary
-            .rationale
-            .iter()
-            .any(|line| line.contains("matched the requested external action")));
-        assert!(summary
-            .rationale
-            .iter()
-            .any(|line| line
-                .contains("required scope InvokeTool matched capability scope InvokeTool")));
+        assert!(
+            summary
+                .rationale
+                .iter()
+                .any(|line| line.contains("matched the requested external action"))
+        );
+        assert!(summary.rationale.iter().any(|line| {
+            line.contains("required scope InvokeTool matched capability scope InvokeTool")
+        }));
     }
 
     #[test]
@@ -2714,10 +2772,12 @@ mod tests {
         assert_eq!(recovered.session_id, Some(session_id));
         assert_eq!(recovered.turn_index, Some(2));
         assert_eq!(recovered.coordinator_agent_id, Some(coordinator_agent_id));
-        assert!(recovered
-            .conservative_reasons
-            .iter()
-            .any(|line| line.contains("workflow failed before graph publication")));
+        assert!(
+            recovered
+                .conservative_reasons
+                .iter()
+                .any(|line| line.contains("workflow failed before graph publication"))
+        );
 
         let preview = recovered
             .result_preview
@@ -2736,8 +2796,8 @@ mod tests {
     }
 
     #[test]
-    fn recover_persisted_autonomy_status_falls_back_to_metadata_final_result_when_task_result_mismatches(
-    ) {
+    fn recover_persisted_autonomy_status_falls_back_to_metadata_final_result_when_task_result_mismatches()
+     {
         let workflow_id = TaskId::new();
         let session_id = SessionId::new();
         let coordinator_agent_id = AgentId::new();
@@ -2951,7 +3011,7 @@ fn normalize_runtime_plan(goal: &str, context: &Value, raw_plan: Value) -> Value
     let topology_hint = if preserve_explicit_graph {
         plan.get("topology_hint")
             .and_then(Value::as_str)
-            .map(ToString::to_string)
+            .map(canonicalize_topology_hint)
     } else if runtime_steps.len() >= 3 {
         Some("hybrid".to_string())
     } else {
@@ -3154,6 +3214,165 @@ mod runtime_plan_tests {
     }
 
     #[test]
+    fn normalize_runtime_plan_coerces_explicit_join_merge_role() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "topology_hint": "hybrid",
+                "steps": [
+                    {
+                        "id": "branch-a",
+                        "step": 1,
+                        "action": "inspect-a",
+                        "description": "inspect a",
+                        "role": "worker",
+                        "branch": "branch-a"
+                    },
+                    {
+                        "id": "branch-b",
+                        "step": 2,
+                        "action": "inspect-b",
+                        "description": "inspect b",
+                        "role": "worker",
+                        "branch": "branch-b"
+                    },
+                    {
+                        "id": "join",
+                        "step": 3,
+                        "action": "synthesize",
+                        "description": "merge both branches",
+                        "role": "worker",
+                        "branch": "join",
+                        "depends_on": ["branch-a", "branch-b"]
+                    }
+                ]
+            }),
+        );
+
+        let steps = plan["steps"].as_array().expect("normalized steps array");
+        assert_eq!(steps[2]["role"], json!("coordinator"));
+        assert_eq!(steps[2]["branch"], json!("join"));
+    }
+
+    #[test]
+    fn normalize_runtime_plan_coerces_multidependency_non_join_branch() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "topology_hint": "hybrid",
+                "steps": [
+                    {
+                        "id": "branch-a",
+                        "step": 1,
+                        "action": "inspect-a",
+                        "description": "inspect a",
+                        "role": "worker",
+                        "branch": "branch-a"
+                    },
+                    {
+                        "id": "branch-b",
+                        "step": 2,
+                        "action": "inspect-b",
+                        "description": "inspect b",
+                        "role": "worker",
+                        "branch": "branch-b"
+                    },
+                    {
+                        "id": "join",
+                        "step": 3,
+                        "action": "synthesize",
+                        "description": "merge both branches",
+                        "role": "worker",
+                        "branch": "branch-a",
+                        "depends_on": ["branch-a", "branch-b"]
+                    }
+                ]
+            }),
+        );
+
+        let steps = plan["steps"].as_array().expect("normalized steps array");
+        assert_eq!(steps[2]["role"], json!("coordinator"));
+        assert_eq!(steps[2]["branch"], json!("join"));
+    }
+
+    #[test]
+    fn normalize_runtime_plan_preserves_unsupported_merge_role_for_early_rejection() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "topology_hint": "hybrid",
+                "steps": [
+                    {
+                        "id": "branch-a",
+                        "step": 1,
+                        "action": "inspect-a",
+                        "description": "inspect a",
+                        "role": "worker",
+                        "branch": "branch-a"
+                    },
+                    {
+                        "id": "branch-b",
+                        "step": 2,
+                        "action": "inspect-b",
+                        "description": "inspect b",
+                        "role": "worker",
+                        "branch": "branch-b"
+                    },
+                    {
+                        "id": "join",
+                        "step": 3,
+                        "action": "synthesize",
+                        "description": "merge both branches",
+                        "role": "joiner",
+                        "branch": "join",
+                        "depends_on": ["branch-a", "branch-b"]
+                    }
+                ]
+            }),
+        );
+
+        let steps = plan["steps"].as_array().expect("normalized steps array");
+        assert_eq!(steps[2]["role"], json!("joiner"));
+        assert_eq!(steps[2]["branch"], json!("join"));
+    }
+
+    #[test]
+    fn normalize_runtime_plan_canonicalizes_supported_topology_hint_aliases() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "topology_hint": "sequential-single-branch",
+                "steps": [
+                    {
+                        "id": "step-1",
+                        "step": 1,
+                        "action": "inspect",
+                        "description": "inspect",
+                        "role": "worker",
+                        "branch": "branch-a",
+                        "depends_on": []
+                    },
+                    {
+                        "id": "step-2",
+                        "step": 2,
+                        "action": "summarize",
+                        "description": "summarize",
+                        "role": "worker",
+                        "branch": "branch-a",
+                        "depends_on": ["step-1"]
+                    }
+                ]
+            }),
+        );
+
+        assert_eq!(plan["topology_hint"], json!("sequential"));
+    }
+
+    #[test]
     fn normalize_runtime_plan_preserves_one_shot_runtime_compatibility() {
         let plan = normalize_runtime_plan(
             "ship proof",
@@ -3178,6 +3397,49 @@ mod runtime_plan_tests {
         assert_eq!(steps[0]["depends_on"], json!([]));
         assert_eq!(plan["topology_hint"], json!("sequential"));
         assert_eq!(plan["runtime_normalized"], json!(false));
+    }
+
+    #[test]
+    fn compile_execution_plan_returns_clear_topology_compile_error() {
+        let error = compile_execution_plan(
+            TaskId::new(),
+            &json!({
+                "goal": "invalid-plan",
+                "steps": [
+                    {
+                        "id": "branch-a",
+                        "step": 1,
+                        "action": "inspect-a",
+                        "description": "inspect a",
+                        "role": "worker",
+                        "branch": "branch-a"
+                    },
+                    {
+                        "id": "branch-b",
+                        "step": 2,
+                        "action": "inspect-b",
+                        "description": "inspect b",
+                        "role": "worker",
+                        "branch": "branch-b"
+                    },
+                    {
+                        "id": "join",
+                        "step": 3,
+                        "action": "join",
+                        "description": "merge both branches",
+                        "role": "join",
+                        "branch": "join",
+                        "depends_on": ["branch-a", "branch-b"]
+                    }
+                ]
+            }),
+        )
+        .expect_err("unsupported planner role should fail before planning publication");
+
+        assert_eq!(
+            error,
+            "workflow planning produced an invalid execution graph during topology compilation: Unsupported topology contract: unsupported planner role 'join'"
+        );
     }
 
     #[test]

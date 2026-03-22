@@ -1,0 +1,4 @@
+{
+  "description": "Analyze /Users/macmain/hi-pro-ops-dash as one sequential repo inspection pass. Do not split into branches or parallel workers. Report only the primary package manager, the main build command, and the main test command.",
+  "priority": "high"
+}

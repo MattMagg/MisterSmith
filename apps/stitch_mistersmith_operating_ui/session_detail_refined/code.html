@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MS_OPERATOR | Session Detail</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "secondary-fixed-dim": "#e5e5e5",
+                        "surface-variant": "#1c1c1c",
+                        "on-error": "#ffffff",
+                        "error-container": "#450a0a",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-lowest": "#000000",
+                        "surface-bright": "#1c1c1c",
+                        "surface": "#121212",
+                        "outline": "#2e2e2e",
+                        "surface-tint": "#3b82f6",
+                        "error-dim": "#ef4444",
+                        "surface-container-highest": "#2e2e2e",
+                        "background": "#121212",
+                        "inverse-primary": "#3b82f6",
+                        "on-background": "#ededed",
+                        "inverse-on-surface": "#121212",
+                        "surface-container-low": "#171717",
+                        "secondary": "#a1a1a1",
+                        "error": "#ef4444",
+                        "secondary-fixed": "#f5f5f5",
+                        "secondary-dim": "#a1a1a1",
+                        "on-tertiary-fixed": "#171717",
+                        "on-surface-variant": "#a1a1a1",
+                        "on-primary-container": "#dbeafe",
+                        "on-primary-fixed": "#1e3a8a",
+                        "surface-container-high": "#242424",
+                        "primary-fixed": "#dbeafe",
+                        "on-surface": "#ededed",
+                        "inverse-surface": "#ededed",
+                        "on-secondary-container": "#ededed",
+                        "on-primary-fixed-variant": "#1d4ed8",
+                        "on-secondary-fixed-variant": "#404040",
+                        "on-secondary-fixed": "#171717",
+                        "surface-dim": "#0c0c0c",
+                        "primary": "#3b82f6",
+                        "secondary-container": "#2e2e2e",
+                        "tertiary-dim": "#707070",
+                        "on-tertiary-container": "#a1a1a1",
+                        "on-secondary": "#121212",
+                        "on-tertiary-fixed-variant": "#525252",
+                        "outline-variant": "#404040",
+                        "on-error-container": "#f87171",
+                        "primary-container": "#1e3a8a",
+                        "primary-dim": "#3b82f6",
+                        "tertiary": "#707070",
+                        "tertiary-container": "#1c1c1c",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed": "#e5e5e5",
+                        "tertiary-fixed-dim": "#d4d4d4",
+                        "primary-fixed-dim": "#bfdbfe",
+                        "surface-container": "#1c1c1c"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "mono": ["JetBrains Mono"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.375rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            font-size: 18px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212;
+            color: #ededed;
+        }
+        .mono-text {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #121212;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2e2e2e;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3b82f6;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface select-none">
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-4 h-12 bg-[#171717] dark:bg-[#171717] opacity-95 backdrop-blur-sm border-b border-[#2e2e2e]">
+<div class="flex items-center gap-6">
+<span class="text-sm font-black tracking-tighter text-slate-100 dark:text-slate-100 font-mono">MS_OPERATOR</span>
+<nav class="hidden md:flex items-center gap-4">
+<a class="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-500 hover:text-slate-300 transition-colors duration-150" href="#">CONSOLE</a>
+<a class="text-xs font-bold uppercase tracking-widest text-blue-500 dark:text-blue-500 border-b-2 border-blue-500 pb-1" href="#">SESSIONS</a>
+<a class="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-500 hover:text-slate-300 transition-colors duration-150" href="#">RUNTIME</a>
+<a class="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-500 hover:text-slate-300 transition-colors duration-150" href="#">HEALTH</a>
+</nav>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-1 hover:bg-[#1c1c1c] transition-colors duration-150 text-slate-400">
+<span class="material-symbols-outlined">settings_input_component</span>
+</button>
+<button class="p-1 hover:bg-[#1c1c1c] transition-colors duration-150 text-slate-400">
+<span class="material-symbols-outlined">terminal</span>
+</button>
+<button class="p-1 hover:bg-[#1c1c1c] transition-colors duration-150 text-slate-400 relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+</button>
+<div class="h-6 w-6 rounded-sm bg-surface-container-highest border border-outline ml-2">
+<img alt="MisterSmith Operator Avatar" class="w-full h-full object-cover" data-alt="Cyberpunk operator pixel art avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDHycsOGnrPXQhK3llAmLqjyQHo_KBAN5nq0KdXhn3RoSB2DUo8hTDXWE843YhOhjOaJUq7W5zcVcsoZN82bzR-HJrC-Ti_BuGlYQAiuQ3fRwGaZoHplFp1wTDeKZ-oOmOs_i7XRRkUiYVWY1nMhyIUTiYXDVWf7jUz8DdZPfn-PHKJuMtud-5UTBPgcDRteN2ebdwzEJK__Uv9y2uk-9BJmqVp0i4czEW9lYzVAanX2dWXqtgz4Qdve4kKVqHkqkGY6jEqqqR9AIw1"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-12 bottom-0 w-16 z-40 flex flex-col items-center py-4 bg-[#121212] dark:bg-[#121212] border-r border-[#2e2e2e]">
+<div class="flex flex-col items-center gap-6 w-full">
+<div class="group flex flex-col items-center gap-1 cursor-pointer w-full py-2 hover:bg-[#1c1c1c] text-slate-600 transition-all">
+<span class="material-symbols-outlined">terminal</span>
+<span class="text-[10px] uppercase font-bold Inter">Console</span>
+</div>
+<div class="group flex flex-col items-center gap-1 cursor-pointer w-full py-2 bg-blue-500/5 text-blue-500 border-l-2 border-blue-500 transition-all">
+<span class="material-symbols-outlined">analytics</span>
+<span class="text-[10px] uppercase font-bold Inter">Sessions</span>
+</div>
+<div class="group flex flex-col items-center gap-1 cursor-pointer w-full py-2 hover:bg-[#1c1c1c] text-slate-600 transition-all">
+<span class="material-symbols-outlined">memory</span>
+<span class="text-[10px] uppercase font-bold Inter">Agents</span>
+</div>
+<div class="group flex flex-col items-center gap-1 cursor-pointer w-full py-2 hover:bg-[#1c1c1c] text-slate-600 transition-all">
+<span class="material-symbols-outlined">monitor_heart</span>
+<span class="text-[10px] uppercase font-bold Inter">Health</span>
+</div>
+</div>
+<div class="mt-auto flex flex-col items-center gap-6 w-full">
+<div class="group flex flex-col items-center gap-1 cursor-pointer w-full py-2 hover:bg-[#1c1c1c] text-slate-600">
+<span class="material-symbols-outlined">history_edu</span>
+<span class="text-[10px] uppercase font-bold Inter">Logs</span>
+</div>
+<div class="group flex flex-col items-center gap-1 cursor-pointer w-full py-2 hover:bg-[#1c1c1c] text-slate-600">
+<span class="material-symbols-outlined">menu_book</span>
+<span class="text-[10px] uppercase font-bold Inter">Docs</span>
+</div>
+<div class="pt-4 border-t border-outline w-10 flex flex-col items-center">
+<span class="text-[9px] font-mono text-slate-600">v2.4.0</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-16 mt-12 p-4 h-[calc(100vh-3rem)] overflow-hidden grid grid-cols-12 gap-4">
+<!-- Left Column: Session Metadata & Status -->
+<div class="col-span-12 lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-2">
+<!-- Session Status Card -->
+<section class="bg-surface-container-low border border-outline p-4">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Session Status</h2>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+<span class="text-[10px] font-mono text-emerald-500 font-bold uppercase tracking-tighter">Active</span>
+</div>
+</div>
+<div class="space-y-4">
+<div>
+<p class="text-[9px] font-mono uppercase text-slate-600 mb-1">Session UUID</p>
+<p class="mono-text text-[11px] text-blue-500">8f2-aa10-4491-bc01-f2991029</p>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<p class="text-[9px] font-mono uppercase text-slate-600 mb-1">Start Time</p>
+<p class="mono-text text-[11px] text-slate-300">14:02:11.02</p>
+</div>
+<div>
+<p class="text-[9px] font-mono uppercase text-slate-600 mb-1">Duration</p>
+<p class="mono-text text-[11px] text-slate-300">00:42:19</p>
+</div>
+</div>
+<div>
+<p class="text-[9px] font-mono uppercase text-slate-600 mb-1">Operator Node</p>
+<p class="mono-text text-[11px] text-slate-300">US-EAST-2.PROD.04</p>
+</div>
+</div>
+</section>
+<!-- Agent Performance -->
+<section class="bg-surface-container-low border border-outline p-4 flex-1">
+<h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">Resource Monitor</h2>
+<div class="space-y-6">
+<div>
+<div class="flex justify-between items-end mb-1">
+<span class="text-[10px] uppercase font-bold text-slate-500">CPU Load</span>
+<span class="mono-text text-[10px] text-blue-500">42.8%</span>
+</div>
+<div class="h-1 bg-surface-container-highest w-full relative overflow-hidden">
+<div class="absolute top-0 left-0 h-full bg-blue-500 w-[42.8%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-end mb-1">
+<span class="text-[10px] uppercase font-bold text-slate-500">Memory Allocation</span>
+<span class="mono-text text-[10px] text-blue-500">2.1GB / 8GB</span>
+</div>
+<div class="h-1 bg-surface-container-highest w-full relative overflow-hidden">
+<div class="absolute top-0 left-0 h-full bg-blue-500 w-[26%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-end mb-1">
+<span class="text-[10px] uppercase font-bold text-slate-500">Network Latency</span>
+<span class="mono-text text-[10px] text-emerald-500">12ms</span>
+</div>
+<div class="h-24 bg-[#1c1c1c] border border-outline mt-2 overflow-hidden relative">
+<!-- Sparkline simulation -->
+<div class="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_1px_1px,#3b82f6_1px,transparent_0)] [background-size:8px_8px]"></div>
+<svg class="absolute bottom-0 w-full h-12" preserveaspectratio="none" viewbox="0 0 100 100">
+<path d="M0,80 L10,75 L20,85 L30,60 L40,70 L50,65 L60,82 L70,55 L80,60 L90,40 L100,50 V100 H0 Z" fill="rgba(59, 130, 246, 0.1)" stroke="#3b82f6" stroke-width="1"></path>
+</svg>
+</div>
+</div>
+</div>
+</section>
+<!-- Actions -->
+<div class="grid grid-cols-2 gap-2">
+<button class="flex items-center justify-center gap-2 py-2 border border-outline bg-surface-container-high hover:bg-surface-container-highest transition-colors text-[10px] font-bold uppercase tracking-wider text-slate-300">
+<span class="material-symbols-outlined text-sm">download</span>
+                    Export Log
+                </button>
+<button class="flex items-center justify-center gap-2 py-2 border border-error/50 bg-error/10 hover:bg-error/20 transition-colors text-[10px] font-bold uppercase tracking-wider text-error">
+<span class="material-symbols-outlined text-sm">stop_circle</span>
+                    Kill Session
+                </button>
+</div>
+</div>
+<!-- Middle Column: Interactive Terminal Transcript -->
+<div class="col-span-12 lg:col-span-6 flex flex-col bg-surface-container-low border border-outline h-full">
+<div class="px-4 h-10 border-b border-outline flex items-center justify-between bg-[#171717]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500">terminal</span>
+<span class="text-xs font-bold uppercase tracking-widest text-slate-200">Terminal Transcript</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-[9px] font-mono text-slate-600">LIVE FEED_</span>
+<span class="w-1.5 h-3 bg-blue-500 animate-pulse"></span>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-4 mono-text text-[11px] space-y-3 leading-relaxed">
+<!-- Log Entry -->
+<div class="flex gap-4">
+<span class="text-slate-600 shrink-0">14:02:11.02</span>
+<div class="flex-1">
+<span class="text-blue-500">[SYSTEM]</span> Initializing core runtime environment...
+                    </div>
+</div>
+<!-- Log Entry -->
+<div class="flex gap-4">
+<span class="text-slate-600 shrink-0">14:02:11.45</span>
+<div class="flex-1">
+<span class="text-emerald-500">[AUTH]</span> Handshake established with node: US-EAST-2.PROD.04
+                    </div>
+</div>
+<!-- Log Entry -->
+<div class="flex gap-4">
+<span class="text-slate-600 shrink-0">14:02:12.10</span>
+<div class="flex-1">
+<span class="text-slate-400">[CMD]</span> <span class="text-on-surface">operator&gt; run system_scan --deep</span>
+</div>
+</div>
+<!-- Code Block Entry -->
+<div class="bg-[#0c0c0c] border border-outline p-3 rounded-sm ml-20">
+<pre class="text-slate-400">{
+  "status": "success",
+  "entities_found": 1284,
+  "vulnerabilities": 0,
+  "last_sync": "2023-10-27T14:02:12.88Z",
+  "integrity_hash": "sha256-492e...f21"
+}</pre>
+</div>
+<!-- Log Entry -->
+<div class="flex gap-4">
+<span class="text-slate-600 shrink-0">14:05:32.00</span>
+<div class="flex-1">
+<span class="text-amber-500">[WARN]</span> Transient memory spike detected in secondary buffer.
+                    </div>
+</div>
+<!-- Log Entry -->
+<div class="flex gap-4">
+<span class="text-slate-600 shrink-0">14:15:22.18</span>
+<div class="flex-1">
+<span class="text-slate-400">[CMD]</span> <span class="text-on-surface">operator&gt; fetch_encrypted_payload --key=****</span>
+</div>
+</div>
+<!-- Log Entry -->
+<div class="flex gap-4">
+<span class="text-slate-600 shrink-0">14:15:24.01</span>
+<div class="flex-1">
+<span class="text-blue-500">[DATA]</span> Decryption successful. Streaming payload to buffer...
+                    </div>
+</div>
+<!-- Interactive Cursor -->
+<div class="flex gap-4 items-center">
+<span class="text-slate-600 shrink-0">14:44:30.55</span>
+<div class="flex items-center gap-1">
+<span class="text-slate-300">operator&gt;</span>
+<span class="w-2 h-4 bg-blue-500 animate-pulse"></span>
+</div>
+</div>
+</div>
+<!-- Terminal Input Zone -->
+<div class="p-2 border-t border-outline bg-[#171717]">
+<div class="flex items-center gap-3 bg-[#0c0c0c] border border-outline px-3 h-10">
+<span class="material-symbols-outlined text-blue-500">chevron_right</span>
+<input class="bg-transparent border-none outline-none focus:ring-0 mono-text text-[11px] text-on-surface w-full placeholder:text-slate-700" placeholder="ENTER COMMAND..." type="text"/>
+<span class="text-[9px] font-mono text-slate-600">UTF-8</span>
+</div>
+</div>
+</div>
+<!-- Right Column: Timeline & Evidence -->
+<div class="col-span-12 lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-2">
+<!-- Session Timeline -->
+<section class="bg-surface-container-low border border-outline p-4">
+<h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-6">Interaction Timeline</h2>
+<div class="relative ml-2 space-y-8 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[1px] before:bg-outline">
+<!-- Timeline Item -->
+<div class="relative pl-6">
+<div class="absolute left-[-4px] top-1.5 w-2 h-2 rounded-full bg-blue-500 border-2 border-[#121212]"></div>
+<p class="text-[10px] font-bold uppercase text-slate-200">Session Started</p>
+<p class="text-[9px] font-mono text-slate-500 mt-0.5">14:02:11</p>
+</div>
+<!-- Timeline Item -->
+<div class="relative pl-6">
+<div class="absolute left-[-4px] top-1.5 w-2 h-2 rounded-full bg-slate-600 border-2 border-[#121212]"></div>
+<p class="text-[10px] font-bold uppercase text-slate-400">Deep Scan Execution</p>
+<p class="text-[9px] font-mono text-slate-500 mt-0.5">14:02:12</p>
+</div>
+<!-- Timeline Item -->
+<div class="relative pl-6">
+<div class="absolute left-[-4px] top-1.5 w-2 h-2 rounded-full bg-amber-500 border-2 border-[#121212]"></div>
+<p class="text-[10px] font-bold uppercase text-slate-400">Resource Alert</p>
+<p class="text-[9px] font-mono text-slate-500 mt-0.5">14:05:32</p>
+</div>
+<!-- Timeline Item -->
+<div class="relative pl-6">
+<div class="absolute left-[-4px] top-1.5 w-2 h-2 rounded-full bg-blue-500 border-2 border-[#121212] animate-pulse"></div>
+<p class="text-[10px] font-bold uppercase text-blue-500">Payload Received</p>
+<p class="text-[9px] font-mono text-slate-500 mt-0.5">14:15:24</p>
+</div>
+</div>
+</section>
+<!-- Evidence Shelf -->
+<section class="bg-surface-container-low border border-outline flex-1 p-4">
+<h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">Captured Evidence</h2>
+<div class="space-y-3">
+<!-- File Card -->
+<div class="bg-surface-elevated border border-outline p-2 group cursor-pointer hover:border-blue-500/50 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-surface-container-highest flex items-center justify-center border border-outline">
+<span class="material-symbols-outlined text-slate-500">description</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-[10px] font-bold uppercase truncate text-slate-300">system_manifest.json</p>
+<p class="text-[9px] font-mono text-slate-600">4.2 KB • JSON</p>
+</div>
+<span class="material-symbols-outlined text-slate-600 group-hover:text-blue-500 text-sm">open_in_new</span>
+</div>
+</div>
+<!-- File Card -->
+<div class="bg-surface-elevated border border-outline p-2 group cursor-pointer hover:border-blue-500/50 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-surface-container-highest flex items-center justify-center border border-outline overflow-hidden">
+<img alt="Captured Scene" class="w-full h-full object-cover opacity-60" data-alt="Abstract glowing blue network mesh background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeCk7AsWkb2MyaxbnNAm5BA5rZgtY48wVyVATOCyJyqg8F_hKbZmaQDvpn_5hO68ZAdgTnauicvRtHP7ufJGXFYCEod1vSUQX8mDF0apdBzRTh0MYwdlLytC-r8FgsSPX0ydhfSheaqSZhD5slS_MXoO8RmN_QaJHoGYpcHzVmBLjB9djPE7Z13H5gU0k7lDFJ87L9XmUzc8bacoUCpj9cochSeNtQfwdfpUjUedD31CRU4bDhCUC_mm5kPxT8muoDgS06fiRo8HEo"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-[10px] font-bold uppercase truncate text-slate-300">security_cam_04.png</p>
+<p class="text-[9px] font-mono text-slate-600">1.8 MB • IMG</p>
+</div>
+<span class="material-symbols-outlined text-slate-600 group-hover:text-blue-500 text-sm">open_in_new</span>
+</div>
+</div>
+<!-- File Card -->
+<div class="bg-surface-elevated border border-outline p-2 group cursor-pointer hover:border-blue-500/50 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-surface-container-highest flex items-center justify-center border border-outline">
+<span class="material-symbols-outlined text-slate-500">code</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-[10px] font-bold uppercase truncate text-slate-300">decryption_script.py</p>
+<p class="text-[9px] font-mono text-slate-600">12 KB • SRC</p>
+</div>
+<span class="material-symbols-outlined text-slate-600 group-hover:text-blue-500 text-sm">open_in_new</span>
+</div>
+</div>
+</div>
+<button class="w-full mt-4 py-2 border border-dashed border-outline text-[9px] font-mono uppercase text-slate-600 hover:text-slate-400 hover:border-slate-500 transition-all">
+                    + Attach Local Asset
+                </button>
+</section>
+</div>
+</main>
+<!-- Global Footer Bar -->
+<footer class="fixed bottom-0 left-16 right-0 h-6 bg-[#171717] border-t border-[#2e2e2e] flex items-center justify-between px-4 z-50">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+<span class="text-[9px] font-mono uppercase text-slate-500">SYSTEM READY</span>
+</div>
+<div class="h-3 w-[1px] bg-outline"></div>
+<span class="text-[9px] font-mono text-slate-600">LOAD: 0.24, 0.33, 0.41</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-[9px] font-mono text-slate-600 uppercase">Buffer: 82% Clear</span>
+<div class="h-3 w-[1px] bg-outline"></div>
+<span class="text-[9px] font-mono text-slate-400">14:44:30.55 UTC</span>
+</div>
+</footer>
+</body></html>
