@@ -1,0 +1,419 @@
+{
+  "result": {
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Trace task execution, autonomy status, and terminal result evidence",
+            "branch_id": "e774a359-05fd-4bfb-863e-640b0035bdee",
+            "dependencies": [],
+            "description": "Collect only directly observed runtime markers for task execution flow, autonomy-status changes, completion/failure markers, terminal outputs, and any explicit stop conditions. Record exact observed signals, timestamps, and unresolved gaps; do not infer success beyond what the runtime trace shows.",
+            "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "trace-task-autonomy-result",
+            "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "acae6eef-079b-46c3-863b-9a99598545a6",
+          "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+            "branch_id": "d322e32f-19bc-42d6-8fca-5544edf1877f",
+            "dependencies": [],
+            "description": "Collect only directly observed runtime markers for startup/bootstrap flow, readiness transitions, provider selection, model/runtime wiring, and any explicit initialization evidence. Record exact observed signals, timestamps, and unresolved gaps; do not infer health beyond what the runtime trace shows.",
+            "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "trace-bootstrap-readiness",
+            "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb",
+          "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+              "branch_id": "d322e32f-19bc-42d6-8fca-5544edf1877f",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+                  "branch_id": "d322e32f-19bc-42d6-8fca-5544edf1877f",
+                  "dependencies": [],
+                  "description": "Collect only directly observed runtime markers for startup/bootstrap flow, readiness transitions, provider selection, model/runtime wiring, and any explicit initialization evidence. Record exact observed signals, timestamps, and unresolved gaps; do not infer health beyond what the runtime trace shows.",
+                  "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "trace-bootstrap-readiness",
+                  "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb",
+                "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+              },
+              "task_id": "ad8dc5d6-7752-4338-a9e0-2c0bc3cbbd8a",
+              "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb"
+            },
+            {
+              "action": "Trace task execution, autonomy status, and terminal result evidence",
+              "branch_id": "e774a359-05fd-4bfb-863e-640b0035bdee",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Trace task execution, autonomy status, and terminal result evidence",
+                  "branch_id": "e774a359-05fd-4bfb-863e-640b0035bdee",
+                  "dependencies": [],
+                  "description": "Collect only directly observed runtime markers for task execution flow, autonomy-status changes, completion/failure markers, terminal outputs, and any explicit stop conditions. Record exact observed signals, timestamps, and unresolved gaps; do not infer success beyond what the runtime trace shows.",
+                  "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "trace-task-autonomy-result",
+                  "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "acae6eef-079b-46c3-863b-9a99598545a6",
+                "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+              },
+              "task_id": "9cd3b772-2a38-4170-b369-a7e6f3a4a9f9",
+              "worker_id": "acae6eef-079b-46c3-863b-9a99598545a6"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Merge both trace outputs into one concise runtime memo",
+            "branch_id": "d94711bb-9001-4367-b371-bf271748845b",
+            "dependencies": [
+              "ad8dc5d6-7752-4338-a9e0-2c0bc3cbbd8a",
+              "9cd3b772-2a38-4170-b369-a7e6f3a4a9f9"
+            ],
+            "description": "Combine both worker outputs into a single memo under 180 words with exactly two sections: Observed Evidence and Follow-up Needed. Every claim must be tied to directly observed runtime evidence from the two worker traces, and any missing proof must be stated as follow-up rather than inferred.",
+            "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "merge-runtime-memo",
+            "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb",
+          "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+        }
+      ],
+      "description": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "require_join_step": true,
+            "require_parallel_workers": 2,
+            "require_real_multi_agent_workflow": true,
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "branch-a",
+                  "depends_on": [],
+                  "description": "string",
+                  "id": "string",
+                  "role": "worker",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "hybrid"
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Collect only directly observed runtime markers for startup/bootstrap flow, readiness transitions, provider selection, model/runtime wiring, and any explicit initialization evidence. Record exact observed signals, timestamps, and unresolved gaps; do not infer health beyond what the runtime trace shows.",
+            "id": "trace-bootstrap-readiness",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "Trace task execution, autonomy status, and terminal result evidence",
+            "branch": "branch-b",
+            "depends_on": [],
+            "description": "Collect only directly observed runtime markers for task execution flow, autonomy-status changes, completion/failure markers, terminal outputs, and any explicit stop conditions. Record exact observed signals, timestamps, and unresolved gaps; do not infer success beyond what the runtime trace shows.",
+            "id": "trace-task-autonomy-result",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "Merge both trace outputs into one concise runtime memo",
+            "branch": "join",
+            "depends_on": [
+              "trace-bootstrap-readiness",
+              "trace-task-autonomy-result"
+            ],
+            "description": "Combine both worker outputs into a single memo under 180 words with exactly two sections: Observed Evidence and Follow-up Needed. Every claim must be tied to directly observed runtime evidence from the two worker traces, and any missing proof must be stated as follow-up rather than inferred.",
+            "id": "merge-runtime-memo",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "hybrid"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "constraints": [
+            "Exactly two parallel worker steps before the merge step.",
+            "Final memo must stay under 180 words.",
+            "Use only directly observed runtime evidence.",
+            "Do not convert missing evidence into assumptions."
+          ],
+          "execution_contract": {
+            "require_join_step": true,
+            "require_parallel_workers": 2,
+            "require_real_multi_agent_workflow": true,
+            "return_json_only": true
+          },
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Create a concise live runtime trace summary from directly observed evidence using two parallel workers and one final merge worker.",
+        "steps": [
+          {
+            "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Collect only directly observed runtime markers for startup/bootstrap flow, readiness transitions, provider selection, model/runtime wiring, and any explicit initialization evidence. Record exact observed signals, timestamps, and unresolved gaps; do not infer health beyond what the runtime trace shows.",
+            "id": "trace-bootstrap-readiness",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "Trace task execution, autonomy status, and terminal result evidence",
+            "branch": "branch-b",
+            "depends_on": [],
+            "description": "Collect only directly observed runtime markers for task execution flow, autonomy-status changes, completion/failure markers, terminal outputs, and any explicit stop conditions. Record exact observed signals, timestamps, and unresolved gaps; do not infer success beyond what the runtime trace shows.",
+            "id": "trace-task-autonomy-result",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "Merge both trace outputs into one concise runtime memo",
+            "branch": "branch-merge",
+            "depends_on": [
+              "trace-bootstrap-readiness",
+              "trace-task-autonomy-result"
+            ],
+            "description": "Combine both worker outputs into a single memo under 180 words with exactly two sections: Observed Evidence and Follow-up Needed. Every claim must be tied to directly observed runtime evidence from the two worker traces, and any missing proof must be stated as follow-up rather than inferred.",
+            "id": "merge-runtime-memo",
+            "role": "worker",
+            "step": 3
+          }
+        ],
+        "topology_hint": "hybrid"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "Merge both trace outputs into one concise runtime memo",
+          "branch_id": "d94711bb-9001-4367-b371-bf271748845b",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+                "branch_id": "d322e32f-19bc-42d6-8fca-5544edf1877f",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+                    "branch_id": "d322e32f-19bc-42d6-8fca-5544edf1877f",
+                    "dependencies": [],
+                    "description": "Collect only directly observed runtime markers for startup/bootstrap flow, readiness transitions, provider selection, model/runtime wiring, and any explicit initialization evidence. Record exact observed signals, timestamps, and unresolved gaps; do not infer health beyond what the runtime trace shows.",
+                    "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "trace-bootstrap-readiness",
+                    "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb",
+                  "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+                },
+                "task_id": "ad8dc5d6-7752-4338-a9e0-2c0bc3cbbd8a",
+                "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb"
+              },
+              {
+                "action": "Trace task execution, autonomy status, and terminal result evidence",
+                "branch_id": "e774a359-05fd-4bfb-863e-640b0035bdee",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "Trace task execution, autonomy status, and terminal result evidence",
+                    "branch_id": "e774a359-05fd-4bfb-863e-640b0035bdee",
+                    "dependencies": [],
+                    "description": "Collect only directly observed runtime markers for task execution flow, autonomy-status changes, completion/failure markers, terminal outputs, and any explicit stop conditions. Record exact observed signals, timestamps, and unresolved gaps; do not infer success beyond what the runtime trace shows.",
+                    "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "trace-task-autonomy-result",
+                    "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "acae6eef-079b-46c3-863b-9a99598545a6",
+                  "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+                },
+                "task_id": "9cd3b772-2a38-4170-b369-a7e6f3a4a9f9",
+                "worker_id": "acae6eef-079b-46c3-863b-9a99598545a6"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Merge both trace outputs into one concise runtime memo",
+              "branch_id": "d94711bb-9001-4367-b371-bf271748845b",
+              "dependencies": [
+                "ad8dc5d6-7752-4338-a9e0-2c0bc3cbbd8a",
+                "9cd3b772-2a38-4170-b369-a7e6f3a4a9f9"
+              ],
+              "description": "Combine both worker outputs into a single memo under 180 words with exactly two sections: Observed Evidence and Follow-up Needed. Every claim must be tied to directly observed runtime evidence from the two worker traces, and any missing proof must be stated as follow-up rather than inferred.",
+              "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "merge-runtime-memo",
+              "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb",
+            "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+          },
+          "task_id": "870218b9-a24d-467f-b8ce-c1052118fc69",
+          "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb"
+        },
+        {
+          "action": "Trace task execution, autonomy status, and terminal result evidence",
+          "branch_id": "e774a359-05fd-4bfb-863e-640b0035bdee",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Trace task execution, autonomy status, and terminal result evidence",
+              "branch_id": "e774a359-05fd-4bfb-863e-640b0035bdee",
+              "dependencies": [],
+              "description": "Collect only directly observed runtime markers for task execution flow, autonomy-status changes, completion/failure markers, terminal outputs, and any explicit stop conditions. Record exact observed signals, timestamps, and unresolved gaps; do not infer success beyond what the runtime trace shows.",
+              "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "trace-task-autonomy-result",
+              "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "acae6eef-079b-46c3-863b-9a99598545a6",
+            "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+          },
+          "task_id": "9cd3b772-2a38-4170-b369-a7e6f3a4a9f9",
+          "worker_id": "acae6eef-079b-46c3-863b-9a99598545a6"
+        },
+        {
+          "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+          "branch_id": "d322e32f-19bc-42d6-8fca-5544edf1877f",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+              "branch_id": "d322e32f-19bc-42d6-8fca-5544edf1877f",
+              "dependencies": [],
+              "description": "Collect only directly observed runtime markers for startup/bootstrap flow, readiness transitions, provider selection, model/runtime wiring, and any explicit initialization evidence. Record exact observed signals, timestamps, and unresolved gaps; do not infer health beyond what the runtime trace shows.",
+              "goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "trace-bootstrap-readiness",
+              "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb",
+            "workflow_goal": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence."
+          },
+          "task_id": "ad8dc5d6-7752-4338-a9e0-2c0bc3cbbd8a",
+          "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb"
+        }
+      ],
+      "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+    },
+    "status": "completed",
+    "workflow_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+  },
+  "status": "completed",
+  "task_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+}

@@ -1,0 +1,25 @@
+{
+  "aggregated_result_count": 3,
+  "artifact_dir": "docs/plans/artifacts/live-runtime-proof-smoke/20260326T174047Z",
+  "base_url": "http://127.0.0.1:8080",
+  "branch_count": 3,
+  "database_name": "mistersmith_live_runtime_smoke_20260326_174047",
+  "graph_state": "Completed",
+  "model_id": "gpt-5.4",
+  "node_count": 3,
+  "parallelism_width": 2,
+  "provider_kind": "openai_chatgpt",
+  "run_id": "20260326T174047Z",
+  "runtime_execution_mode": {
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "step_result_count": 3,
+  "task_id": "f3e67de6-3a23-444d-ac56-86841c3003d9",
+  "topology_kind": "Hybrid"
+}

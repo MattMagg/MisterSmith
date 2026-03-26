@@ -1,0 +1,41 @@
+{
+  "aggregated_result_count": 3,
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "runtime_execution_mode": {
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "Merge both trace outputs into one concise runtime memo",
+      "execution_boundary": "tool_bus",
+      "task_id": "870218b9-a24d-467f-b8ce-c1052118fc69",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb"
+    },
+    {
+      "action": "Trace task execution, autonomy status, and terminal result evidence",
+      "execution_boundary": "tool_bus",
+      "task_id": "9cd3b772-2a38-4170-b369-a7e6f3a4a9f9",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "acae6eef-079b-46c3-863b-9a99598545a6"
+    },
+    {
+      "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+      "execution_boundary": "tool_bus",
+      "task_id": "ad8dc5d6-7752-4338-a9e0-2c0bc3cbbd8a",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "5e1335b3-449c-44fd-ac61-8cb8d82acbeb"
+    }
+  ],
+  "task_id": "f3e67de6-3a23-444d-ac56-86841c3003d9"
+}

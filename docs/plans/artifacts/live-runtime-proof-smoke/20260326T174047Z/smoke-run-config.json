@@ -1,0 +1,13 @@
+{
+  "artifact_dir": "docs/plans/artifacts/live-runtime-proof-smoke/20260326T174047Z",
+  "base_url": "http://127.0.0.1:8080",
+  "compose_file": "deploy/docker-compose.yml",
+  "database_name": "mistersmith_live_runtime_smoke_20260326_174047",
+  "database_url": "postgres://mistersmith:<redacted>@127.0.0.1:5432/mistersmith_live_runtime_smoke_20260326_174047",
+  "http_port": 8080,
+  "model_id": "gpt-5.4",
+  "poll_interval_seconds": 1.0,
+  "provider_kind": "openai_chatgpt",
+  "run_id": "20260326T174047Z",
+  "timeout_seconds": 240.0
+}
