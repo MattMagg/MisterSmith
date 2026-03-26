@@ -21,6 +21,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 ## Pre-Execution Checks
 
 **Check for extension hooks (before specification)**:
+
 - Check if `.specify/extensions.yml` exists in the project root.
 - If it exists, read it and look for entries under the `hooks.before_specify` key
 - If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
@@ -30,7 +31,7 @@ You **MUST** consider the user input before proceeding (if not empty).
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
 - For each executable hook, output the following based on its `optional` flag:
   - **Optional hook** (`optional: true`):
-    ```
+    ```text
     ## Extension Hooks
 
     **Optional Pre-Hook**: {extension}
@@ -41,7 +42,7 @@ You **MUST** consider the user input before proceeding (if not empty).
     To execute: `/{command}`
     ```
   - **Mandatory hook** (`optional: false`):
-    ```
+    ```text
     ## Extension Hooks
 
     **Automatic Pre-Hook**: {extension}
@@ -54,7 +55,12 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
 
-The text the user typed after `/speckit.specify` in the triggering message **is** the feature description. Assume you always have it available in this conversation even if `$ARGUMENTS` appears literally below. Do not ask the user to repeat it unless they provided an empty command.
+The text the user typed after `/speckit.specify` in the triggering message **is** the feature
+description. Assume you always have it available in this conversation even if `$ARGUMENTS` appears
+literally below. Do not ask the user to repeat it unless they provided an empty command.
+
+This repo uses SpecKit to create bounded Mister Smith packets, not vague product brainstorms. Every
+new spec MUST be grounded in current repo truth before it proposes new scope.
 
 Given that feature description, do this:
 
@@ -70,50 +76,76 @@ Given that feature description, do this:
      - "Create a dashboard for analytics" → "analytics-dashboard"
      - "Fix payment processing timeout bug" → "fix-payment-timeout"
 
-2. **Create the feature branch** by running the script with `--short-name` (and `--json`), and do NOT pass `--number` (the script auto-detects the next globally available number across all branches and spec directories):
+2. **Create the feature branch** by running the script with `--short-name` (and `--json`), and
+   do NOT pass `--number` (the script auto-detects the next globally available number across all
+   branches and spec directories):
 
    - Bash example: `.specify/scripts/bash/create-new-feature.sh "$ARGUMENTS" --json --short-name "user-auth" "Add user authentication"`
    - PowerShell example: `.specify/scripts/bash/create-new-feature.sh "$ARGUMENTS" -Json -ShortName "user-auth" "Add user authentication"`
 
    **IMPORTANT**:
    - Do NOT pass `--number` — the script determines the correct next number automatically
-   - Always include the JSON flag (`--json` for Bash, `-Json` for PowerShell) so the output can be parsed reliably
+   - Always include the JSON flag (`--json` for Bash, `-Json` for PowerShell) so the output can
+     be parsed reliably
    - You must only ever run this script once per feature
-   - The JSON is provided in the terminal as output - always refer to it to get the actual content you're looking for
+   - The JSON is provided in the terminal as output; always refer to it to get the actual content
+     you're looking for
    - The JSON output will contain BRANCH_NAME and SPEC_FILE paths
-   - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
+   - For single quotes in args like "I'm Groot", use escape syntax: e.g. `'I'\''m Groot'` (or
+     double-quote if possible: `"I'm Groot"`)
 
-3. Load `.specify/templates/spec-template.md` to understand required sections.
+3. Load the repo authority before writing:
+   - `AGENTS.md`
+   - `docs/current-state.md`
+   - `docs/ms_recent_context.md`
+   - the currently active scope-freeze or closure note if one is named in current-state
+   - one recent landed packet spec from `specs/` to mirror repo style
 
-4. Follow this execution flow:
+4. Load `.specify/templates/spec-template.md` to understand required sections.
+
+5. Follow this execution flow:
 
     1. Parse user description from Input
        If empty: ERROR "No feature description provided"
-    2. Extract key concepts from description
-       Identify: actors, actions, data, constraints
-    3. For unclear aspects:
+    2. Extract key concepts from description and current repo truth
+       Identify: baseline behavior, unfinished gap, actors, actions, data, constraints, explicit
+       non-goals
+    3. Bound the scope before writing user stories
+       - Name the narrowest honest gap
+       - List what is already landed and must not be reopened
+       - State what the packet is not
+       - Keep the proposed write set reviewable and realistically verifiable
+    4. For unclear aspects:
        - Make informed guesses based on context and industry standards
        - Only mark with [NEEDS CLARIFICATION: specific question] if:
-         - The choice significantly impacts feature scope or user experience
+         - The choice significantly impacts packet scope, architecture, or validation posture
          - Multiple reasonable interpretations exist with different implications
          - No reasonable default exists
        - **LIMIT: Maximum 3 [NEEDS CLARIFICATION] markers total**
-       - Prioritize clarifications by impact: scope > security/privacy > user experience > technical details
-    4. Fill User Scenarios & Testing section
+       - Prioritize clarifications by impact: scope > correctness > proof boundary > user
+         experience > technical details
+    5. Fill `Current Truth & Scope` first
+       - Start from what is already true on `main`
+       - State the unfinished bounded gap
+       - State explicit non-goals and deferred scope
+    6. Fill User Scenarios & Testing section
        If no clear user flow: ERROR "Cannot determine user scenarios"
-    5. Generate Functional Requirements
+    7. Generate Functional Requirements
        Each requirement must be testable
-       Use reasonable defaults for unspecified details (document assumptions in Assumptions section)
-    6. Define Success Criteria
-       Create measurable, technology-agnostic outcomes
-       Include both quantitative metrics (time, performance, volume) and qualitative measures (user satisfaction, task completion)
-       Each criterion must be verifiable without implementation details
-    7. Identify Key Entities (if data involved)
-    8. Return: SUCCESS (spec ready for planning)
+       Use reasonable defaults for unspecified details and preserve explicit invariants
+    8. Define Success Criteria
+       - Use measurable outcomes
+       - Keep success criteria tied to the bounded packet, not broad product promises
+       - Make proof boundaries explicit when live evidence is not yet available
+    9. Identify Key Entities (if data involved)
+    10. Return: SUCCESS (spec ready for planning)
 
-5. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
+6. Write the specification to SPEC_FILE using the template structure, replacing placeholders with
+   concrete details derived from the feature description plus current repo truth while preserving
+   section order and headings.
 
-6. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
+7. **Specification Quality Validation**: After writing the initial spec, validate it against
+   quality criteria:
 
    a. **Create Spec Quality Checklist**: Generate a checklist file at `FEATURE_DIR/checklists/requirements.md` using the checklist template structure with these validation items:
 
@@ -125,10 +157,10 @@ Given that feature description, do this:
       **Feature**: [Link to spec.md]
       
       ## Content Quality
-      
+
       - [ ] No implementation details (languages, frameworks, APIs)
-      - [ ] Focused on user value and business needs
-      - [ ] Written for non-technical stakeholders
+      - [ ] Grounded in current repo truth and named source documents
+      - [ ] Scope is explicitly bounded
       - [ ] All mandatory sections completed
       
       ## Requirement Completeness
@@ -140,14 +172,14 @@ Given that feature description, do this:
       - [ ] All acceptance scenarios are defined
       - [ ] Edge cases are identified
       - [ ] Scope is clearly bounded
-      - [ ] Dependencies and assumptions identified
-      
+      - [ ] Existing baseline truth and explicit non-goals are identified
+
       ## Feature Readiness
-      
+
       - [ ] All functional requirements have clear acceptance criteria
       - [ ] User scenarios cover primary flows
       - [ ] Feature meets measurable outcomes defined in Success Criteria
-      - [ ] No implementation details leak into specification
+      - [ ] Deterministic versus live-proof boundaries are explicit
       
       ## Notes
       
@@ -205,9 +237,11 @@ Given that feature description, do this:
 
    d. **Update Checklist**: After each validation iteration, update the checklist file with current pass/fail status
 
-7. Report completion with branch name, spec file path, checklist results, and readiness for the next phase (`/speckit.clarify` or `/speckit.plan`).
+8. Report completion with branch name, spec file path, checklist results, and readiness for the
+   next phase (`/speckit.clarify` or `/speckit.plan`).
 
-8. **Check for extension hooks**: After reporting completion, check if `.specify/extensions.yml` exists in the project root.
+9. **Check for extension hooks**: After reporting completion, check if
+   `.specify/extensions.yml` exists in the project root.
    - If it exists, read it and look for entries under the `hooks.after_specify` key
    - If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
    - Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
@@ -216,7 +250,7 @@ Given that feature description, do this:
      - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
    - For each executable hook, output the following based on its `optional` flag:
      - **Optional hook** (`optional: true`):
-       ```
+       ```text
        ## Extension Hooks
 
        **Optional Hook**: {extension}
@@ -227,7 +261,7 @@ Given that feature description, do this:
        To execute: `/{command}`
        ```
      - **Mandatory hook** (`optional: false`):
-       ```
+       ```text
        ## Extension Hooks
 
        **Automatic Hook**: {extension}
@@ -236,13 +270,15 @@ Given that feature description, do this:
        ```
    - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
-**NOTE:** The script creates and checks out the new branch and initializes the spec file before writing.
+**NOTE:** The script creates and checks out the new branch and initializes the spec file before
+writing. In this repo, branch creation does not authorize worktree creation.
 
 ## Quick Guidelines
 
-- Focus on **WHAT** users need and **WHY**.
+- Focus on the bounded gap, preserved baseline, and explicit non-goals.
 - Avoid HOW to implement (no tech stack, APIs, code structure).
-- Written for business stakeholders, not developers.
+- Write for repo operators and implementers who need a precise packet, not for generic business
+  stakeholders.
 - DO NOT create any checklists that are embedded in the spec. That will be a separate command.
 
 ### Section Requirements
@@ -255,8 +291,8 @@ Given that feature description, do this:
 
 When creating this spec from a user prompt:
 
-1. **Make informed guesses**: Use context, industry standards, and common patterns to fill gaps
-2. **Document assumptions**: Record reasonable defaults in the Assumptions section
+1. **Make informed guesses**: Use current repo truth, recent packet examples, and bounded defaults
+2. **Document assumptions**: Record reasonable defaults in the most relevant packet section
 3. **Limit clarifications**: Maximum 3 [NEEDS CLARIFICATION] markers - use only for critical decisions that:
    - Significantly impact feature scope or user experience
    - Have multiple reasonable interpretations with different implications

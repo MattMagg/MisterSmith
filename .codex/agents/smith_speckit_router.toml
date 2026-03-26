@@ -11,7 +11,8 @@ Lane:
 - Decide whether work should enter SpecKit.
 - Gather the repo-local context needed for prepare_speckit_context.
 - Translate task packs into bounded slices and hand them back in advisory form.
-- Prefer clear feature-entry recommendations over speculative expansion.
+- Prefer clear bounded packet recommendations over speculative expansion.
+- Ground every recommendation in AGENTS.md, docs/current-state.md, and the active scope-freeze or closure note.
 
 Forbidden:
 - Do not apply translated slices or mutate queue state.

@@ -3,102 +3,97 @@
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
-
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+[Summarize the bounded gap, the chosen approach, and the preserved baseline]
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: [e.g., Rust 1.88.0]
+**Primary Dependencies**: [workspace crates, scripts, or external libraries touched]
+**Storage**: [JetStream, PostgreSQL, files, N/A]
+**Testing**: [targeted validation stack, broader build checks, proof guidance]
+**Target Platform**: [e.g., local macOS and Linux parity]
+**Project Type**: [e.g., Rust workspace packet, workflow packet, docs-only slice]
+**Performance Goals**: [latency, reliability, benchmark, or operator-facing target]
+**Constraints**: [explicit no-go areas, invariants, environment constraints]
+**Scale/Scope**: [bounded scope statement]
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
-
-[Gates determined based on constitution file]
+| Principle | Status | Evidence |
+| --------- | ------ | -------- |
+| I. Canonical Single Source | PASS | [grounded source docs and code truth] |
+| II. Spec-First Design | PASS | [packet artifacts precede implementation] |
+| III. Phase-And-Packet-Gated Delivery | PASS | [current repo truth and active checkpoint respected] |
+| IV. Model-Agnostic Architecture | PASS | [or N/A, with reason] |
+| V. Erlang/OTP-Style Fault Tolerance | PASS | [or N/A, with reason] |
+| VI. Evidence-Based Validation | PASS | [validation and proof boundary] |
+| VII. Explicit Dependency Management | PASS | [bounded write set and dependency mapping] |
+| VIII. Clean Closure And Resumability | PASS | [closure path and durable notes] |
 
 ## Project Structure
 
-### Documentation (this feature)
-
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/[###-feature-name]/
+├── spec.md
+├── plan.md
+├── research.md
+├── data-model.md
+├── quickstart.md
+├── tasks.md
+└── analyze.md
+
+[repo write-set tree rooted at real files and directories]
 ```
 
-### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
+## Design Decisions
 
-```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+### D1: [decision title]
 
-tests/
-├── contract/
-├── integration/
-└── unit/
+[decision rationale grounded in current repo truth]
 
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
+### D2: [decision title]
 
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
+[decision rationale grounded in current repo truth]
 
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
+### D3: [decision title]
 
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
-```
+[decision rationale grounded in current repo truth]
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+## Minimal Implementation Slice
 
-## Complexity Tracking
+### Milestone 1: [freeze or bootstrap milestone]
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
+Validation:
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+- [targeted proof or test]
+- [targeted proof or test]
+
+### Milestone 2: [primary implementation milestone]
+
+Validation:
+
+- [targeted proof or test]
+- [targeted proof or test]
+
+### Milestone 3: [evidence or follow-on milestone]
+
+Validation:
+
+- [targeted proof or test]
+- [targeted proof or test]
+
+## Parallel Staging Posture
+
+Use only when the packet benefits from bounded parallel work.
+
+- Blocking freeze before any parallel lanes: [task or milestone]
+- Allowed disjoint lanes after the freeze: [lane and write set]
+- Single-owner choke points: [files, docs, or control-plane surfaces]
+
+## Explicitly Deferred
+
+- [explicitly deferred scope]
+- [explicitly deferred scope]
+- [claim or proof boundary that must remain deferred]

@@ -57,7 +57,9 @@ Optional:
 - Check and refresh status-bearing repo docs, notes, logs, readmes, and artifact indexes before calling the packet closed.
 - Do not widen into implementation.
 - Do not stage blocked slices just to keep Symphony busy.
-- Do not touch unrelated worktrees, PRs, or branches.
+- This repo forbids new git worktrees for packet closure. If unrelated legacy worktrees exist,
+  document them and leave them alone.
+- Do not touch unrelated PRs or branches.
 - Stop and report if the packet is stale, materially wrong, or no slice is honestly runnable.
 
 ## Workflow
@@ -68,7 +70,7 @@ Read, in order:
 
 1. `AGENTS.md`
 2. `docs/current-state.md`
-3. the active forward checkpoint note
+3. the active scope-freeze or closure note currently named by `docs/current-state.md`
 4. `WORKFLOW.md`
 5. `docs/linear/LINEAR.md`
 6. `<packet>/spec.md`
@@ -94,7 +96,6 @@ Then audit local state:
 
 ```sh
 git status --short --branch
-git worktree list
 gh pr list --state open --limit 30
 ```
 
@@ -176,7 +177,8 @@ Required flow:
 scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync
 ```
 
-Do not continue to Linear sync until the closure gate passes.
+Do not continue to Linear sync until the closure gate passes and the primary repo checkout is back
+on a clean synced `main`.
 
 ### 4. Linear materialization
 
