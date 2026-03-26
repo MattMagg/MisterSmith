@@ -154,6 +154,24 @@ fn framework_config_validates_nested() {
 }
 
 #[test]
+fn framework_config_rejects_empty_llm_model_id() {
+    let mut config = FrameworkConfig::default();
+    config.llm.model_id = "   ".to_string();
+
+    let err = config
+        .validate()
+        .expect_err("empty llm model id should fail");
+
+    match err {
+        ConfigValidationError::InvalidValue { field, reason } => {
+            assert_eq!(field, "llm.model_id");
+            assert_eq!(reason, "must not be empty");
+        }
+        other => panic!("expected invalid value error, got {other}"),
+    }
+}
+
+#[test]
 fn error_messages_are_actionable() {
     let mut config = RuntimeConfig::default();
     config.worker_threads = Some(0);

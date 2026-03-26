@@ -73,6 +73,15 @@ struct HttpServerServices {
     agent_service: Arc<RegistryAgentInspectionService>,
 }
 
+struct HttpServerRuntimeDeps<'a> {
+    shutdown_tx: &'a broadcast::Sender<()>,
+    otel_guard: &'a ObservabilityGuard,
+    state_tracker: &'a ProcessStateTracker,
+    event_bus: Arc<EventBus>,
+    nats_transport: Option<Arc<NatsTransport>>,
+    event_tx: broadcast::Sender<mister_smith_http::WsEvent>,
+}
+
 /// Run the full bootstrap sequence with startup timeout enforcement.
 ///
 /// Returns [`BootstrapContext`] on success, or an error if:
@@ -144,6 +153,7 @@ async fn bootstrap_inner(
 
     // Step 5: Initialize runtime-backed task execution
     let task_service = RuntimeTaskService::bootstrap(
+        config,
         event_bus.clone(),
         nats_transport.clone(),
         supervised_system.clone(),
@@ -186,12 +196,14 @@ async fn bootstrap_inner(
     // Step 8: Start HTTP server (with /metrics endpoint if prometheus enabled)
     let http_handle = start_http_server(
         config,
-        &shutdown_tx,
-        otel_guard,
-        state_tracker,
-        event_bus.clone(),
-        nats_transport.clone(),
-        event_tx,
+        HttpServerRuntimeDeps {
+            shutdown_tx: &shutdown_tx,
+            otel_guard,
+            state_tracker,
+            event_bus: event_bus.clone(),
+            nats_transport: nats_transport.clone(),
+            event_tx,
+        },
         HttpServerServices {
             task_service,
             conversation_service,
@@ -267,12 +279,7 @@ async fn connect_nats(
 /// when the prometheus recorder is enabled.
 async fn start_http_server(
     config: &FrameworkConfig,
-    shutdown_tx: &broadcast::Sender<()>,
-    otel_guard: &ObservabilityGuard,
-    state_tracker: &ProcessStateTracker,
-    event_bus: Arc<EventBus>,
-    nats_transport: Option<Arc<NatsTransport>>,
-    event_tx: broadcast::Sender<mister_smith_http::WsEvent>,
+    deps: HttpServerRuntimeDeps<'_>,
     services: HttpServerServices,
 ) -> Result<Option<tokio::task::JoinHandle<()>>, Box<dyn std::error::Error + Send + Sync>> {
     let port = config.transport.http_port.unwrap_or(8080);
@@ -285,9 +292,9 @@ async fn start_http_server(
     let autonomy_pool = services.task_service.pool();
     let autonomy_task_service = services.task_service.clone();
     let mut app_state = mister_smith_http::AppState::new()
-        .with_event_tx(event_tx)
+        .with_event_tx(deps.event_tx)
         .with_transport_health(Arc::new(mister_smith_http::server::NatsHealthCheck::new(
-            nats_transport.is_some(),
+            deps.nats_transport.is_some(),
         )))
         .with_task_service(services.task_service)
         .with_conversation_service(services.conversation_service)
@@ -316,7 +323,7 @@ async fn start_http_server(
     );
 
     // GET /health/ready — readiness probe (200 only when Ready, 503 otherwise)
-    let tracker = state_tracker.clone();
+    let tracker = deps.state_tracker.clone();
     app = app.route(
         "/health/ready",
         axum::routing::get(move || {
@@ -345,7 +352,7 @@ async fn start_http_server(
     );
     info!("Health probe endpoints registered (/health/live, /health/ready)");
 
-    let autonomy_bus = event_bus.clone();
+    let autonomy_bus = deps.event_bus.clone();
     let autonomy_task_service_for_workflows = autonomy_task_service.clone();
     app = app.route(
         "/api/v1/autonomy/workflows",
@@ -374,7 +381,7 @@ async fn start_http_server(
         }),
     );
 
-    let autonomy_bus = event_bus.clone();
+    let autonomy_bus = deps.event_bus.clone();
     let autonomy_task_service_for_status = autonomy_task_service.clone();
     app = app.route(
         "/api/v1/autonomy/status/{workflow_id}",
@@ -406,7 +413,7 @@ async fn start_http_server(
     info!("Autonomy inspection endpoints registered (/api/v1/autonomy/...)");
 
     // Add /metrics endpoint if Prometheus is enabled
-    if let Some(ref handle) = otel_guard.prometheus_handle {
+    if let Some(ref handle) = deps.otel_guard.prometheus_handle {
         let handle = handle.clone();
         app = app.route(
             "/metrics",
@@ -421,7 +428,7 @@ async fn start_http_server(
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     info!(port = port, "HTTP server listening");
 
-    let mut shutdown_rx = shutdown_tx.subscribe();
+    let mut shutdown_rx = deps.shutdown_tx.subscribe();
     let handle = tokio::spawn(async move {
         if let Err(e) = axum::serve(
             listener,

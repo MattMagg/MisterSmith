@@ -10,6 +10,9 @@ Status: Current
 - Packet 016 is fully landed on `main` through `MS-97` through `MS-100`, and its parent epic
   `MS-96` is closed.
 - The runtime-backed task path is live and locally proven on `openai_chatgpt` with `gpt-5.4`.
+- The runtime-backed task path now reads `provider_kind` and `model_id` from framework config for
+  the supported shipped providers `openai_chatgpt`, `claude_subscription`, and `mock`; only the
+  `openai_chatgpt` / `gpt-5.4` path has live proof so far.
 - The bounded same-agent session slice is live on `main`.
 - Harder-workload graph proof, unified result projection, bounded operator preview/provenance, and
   persisted proof-outcome visibility are now landed on `main`.

@@ -35,7 +35,7 @@ pub fn load_framework_config(
     };
 
     // Apply environment variable overlay (MISTER_SMITH_ prefix)
-    apply_env_overlay(&mut config, "MISTER_SMITH");
+    apply_env_overlay(&mut config, "MISTER_SMITH")?;
 
     // Apply CLI overrides (highest priority)
     if let Some(ref level) = overrides.log_level {

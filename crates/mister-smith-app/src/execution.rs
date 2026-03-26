@@ -18,10 +18,11 @@ use mister_smith_agents::scheduler::{
     ArrayAggregator, IdentityDecomposer, TaskAssignment, TaskScheduler,
 };
 use mister_smith_agents::{AgentConfig, Orchestrator, ToolBus, TopologyCompiler, TopologySignals};
+use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{
     AgentId, AgentType, BranchState, EscalationPolicy, ExternalDelegationEnvelope, GraphState,
-    GuardTarget, NodeState, SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId,
-    ToolSchema,
+    GuardTarget, LlmError, NodeState, SupervisionStrategy, TaskId, Tool, ToolCapabilities,
+    ToolError, ToolId, ToolSchema,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -30,8 +31,8 @@ use mister_smith_http::server::{
 };
 use mister_smith_http::websocket::{WsEvent, broadcast_event};
 use mister_smith_llm::{
-    CircuitBreakerConfig, ModelRouter, OpenAiChatGptProvider, ProviderConfig, ProviderKind,
-    RoutingPolicy,
+    CircuitBreakerConfig, ClaudeSubscriptionProvider, MockProvider, ModelProvider, ModelRouter,
+    OpenAiChatGptProvider, ProviderConfig, ProviderKind, RoutingPolicy,
 };
 use mister_smith_nats::{JetStreamConfig, JetStreamManager, NatsTransport};
 use mister_smith_persistence::postgres::migrations::MigrationRunner;
@@ -59,6 +60,49 @@ const ACCEPTED_TASK_INGRESS_METADATA_KEY: &str = "accepted_task_ingress";
 const TASK_INGRESS_REQUEST_SURFACE: &str = "POST /api/v1/tasks";
 const WORKFLOW_TOOL_NAMESPACE: &str = "workflow";
 const WORKFLOW_EXECUTE_STEP_TOOL: &str = "execute_step";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeLlmSelection {
+    provider_kind: ProviderKind,
+    provider_kind_name: String,
+    model_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct RuntimeEnvelopeProvenance {
+    provider_kind: String,
+    model_id: String,
+    runtime_execution_mode: Value,
+}
+
+impl Default for RuntimeLlmSelection {
+    fn default() -> Self {
+        Self {
+            provider_kind: PROVIDER_KIND,
+            provider_kind_name: PROVIDER_KIND_NAME.to_string(),
+            model_id: MODEL_ID.to_string(),
+        }
+    }
+}
+
+impl RuntimeLlmSelection {
+    fn from_config(config: &FrameworkConfig) -> Self {
+        Self {
+            provider_kind: config.llm.provider_kind,
+            provider_kind_name: config.llm.provider_kind.as_str().to_string(),
+            model_id: config.llm.model_id.clone(),
+        }
+    }
+
+    fn provider_config(&self) -> ProviderConfig {
+        ProviderConfig {
+            provider_kind: self.provider_kind,
+            model_id: self.model_id.clone(),
+            timeout_ms: 120_000,
+            ..ProviderConfig::default()
+        }
+    }
+}
 
 struct PreparedDecisionExecution {
     tasks: Vec<PreparedTaskExecution>,
@@ -141,16 +185,109 @@ fn register_runtime_tools(tool_bus: &ToolBus, agent_id: AgentId) {
     );
 }
 
-fn runtime_execution_mode() -> Value {
+fn runtime_execution_mode(selection: &RuntimeLlmSelection) -> Value {
     json!({
         "workflow_runner": "tokio_task",
         "planner_lifecycle": "supervised_actor",
         "executor_lifecycle": "supervised_actor",
         "execution_boundary": "tool_bus",
         "tool_name": format!("{WORKFLOW_TOOL_NAMESPACE}.{WORKFLOW_EXECUTE_STEP_TOOL}"),
-        "provider_kind": PROVIDER_KIND_NAME,
-        "model_id": MODEL_ID,
+        "provider_kind": selection.provider_kind_name,
+        "model_id": selection.model_id,
     })
+}
+
+fn render_unsupported_runtime_provider(selection: &RuntimeLlmSelection) -> String {
+    format!(
+        "provider '{}' is not supported by the current mister-smith-app binary. \
+Choose one of: openai_chatgpt, claude_subscription, mock.",
+        selection.provider_kind_name
+    )
+}
+
+fn render_claude_subscription_auth_status(
+    creds: &mister_smith_llm::ClaudeOAuthCredentials,
+) -> Result<(), String> {
+    if creds.is_expired() {
+        Err(auth::render_claude_subscription_status(creds))
+    } else {
+        Ok(())
+    }
+}
+
+fn runtime_envelope_provenance(
+    metadata: &Value,
+    fallback: &RuntimeLlmSelection,
+) -> RuntimeEnvelopeProvenance {
+    let provider_kind = metadata
+        .get("provider_kind")
+        .and_then(Value::as_str)
+        .unwrap_or(fallback.provider_kind_name.as_str())
+        .to_string();
+    let model_id = metadata
+        .get("model_id")
+        .and_then(Value::as_str)
+        .unwrap_or(fallback.model_id.as_str())
+        .to_string();
+    let runtime_execution_mode = metadata
+        .get("runtime_execution_mode")
+        .cloned()
+        .unwrap_or_else(|| runtime_execution_mode(fallback));
+
+    RuntimeEnvelopeProvenance {
+        provider_kind,
+        model_id,
+        runtime_execution_mode,
+    }
+}
+
+fn build_runtime_provider(
+    selection: &RuntimeLlmSelection,
+) -> Result<Arc<dyn ModelProvider>, String> {
+    let provider_config = selection.provider_config();
+
+    match selection.provider_kind {
+        ProviderKind::OpenAiChatGpt => Ok(Arc::new(
+            OpenAiChatGptProvider::new(provider_config)
+                .map_err(|error| format!("provider initialization failed: {error}"))?,
+        )),
+        ProviderKind::ClaudeSubscription => Ok(Arc::new(
+            ClaudeSubscriptionProvider::new(provider_config)
+                .map_err(|error| format!("provider initialization failed: {error}"))?,
+        )),
+        ProviderKind::Mock => Ok(Arc::new(MockProvider::new(selection.model_id.clone()))),
+        ProviderKind::OpenAi | ProviderKind::Anthropic => {
+            Err(render_unsupported_runtime_provider(selection))
+        }
+    }
+}
+
+async fn verify_runtime_provider_auth(selection: &RuntimeLlmSelection) -> Result<(), String> {
+    match selection.provider_kind {
+        ProviderKind::OpenAiChatGpt => {
+            let auth_status = auth::openai_chatgpt_status()
+                .await
+                .map_err(|error| format!("ChatGPT auth check failed: {error}"))?;
+            if auth_status.is_chatgpt_session() {
+                Ok(())
+            } else {
+                Err(auth::render_openai_chatgpt_status(&auth_status))
+            }
+        }
+        ProviderKind::ClaudeSubscription => match auth::claude_subscription_status() {
+            Ok(creds) => render_claude_subscription_auth_status(&creds),
+            Err(LlmError::Authentication(message))
+                if message.starts_with("No Claude subscription credentials found") =>
+            {
+                Err(auth::render_claude_subscription_missing())
+            }
+            Err(error) => Err(error.to_string()),
+        },
+        ProviderKind::Mock => Ok(()),
+        ProviderKind::OpenAi | ProviderKind::Anthropic => {
+            Err(render_unsupported_runtime_provider(selection))
+        }
+    }
 }
 
 fn runtime_supervision_strategy() -> SupervisionStrategy {
@@ -212,10 +349,12 @@ pub(crate) struct RuntimeTaskService {
     boot_started_at: chrono::DateTime<Utc>,
     default_coordinator_id: AgentId,
     worker_ids: Vec<AgentId>,
+    runtime_llm: RuntimeLlmSelection,
 }
 
 impl RuntimeTaskService {
     pub(crate) async fn bootstrap(
+        config: &FrameworkConfig,
         event_bus: Arc<EventBus>,
         nats_transport: Option<Arc<NatsTransport>>,
         supervised_system: Arc<SupervisedSystem>,
@@ -241,12 +380,8 @@ impl RuntimeTaskService {
             return Err("PostgreSQL migrations did not verify cleanly".to_string());
         }
 
-        let auth_status = auth::openai_chatgpt_status()
-            .await
-            .map_err(|error| format!("ChatGPT auth check failed: {error}"))?;
-        if !auth_status.is_chatgpt_session() {
-            return Err(auth::render_openai_chatgpt_status(&auth_status));
-        }
+        let runtime_llm = RuntimeLlmSelection::from_config(config);
+        verify_runtime_provider_auth(&runtime_llm).await?;
 
         let nats_transport = nats_transport
             .ok_or_else(|| "NATS transport must be configured for runtime execution".to_string())?;
@@ -267,16 +402,8 @@ impl RuntimeTaskService {
             .await
             .map_err(|error| format!("JetStream stream initialization failed: {error}"))?;
 
-        let provider_config = ProviderConfig {
-            provider_kind: PROVIDER_KIND,
-            model_id: MODEL_ID.to_string(),
-            timeout_ms: 120_000,
-            ..ProviderConfig::default()
-        };
-        let provider = Arc::new(
-            OpenAiChatGptProvider::new(provider_config.clone())
-                .map_err(|error| format!("provider initialization failed: {error}"))?,
-        );
+        let provider_config = runtime_llm.provider_config();
+        let provider = build_runtime_provider(&runtime_llm)?;
         let router = Arc::new(ModelRouter::new(RoutingPolicy::RoundRobin));
         router
             .add_provider(provider_config, provider, CircuitBreakerConfig::default())
@@ -298,8 +425,8 @@ impl RuntimeTaskService {
         register_runtime_tools(tool_bus.as_ref(), runtime_supervisor_id);
 
         info!(
-            provider_kind = PROVIDER_KIND_NAME,
-            model_id = MODEL_ID,
+            provider_kind = runtime_llm.provider_kind_name.as_str(),
+            model_id = runtime_llm.model_id.as_str(),
             stream = WORKFLOW_STREAM,
             "Runtime task execution service ready"
         );
@@ -317,11 +444,24 @@ impl RuntimeTaskService {
             boot_started_at,
             default_coordinator_id: AgentId::new(),
             worker_ids: vec![AgentId::new(), AgentId::new()],
+            runtime_llm,
         }))
     }
 
     pub(crate) fn pool(&self) -> PgPool {
         self.pool.clone()
+    }
+
+    pub(crate) fn provider_kind_name(&self) -> &str {
+        &self.runtime_llm.provider_kind_name
+    }
+
+    pub(crate) fn model_id(&self) -> &str {
+        &self.runtime_llm.model_id
+    }
+
+    fn runtime_execution_mode(&self) -> Value {
+        runtime_execution_mode(&self.runtime_llm)
     }
 
     pub(crate) async fn autonomy_status(&self, workflow_id: TaskId) -> Option<AutonomyStatusView> {
@@ -395,16 +535,17 @@ impl RuntimeTaskService {
             "error": message,
             "recovered_after_restart": true,
         });
+        let envelope_provenance = runtime_envelope_provenance(&metadata, &self.runtime_llm);
         let final_result = crate::autonomy::build_canonical_result_envelope(
             crate::autonomy::CanonicalResultEnvelopeInput {
                 workflow_id,
-                provider_kind: PROVIDER_KIND_NAME,
-                model_id: MODEL_ID,
+                provider_kind: envelope_provenance.provider_kind.as_str(),
+                model_id: envelope_provenance.model_id.as_str(),
                 description: metadata
                     .get("description")
                     .and_then(Value::as_str)
                     .unwrap_or(message),
-                runtime_execution_mode: runtime_execution_mode(),
+                runtime_execution_mode: envelope_provenance.runtime_execution_mode,
                 planner_output: metadata
                     .get("planner_output")
                     .cloned()
@@ -467,11 +608,17 @@ impl RuntimeTaskService {
         let coordinator_id = coordinator_id_for_request(&request, self.default_coordinator_id);
         self.orchestrator
             .register_workflow_coordinator(&workflow_id, coordinator_id);
-        let mut metadata = initial_metadata(&request, coordinator_id, &self.worker_ids, "running");
+        let mut metadata = initial_metadata(
+            &request,
+            coordinator_id,
+            &self.worker_ids,
+            "running",
+            &self.runtime_llm,
+        );
         put_metadata(
             &mut metadata,
             "runtime_execution_mode",
-            runtime_execution_mode(),
+            self.runtime_execution_mode(),
         );
         self.update_root_record(
             workflow_id,
@@ -489,8 +636,8 @@ impl RuntimeTaskService {
             workflow_id,
             json!({
                 "workflow_id": workflow_id,
-                "provider_kind": PROVIDER_KIND_NAME,
-                "model_id": MODEL_ID,
+                "provider_kind": self.provider_kind_name(),
+                "model_id": self.model_id(),
                 "description": request.description,
             }),
         )
@@ -498,8 +645,8 @@ impl RuntimeTaskService {
 
         let planning_context = json!({
             "submission_path": if request.conversation.is_some() { "session" } else { "http" },
-            "provider_kind": PROVIDER_KIND_NAME,
-            "model_id": MODEL_ID,
+            "provider_kind": self.provider_kind_name(),
+            "model_id": self.model_id(),
             "external_delegation": request.delegation,
             "conversation": request.conversation.as_ref().map(|conversation| {
                 json!({
@@ -565,11 +712,11 @@ impl RuntimeTaskService {
             workflow_id,
             json!({
                 "workflow_id": workflow_id,
-                "provider_kind": PROVIDER_KIND_NAME,
-                "model_id": MODEL_ID,
+                "provider_kind": self.provider_kind_name(),
+                "model_id": self.model_id(),
                 "planner_output": planner_output,
                 "execution_plan": execution_plan,
-                "runtime_execution_mode": runtime_execution_mode(),
+                "runtime_execution_mode": self.runtime_execution_mode(),
             }),
         )
         .await?;
@@ -677,6 +824,7 @@ impl RuntimeTaskService {
                         &request.description,
                         worker_id,
                         &step_results,
+                        &self.runtime_llm,
                     );
                     prepared_tasks.push(PreparedTaskExecution {
                         task,
@@ -776,10 +924,10 @@ impl RuntimeTaskService {
         let final_result = crate::autonomy::build_canonical_result_envelope(
             crate::autonomy::CanonicalResultEnvelopeInput {
                 workflow_id,
-                provider_kind: PROVIDER_KIND_NAME,
-                model_id: MODEL_ID,
+                provider_kind: self.provider_kind_name(),
+                model_id: self.model_id(),
                 description: &request.description,
-                runtime_execution_mode: runtime_execution_mode(),
+                runtime_execution_mode: self.runtime_execution_mode(),
                 planner_output: metadata
                     .get("planner_output")
                     .cloned()
@@ -831,8 +979,8 @@ impl RuntimeTaskService {
 
         info!(
             workflow_id = %workflow_id,
-            provider_kind = PROVIDER_KIND_NAME,
-            model_id = MODEL_ID,
+            provider_kind = self.provider_kind_name(),
+            model_id = self.model_id(),
             "Workflow completed"
         );
         Ok(())
@@ -849,6 +997,7 @@ impl RuntimeTaskService {
         let planner_timeout = planner_config.task_timeout;
         let router = self.router.clone();
         let orchestrator = self.orchestrator.clone();
+        let runtime_llm = self.runtime_llm.clone();
 
         let runtime = spawn_supervised(
             self.supervised_system.as_ref(),
@@ -858,7 +1007,7 @@ impl RuntimeTaskService {
                     orchestrator.clone(),
                     workflow_id,
                     LlmSupervisionConfig::new(GuardTarget::Provider(
-                        PROVIDER_KIND_NAME.to_string(),
+                        runtime_llm.provider_kind_name.clone(),
                     )),
                 );
                 (
@@ -959,8 +1108,8 @@ impl RuntimeTaskService {
                 workflow_id = %workflow_id,
                 task_id = %task_id,
                 worker_id = %worker_id,
-                provider_kind = PROVIDER_KIND_NAME,
-                model_id = MODEL_ID,
+                provider_kind = self.provider_kind_name(),
+                model_id = self.model_id(),
                 "Executing workflow step"
             );
 
@@ -1014,12 +1163,18 @@ impl RuntimeTaskService {
                 "description": request.description,
                 "agent_type": request.agent_type,
                 "priority": request.priority,
-                "provider_kind": PROVIDER_KIND_NAME,
-                "model_id": MODEL_ID,
+                "provider_kind": self.provider_kind_name(),
+                "model_id": self.model_id(),
                 "external_delegation": request.delegation,
             }),
             result: None,
-            metadata: initial_metadata(request, coordinator_id, &self.worker_ids, "queued"),
+            metadata: initial_metadata(
+                request,
+                coordinator_id,
+                &self.worker_ids,
+                "queued",
+                &self.runtime_llm,
+            ),
             status: "queued".to_string(),
             priority: priority_rank(request.priority.as_deref()),
             correlation_id: Some(*workflow_id.as_ref()),
@@ -1141,13 +1296,13 @@ impl RuntimeTaskService {
         let final_result = crate::autonomy::build_canonical_result_envelope(
             crate::autonomy::CanonicalResultEnvelopeInput {
                 workflow_id,
-                provider_kind: PROVIDER_KIND_NAME,
-                model_id: MODEL_ID,
+                provider_kind: self.provider_kind_name(),
+                model_id: self.model_id(),
                 description: metadata
                     .get("description")
                     .and_then(Value::as_str)
                     .unwrap_or("workflow failed"),
-                runtime_execution_mode: runtime_execution_mode(),
+                runtime_execution_mode: self.runtime_execution_mode(),
                 planner_output: metadata
                     .get("planner_output")
                     .cloned()
@@ -1207,8 +1362,8 @@ impl RuntimeTaskService {
                 workflow_id,
                 json!({
                     "workflow_id": workflow_id,
-                    "provider_kind": PROVIDER_KIND_NAME,
-                    "model_id": MODEL_ID,
+                    "provider_kind": self.provider_kind_name(),
+                    "model_id": self.model_id(),
                     "error": message,
                 }),
             )
@@ -1558,10 +1713,11 @@ fn initial_metadata(
     coordinator_id: AgentId,
     worker_ids: &[AgentId],
     status: &str,
+    runtime_llm: &RuntimeLlmSelection,
 ) -> Value {
     let mut metadata = json!({
-        "provider_kind": PROVIDER_KIND_NAME,
-        "model_id": MODEL_ID,
+        "provider_kind": runtime_llm.provider_kind_name,
+        "model_id": runtime_llm.model_id,
         "submission_path": if request.conversation.is_some() { "session" } else { "http" },
         "status": status,
         "description": request.description,
@@ -1894,6 +2050,17 @@ mod tests {
     };
     use mister_smith_security::DelegationService;
 
+    fn sample_runtime_llm_selection(
+        provider_kind: ProviderKind,
+        model_id: &str,
+    ) -> RuntimeLlmSelection {
+        RuntimeLlmSelection {
+            provider_kind,
+            provider_kind_name: provider_kind.as_str().to_string(),
+            model_id: model_id.to_string(),
+        }
+    }
+
     fn sample_autonomy_view() -> AutonomyStatusView {
         sample_autonomy_view_with_states(GraphState::Completed, BranchState::Completed)
     }
@@ -2117,6 +2284,97 @@ mod tests {
     }
 
     #[test]
+    fn runtime_llm_selection_preserves_default_chatgpt_baseline() {
+        let selection = RuntimeLlmSelection::from_config(&FrameworkConfig::default());
+
+        assert_eq!(selection, RuntimeLlmSelection::default());
+    }
+
+    #[test]
+    fn runtime_llm_selection_uses_framework_config_override() {
+        let mut config = FrameworkConfig::default();
+        config.llm.provider_kind = ProviderKind::Mock;
+        config.llm.model_id = "mock-ops".to_string();
+
+        let selection = RuntimeLlmSelection::from_config(&config);
+
+        assert_eq!(
+            selection,
+            sample_runtime_llm_selection(ProviderKind::Mock, "mock-ops")
+        );
+        assert_eq!(
+            selection.provider_config().provider_kind,
+            ProviderKind::Mock
+        );
+        assert_eq!(selection.provider_config().model_id, "mock-ops");
+    }
+
+    #[test]
+    fn runtime_execution_mode_uses_selected_provider_and_model() {
+        let selection = sample_runtime_llm_selection(ProviderKind::Mock, "mock-ops");
+
+        let mode = runtime_execution_mode(&selection);
+
+        assert_eq!(mode["provider_kind"], json!("mock"));
+        assert_eq!(mode["model_id"], json!("mock-ops"));
+    }
+
+    #[test]
+    fn runtime_envelope_provenance_prefers_persisted_metadata_over_current_selection() {
+        let metadata = json!({
+            "provider_kind": "mock",
+            "model_id": "mock-ops",
+            "runtime_execution_mode": {
+                "execution_boundary": "tool_bus",
+                "provider_kind": "mock",
+                "model_id": "mock-ops"
+            }
+        });
+        let fallback = RuntimeLlmSelection::default();
+
+        let provenance = runtime_envelope_provenance(&metadata, &fallback);
+
+        assert_eq!(provenance.provider_kind, "mock");
+        assert_eq!(provenance.model_id, "mock-ops");
+        assert_eq!(provenance.runtime_execution_mode["provider_kind"], "mock");
+        assert_eq!(provenance.runtime_execution_mode["model_id"], "mock-ops");
+    }
+
+    #[test]
+    fn runtime_envelope_provenance_falls_back_to_current_selection_when_metadata_missing() {
+        let fallback = sample_runtime_llm_selection(ProviderKind::Mock, "mock-ops");
+
+        let provenance = runtime_envelope_provenance(&json!({}), &fallback);
+
+        assert_eq!(provenance.provider_kind, "mock");
+        assert_eq!(provenance.model_id, "mock-ops");
+        assert_eq!(provenance.runtime_execution_mode["provider_kind"], "mock");
+        assert_eq!(provenance.runtime_execution_mode["model_id"], "mock-ops");
+    }
+
+    #[test]
+    fn build_runtime_provider_supports_mock_selection() {
+        let selection = sample_runtime_llm_selection(ProviderKind::Mock, "mock-ops");
+
+        assert!(build_runtime_provider(&selection).is_ok());
+    }
+
+    #[test]
+    fn build_runtime_provider_rejects_unshipped_provider_kinds() {
+        for provider_kind in [ProviderKind::OpenAi, ProviderKind::Anthropic] {
+            let selection = sample_runtime_llm_selection(provider_kind, "test-model");
+
+            let error = match build_runtime_provider(&selection) {
+                Ok(_) => panic!("unshipped provider kinds should fail explicitly"),
+                Err(error) => error,
+            };
+
+            assert!(error.contains(provider_kind.as_str()));
+            assert!(error.contains("not supported"));
+        }
+    }
+
+    #[test]
     fn recover_persisted_autonomy_status_restores_session_linkage() {
         let session_id = SessionId::new();
         let coordinator_agent_id = AgentId::new();
@@ -2150,7 +2408,13 @@ mod tests {
             delegation: Some(delegation.clone()),
         };
 
-        let metadata = initial_metadata(&request, AgentId::new(), &[], "queued");
+        let metadata = initial_metadata(
+            &request,
+            AgentId::new(),
+            &[],
+            "queued",
+            &RuntimeLlmSelection::default(),
+        );
 
         assert_eq!(
             metadata["external_delegation"]["capability"]["descriptor_id"],
@@ -2160,6 +2424,28 @@ mod tests {
             metadata["external_delegation"]["action"]["revocation_key"],
             "tool:app.workflow#execute"
         );
+    }
+
+    #[test]
+    fn initial_metadata_uses_selected_provider_and_model() {
+        let request = TaskSubmissionRequest {
+            description: "mock workflow".to_string(),
+            agent_type: None,
+            priority: Some("normal".to_string()),
+            conversation: None,
+            delegation: None,
+        };
+
+        let metadata = initial_metadata(
+            &request,
+            AgentId::new(),
+            &[],
+            "queued",
+            &sample_runtime_llm_selection(ProviderKind::Mock, "mock-ops"),
+        );
+
+        assert_eq!(metadata["provider_kind"], json!("mock"));
+        assert_eq!(metadata["model_id"], json!("mock-ops"));
     }
 
     #[test]
@@ -2173,7 +2459,13 @@ mod tests {
             delegation: Some(delegation.clone()),
         };
 
-        let metadata = initial_metadata(&request, AgentId::new(), &[], "queued");
+        let metadata = initial_metadata(
+            &request,
+            AgentId::new(),
+            &[],
+            "queued",
+            &RuntimeLlmSelection::default(),
+        );
         let accepted = metadata
             .get(ACCEPTED_TASK_INGRESS_METADATA_KEY)
             .expect("delegated HTTP submission should persist accepted task ingress continuity");
@@ -2235,7 +2527,13 @@ mod tests {
             delegation: Some(sample_external_delegation()),
         };
 
-        let metadata = initial_metadata(&request, AgentId::new(), &[], "queued");
+        let metadata = initial_metadata(
+            &request,
+            AgentId::new(),
+            &[],
+            "queued",
+            &RuntimeLlmSelection::default(),
+        );
 
         assert!(
             metadata.get("external_delegation").is_some(),
@@ -3075,6 +3373,7 @@ fn execution_input_for_task(
     goal: &str,
     worker_id: AgentId,
     step_results: &BTreeMap<String, Value>,
+    runtime_llm: &RuntimeLlmSelection,
 ) -> Value {
     let node_id = mister_smith_core::ExecutionNodeId::from_uuid(*task.task_id.as_ref());
     let dependency_results = graph
@@ -3094,8 +3393,8 @@ fn execution_input_for_task(
 
     json!({
         "workflow_goal": goal,
-        "provider_kind": PROVIDER_KIND_NAME,
-        "model_id": MODEL_ID,
+        "provider_kind": runtime_llm.provider_kind_name,
+        "model_id": runtime_llm.model_id,
         "worker_id": worker_id,
         "task": task.input,
         "dependency_results": dependency_results,

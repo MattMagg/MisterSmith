@@ -113,7 +113,7 @@ fn env_overlay_runtime() {
         ("TEST_PREFIX_AGENT__RUNTIME__MAX_MEMORY", Some("2048")),
     ]);
 
-    apply_env_overlay(&mut config, "TEST_PREFIX");
+    apply_env_overlay(&mut config, "TEST_PREFIX").unwrap();
 
     assert_eq!(config.agent.runtime.worker_threads, Some(16));
     assert_eq!(config.agent.runtime.blocking_threads, 128);
@@ -128,7 +128,7 @@ fn env_overlay_supervision() {
         Some("9"),
     )]);
 
-    apply_env_overlay(&mut config, "TEST_PREFIX2");
+    apply_env_overlay(&mut config, "TEST_PREFIX2").unwrap();
 
     assert_eq!(config.agent.supervision.max_restart_attempts, 9);
 }
@@ -137,7 +137,7 @@ fn env_overlay_supervision() {
 fn env_overlay_log_level() {
     let mut config = FrameworkConfig::default();
     let _env = EnvGuard::new(&[("TEST_PREFIX3_AGENT__MONITORING__LOG_LEVEL", Some("debug"))]);
-    apply_env_overlay(&mut config, "TEST_PREFIX3");
+    apply_env_overlay(&mut config, "TEST_PREFIX3").unwrap();
 
     assert_eq!(config.agent.monitoring.log_level, "debug");
 }
@@ -153,7 +153,7 @@ fn env_overlay_transport() {
         ("TEST_PREFIX4_TRANSPORT__HTTP_PORT", Some("8080")),
         ("TEST_PREFIX4_TRANSPORT__GRPC_PORT", Some("9090")),
     ]);
-    apply_env_overlay(&mut config, "TEST_PREFIX4");
+    apply_env_overlay(&mut config, "TEST_PREFIX4").unwrap();
 
     assert_eq!(
         config.transport.nats_url,
@@ -171,7 +171,7 @@ fn env_overlay_security() {
         ("TEST_PREFIX5_SECURITY__TLS_ENABLED", Some("true")),
         ("TEST_PREFIX5_SECURITY__AUTH_ENABLED", Some("true")),
     ]);
-    apply_env_overlay(&mut config, "TEST_PREFIX5");
+    apply_env_overlay(&mut config, "TEST_PREFIX5").unwrap();
 
     assert!(config.security.enabled);
     assert!(config.security.tls.enabled);
@@ -202,7 +202,7 @@ fn env_overlay_security_auth_fields() {
         ),
     ]);
 
-    apply_env_overlay(&mut config, "TEST_PREFIX6");
+    apply_env_overlay(&mut config, "TEST_PREFIX6").unwrap();
 
     assert_eq!(config.security.auth.algorithm, "HS512");
     assert_eq!(config.security.auth.access_token_ttl_secs, 120);
@@ -219,6 +219,23 @@ fn env_overlay_security_auth_fields() {
         config.security.auth.hmac_secret.as_deref(),
         Some("shared-secret")
     );
+}
+
+#[test]
+fn env_overlay_invalid_llm_provider_fails() {
+    let mut config = FrameworkConfig::default();
+    let _env = EnvGuard::new(&[("TEST_PREFIX7_LLM__PROVIDER_KIND", Some("mockk"))]);
+
+    let err = apply_env_overlay(&mut config, "TEST_PREFIX7")
+        .expect_err("invalid provider should fail explicitly");
+
+    match err {
+        ConfigValidationError::InvalidValue { field, reason } => {
+            assert_eq!(field, "llm.provider_kind");
+            assert!(reason.contains("mockk"));
+        }
+        other => panic!("expected invalid value error, got {other}"),
+    }
 }
 
 #[test]

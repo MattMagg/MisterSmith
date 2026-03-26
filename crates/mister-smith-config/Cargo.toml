@@ -8,9 +8,11 @@ description = "Typed configuration loading, validation, and environment overlay 
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 mister-smith-core = { path = "../mister-smith-core" }
+mister-smith-llm = { path = "../mister-smith-llm" }
 
 [dev-dependencies]
 tempfile = "3"
