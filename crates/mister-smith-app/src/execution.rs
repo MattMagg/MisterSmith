@@ -89,6 +89,13 @@ struct RuntimeBootstrapPlan {
     budget_root: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuntimeExecutionModeContext {
+    routing_policy: String,
+    registered_provider_count: usize,
+    budget_root: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct JetStreamBudgetStore {
     store: KvStore,
@@ -127,6 +134,16 @@ impl RuntimeLlmSelection {
             model_id: self.model_id.clone(),
             timeout_ms: 120_000,
             ..ProviderConfig::default()
+        }
+    }
+}
+
+impl Default for RuntimeExecutionModeContext {
+    fn default() -> Self {
+        Self {
+            routing_policy: "round_robin".to_string(),
+            registered_provider_count: 1,
+            budget_root: None,
         }
     }
 }
@@ -347,7 +364,10 @@ fn register_runtime_tools(tool_bus: &ToolBus, agent_id: AgentId) {
     );
 }
 
-fn runtime_execution_mode(selection: &RuntimeLlmSelection) -> Value {
+fn runtime_execution_mode_with_context(
+    selection: &RuntimeLlmSelection,
+    context: &RuntimeExecutionModeContext,
+) -> Value {
     json!({
         "workflow_runner": "tokio_task",
         "planner_lifecycle": "supervised_actor",
@@ -356,7 +376,14 @@ fn runtime_execution_mode(selection: &RuntimeLlmSelection) -> Value {
         "tool_name": format!("{WORKFLOW_TOOL_NAMESPACE}.{WORKFLOW_EXECUTE_STEP_TOOL}"),
         "provider_kind": selection.provider_kind_name,
         "model_id": selection.model_id,
+        "routing_policy": context.routing_policy,
+        "registered_provider_count": context.registered_provider_count,
+        "budget_root": context.budget_root.as_deref().unwrap_or("disabled"),
     })
+}
+
+fn runtime_execution_mode(selection: &RuntimeLlmSelection) -> Value {
+    runtime_execution_mode_with_context(selection, &RuntimeExecutionModeContext::default())
 }
 
 fn render_unsupported_runtime_provider(selection: &RuntimeLlmSelection) -> String {
@@ -580,6 +607,7 @@ pub(crate) struct RuntimeTaskService {
     default_coordinator_id: AgentId,
     worker_ids: Vec<AgentId>,
     runtime_llm: RuntimeLlmSelection,
+    runtime_execution_mode_context: RuntimeExecutionModeContext,
 }
 
 impl RuntimeTaskService {
@@ -635,6 +663,11 @@ impl RuntimeTaskService {
         let routing_policy_name = runtime_routing_policy_name(&runtime_bootstrap.routing_policy);
         let registered_provider_count = runtime_bootstrap.registered_providers.len();
         let budget_root = runtime_bootstrap.budget_root.clone();
+        let runtime_execution_mode_context = RuntimeExecutionModeContext {
+            routing_policy: routing_policy_name.to_string(),
+            registered_provider_count,
+            budget_root: budget_root.clone(),
+        };
         let router = if let Some(budget_root) = budget_root.as_ref() {
             let budget_enforcer =
                 build_runtime_budget_enforcer(jetstream.as_ref(), budget_root).await?;
@@ -690,6 +723,7 @@ impl RuntimeTaskService {
             default_coordinator_id: AgentId::new(),
             worker_ids: vec![AgentId::new(), AgentId::new()],
             runtime_llm: runtime_bootstrap.active_selection,
+            runtime_execution_mode_context,
         }))
     }
 
@@ -706,7 +740,7 @@ impl RuntimeTaskService {
     }
 
     fn runtime_execution_mode(&self) -> Value {
-        runtime_execution_mode(&self.runtime_llm)
+        runtime_execution_mode_with_context(&self.runtime_llm, &self.runtime_execution_mode_context)
     }
 
     pub(crate) async fn autonomy_status(&self, workflow_id: TaskId) -> Option<AutonomyStatusView> {
@@ -2630,6 +2664,27 @@ mod tests {
 
         assert_eq!(mode["provider_kind"], json!("mock"));
         assert_eq!(mode["model_id"], json!("mock-ops"));
+        assert_eq!(mode["routing_policy"], json!("round_robin"));
+        assert_eq!(mode["registered_provider_count"], json!(1));
+        assert_eq!(mode["budget_root"], json!("disabled"));
+    }
+
+    #[test]
+    fn runtime_execution_mode_with_context_surfaces_budget_routing_details() {
+        let selection = sample_runtime_llm_selection(ProviderKind::Mock, "mock-ops");
+        let context = RuntimeExecutionModeContext {
+            routing_policy: "cascade".to_string(),
+            registered_provider_count: 2,
+            budget_root: Some("runtime.task_path".to_string()),
+        };
+
+        let mode = runtime_execution_mode_with_context(&selection, &context);
+
+        assert_eq!(mode["provider_kind"], json!("mock"));
+        assert_eq!(mode["model_id"], json!("mock-ops"));
+        assert_eq!(mode["routing_policy"], json!("cascade"));
+        assert_eq!(mode["registered_provider_count"], json!(2));
+        assert_eq!(mode["budget_root"], json!("runtime.task_path"));
     }
 
     #[test]
@@ -2640,7 +2695,10 @@ mod tests {
             "runtime_execution_mode": {
                 "execution_boundary": "tool_bus",
                 "provider_kind": "mock",
-                "model_id": "mock-ops"
+                "model_id": "mock-ops",
+                "routing_policy": "cascade",
+                "registered_provider_count": 2,
+                "budget_root": "runtime.task_path"
             }
         });
         let fallback = RuntimeLlmSelection::default();
@@ -2651,6 +2709,18 @@ mod tests {
         assert_eq!(provenance.model_id, "mock-ops");
         assert_eq!(provenance.runtime_execution_mode["provider_kind"], "mock");
         assert_eq!(provenance.runtime_execution_mode["model_id"], "mock-ops");
+        assert_eq!(
+            provenance.runtime_execution_mode["routing_policy"],
+            "cascade"
+        );
+        assert_eq!(
+            provenance.runtime_execution_mode["registered_provider_count"],
+            2
+        );
+        assert_eq!(
+            provenance.runtime_execution_mode["budget_root"],
+            "runtime.task_path"
+        );
     }
 
     #[test]
@@ -2663,6 +2733,15 @@ mod tests {
         assert_eq!(provenance.model_id, "mock-ops");
         assert_eq!(provenance.runtime_execution_mode["provider_kind"], "mock");
         assert_eq!(provenance.runtime_execution_mode["model_id"], "mock-ops");
+        assert_eq!(
+            provenance.runtime_execution_mode["routing_policy"],
+            "round_robin"
+        );
+        assert_eq!(
+            provenance.runtime_execution_mode["registered_provider_count"],
+            1
+        );
+        assert_eq!(provenance.runtime_execution_mode["budget_root"], "disabled");
     }
 
     #[test]

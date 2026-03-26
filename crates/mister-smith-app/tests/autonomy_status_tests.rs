@@ -340,7 +340,10 @@ fn sample_task_result_payload(
             "description": "freeze the result contract",
             "runtime_execution_mode": {
                 "execution_boundary": "tool_bus",
-                "workflow_runner": "tokio_task"
+                "workflow_runner": "tokio_task",
+                "routing_policy": "round_robin",
+                "registered_provider_count": 1,
+                "budget_root": "disabled"
             },
             "planner_output": {
                 "steps": 1
@@ -435,6 +438,8 @@ fn enrich_accepted_task_ingress_continuity_surfaces_task_ingress_decision() {
 fn enrich_result_preview_prefers_task_result_projection() {
     let (mut view, _, _) = sample_view();
     view.graph.state = GraphState::Completed;
+    view.step_routing_history[0].triggered_checkpoints =
+        vec!["budget_policy".to_string(), "confidence_review".to_string()];
     let task_result = sample_task_result_view(
         view.graph.workflow_id,
         ProofOutcomeClassification::CollapsedToSequential,
@@ -465,10 +470,12 @@ fn enrich_result_preview_prefers_task_result_projection() {
         .provenance_lines
         .iter()
         .any(|line| line.contains("provider=openai_chatgpt model=gpt-5.4")));
-    assert!(preview
-        .provenance_lines
-        .iter()
-        .any(|line| line.contains("runtime execution mode boundary=tool_bus runner=tokio_task")));
+    assert!(preview.provenance_lines.iter().any(|line| {
+        line.contains("runtime execution mode boundary=tool_bus runner=tokio_task")
+            && line.contains("routing_policy=round_robin")
+            && line.contains("registered_providers=1")
+            && line.contains("budget_root=disabled")
+    }));
     assert!(preview
         .provenance_lines
         .iter()
@@ -477,6 +484,11 @@ fn enrich_result_preview_prefers_task_result_projection() {
         .provenance_lines
         .iter()
         .any(|line| line.contains("routing history retained 1 decision(s)")));
+    assert!(preview.provenance_lines.iter().any(|line| {
+        line.contains("latest step routing tier=llm-tier action=continue")
+            && line.contains("budget_policy")
+            && line.contains("confidence_review")
+    }));
     assert!(preview
         .provenance_lines
         .iter()

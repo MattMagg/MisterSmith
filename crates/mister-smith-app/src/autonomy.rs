@@ -1239,6 +1239,9 @@ fn result_preview_provenance(
             view.routing_history.len()
         ));
     }
+    if let Some(step_line) = latest_step_routing_provenance(view) {
+        lines.push(step_line);
+    }
     lines.extend([
         "canonical result stored in metadata.final_result".to_string(),
         "aggregated payload nested under metadata.aggregated_result".to_string(),
@@ -1267,12 +1270,38 @@ fn runtime_execution_mode_provenance(runtime_execution_mode: &Value) -> Option<S
     if let Some(tool_name) = object.get("tool_name").and_then(Value::as_str) {
         parts.push(format!("tool={tool_name}"));
     }
+    if let Some(routing_policy) = object.get("routing_policy").and_then(Value::as_str) {
+        parts.push(format!("routing_policy={routing_policy}"));
+    }
+    if let Some(count) = object
+        .get("registered_provider_count")
+        .and_then(Value::as_u64)
+    {
+        parts.push(format!("registered_providers={count}"));
+    }
+    if let Some(budget_root) = object.get("budget_root").and_then(Value::as_str) {
+        parts.push(format!("budget_root={budget_root}"));
+    }
 
     if parts.is_empty() {
         None
     } else {
         Some(format!("runtime execution mode {}", parts.join(" ")))
     }
+}
+
+fn latest_step_routing_provenance(view: &AutonomyStatusView) -> Option<String> {
+    let latest = view.step_routing_history.last()?;
+    let checkpoints = if latest.triggered_checkpoints.is_empty() {
+        "none".to_string()
+    } else {
+        latest.triggered_checkpoints.join(" | ")
+    };
+
+    Some(format!(
+        "latest step routing tier={} action={} checkpoints={}",
+        latest.tier, latest.action, checkpoints
+    ))
 }
 
 fn canonical_result_from_value(

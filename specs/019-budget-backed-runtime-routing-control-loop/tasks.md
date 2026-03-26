@@ -26,6 +26,6 @@
 
 ## T5. Extend routing evidence and validation boundaries
 
-- [ ] Surface routing policy, accepted tier, and budget checkpoints on task/autonomy outputs
+- [x] Surface routing policy, accepted tier, and budget checkpoints on task/autonomy outputs
 - [ ] Update proof guidance or harness only if the path can be exercised honestly
 - [ ] Refresh state-bearing docs with explicit deterministic vs live-proof boundaries
