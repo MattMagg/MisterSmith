@@ -146,6 +146,53 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
         with self.assertRaises(self.module.SmokeHarnessError):
             self.module.assert_runtime_log_markers("Runtime task execution service ready")
 
+    def test_wait_for_runtime_log_markers_reads_until_markers_exist(self) -> None:
+        class StubProcess:
+            returncode = None
+
+            @staticmethod
+            def poll():
+                return None
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_dir = Path(temp_dir)
+            (artifact_dir / "runtime.log").write_text(
+                "\n".join(self.module.REQUIRED_RUNTIME_LOG_MARKERS),
+                encoding="utf-8",
+            )
+            config = self.module.HarnessConfig(
+                run_id="20260326T200000Z",
+                compose_file=artifact_dir / "docker-compose.yml",
+                artifact_dir=artifact_dir,
+                database_name="ms_test",
+                database_url="postgres://mistersmith:mistersmith_dev@127.0.0.1:5432/ms_test",
+                http_port=8080,
+                base_url="http://127.0.0.1:8080",
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.01,
+                provider_kind="openai_chatgpt",
+                model_id="gpt-5.4",
+            )
+
+            log_text = self.module.wait_for_runtime_log_markers(config, StubProcess())
+            self.assertIn("Mister Smith ready", log_text)
+
+    def test_annotate_task_status_artifact_marks_planner_output_untrusted(self) -> None:
+        payload = {
+            "result": {
+                "result": {
+                    "planner_output": {
+                        "steps": [{"id": "join-proof-boundary-summary", "role": "worker"}]
+                    }
+                }
+            }
+        }
+
+        annotated = self.module.annotate_task_status_artifact(payload)
+        result = annotated["result"]["result"]
+        self.assertEqual(result["planner_output_trust"], "raw_untrusted")
+        self.assertIn("runtime_execution_mode", result["planner_output_note"])
+
 
 if __name__ == "__main__":
     unittest.main()

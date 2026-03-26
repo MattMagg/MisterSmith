@@ -35,16 +35,22 @@ DEFAULT_MODEL_ID = "gpt-5.4"
 DEFAULT_TIMEOUT_SECONDS = 240.0
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TASK_DESCRIPTION = (
-    "Create a concise live runtime smoke proof summary by splitting the work into two parallel "
-    "tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker "
-    "traces task execution, autonomy status, and terminal result markers, then join the "
-    "findings into one final proof-boundary summary that separates what was directly observed "
-    "from what still needs follow-up."
+    "Create a concise live runtime trace summary using multiple agents. Create exactly two "
+    "parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; "
+    "one worker traces task execution, autonomy status, and terminal result markers. Then create "
+    "one final worker step that merges both worker outputs into one concise runtime memo with "
+    "sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and "
+    "keep every claim tied to directly observed runtime evidence."
 )
 REQUIRED_RUNTIME_LOG_MARKERS = (
     "JetStream stream created/updated",
     "Runtime task execution service ready",
     "Mister Smith ready",
+)
+RUNTIME_SERVICES = ("postgres", "nats")
+PLANNER_OUTPUT_TRUST_NOTE = (
+    "planner_output is preserved as raw planner output and may carry stale role metadata; "
+    "runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact."
 )
 EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 
@@ -287,29 +293,67 @@ def fetch_nats_varz(config: HarnessConfig) -> dict[str, Any]:
     return payload
 
 
+def service_running(config: HarnessConfig, service: str) -> bool:
+    result = run_command(
+        compose_command(config.compose_file, "ps", "-q", service),
+        check=False,
+    )
+    container_id = result.stdout.strip()
+    if not container_id:
+        return False
+    inspect = run_command(
+        ["docker", "inspect", "--format", "{{.State.Running}}", container_id],
+        check=False,
+    )
+    return inspect.returncode == 0 and inspect.stdout.strip() == "true"
+
+
+def format_database_create_artifact(
+    config: HarnessConfig,
+    command: list[str],
+    result: subprocess.CompletedProcess[str],
+) -> str:
+    return "\n".join(
+        (
+            f"timestamp: {datetime.now(timezone.utc).isoformat()}",
+            f"database_name: {config.database_name}",
+            f"command: {format_command(command)}",
+            f"sql: CREATE DATABASE {config.database_name};",
+            f"returncode: {result.returncode}",
+            "stdout:",
+            result.stdout.rstrip(),
+            "stderr:",
+            result.stderr.rstrip(),
+            "",
+        )
+    )
+
+
 def create_database(config: HarnessConfig) -> None:
     if not re.fullmatch(r"[a-z0-9_]+", config.database_name):
         raise SmokeHarnessError(
             f"database name must be lowercase alphanumeric plus underscore: {config.database_name}"
         )
-    result = run_command(
-        compose_command(
-            config.compose_file,
-            "exec",
-            "-T",
-            "postgres",
-            "psql",
-            "-U",
-            "mistersmith",
-            "-d",
-            "postgres",
-            "-v",
-            "ON_ERROR_STOP=1",
-            "-c",
-            f"CREATE DATABASE {config.database_name};",
-        )
+    command = compose_command(
+        config.compose_file,
+        "exec",
+        "-T",
+        "postgres",
+        "psql",
+        "-U",
+        "mistersmith",
+        "-d",
+        "postgres",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        f"CREATE DATABASE {config.database_name};",
     )
-    write_text(config.artifact_dir / "database-create.txt", result.stdout)
+    result = run_command(command)
+    write_text(
+        config.artifact_dir / "database-create.txt",
+        format_database_create_artifact(config, command, result),
+    )
 
 
 def check_openai_auth_status(config: HarnessConfig) -> str:
@@ -395,6 +439,44 @@ def assert_runtime_log_markers(log_text: str) -> None:
         raise SmokeHarnessError(
             "runtime log is missing required startup markers: " + ", ".join(missing)
         )
+
+
+def wait_for_runtime_log_markers(
+    config: HarnessConfig,
+    process: subprocess.Popen[str],
+) -> str:
+    deadline = time.monotonic() + config.timeout_seconds
+    last_error = "runtime log markers never appeared"
+    runtime_log_path = config.artifact_dir / "runtime.log"
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise SmokeHarnessError(
+                f"runtime exited before startup markers completed with code {process.returncode}; "
+                f"see {runtime_log_path}"
+            )
+        log_text = runtime_log_path.read_text(encoding="utf-8")
+        try:
+            assert_runtime_log_markers(log_text)
+            return log_text
+        except SmokeHarnessError as exc:
+            last_error = str(exc)
+        time.sleep(config.poll_interval_seconds)
+    raise SmokeHarnessError(last_error)
+
+
+def annotate_task_status_artifact(task_status: dict[str, Any]) -> dict[str, Any]:
+    result_envelope = task_status.get("result")
+    if not isinstance(result_envelope, dict):
+        return task_status
+    result = result_envelope.get("result", result_envelope)
+    if not isinstance(result, dict):
+        return task_status
+    planner_output = result.get("planner_output")
+    if not isinstance(planner_output, dict):
+        return task_status
+    result["planner_output_trust"] = "raw_untrusted"
+    result["planner_output_note"] = PLANNER_OUTPUT_TRUST_NOTE
+    return task_status
 
 
 def summarize_task_status(task_status: dict[str, Any]) -> dict[str, Any]:
@@ -550,12 +632,16 @@ def wait_for_terminal_task_status(
             poll_log.write(f"{timestamp} status={status}\n")
             poll_log.flush()
             if status.lower() in {"completed", "failed", "cancelled"}:
-                write_json(config.artifact_dir / "task-status-latest.json", payload)
-                return payload
+                artifact_payload = annotate_task_status_artifact(payload)
+                write_json(config.artifact_dir / "task-status-latest.json", artifact_payload)
+                return artifact_payload
             time.sleep(config.poll_interval_seconds)
 
     if last_payload is not None:
-        write_json(config.artifact_dir / "task-status-latest.json", last_payload)
+        write_json(
+            config.artifact_dir / "task-status-latest.json",
+            annotate_task_status_artifact(last_payload),
+        )
     raise SmokeHarnessError(f"task {task_id} did not reach terminal state before timeout")
 
 
@@ -674,15 +760,24 @@ def main() -> int:
 
     process: subprocess.Popen[str] | None = None
     runtime_log: Any | None = None
+    started_services: tuple[str, ...] = ()
 
     try:
         ensure_required_tools("cargo", "docker", "python3")
         ensure_port_available(config.http_port)
 
+        services_running_before = {
+            service: service_running(config, service) for service in RUNTIME_SERVICES
+        }
         docker_up = run_command(
             compose_command(config.compose_file, "up", "-d", "postgres", "nats")
         )
         write_text(config.artifact_dir / "docker-up.txt", docker_up.stdout + docker_up.stderr)
+        started_services = tuple(
+            service
+            for service in RUNTIME_SERVICES
+            if not services_running_before[service] and service_running(config, service)
+        )
 
         docker_ps = run_command(compose_command(config.compose_file, "ps"))
         write_text(config.artifact_dir / "docker-ps.txt", docker_ps.stdout)
@@ -696,9 +791,7 @@ def main() -> int:
 
         process, runtime_log = start_runtime(config)
         wait_for_runtime_ready(config, process)
-
-        runtime_log_text = (config.artifact_dir / "runtime.log").read_text(encoding="utf-8")
-        assert_runtime_log_markers(runtime_log_text)
+        wait_for_runtime_log_markers(config, process)
 
         task_request = build_task_request()
         write_json(config.artifact_dir / "task-request.json", task_request)
@@ -755,6 +848,15 @@ def main() -> int:
     finally:
         if process is not None and runtime_log is not None:
             shutdown_runtime(process, runtime_log)
+        if started_services:
+            docker_stop = run_command(
+                compose_command(config.compose_file, "stop", *started_services),
+                check=False,
+            )
+            write_text(
+                config.artifact_dir / "docker-stop.txt",
+                docker_stop.stdout + docker_stop.stderr,
+            )
 
 
 if __name__ == "__main__":

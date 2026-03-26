@@ -1,15 +1,15 @@
 {
   "aggregated_result_count": 3,
-  "artifact_dir": "docs/plans/artifacts/live-runtime-proof-smoke/20260326T154005Z",
+  "artifact_dir": "docs/plans/artifacts/live-runtime-proof-smoke/20260326T173652Z",
   "base_url": "http://127.0.0.1:8080",
   "branch_count": 3,
-  "database_name": "mistersmith_live_runtime_smoke_20260326_154005",
+  "database_name": "mistersmith_live_runtime_smoke_20260326_173652",
   "graph_state": "Completed",
   "model_id": "gpt-5.4",
   "node_count": 3,
   "parallelism_width": 2,
   "provider_kind": "openai_chatgpt",
-  "run_id": "20260326T154005Z",
+  "run_id": "20260326T173652Z",
   "runtime_execution_mode": {
     "execution_boundary": "tool_bus",
     "executor_lifecycle": "supervised_actor",
@@ -20,6 +20,6 @@
     "workflow_runner": "tokio_task"
   },
   "step_result_count": 3,
-  "task_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+  "task_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
   "topology_kind": "Hybrid"
 }

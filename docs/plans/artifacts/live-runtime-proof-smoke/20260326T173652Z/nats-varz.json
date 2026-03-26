@@ -15,11 +15,11 @@
   "http_host": "0.0.0.0",
   "http_port": 8222,
   "http_req_stats": {
-    "/varz": 56
+    "/varz": 1303
   },
   "https_port": 0,
-  "in_bytes": 113626,
-  "in_msgs": 20,
+  "in_bytes": 160186,
+  "in_msgs": 35,
   "jetstream": {
     "config": {
       "max_memory": 6162269184,
@@ -34,13 +34,13 @@
       "api": {
         "errors": 0,
         "level": 2,
-        "total": 2
+        "total": 5
       },
       "ha_assets": 0,
       "memory": 0,
       "reserved_memory": 0,
       "reserved_storage": 0,
-      "storage": 1724797
+      "storage": 1771916
     }
   },
   "leaf": {},
@@ -49,11 +49,11 @@
   "max_control_line": 4096,
   "max_payload": 1048576,
   "max_pending": 67108864,
-  "mem": 27156480,
+  "mem": 32452608,
   "mqtt": {},
-  "now": "2026-03-26T15:40:05.529378462Z",
-  "out_bytes": 2774,
-  "out_msgs": 20,
+  "now": "2026-03-26T17:36:53.134016672Z",
+  "out_bytes": 6260,
+  "out_msgs": 35,
   "ping_interval": 120000000000,
   "ping_max": 2,
   "port": 4222,
@@ -81,8 +81,8 @@
   "subscriptions": 65,
   "system_account": "$SYS",
   "tls_timeout": 2,
-  "total_connections": 2,
-  "uptime": "4m31s",
+  "total_connections": 5,
+  "uptime": "1h49m6s",
   "version": "2.12.4",
   "websocket": {},
   "write_deadline": 10000000000

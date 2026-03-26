@@ -2,6 +2,7 @@
 
 ## Authority
 
+- `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`
 - `docs/plans/2026-03-19-live-run-trace-evaluation.md`
 - `docs/current-state.md`
 - `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`

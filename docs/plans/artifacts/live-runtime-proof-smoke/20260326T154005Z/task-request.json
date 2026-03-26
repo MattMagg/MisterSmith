@@ -1,4 +1,0 @@
-{
-  "description": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
-  "priority": "high"
-}

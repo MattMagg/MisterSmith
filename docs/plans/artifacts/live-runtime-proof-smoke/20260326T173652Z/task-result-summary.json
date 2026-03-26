@@ -16,26 +16,26 @@
   "step_result_count": 3,
   "step_summaries": [
     {
-      "action": "Trace bootstrap and readiness evidence",
+      "action": "Trace task execution, autonomy status, and terminal result markers",
       "execution_boundary": "tool_bus",
-      "task_id": "4fa95666-6aaa-480d-8092-338d78552d33",
+      "task_id": "54214465-826e-4ad4-8f0a-3ec1ca9c934d",
       "tool_name": "workflow.execute_step",
-      "worker_id": "85094bc5-e039-4f76-bcd0-dae3920646cf"
+      "worker_id": "c4d77a3d-12f1-4de5-82e2-daa811abfe6d"
     },
     {
-      "action": "Trace task execution and terminal outcome evidence",
+      "action": "Trace bootstrap, readiness, and provider/runtime wiring",
       "execution_boundary": "tool_bus",
-      "task_id": "948c1a1c-283d-4213-8f7f-bb5a60f76c0d",
+      "task_id": "6e0844b6-8bf4-4057-a6ff-85000e33df01",
       "tool_name": "workflow.execute_step",
-      "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+      "worker_id": "84bf68e1-7f07-4ba8-960a-545fba8e9932"
     },
     {
-      "action": "Merge both tracks into one proof-boundary summary",
+      "action": "Merge both worker outputs into one concise runtime memo",
       "execution_boundary": "tool_bus",
-      "task_id": "d84d0847-1f00-45ba-a62c-a769004ccc6d",
+      "task_id": "c1874bf8-9ba7-46b5-9d86-d37279c102cc",
       "tool_name": "workflow.execute_step",
-      "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+      "worker_id": "84bf68e1-7f07-4ba8-960a-545fba8e9932"
     }
   ],
-  "task_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+  "task_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4"
 }

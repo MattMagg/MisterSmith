@@ -2,47 +2,47 @@
   "branches": [
     {
       "assigned_agents": [
-        "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+        "84bf68e1-7f07-4ba8-960a-545fba8e9932"
       ],
-      "branch_id": "84c52297-8df5-4ff8-bed0-5cd6834a6e14",
+      "branch_id": "49dbd395-311a-44c3-abd9-d5c74465f6e0",
       "checkpoint_id": null,
-      "graph_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+      "graph_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
       "recovery_strategy": "Resume",
       "state": "Completed"
     },
     {
       "assigned_agents": [
-        "85094bc5-e039-4f76-bcd0-dae3920646cf"
+        "84bf68e1-7f07-4ba8-960a-545fba8e9932"
       ],
-      "branch_id": "da66058a-06d0-468c-a582-1fbcc95fa3c7",
+      "branch_id": "69410a77-babc-4acc-b863-aafe1e4eac85",
       "checkpoint_id": null,
-      "graph_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+      "graph_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
       "recovery_strategy": "Resume",
       "state": "Completed"
     },
     {
       "assigned_agents": [
-        "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+        "c4d77a3d-12f1-4de5-82e2-daa811abfe6d"
       ],
-      "branch_id": "fb8f43b8-5ecc-4dd0-b0af-9a1becd95bfd",
+      "branch_id": "77749b94-4abe-40ce-89b0-e632a7c0f093",
       "checkpoint_id": null,
-      "graph_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+      "graph_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
       "recovery_strategy": "Resume",
       "state": "Completed"
     }
   ],
   "checkpoint_lineage": [],
   "conservative_reasons": [],
-  "coordinator_agent_id": "daee8572-ba13-4526-a0ae-1bcf15df37bf",
+  "coordinator_agent_id": "d41e67f3-59b8-4d50-bc7b-5e0c2b4efcd7",
   "delegation_alerts": [],
   "delegation_capabilities": [],
   "graph": {
     "active_topology": "Hybrid",
     "branch_count": 3,
-    "graph_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+    "graph_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
     "node_count": 3,
     "state": "Completed",
-    "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+    "workflow_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4"
   },
   "guard_decisions": [],
   "interventions": [],
@@ -50,7 +50,7 @@
   "profiles": [],
   "result_preview": {
     "payload_location": "task.result",
-    "preview_text": "[{\"dependency_results\":[{\"action\":\"Trace bootstrap and readiness evidence\",\"branch_id\":\"da66058a-06d0-468c-a582-1fbcc95fa3c7\",\"result\":{\"dependency_results\":...",
+    "preview_text": "[{\"dependency_results\":[{\"action\":\"Trace bootstrap, readiness, and provider/runtime wiring\",\"branch_id\":\"49dbd395-311a-44c3-abd9-d5c74465f6e0\",\"result\":{\"dep...",
     "proof_outcome": "graph_formed_and_completed",
     "provenance_lines": [
       "graph formed and completed before final result publication",
@@ -65,15 +65,15 @@
       "projection observed graph state Completed with topology Hybrid (3 branch(es), 3 node(s))",
       "projection retained 3 branch detail record(s)"
     ],
-    "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+    "workflow_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4"
   },
   "routing_history": [
     {
-      "branch_id": "84c52297-8df5-4ff8-bed0-5cd6834a6e14",
+      "branch_id": "49dbd395-311a-44c3-abd9-d5c74465f6e0",
       "budget_pressure": 0,
       "checkpoint_id": null,
       "dependency_depth": 0,
-      "graph_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+      "graph_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
       "health_state": "Unknown",
       "profile_id": null,
       "rationale": [
@@ -84,17 +84,17 @@
         "profile unavailable; defaulting to unknown health"
       ],
       "recovery_strategy": "Resume",
-      "selected_agent": "84cb0609-296a-4a1e-b30d-d7172e19cffb",
+      "selected_agent": "84bf68e1-7f07-4ba8-960a-545fba8e9932",
       "task_ids": [
-        "948c1a1c-283d-4213-8f7f-bb5a60f76c0d"
+        "6e0844b6-8bf4-4057-a6ff-85000e33df01"
       ]
     },
     {
-      "branch_id": "da66058a-06d0-468c-a582-1fbcc95fa3c7",
+      "branch_id": "77749b94-4abe-40ce-89b0-e632a7c0f093",
       "budget_pressure": 0,
       "checkpoint_id": null,
       "dependency_depth": 0,
-      "graph_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+      "graph_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
       "health_state": "Unknown",
       "profile_id": null,
       "rationale": [
@@ -105,17 +105,17 @@
         "profile unavailable; defaulting to unknown health"
       ],
       "recovery_strategy": "Resume",
-      "selected_agent": "85094bc5-e039-4f76-bcd0-dae3920646cf",
+      "selected_agent": "c4d77a3d-12f1-4de5-82e2-daa811abfe6d",
       "task_ids": [
-        "4fa95666-6aaa-480d-8092-338d78552d33"
+        "54214465-826e-4ad4-8f0a-3ec1ca9c934d"
       ]
     },
     {
-      "branch_id": "fb8f43b8-5ecc-4dd0-b0af-9a1becd95bfd",
+      "branch_id": "69410a77-babc-4acc-b863-aafe1e4eac85",
       "budget_pressure": 0,
       "checkpoint_id": null,
       "dependency_depth": 1,
-      "graph_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+      "graph_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
       "health_state": "Unknown",
       "profile_id": null,
       "rationale": [
@@ -126,9 +126,9 @@
         "profile unavailable; defaulting to unknown health"
       ],
       "recovery_strategy": "Resume",
-      "selected_agent": "84cb0609-296a-4a1e-b30d-d7172e19cffb",
+      "selected_agent": "84bf68e1-7f07-4ba8-960a-545fba8e9932",
       "task_ids": [
-        "d84d0847-1f00-45ba-a62c-a769004ccc6d"
+        "c1874bf8-9ba7-46b5-9d86-d37279c102cc"
       ]
     }
   ],
@@ -139,7 +139,7 @@
         "initial step routing decision for workflow-visible control state"
       ],
       "confidence_score": 1.0,
-      "estimated_cost_tokens": 1237,
+      "estimated_cost_tokens": 1268,
       "model_id": "gpt-5.4",
       "reason": "Selected via RoundRobin",
       "step_id": "planner.step.1",
@@ -154,11 +154,11 @@
     "budget_pressure": 0,
     "cap_reason": null,
     "conservative_mode": false,
-    "decided_at": "2026-03-26T15:40:36.863691Z",
+    "decided_at": "2026-03-26T17:37:23.610308Z",
     "decision_phase": "frontier_rebalance",
     "dependency_depth": 1,
     "desired_workers": 1,
-    "graph_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+    "graph_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
     "rationale_lines": [
       "task shape fanout-join with frontier width 1",
       "dependency depth 1 keeps coordination cost acceptable",
@@ -167,12 +167,12 @@
       "frontier health Unknown influenced active width"
     ],
     "selected_workers": 1,
-    "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+    "workflow_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4"
   },
   "topology": {
     "coordination_policy": "Mixed",
     "fallback_topology": "Sequential",
-    "graph_id": "1d3350b4-85b3-4c17-b01f-4e223b091905",
+    "graph_id": "fa1e62b9-c5e8-4c9b-afeb-c8815c1412c4",
     "parallelism_width": 2,
     "rationale": {
       "dependency_shape": "fanout-join",
@@ -181,7 +181,7 @@
         "health:healthy",
         "budget_pressure:normal"
       ],
-      "selected_for": "selected hybrid topology from compatible planner policy hint"
+      "selected_for": "selected hybrid topology from dependency analysis"
     },
     "task_shape": {
       "has_fanout": false,

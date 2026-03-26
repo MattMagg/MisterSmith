@@ -107,7 +107,7 @@ Validation:
 - live smoke proof passed:
   - `python3 scripts/live_runtime_proof_smoke.py`
 - durable artifacts captured under:
-  - `docs/plans/artifacts/live-runtime-proof-smoke/20260326T154005Z/`
+  - `docs/plans/artifacts/live-runtime-proof-smoke/20260326T173652Z/`
 
 ## Landed Surface
 
@@ -119,7 +119,11 @@ Validation:
     `8222/healthz` path
   - fresh proof database creation
   - provider-auth check for the bounded `openai_chatgpt` / `gpt-5.4` live path
+  - explicit worker-only merge prompt so the smoke run stays on supported planner role metadata
+    instead of failing on an unsupported synthetic `joiner` role
   - real `POST /api/v1/tasks` submission, task polling, and autonomy-status capture
+  - raw `planner_output` preserved only as untrusted context while `runtime_execution_mode` and
+    `step_results` remain the authoritative proof surfaces
   - predictable artifact output under `docs/plans/artifacts/live-runtime-proof-smoke/`
 
 ## Stop Conditions
