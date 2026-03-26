@@ -48,7 +48,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "str
 semver = "1.0"
 
 # Config
-toml = "1.0"
+toml = "1.1"
 
 # Logging / Metrics
 tracing = "0.1.44"
@@ -94,7 +94,7 @@ rustls = "0.23.37"
 tokio-rustls = "0.26.4"
 rcgen = { version = "0.14.7", features = ["pem"] }
 rustls-pki-types = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 arc-swap = "1"
 hex = "0.4"
 base64 = "0.22.1"
@@ -124,7 +124,7 @@ mister-smith-agents = { path = "crates/mister-smith-agents" }
 # Observability — Phase 8
 opentelemetry = "0.31.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.31.0", features = ["tonic"] }
+opentelemetry-otlp = { version = "0.31.1", features = ["tonic"] }
 tracing-opentelemetry = "0.32.1"
 
 # CLI — Phase 8
