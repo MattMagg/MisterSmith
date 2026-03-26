@@ -1,6 +1,7 @@
 //! Tests for config loading, environment overlay, and file discovery.
 
 use mister_smith_config::*;
+use mister_smith_llm::ProviderKind;
 use std::ffi::OsString;
 use std::io::Write;
 use std::path::PathBuf;
@@ -77,6 +78,53 @@ nats_url = "nats://localhost:4222"
     assert_eq!(
         config.transport.nats_url,
         Some("nats://localhost:4222".to_string())
+    );
+}
+
+#[test]
+fn load_from_toml_file_parses_runtime_routing_profile() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+    let mut file = std::fs::File::create(&path).unwrap();
+    write!(
+        file,
+        r#"
+[llm]
+provider_kind = "openai_chatgpt"
+model_id = "gpt-5.4"
+
+[llm.runtime_routing_profile]
+policy = "cascade"
+budget_root = "runtime.task_path"
+
+[[llm.runtime_routing_profile.tiers]]
+label = "primary"
+provider_kind = "openai_chatgpt"
+model_id = "gpt-5.4"
+metadata = {{ preferred_tier = "primary" }}
+
+[[llm.runtime_routing_profile.tiers]]
+label = "fallback"
+provider_kind = "claude_subscription"
+model_id = "claude-sonnet"
+"#
+    )
+    .unwrap();
+
+    let config = load_from_file(&path).unwrap();
+    let profile = config
+        .llm
+        .runtime_routing_profile
+        .expect("runtime routing profile should parse");
+
+    assert_eq!(profile.policy, RuntimeRoutingPolicy::Cascade);
+    assert_eq!(profile.budget_root, "runtime.task_path");
+    assert_eq!(profile.tiers.len(), 2);
+    assert_eq!(profile.tiers[0].provider_kind, ProviderKind::OpenAiChatGpt);
+    assert_eq!(profile.tiers[1].provider_kind, ProviderKind::ClaudeSubscription);
+    assert_eq!(
+        profile.tiers[0].metadata["preferred_tier"],
+        serde_json::json!("primary")
     );
 }
 

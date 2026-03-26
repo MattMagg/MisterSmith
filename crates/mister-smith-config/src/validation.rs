@@ -5,9 +5,11 @@
 
 use crate::error::ConfigValidationError;
 use crate::types::{
-    AgentConfig, FrameworkConfig, LlmConfig, MonitoringConfig, RuntimeConfig, SecurityConfig,
-    SupervisionConfig, TransportConfig,
+    AgentConfig, FrameworkConfig, LlmConfig, MonitoringConfig, RuntimeConfig, RuntimeProviderTier,
+    RuntimeRoutingProfile, SecurityConfig, SupervisionConfig, TransportConfig,
 };
+use mister_smith_llm::ProviderKind;
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 impl RuntimeConfig {
@@ -119,6 +121,84 @@ impl SecurityConfig {
     }
 }
 
+fn runtime_supports_provider(provider_kind: ProviderKind) -> bool {
+    matches!(
+        provider_kind,
+        ProviderKind::OpenAiChatGpt | ProviderKind::ClaudeSubscription | ProviderKind::Mock
+    )
+}
+
+impl RuntimeProviderTier {
+    /// Validate one runtime provider tier.
+    pub fn validate(&self, index: usize) -> Result<(), ConfigValidationError> {
+        if self.label.trim().is_empty() {
+            return Err(ConfigValidationError::InvalidValue {
+                field: format!("llm.runtime_routing_profile.tiers[{index}].label"),
+                reason: "must not be empty".to_string(),
+            });
+        }
+
+        if self.model_id.trim().is_empty() {
+            return Err(ConfigValidationError::InvalidValue {
+                field: format!("llm.runtime_routing_profile.tiers[{index}].model_id"),
+                reason: "must not be empty".to_string(),
+            });
+        }
+
+        if !runtime_supports_provider(self.provider_kind) {
+            return Err(ConfigValidationError::InvalidValue {
+                field: format!("llm.runtime_routing_profile.tiers[{index}].provider_kind"),
+                reason: format!(
+                    "provider '{}' is not shipped on the current runtime path; expected one of: openai_chatgpt, claude_subscription, mock",
+                    self.provider_kind
+                ),
+            });
+        }
+
+        if !self.metadata.is_object() {
+            return Err(ConfigValidationError::InvalidValue {
+                field: format!("llm.runtime_routing_profile.tiers[{index}].metadata"),
+                reason: "must be a JSON object".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+}
+
+impl RuntimeRoutingProfile {
+    /// Validate the runtime routing profile.
+    pub fn validate(&self) -> Result<(), ConfigValidationError> {
+        if self.budget_root.trim().is_empty() {
+            return Err(ConfigValidationError::InvalidValue {
+                field: "llm.runtime_routing_profile.budget_root".to_string(),
+                reason: "must not be empty".to_string(),
+            });
+        }
+
+        if self.tiers.is_empty() {
+            return Err(ConfigValidationError::InvalidValue {
+                field: "llm.runtime_routing_profile.tiers".to_string(),
+                reason: "must contain at least one provider tier".to_string(),
+            });
+        }
+
+        let mut seen_labels = BTreeSet::new();
+        for (index, tier) in self.tiers.iter().enumerate() {
+            tier.validate(index)?;
+            let normalized_label = tier.label.trim().to_ascii_lowercase();
+            if !seen_labels.insert(normalized_label) {
+                return Err(ConfigValidationError::InvalidValue {
+                    field: format!("llm.runtime_routing_profile.tiers[{index}].label"),
+                    reason: format!("duplicate tier label '{}'", tier.label.trim()),
+                });
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl LlmConfig {
     /// Validate runtime LLM selection.
     pub fn validate(&self) -> Result<(), ConfigValidationError> {
@@ -127,6 +207,10 @@ impl LlmConfig {
                 field: "llm.model_id".to_string(),
                 reason: "must not be empty".to_string(),
             });
+        }
+
+        if let Some(profile) = &self.runtime_routing_profile {
+            profile.validate()?;
         }
 
         Ok(())

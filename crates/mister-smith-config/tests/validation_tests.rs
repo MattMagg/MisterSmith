@@ -1,6 +1,7 @@
 //! Tests for config validation constraints.
 
 use mister_smith_config::*;
+use mister_smith_llm::ProviderKind;
 use std::time::Duration;
 
 fn invalid_observability_configs() -> Vec<(&'static str, ObservabilityConfig)> {
@@ -166,6 +167,124 @@ fn framework_config_rejects_empty_llm_model_id() {
         ConfigValidationError::InvalidValue { field, reason } => {
             assert_eq!(field, "llm.model_id");
             assert_eq!(reason, "must not be empty");
+        }
+        other => panic!("expected invalid value error, got {other}"),
+    }
+}
+
+#[test]
+fn llm_defaults_keep_runtime_routing_profile_absent() {
+    let config = FrameworkConfig::default();
+
+    assert_eq!(config.llm.provider_kind, ProviderKind::OpenAiChatGpt);
+    assert_eq!(config.llm.model_id, "gpt-5.4");
+    assert!(config.llm.runtime_routing_profile.is_none());
+}
+
+#[test]
+fn framework_config_accepts_valid_runtime_routing_profile() {
+    let mut config = FrameworkConfig::default();
+    config.llm.runtime_routing_profile = Some(RuntimeRoutingProfile {
+        policy: RuntimeRoutingPolicy::Cascade,
+        budget_root: "runtime.task_path".to_string(),
+        tiers: vec![
+            RuntimeProviderTier {
+                label: "primary".to_string(),
+                provider_kind: ProviderKind::OpenAiChatGpt,
+                model_id: "gpt-5.4".to_string(),
+                metadata: serde_json::json!({ "preferred_tier": "primary" }),
+            },
+            RuntimeProviderTier {
+                label: "fallback".to_string(),
+                provider_kind: ProviderKind::ClaudeSubscription,
+                model_id: "claude-sonnet".to_string(),
+                metadata: serde_json::json!({}),
+            },
+        ],
+    });
+
+    assert!(config.validate().is_ok());
+}
+
+#[test]
+fn framework_config_rejects_runtime_routing_profile_without_tiers() {
+    let mut config = FrameworkConfig::default();
+    config.llm.runtime_routing_profile = Some(RuntimeRoutingProfile {
+        policy: RuntimeRoutingPolicy::Cascade,
+        budget_root: "runtime.task_path".to_string(),
+        tiers: Vec::new(),
+    });
+
+    let err = config
+        .validate()
+        .expect_err("runtime routing profile without tiers should fail");
+
+    match err {
+        ConfigValidationError::InvalidValue { field, reason } => {
+            assert_eq!(field, "llm.runtime_routing_profile.tiers");
+            assert_eq!(reason, "must contain at least one provider tier");
+        }
+        other => panic!("expected invalid value error, got {other}"),
+    }
+}
+
+#[test]
+fn framework_config_rejects_unsupported_runtime_tier_provider() {
+    let mut config = FrameworkConfig::default();
+    config.llm.runtime_routing_profile = Some(RuntimeRoutingProfile {
+        policy: RuntimeRoutingPolicy::Cascade,
+        budget_root: "runtime.task_path".to_string(),
+        tiers: vec![RuntimeProviderTier {
+            label: "api-key-openai".to_string(),
+            provider_kind: ProviderKind::OpenAi,
+            model_id: "gpt-4.1".to_string(),
+            metadata: serde_json::json!({}),
+        }],
+    });
+
+    let err = config
+        .validate()
+        .expect_err("unsupported tier provider should fail");
+
+    match err {
+        ConfigValidationError::InvalidValue { field, reason } => {
+            assert_eq!(field, "llm.runtime_routing_profile.tiers[0].provider_kind");
+            assert!(reason.contains("openai"));
+        }
+        other => panic!("expected invalid value error, got {other}"),
+    }
+}
+
+#[test]
+fn framework_config_rejects_duplicate_runtime_tier_labels() {
+    let mut config = FrameworkConfig::default();
+    config.llm.runtime_routing_profile = Some(RuntimeRoutingProfile {
+        policy: RuntimeRoutingPolicy::Cascade,
+        budget_root: "runtime.task_path".to_string(),
+        tiers: vec![
+            RuntimeProviderTier {
+                label: "primary".to_string(),
+                provider_kind: ProviderKind::OpenAiChatGpt,
+                model_id: "gpt-5.4".to_string(),
+                metadata: serde_json::json!({}),
+            },
+            RuntimeProviderTier {
+                label: " primary ".to_string(),
+                provider_kind: ProviderKind::Mock,
+                model_id: "mock-ops".to_string(),
+                metadata: serde_json::json!({}),
+            },
+        ],
+    });
+
+    let err = config
+        .validate()
+        .expect_err("duplicate labels should fail validation");
+
+    match err {
+        ConfigValidationError::InvalidValue { field, reason } => {
+            assert_eq!(field, "llm.runtime_routing_profile.tiers[1].label");
+            assert_eq!(reason, "duplicate tier label 'primary'");
         }
         other => panic!("expected invalid value error, got {other}"),
     }

@@ -142,6 +142,9 @@ pub struct LlmConfig {
     /// Model identifier to pass to the selected provider.
     #[serde(default = "default_llm_model_id")]
     pub model_id: String,
+    /// Optional multi-provider routing profile for the runtime-backed task path.
+    #[serde(default)]
+    pub runtime_routing_profile: Option<RuntimeRoutingProfile>,
 }
 
 impl Default for LlmConfig {
@@ -149,6 +152,54 @@ impl Default for LlmConfig {
         Self {
             provider_kind: default_llm_provider_kind(),
             model_id: default_llm_model_id(),
+            runtime_routing_profile: None,
+        }
+    }
+}
+
+/// Bounded routing policies supported by the runtime profile config.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeRoutingPolicy {
+    /// Multi-tier cascade routing with bounded fallback.
+    #[default]
+    Cascade,
+}
+
+/// One provider tier declared inside the runtime routing profile.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuntimeProviderTier {
+    /// Operator-visible tier label surfaced on routing evidence.
+    pub label: String,
+    /// Shipped provider kind to register for this tier.
+    pub provider_kind: ProviderKind,
+    /// Model identifier for this tier.
+    pub model_id: String,
+    /// Optional provider-tier metadata used by later runtime wiring.
+    #[serde(default = "default_runtime_tier_metadata")]
+    pub metadata: serde_json::Value,
+}
+
+/// Typed runtime routing profile for bounded multi-provider boot.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuntimeRoutingProfile {
+    /// Routing policy for the runtime-backed task path.
+    #[serde(default)]
+    pub policy: RuntimeRoutingPolicy,
+    /// Canonical budget root used by the runtime task path.
+    #[serde(default = "default_runtime_budget_root")]
+    pub budget_root: String,
+    /// Ordered provider tiers registered into the runtime router.
+    #[serde(default)]
+    pub tiers: Vec<RuntimeProviderTier>,
+}
+
+impl Default for RuntimeRoutingProfile {
+    fn default() -> Self {
+        Self {
+            policy: RuntimeRoutingPolicy::Cascade,
+            budget_root: default_runtime_budget_root(),
+            tiers: Vec::new(),
         }
     }
 }
@@ -489,6 +540,14 @@ fn default_llm_provider_kind() -> ProviderKind {
 
 fn default_llm_model_id() -> String {
     "gpt-5.4".to_string()
+}
+
+fn default_runtime_budget_root() -> String {
+    "runtime.task_path".to_string()
+}
+
+fn default_runtime_tier_metadata() -> serde_json::Value {
+    serde_json::json!({})
 }
 
 fn default_max_restart_attempts() -> u32 {
