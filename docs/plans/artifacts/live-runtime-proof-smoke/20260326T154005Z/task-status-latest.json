@@ -1,0 +1,412 @@
+{
+  "result": {
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [
+            {
+              "action": "Trace bootstrap and readiness evidence",
+              "branch_id": "da66058a-06d0-468c-a582-1fbcc95fa3c7",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Trace bootstrap and readiness evidence",
+                  "branch_id": "da66058a-06d0-468c-a582-1fbcc95fa3c7",
+                  "dependencies": [],
+                  "description": "Inspect the live runtime path from bootstrap through readiness, focusing on startup sequence, readiness signals, provider selection, model/runtime wiring, and any explicit evidence that the runtime is connected and serving as expected. Record only directly observed markers, note missing or ambiguous evidence, and avoid inferring successful execution beyond what is concretely shown.",
+                  "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "w1-bootstrap-readiness",
+                  "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "85094bc5-e039-4f76-bcd0-dae3920646cf",
+                "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+              },
+              "task_id": "4fa95666-6aaa-480d-8092-338d78552d33",
+              "worker_id": "85094bc5-e039-4f76-bcd0-dae3920646cf"
+            },
+            {
+              "action": "Trace task execution and terminal outcome evidence",
+              "branch_id": "84c52297-8df5-4ff8-bed0-5cd6834a6e14",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Trace task execution and terminal outcome evidence",
+                  "branch_id": "84c52297-8df5-4ff8-bed0-5cd6834a6e14",
+                  "dependencies": [],
+                  "description": "Inspect the live runtime path from task dispatch through execution, autonomy-status updates, terminal result markers, and any completion or failure indicators. Capture the exact observed evidence for task progress and end-state, identify gaps between progress signals and final proof, and flag anything that still requires follow-up verification.",
+                  "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "w2-execution-result-markers",
+                  "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb",
+                "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+              },
+              "task_id": "948c1a1c-283d-4213-8f7f-bb5a60f76c0d",
+              "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Merge both tracks into one proof-boundary summary",
+            "branch_id": "fb8f43b8-5ecc-4dd0-b0af-9a1becd95bfd",
+            "dependencies": [
+              "4fa95666-6aaa-480d-8092-338d78552d33",
+              "948c1a1c-283d-4213-8f7f-bb5a60f76c0d"
+            ],
+            "description": "Combine both workers' findings into a concise smoke-proof summary with two explicit sections: directly observed evidence and follow-up needed. Reconcile overlaps, separate readiness proof from execution proof, call out any boundary where the runtime appears healthy but task completion is not fully proven, and keep the final output brief, factual, and evidence-bound.",
+            "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "join-proof-boundary-summary",
+            "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb",
+          "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Trace task execution and terminal outcome evidence",
+            "branch_id": "84c52297-8df5-4ff8-bed0-5cd6834a6e14",
+            "dependencies": [],
+            "description": "Inspect the live runtime path from task dispatch through execution, autonomy-status updates, terminal result markers, and any completion or failure indicators. Capture the exact observed evidence for task progress and end-state, identify gaps between progress signals and final proof, and flag anything that still requires follow-up verification.",
+            "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "w2-execution-result-markers",
+            "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb",
+          "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Trace bootstrap and readiness evidence",
+            "branch_id": "da66058a-06d0-468c-a582-1fbcc95fa3c7",
+            "dependencies": [],
+            "description": "Inspect the live runtime path from bootstrap through readiness, focusing on startup sequence, readiness signals, provider selection, model/runtime wiring, and any explicit evidence that the runtime is connected and serving as expected. Record only directly observed markers, note missing or ambiguous evidence, and avoid inferring successful execution beyond what is concretely shown.",
+            "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "w1-bootstrap-readiness",
+            "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "85094bc5-e039-4f76-bcd0-dae3920646cf",
+          "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+        }
+      ],
+      "description": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "require_join_step": true,
+            "require_parallel_workers": 2,
+            "require_real_multi_agent_workflow": true,
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "branch-a",
+                  "depends_on": [],
+                  "description": "string",
+                  "id": "string",
+                  "role": "worker",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "hybrid"
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "Trace bootstrap and readiness evidence",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Inspect the live runtime path from bootstrap through readiness, focusing on startup sequence, readiness signals, provider selection, model/runtime wiring, and any explicit evidence that the runtime is connected and serving as expected. Record only directly observed markers, note missing or ambiguous evidence, and avoid inferring successful execution beyond what is concretely shown.",
+            "id": "w1-bootstrap-readiness",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "Trace task execution and terminal outcome evidence",
+            "branch": "branch-b",
+            "depends_on": [],
+            "description": "Inspect the live runtime path from task dispatch through execution, autonomy-status updates, terminal result markers, and any completion or failure indicators. Capture the exact observed evidence for task progress and end-state, identify gaps between progress signals and final proof, and flag anything that still requires follow-up verification.",
+            "id": "w2-execution-result-markers",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "Merge both tracks into one proof-boundary summary",
+            "branch": "join",
+            "depends_on": [
+              "w1-bootstrap-readiness",
+              "w2-execution-result-markers"
+            ],
+            "description": "Combine both workers' findings into a concise smoke-proof summary with two explicit sections: directly observed evidence and follow-up needed. Reconcile overlaps, separate readiness proof from execution proof, call out any boundary where the runtime appears healthy but task completion is not fully proven, and keep the final output brief, factual, and evidence-bound.",
+            "id": "join-proof-boundary-summary",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "hybrid"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "execution_contract": {
+            "require_join_step": true,
+            "require_parallel_workers": 2,
+            "require_real_multi_agent_workflow": true,
+            "return_json_only": true
+          },
+          "model_id": "gpt-5.4",
+          "proof_boundary": "Separate direct live observations from unresolved follow-up so the final summary does not overclaim runtime or task success.",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+        "steps": [
+          {
+            "action": "Trace bootstrap and readiness evidence",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Inspect the live runtime path from bootstrap through readiness, focusing on startup sequence, readiness signals, provider selection, model/runtime wiring, and any explicit evidence that the runtime is connected and serving as expected. Record only directly observed markers, note missing or ambiguous evidence, and avoid inferring successful execution beyond what is concretely shown.",
+            "id": "w1-bootstrap-readiness",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "Trace task execution and terminal outcome evidence",
+            "branch": "branch-b",
+            "depends_on": [],
+            "description": "Inspect the live runtime path from task dispatch through execution, autonomy-status updates, terminal result markers, and any completion or failure indicators. Capture the exact observed evidence for task progress and end-state, identify gaps between progress signals and final proof, and flag anything that still requires follow-up verification.",
+            "id": "w2-execution-result-markers",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "Merge both tracks into one proof-boundary summary",
+            "branch": "join",
+            "depends_on": [
+              "w1-bootstrap-readiness",
+              "w2-execution-result-markers"
+            ],
+            "description": "Combine both workers' findings into a concise smoke-proof summary with two explicit sections: directly observed evidence and follow-up needed. Reconcile overlaps, separate readiness proof from execution proof, call out any boundary where the runtime appears healthy but task completion is not fully proven, and keep the final output brief, factual, and evidence-bound.",
+            "id": "join-proof-boundary-summary",
+            "role": "worker",
+            "step": 3
+          }
+        ],
+        "topology_hint": "hybrid"
+      },
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "Trace bootstrap and readiness evidence",
+          "branch_id": "da66058a-06d0-468c-a582-1fbcc95fa3c7",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Trace bootstrap and readiness evidence",
+              "branch_id": "da66058a-06d0-468c-a582-1fbcc95fa3c7",
+              "dependencies": [],
+              "description": "Inspect the live runtime path from bootstrap through readiness, focusing on startup sequence, readiness signals, provider selection, model/runtime wiring, and any explicit evidence that the runtime is connected and serving as expected. Record only directly observed markers, note missing or ambiguous evidence, and avoid inferring successful execution beyond what is concretely shown.",
+              "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "w1-bootstrap-readiness",
+              "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "85094bc5-e039-4f76-bcd0-dae3920646cf",
+            "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+          },
+          "task_id": "4fa95666-6aaa-480d-8092-338d78552d33",
+          "worker_id": "85094bc5-e039-4f76-bcd0-dae3920646cf"
+        },
+        {
+          "action": "Trace task execution and terminal outcome evidence",
+          "branch_id": "84c52297-8df5-4ff8-bed0-5cd6834a6e14",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Trace task execution and terminal outcome evidence",
+              "branch_id": "84c52297-8df5-4ff8-bed0-5cd6834a6e14",
+              "dependencies": [],
+              "description": "Inspect the live runtime path from task dispatch through execution, autonomy-status updates, terminal result markers, and any completion or failure indicators. Capture the exact observed evidence for task progress and end-state, identify gaps between progress signals and final proof, and flag anything that still requires follow-up verification.",
+              "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "w2-execution-result-markers",
+              "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb",
+            "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+          },
+          "task_id": "948c1a1c-283d-4213-8f7f-bb5a60f76c0d",
+          "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+        },
+        {
+          "action": "Merge both tracks into one proof-boundary summary",
+          "branch_id": "fb8f43b8-5ecc-4dd0-b0af-9a1becd95bfd",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "Trace bootstrap and readiness evidence",
+                "branch_id": "da66058a-06d0-468c-a582-1fbcc95fa3c7",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "Trace bootstrap and readiness evidence",
+                    "branch_id": "da66058a-06d0-468c-a582-1fbcc95fa3c7",
+                    "dependencies": [],
+                    "description": "Inspect the live runtime path from bootstrap through readiness, focusing on startup sequence, readiness signals, provider selection, model/runtime wiring, and any explicit evidence that the runtime is connected and serving as expected. Record only directly observed markers, note missing or ambiguous evidence, and avoid inferring successful execution beyond what is concretely shown.",
+                    "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "w1-bootstrap-readiness",
+                    "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "85094bc5-e039-4f76-bcd0-dae3920646cf",
+                  "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+                },
+                "task_id": "4fa95666-6aaa-480d-8092-338d78552d33",
+                "worker_id": "85094bc5-e039-4f76-bcd0-dae3920646cf"
+              },
+              {
+                "action": "Trace task execution and terminal outcome evidence",
+                "branch_id": "84c52297-8df5-4ff8-bed0-5cd6834a6e14",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "Trace task execution and terminal outcome evidence",
+                    "branch_id": "84c52297-8df5-4ff8-bed0-5cd6834a6e14",
+                    "dependencies": [],
+                    "description": "Inspect the live runtime path from task dispatch through execution, autonomy-status updates, terminal result markers, and any completion or failure indicators. Capture the exact observed evidence for task progress and end-state, identify gaps between progress signals and final proof, and flag anything that still requires follow-up verification.",
+                    "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "w2-execution-result-markers",
+                    "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb",
+                  "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+                },
+                "task_id": "948c1a1c-283d-4213-8f7f-bb5a60f76c0d",
+                "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Merge both tracks into one proof-boundary summary",
+              "branch_id": "fb8f43b8-5ecc-4dd0-b0af-9a1becd95bfd",
+              "dependencies": [
+                "4fa95666-6aaa-480d-8092-338d78552d33",
+                "948c1a1c-283d-4213-8f7f-bb5a60f76c0d"
+              ],
+              "description": "Combine both workers' findings into a concise smoke-proof summary with two explicit sections: directly observed evidence and follow-up needed. Reconcile overlaps, separate readiness proof from execution proof, call out any boundary where the runtime appears healthy but task completion is not fully proven, and keep the final output brief, factual, and evidence-bound.",
+              "goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "join-proof-boundary-summary",
+              "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb",
+            "workflow_goal": "Create a concise live runtime smoke proof summary by splitting the work into two parallel tracks: one worker traces bootstrap, readiness, and provider/runtime wiring, one worker traces task execution, autonomy status, and terminal result markers, then join the findings into one final proof-boundary summary that separates what was directly observed from what still needs follow-up."
+          },
+          "task_id": "d84d0847-1f00-45ba-a62c-a769004ccc6d",
+          "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+        }
+      ],
+      "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+    },
+    "status": "completed",
+    "workflow_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+  },
+  "status": "completed",
+  "task_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+}

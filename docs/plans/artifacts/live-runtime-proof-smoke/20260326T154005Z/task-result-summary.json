@@ -1,0 +1,41 @@
+{
+  "aggregated_result_count": 3,
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "runtime_execution_mode": {
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "Trace bootstrap and readiness evidence",
+      "execution_boundary": "tool_bus",
+      "task_id": "4fa95666-6aaa-480d-8092-338d78552d33",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "85094bc5-e039-4f76-bcd0-dae3920646cf"
+    },
+    {
+      "action": "Trace task execution and terminal outcome evidence",
+      "execution_boundary": "tool_bus",
+      "task_id": "948c1a1c-283d-4213-8f7f-bb5a60f76c0d",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+    },
+    {
+      "action": "Merge both tracks into one proof-boundary summary",
+      "execution_boundary": "tool_bus",
+      "task_id": "d84d0847-1f00-45ba-a62c-a769004ccc6d",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "84cb0609-296a-4a1e-b30d-d7172e19cffb"
+    }
+  ],
+  "task_id": "1d3350b4-85b3-4c17-b01f-4e223b091905"
+}

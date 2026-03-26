@@ -1,0 +1,2 @@
+ Container deploy-postgres-1 Running
+ Container deploy-nats-1 Running

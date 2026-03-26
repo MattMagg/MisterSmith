@@ -71,7 +71,8 @@ external workflow services such as Linear or Symphony.
 - the default runtime path now uses supervised planner and executor lifecycles, a Tokio workflow
   runner, and a ToolBus-backed execution boundary
 - A real local provider-backed runtime proof has been completed on the current runtime path using
-  `openai_chatgpt` with `gpt-5.4`.
+  `openai_chatgpt` with `gpt-5.4`, and the repo now ships a repeatable smoke harness for that
+  same bounded proof surface under `scripts/live_runtime_proof_smoke.py`.
 - The default runtime path now selects `provider_kind` and `model_id` from framework
   configuration for the providers the current app binary ships: `openai_chatgpt`,
   `claude_subscription`, and `mock`.
@@ -106,6 +107,9 @@ Read the current state in three layers:
 - NATS/JetStream plus PostgreSQL local runtime prerequisites
 - repo-native local stack bootstrap for `postgres`, `nats`, and the bundled `mister-smith`
   runtime from the macOS operator cockpit
+- repo-owned repeatable smoke proof for the current `openai_chatgpt` / `gpt-5.4` task path,
+  including Docker-backed prerequisite checks, internal NATS `varz` verification, real task
+  submission, autonomy inspection, and predictable proof artifacts
 - the NATS HTTP monitor on `http://127.0.0.1:8222` for local operator health views
 - real workflow submission and terminal completion tracking
 - autonomy inspection surfaces keyed by `workflow_id`
