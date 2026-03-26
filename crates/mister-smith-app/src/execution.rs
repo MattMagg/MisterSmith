@@ -5,6 +5,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
+use async_nats::jetstream::kv::{self, Operation as KvOperation, Store as KvStore};
 use async_nats::jetstream::stream::RetentionPolicy;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -33,8 +34,9 @@ use mister_smith_http::server::{
 };
 use mister_smith_http::websocket::{broadcast_event, WsEvent};
 use mister_smith_llm::{
-    CascadePolicy, CascadeTier, CircuitBreakerConfig, ClaudeSubscriptionProvider, MockProvider,
-    ModelProvider, ModelRouter, OpenAiChatGptProvider, ProviderConfig, ProviderKind, RoutingPolicy,
+    BudgetEnforcer, BudgetNode, BudgetStore, CascadePolicy, CascadeTier, CircuitBreakerConfig,
+    ClaudeSubscriptionProvider, MockProvider, ModelProvider, ModelRouter, OpenAiChatGptProvider,
+    ProviderConfig, ProviderKind, RoutingPolicy,
 };
 use mister_smith_nats::{JetStreamConfig, JetStreamManager, NatsTransport};
 use mister_smith_persistence::postgres::migrations::MigrationRunner;
@@ -57,6 +59,7 @@ pub(crate) const PROVIDER_KIND_NAME: &str = "openai_chatgpt";
 pub(crate) const MODEL_ID: &str = "gpt-5.4";
 const WORKFLOW_STREAM: &str = "mister_smith_workflows";
 const WORKFLOW_SUBJECT_PATTERN: &str = "workflow.>";
+const RUNTIME_BUDGET_BUCKET: &str = "runtime_budget";
 const AUTONOMY_STATUS_METADATA_KEY: &str = "autonomy_status";
 const ACCEPTED_TASK_INGRESS_METADATA_KEY: &str = "accepted_task_ingress";
 const TASK_INGRESS_REQUEST_SURFACE: &str = "POST /api/v1/tasks";
@@ -83,6 +86,12 @@ struct RuntimeBootstrapPlan {
     active_selection: RuntimeLlmSelection,
     registered_providers: Vec<RuntimeLlmSelection>,
     routing_policy: RoutingPolicy,
+    budget_root: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct JetStreamBudgetStore {
+    store: KvStore,
 }
 
 impl Default for RuntimeLlmSelection {
@@ -130,6 +139,7 @@ impl RuntimeBootstrapPlan {
                 active_selection: fallback_selection.clone(),
                 registered_providers: vec![fallback_selection],
                 routing_policy: RoutingPolicy::RoundRobin,
+                budget_root: None,
             };
         };
 
@@ -138,6 +148,7 @@ impl RuntimeBootstrapPlan {
                 active_selection: fallback_selection.clone(),
                 registered_providers: vec![fallback_selection],
                 routing_policy: RoutingPolicy::RoundRobin,
+                budget_root: None,
             };
         }
 
@@ -155,6 +166,7 @@ impl RuntimeBootstrapPlan {
             active_selection,
             registered_providers,
             routing_policy: runtime_routing_policy_from_profile(profile),
+            budget_root: Some(profile.budget_root.clone()),
         }
     }
 }
@@ -184,6 +196,73 @@ fn runtime_routing_policy_name(policy: &RoutingPolicy) -> &'static str {
         RoutingPolicy::CapabilityMatched => "capability_matched",
         RoutingPolicy::Cascade(_) => "cascade",
         _ => "other",
+    }
+}
+
+impl JetStreamBudgetStore {
+    fn new(store: KvStore) -> Self {
+        Self { store }
+    }
+}
+
+#[async_trait]
+impl BudgetStore for JetStreamBudgetStore {
+    async fn get(&self, key: &str) -> Result<Option<BudgetNode>, LlmError> {
+        let entry = self.store.entry(key).await.map_err(|error| {
+            LlmError::InvalidRequest(format!(
+                "failed to read JetStream budget key '{key}': {error}"
+            ))
+        })?;
+
+        match entry {
+            Some(entry) if entry.operation == KvOperation::Put => {
+                let mut node: BudgetNode =
+                    serde_json::from_slice(&entry.value).map_err(|error| {
+                        LlmError::InvalidRequest(format!(
+                            "failed to decode JetStream budget key '{key}': {error}"
+                        ))
+                    })?;
+                node.key = entry.key;
+                node.revision = entry.revision;
+                Ok(Some(node))
+            }
+            Some(_) | None => Ok(None),
+        }
+    }
+
+    async fn cas_update(&self, node: &BudgetNode, expected_revision: u64) -> Result<u64, LlmError> {
+        let mut persisted = node.clone();
+        persisted.revision = 0;
+        let payload = serde_json::to_vec(&persisted).map_err(|error| {
+            LlmError::InvalidRequest(format!(
+                "failed to encode JetStream budget key '{}': {error}",
+                node.key
+            ))
+        })?;
+
+        let revision = if expected_revision == 0 {
+            self.store
+                .create(node.key.as_str(), payload.into())
+                .await
+                .map_err(|error| {
+                    LlmError::InvalidRequest(format!(
+                        "failed to create JetStream budget key '{}': {error}",
+                        node.key
+                    ))
+                })?
+        } else {
+            self.store
+                .update(node.key.as_str(), payload.into(), expected_revision)
+                .await
+                .map_err(|error| {
+                    LlmError::InvalidRequest(format!(
+                        "failed to CAS-update JetStream budget key '{}': {error}",
+                        node.key
+                    ))
+                })?
+        };
+
+        Ok(revision)
     }
 }
 
@@ -381,6 +460,51 @@ async fn verify_runtime_router_auth(plan: &RuntimeBootstrapPlan) -> Result<(), S
     Ok(())
 }
 
+async fn ensure_runtime_budget_kv_store(
+    jetstream: &JetStreamManager,
+    bucket: &str,
+) -> Result<KvStore, String> {
+    jetstream
+        .context()
+        .create_or_update_key_value(kv::Config {
+            bucket: bucket.to_string(),
+            description: "Runtime budget state for the task-path router".to_string(),
+            history: 1,
+            ..Default::default()
+        })
+        .await
+        .map_err(|error| {
+            format!("JetStream budget bucket '{bucket}' initialization failed: {error}")
+        })
+}
+
+async fn build_runtime_budget_enforcer_with_bucket(
+    jetstream: &JetStreamManager,
+    bucket: &str,
+    budget_root: &str,
+) -> Result<BudgetEnforcer, String> {
+    let store = JetStreamBudgetStore::new(ensure_runtime_budget_kv_store(jetstream, bucket).await?);
+    if store
+        .get(budget_root)
+        .await
+        .map_err(|error| format!("JetStream budget preflight failed: {error}"))?
+        .is_none()
+    {
+        return Err(format!(
+            "JetStream budget key '{budget_root}' is missing from bucket '{bucket}'"
+        ));
+    }
+
+    Ok(BudgetEnforcer::new(Box::new(store)))
+}
+
+async fn build_runtime_budget_enforcer(
+    jetstream: &JetStreamManager,
+    budget_root: &str,
+) -> Result<BudgetEnforcer, String> {
+    build_runtime_budget_enforcer_with_bucket(jetstream, RUNTIME_BUDGET_BUCKET, budget_root).await
+}
+
 async fn register_runtime_router_providers(
     router: &ModelRouter,
     selections: &[RuntimeLlmSelection],
@@ -510,7 +634,17 @@ impl RuntimeTaskService {
 
         let routing_policy_name = runtime_routing_policy_name(&runtime_bootstrap.routing_policy);
         let registered_provider_count = runtime_bootstrap.registered_providers.len();
-        let router = Arc::new(ModelRouter::new(runtime_bootstrap.routing_policy.clone()));
+        let budget_root = runtime_bootstrap.budget_root.clone();
+        let router = if let Some(budget_root) = budget_root.as_ref() {
+            let budget_enforcer =
+                build_runtime_budget_enforcer(jetstream.as_ref(), budget_root).await?;
+            Arc::new(
+                ModelRouter::new(runtime_bootstrap.routing_policy.clone())
+                    .with_budget(budget_enforcer, budget_root.clone()),
+            )
+        } else {
+            Arc::new(ModelRouter::new(runtime_bootstrap.routing_policy.clone()))
+        };
         register_runtime_router_providers(router.as_ref(), &runtime_bootstrap.registered_providers)
             .await?;
 
@@ -537,6 +671,7 @@ impl RuntimeTaskService {
             model_id = runtime_bootstrap.active_selection.model_id.as_str(),
             routing_policy = routing_policy_name,
             registered_provider_count,
+            budget_root = budget_root.as_deref().unwrap_or("disabled"),
             stream = WORKFLOW_STREAM,
             "Runtime task execution service ready"
         );
@@ -2462,6 +2597,7 @@ mod tests {
             sample_runtime_llm_selection(ProviderKind::OpenAiChatGpt, "gpt-5.4")
         );
         assert_eq!(plan.registered_providers.len(), 2);
+        assert_eq!(plan.budget_root.as_deref(), Some("runtime.task_path"));
 
         match plan.routing_policy {
             RoutingPolicy::Cascade(policy) => {
@@ -2564,6 +2700,89 @@ mod tests {
             .expect("mock providers should register");
 
         assert_eq!(router.provider_count().await, 2);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local NATS with JetStream on localhost:4222"]
+    async fn jetstream_budget_store_round_trips_budget_nodes() {
+        let client = async_nats::connect("nats://localhost:4222")
+            .await
+            .expect("local NATS with JetStream should be available");
+        let jetstream = JetStreamManager::new(client, JetStreamConfig::default());
+        let bucket = format!("runtimebudget{}", Uuid::new_v4().simple());
+        let store = JetStreamBudgetStore::new(
+            ensure_runtime_budget_kv_store(&jetstream, &bucket)
+                .await
+                .expect("budget bucket should initialize"),
+        );
+        let node = BudgetNode {
+            key: "budget/test".to_string(),
+            limit_tokens: 10_000,
+            used_tokens: 0,
+            period: "2026-03-daily".to_string(),
+            policy: mister_smith_llm::BudgetPolicy::HardCap,
+            revision: 0,
+        };
+
+        let created_revision = store
+            .cas_update(&node, 0)
+            .await
+            .expect("initial CAS create should succeed");
+        let created = store
+            .get("budget/test")
+            .await
+            .expect("created budget node should load")
+            .expect("created budget node should exist");
+        assert_eq!(created.limit_tokens, 10_000);
+        assert_eq!(created.used_tokens, 0);
+        assert_eq!(created.revision, created_revision);
+
+        let mut updated = created.clone();
+        updated.used_tokens = 512;
+        let updated_revision = store
+            .cas_update(&updated, created.revision)
+            .await
+            .expect("CAS update should succeed");
+        let fetched = store
+            .get("budget/test")
+            .await
+            .expect("updated budget node should load")
+            .expect("updated budget node should exist");
+        assert_eq!(fetched.used_tokens, 512);
+        assert_eq!(fetched.revision, updated_revision);
+
+        jetstream
+            .context()
+            .delete_key_value(&bucket)
+            .await
+            .expect("test bucket should delete cleanly");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local NATS with JetStream on localhost:4222"]
+    async fn runtime_budget_enforcer_requires_existing_budget_root() {
+        let client = async_nats::connect("nats://localhost:4222")
+            .await
+            .expect("local NATS with JetStream should be available");
+        let jetstream = JetStreamManager::new(client, JetStreamConfig::default());
+        let bucket = format!("runtimebudget{}", Uuid::new_v4().simple());
+
+        let error =
+            match build_runtime_budget_enforcer_with_bucket(&jetstream, &bucket, "budget/missing")
+                .await
+            {
+                Ok(_) => panic!("missing budget roots should fail bootstrap preflight"),
+                Err(error) => error,
+            };
+
+        assert!(error.contains("budget/missing"));
+        assert!(error.contains(&bucket));
+
+        jetstream
+            .context()
+            .delete_key_value(&bucket)
+            .await
+            .expect("test bucket should delete cleanly");
     }
 
     #[test]
