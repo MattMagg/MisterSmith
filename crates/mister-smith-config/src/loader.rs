@@ -66,6 +66,16 @@ pub fn apply_env_overlay(config: &mut FrameworkConfig, prefix: &str) {
         }
     }
 
+    // LLM fields
+    if let Ok(val) = std::env::var(format!("{prefix}_LLM__PROVIDER_KIND")) {
+        if let Ok(provider_kind) = serde_json::from_value(serde_json::Value::String(val.clone())) {
+            config.llm.provider_kind = provider_kind;
+        }
+    }
+    if let Ok(val) = std::env::var(format!("{prefix}_LLM__MODEL_ID")) {
+        config.llm.model_id = val;
+    }
+
     // Security fields
     if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__ENABLED")) {
         if let Ok(b) = val.parse() {
@@ -232,6 +242,8 @@ mod tests {
             ("MISTER_SMITH_TRANSPORT__NATS_URL", None),
             ("MISTER_SMITH_TRANSPORT__HTTP_PORT", None),
             ("MISTER_SMITH_TRANSPORT__GRPC_PORT", None),
+            ("MISTER_SMITH_LLM__PROVIDER_KIND", None),
+            ("MISTER_SMITH_LLM__MODEL_ID", None),
             ("MISTER_SMITH_SECURITY__ENABLED", None),
             ("MISTER_SMITH_SECURITY__TLS_ENABLED", None),
             ("MISTER_SMITH_SECURITY__AUTH_ENABLED", None),
@@ -246,5 +258,25 @@ mod tests {
         let config = load_config_from_paths(&paths).unwrap();
 
         assert_eq!(config.agent.runtime.blocking_threads, 512);
+        assert_eq!(
+            config.llm.provider_kind,
+            mister_smith_llm::ProviderKind::OpenAiChatGpt
+        );
+        assert_eq!(config.llm.model_id, "gpt-5.4");
+    }
+
+    #[test]
+    fn apply_env_overlay_updates_llm_selection() {
+        let _env = EnvGuard::new(&[
+            ("MISTER_SMITH_LLM__PROVIDER_KIND", Some("mock")),
+            ("MISTER_SMITH_LLM__MODEL_ID", Some("mock-ops")),
+        ]);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let paths = vec![temp_dir.path().join("missing-local.toml")];
+
+        let config = load_config_from_paths(&paths).unwrap();
+
+        assert_eq!(config.llm.provider_kind, mister_smith_llm::ProviderKind::Mock);
+        assert_eq!(config.llm.model_id, "mock-ops");
     }
 }

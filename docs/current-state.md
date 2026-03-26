@@ -72,6 +72,9 @@ external workflow services such as Linear or Symphony.
   runner, and a ToolBus-backed execution boundary
 - A real local provider-backed runtime proof has been completed on the current runtime path using
   `openai_chatgpt` with `gpt-5.4`.
+- The default runtime path now selects `provider_kind` and `model_id` from framework
+  configuration for the providers the current app binary ships: `openai_chatgpt`,
+  `claude_subscription`, and `mock`.
 - Packet 015 is landed on `main` through `MS-94`, with the final evidence captured in
   `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`.
 - Packet 016 is landed on `main` through `MS-97` through `MS-100`, with final closure evidence
@@ -109,6 +112,9 @@ Read the current state in three layers:
 - bounded same-agent sessions with stable `session_id` and `coordinator_agent_id`
 - supervised planner and executor lifecycles on the default runtime path
 - ToolBus-backed workflow step execution on the default runtime path
+- bounded runtime provider/model selection through framework config for `openai_chatgpt`,
+  `claude_subscription`, and `mock`, with the live proof baseline still recorded on
+  `openai_chatgpt` and `gpt-5.4`
 - harder-workload graph proof on the default path when the planner supports it
 - one shared result contract across task, session, and operator-facing result views
 - bounded operator preview and provenance for proof-relevant inspection
@@ -122,15 +128,14 @@ This is the current OS path that has real end-to-end proof.
 These capabilities are real in the codebase, but the default runtime path does not yet use all of
 them end to end:
 
-- provider-neutral `ModelRouter` substrate
-- deterministic `MockProvider`
 - budget abstractions and router budget hooks
 - JetStream KV-backed budget and distributed state control
 - additive external-agent interoperability surfaces and capability discovery adapters
 
 Current default runtime limitations to keep in mind:
 
-- the live runtime path is currently fixed to `openai_chatgpt` and `gpt-5.4`
+- the live runtime-proof baseline is still `openai_chatgpt` with `gpt-5.4`; alternate supported
+  provider selections need explicit runtime proof before they carry the same claim
 - the default runtime router path is currently a plain round-robin router, not the full
   budget-backed control-loop path
 - the bounded MCP discovery and enforcement surface from `MS-77` is already landed on `main`

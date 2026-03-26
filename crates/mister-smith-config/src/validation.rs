@@ -5,7 +5,7 @@
 
 use crate::error::ConfigValidationError;
 use crate::types::{
-    AgentConfig, FrameworkConfig, MonitoringConfig, RuntimeConfig, SecurityConfig,
+    AgentConfig, FrameworkConfig, LlmConfig, MonitoringConfig, RuntimeConfig, SecurityConfig,
     SupervisionConfig, TransportConfig,
 };
 use std::time::Duration;
@@ -119,6 +119,20 @@ impl SecurityConfig {
     }
 }
 
+impl LlmConfig {
+    /// Validate runtime LLM selection.
+    pub fn validate(&self) -> Result<(), ConfigValidationError> {
+        if self.model_id.trim().is_empty() {
+            return Err(ConfigValidationError::InvalidValue {
+                field: "llm.model_id".to_string(),
+                reason: "must not be empty".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+}
+
 impl FrameworkConfig {
     /// Validate the entire framework configuration.
     pub fn validate(&self) -> Result<(), ConfigValidationError> {
@@ -126,6 +140,7 @@ impl FrameworkConfig {
         self.transport.validate()?;
         self.security.validate()?;
         self.persistence.validate()?;
+        self.llm.validate()?;
         self.observability.validate()?;
         Ok(())
     }

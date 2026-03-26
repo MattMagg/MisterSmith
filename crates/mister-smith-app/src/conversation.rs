@@ -25,7 +25,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::autonomy::resume_provenance_from_metadata;
-use crate::execution::{RuntimeTaskService, MODEL_ID, PROVIDER_KIND_NAME};
+use crate::execution::RuntimeTaskService;
 
 /// Runtime-backed durable conversation service.
 #[derive(Clone)]
@@ -187,8 +187,8 @@ impl ConversationSessionService for ConversationRuntimeService {
             session_id: *session_id.as_ref(),
             coordinator_agent_id: *coordinator_agent_id.as_ref(),
             status: session_status_text(SessionStatus::Active).to_string(),
-            provider_kind: PROVIDER_KIND_NAME.to_string(),
-            model_id: MODEL_ID.to_string(),
+            provider_kind: self.runtime_task_service.provider_kind_name().to_string(),
+            model_id: self.runtime_task_service.model_id().to_string(),
             active_workflow_id: Some(*workflow_id.as_ref()),
             last_completed_workflow_id: None,
             turn_count: 1,

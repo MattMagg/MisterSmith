@@ -144,6 +144,7 @@ async fn bootstrap_inner(
 
     // Step 5: Initialize runtime-backed task execution
     let task_service = RuntimeTaskService::bootstrap(
+        config,
         event_bus.clone(),
         nats_transport.clone(),
         supervised_system.clone(),

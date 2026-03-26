@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+use mister_smith_llm::ProviderKind;
+
 /// Runtime configuration.
 ///
 /// This is the SINGLE canonical `RuntimeConfig` definition. Phase 2's
@@ -129,6 +131,26 @@ pub struct TransportConfig {
     /// gRPC server port.
     #[serde(default)]
     pub grpc_port: Option<u16>,
+}
+
+/// Runtime LLM provider/model selection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmConfig {
+    /// Provider kind used by the runtime-backed task path.
+    #[serde(default = "default_llm_provider_kind")]
+    pub provider_kind: ProviderKind,
+    /// Model identifier to pass to the selected provider.
+    #[serde(default = "default_llm_model_id")]
+    pub model_id: String,
+}
+
+impl Default for LlmConfig {
+    fn default() -> Self {
+        Self {
+            provider_kind: default_llm_provider_kind(),
+            model_id: default_llm_model_id(),
+        }
+    }
 }
 
 /// Security configuration with independent subsystem toggles.
@@ -296,6 +318,9 @@ pub struct FrameworkConfig {
     /// Persistence configuration.
     #[serde(default)]
     pub persistence: PersistenceConfig,
+    /// Runtime LLM selection.
+    #[serde(default)]
+    pub llm: LlmConfig,
     /// Observability configuration (Phase 8).
     #[serde(default)]
     pub observability: ObservabilityConfig,
@@ -456,6 +481,14 @@ fn default_thread_keep_alive() -> Duration {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_llm_provider_kind() -> ProviderKind {
+    ProviderKind::OpenAiChatGpt
+}
+
+fn default_llm_model_id() -> String {
+    "gpt-5.4".to_string()
 }
 
 fn default_max_restart_attempts() -> u32 {
