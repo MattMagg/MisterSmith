@@ -21,7 +21,10 @@ pub fn load_from_file(path: &Path) -> Result<FrameworkConfig, ConfigValidationEr
 /// Reads env vars with the given prefix and `__` as nested field separator.
 /// Example: `MISTER_SMITH_AGENT__RUNTIME__WORKER_THREADS=8` sets
 /// `agent.runtime.worker_threads` to `8`.
-pub fn apply_env_overlay(config: &mut FrameworkConfig, prefix: &str) {
+pub fn apply_env_overlay(
+    config: &mut FrameworkConfig,
+    prefix: &str,
+) -> Result<(), ConfigValidationError> {
     // Agent runtime fields
     if let Ok(val) = std::env::var(format!("{prefix}_AGENT__RUNTIME__WORKER_THREADS")) {
         if let Ok(n) = val.parse() {
@@ -68,9 +71,14 @@ pub fn apply_env_overlay(config: &mut FrameworkConfig, prefix: &str) {
 
     // LLM fields
     if let Ok(val) = std::env::var(format!("{prefix}_LLM__PROVIDER_KIND")) {
-        if let Ok(provider_kind) = serde_json::from_value(serde_json::Value::String(val.clone())) {
-            config.llm.provider_kind = provider_kind;
-        }
+        let provider_kind = serde_json::from_value(serde_json::Value::String(val.clone()))
+            .map_err(|_| ConfigValidationError::InvalidValue {
+                field: "llm.provider_kind".to_string(),
+                reason: format!(
+                    "invalid environment value '{val}'; expected one of: anthropic, openai, openai_chatgpt, claude_subscription, mock"
+                ),
+            })?;
+        config.llm.provider_kind = provider_kind;
     }
     if let Ok(val) = std::env::var(format!("{prefix}_LLM__MODEL_ID")) {
         config.llm.model_id = val;
@@ -119,6 +127,8 @@ pub fn apply_env_overlay(config: &mut FrameworkConfig, prefix: &str) {
     if let Ok(val) = std::env::var(format!("{prefix}_SECURITY__AUTH__HMAC_SECRET")) {
         config.security.auth.hmac_secret = Some(val);
     }
+
+    Ok(())
 }
 
 /// Discover configuration file paths in priority order.
@@ -158,7 +168,7 @@ fn load_config_from_paths(paths: &[PathBuf]) -> Result<FrameworkConfig, ConfigVa
     }
 
     // Apply environment variable overlays
-    apply_env_overlay(&mut config, "MISTER_SMITH");
+    apply_env_overlay(&mut config, "MISTER_SMITH")?;
 
     // Validate final configuration
     config.validate()?;
@@ -276,7 +286,27 @@ mod tests {
 
         let config = load_config_from_paths(&paths).unwrap();
 
-        assert_eq!(config.llm.provider_kind, mister_smith_llm::ProviderKind::Mock);
+        assert_eq!(
+            config.llm.provider_kind,
+            mister_smith_llm::ProviderKind::Mock
+        );
         assert_eq!(config.llm.model_id, "mock-ops");
+    }
+
+    #[test]
+    fn apply_env_overlay_rejects_invalid_llm_provider_selection() {
+        let _env = EnvGuard::new(&[("MISTER_SMITH_LLM__PROVIDER_KIND", Some("mockk"))]);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let paths = vec![temp_dir.path().join("missing-local.toml")];
+
+        let error = load_config_from_paths(&paths).expect_err("invalid provider should fail");
+
+        match error {
+            ConfigValidationError::InvalidValue { field, reason } => {
+                assert_eq!(field, "llm.provider_kind");
+                assert!(reason.contains("mockk"));
+            }
+            other => panic!("expected invalid value error, got {other}"),
+        }
     }
 }

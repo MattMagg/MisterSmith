@@ -18,7 +18,8 @@ and preserve task/session/autonomy provenance.
 **Language/Version**: Rust 1.88.0
 **Primary Dependencies**: existing `mister-smith-config`, `mister-smith-app`, and
 `mister-smith-llm` crates
-**Testing**: targeted config and app tests plus `cargo build --workspace`
+**Testing**: targeted config and app tests plus `cargo clippy --workspace -- -D warnings` and
+`cargo build --workspace`
 **Target Platform**: local macOS and Linux parity for the existing app binary
 **Constraints**: no new routing-policy program, no queue staging, no external-agent widening
 

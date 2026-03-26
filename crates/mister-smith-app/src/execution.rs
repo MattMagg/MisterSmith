@@ -18,12 +18,12 @@ use mister_smith_agents::scheduler::{
     ArrayAggregator, IdentityDecomposer, TaskAssignment, TaskScheduler,
 };
 use mister_smith_agents::{AgentConfig, Orchestrator, ToolBus, TopologyCompiler, TopologySignals};
+use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{
     AgentId, AgentType, BranchState, EscalationPolicy, ExternalDelegationEnvelope, GraphState,
-    GuardTarget, NodeState, SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId,
-    ToolSchema,
+    GuardTarget, LlmError, NodeState, SupervisionStrategy, TaskId, Tool, ToolCapabilities,
+    ToolError, ToolId, ToolSchema,
 };
-use mister_smith_config::FrameworkConfig;
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
     TaskExecutionService, TaskListRequest, TaskStatusView, TaskSubmissionRequest,
@@ -66,6 +66,13 @@ struct RuntimeLlmSelection {
     provider_kind: ProviderKind,
     provider_kind_name: String,
     model_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct RuntimeEnvelopeProvenance {
+    provider_kind: String,
+    model_id: String,
+    runtime_execution_mode: Value,
 }
 
 impl Default for RuntimeLlmSelection {
@@ -208,6 +215,32 @@ fn render_claude_subscription_auth_status(
     }
 }
 
+fn runtime_envelope_provenance(
+    metadata: &Value,
+    fallback: &RuntimeLlmSelection,
+) -> RuntimeEnvelopeProvenance {
+    let provider_kind = metadata
+        .get("provider_kind")
+        .and_then(Value::as_str)
+        .unwrap_or(fallback.provider_kind_name.as_str())
+        .to_string();
+    let model_id = metadata
+        .get("model_id")
+        .and_then(Value::as_str)
+        .unwrap_or(fallback.model_id.as_str())
+        .to_string();
+    let runtime_execution_mode = metadata
+        .get("runtime_execution_mode")
+        .cloned()
+        .unwrap_or_else(|| runtime_execution_mode(fallback));
+
+    RuntimeEnvelopeProvenance {
+        provider_kind,
+        model_id,
+        runtime_execution_mode,
+    }
+}
+
 fn build_runtime_provider(
     selection: &RuntimeLlmSelection,
 ) -> Result<Arc<dyn ModelProvider>, String> {
@@ -243,7 +276,12 @@ async fn verify_runtime_provider_auth(selection: &RuntimeLlmSelection) -> Result
         }
         ProviderKind::ClaudeSubscription => match auth::claude_subscription_status() {
             Ok(creds) => render_claude_subscription_auth_status(&creds),
-            Err(_) => Err(auth::render_claude_subscription_missing()),
+            Err(LlmError::Authentication(message))
+                if message.starts_with("No Claude subscription credentials found") =>
+            {
+                Err(auth::render_claude_subscription_missing())
+            }
+            Err(error) => Err(error.to_string()),
         },
         ProviderKind::Mock => Ok(()),
         ProviderKind::OpenAi | ProviderKind::Anthropic => {
@@ -497,16 +535,17 @@ impl RuntimeTaskService {
             "error": message,
             "recovered_after_restart": true,
         });
+        let envelope_provenance = runtime_envelope_provenance(&metadata, &self.runtime_llm);
         let final_result = crate::autonomy::build_canonical_result_envelope(
             crate::autonomy::CanonicalResultEnvelopeInput {
                 workflow_id,
-                provider_kind: self.provider_kind_name(),
-                model_id: self.model_id(),
+                provider_kind: envelope_provenance.provider_kind.as_str(),
+                model_id: envelope_provenance.model_id.as_str(),
                 description: metadata
                     .get("description")
                     .and_then(Value::as_str)
                     .unwrap_or(message),
-                runtime_execution_mode: self.runtime_execution_mode(),
+                runtime_execution_mode: envelope_provenance.runtime_execution_mode,
                 planner_output: metadata
                     .get("planner_output")
                     .cloned()
@@ -2211,7 +2250,10 @@ mod tests {
             selection,
             sample_runtime_llm_selection(ProviderKind::Mock, "mock-ops")
         );
-        assert_eq!(selection.provider_config().provider_kind, ProviderKind::Mock);
+        assert_eq!(
+            selection.provider_config().provider_kind,
+            ProviderKind::Mock
+        );
         assert_eq!(selection.provider_config().model_id, "mock-ops");
     }
 
@@ -2223,6 +2265,39 @@ mod tests {
 
         assert_eq!(mode["provider_kind"], json!("mock"));
         assert_eq!(mode["model_id"], json!("mock-ops"));
+    }
+
+    #[test]
+    fn runtime_envelope_provenance_prefers_persisted_metadata_over_current_selection() {
+        let metadata = json!({
+            "provider_kind": "mock",
+            "model_id": "mock-ops",
+            "runtime_execution_mode": {
+                "execution_boundary": "tool_bus",
+                "provider_kind": "mock",
+                "model_id": "mock-ops"
+            }
+        });
+        let fallback = RuntimeLlmSelection::default();
+
+        let provenance = runtime_envelope_provenance(&metadata, &fallback);
+
+        assert_eq!(provenance.provider_kind, "mock");
+        assert_eq!(provenance.model_id, "mock-ops");
+        assert_eq!(provenance.runtime_execution_mode["provider_kind"], "mock");
+        assert_eq!(provenance.runtime_execution_mode["model_id"], "mock-ops");
+    }
+
+    #[test]
+    fn runtime_envelope_provenance_falls_back_to_current_selection_when_metadata_missing() {
+        let fallback = sample_runtime_llm_selection(ProviderKind::Mock, "mock-ops");
+
+        let provenance = runtime_envelope_provenance(&json!({}), &fallback);
+
+        assert_eq!(provenance.provider_kind, "mock");
+        assert_eq!(provenance.model_id, "mock-ops");
+        assert_eq!(provenance.runtime_execution_mode["provider_kind"], "mock");
+        assert_eq!(provenance.runtime_execution_mode["model_id"], "mock-ops");
     }
 
     #[test]

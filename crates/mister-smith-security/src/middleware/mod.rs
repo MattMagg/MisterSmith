@@ -172,7 +172,6 @@ impl From<&RuntimeSecurityConfig> for SecurityLayerConfig {
                 reload_interval: value.tls.reload_interval_secs.map(Duration::from_secs),
                 expiry_warning_days: value.tls.expiry_warning_days,
             }),
-            ..Default::default()
         }
     }
 }

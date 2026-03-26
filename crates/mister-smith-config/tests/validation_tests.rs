@@ -158,7 +158,9 @@ fn framework_config_rejects_empty_llm_model_id() {
     let mut config = FrameworkConfig::default();
     config.llm.model_id = "   ".to_string();
 
-    let err = config.validate().expect_err("empty llm model id should fail");
+    let err = config
+        .validate()
+        .expect_err("empty llm model id should fail");
 
     match err {
         ConfigValidationError::InvalidValue { field, reason } => {
