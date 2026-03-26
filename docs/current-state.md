@@ -19,6 +19,7 @@ Use this file when you need one honest answer to:
 | Need | Primary document | Role |
 | ---- | ---------------- | ---- |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
+| Next bounded phase | `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` | Current forward-development authority for the post-packet-019 orchestration-performance packet |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for the completed packet-019 runtime-routing slice |
 | What just closed | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Packet-019 scope freeze and closure router |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final-validation artifact for the completed packet-016 epic |
@@ -81,6 +82,10 @@ external workflow services such as Linear or Symphony.
   runtime-backed task path can boot a bounded multi-provider cascade plus JetStream-backed budget
   enforcement; when no profile is configured, the current single-provider `RoundRobin` fallback
   remains intact.
+- Packet 020 is now scope-frozen on `main` as the next bounded phase: verifier-gated adaptive
+  orchestration focused on step-level verification, handoff clarification, checkpoint-based repair,
+  and orchestration-quality provenance. Those packet artifacts are planning truth only; they are
+  not yet landed runtime behavior.
 - Task and autonomy provenance now surface runtime routing policy, registered-provider count,
   budget root, and the latest accepted step tier/checkpoint evidence from the runtime task path.
 - one bounded packet-019 live proof now exists for the configured
@@ -96,8 +101,8 @@ external workflow services such as Linear or Symphony.
 - Packet 018 is the in-review smoke-harness lane and is not yet part of landed `main` truth.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
-- The packet-016 family remains terminal, but repo workflow activity has moved on to the packet-018
-  proof-harness review lane and the packet-019 next-phase scope freeze.
+- The packet-016 family remains terminal, packet `019` is closed, packet `018` remains an
+  out-of-main review lane, and repo forward planning now points at the packet-020 scope freeze.
 
 ## Important Distinction
 
@@ -179,11 +184,13 @@ The completed frontier epics are:
 - packet 016: external-agent boundary continuity and runtime proof (`MS-97` through `MS-100`,
   parent `MS-96`)
 
-Packet `019` is now complete on `main`. This repo note does not declare a newer post-019 bounded
-phase.
+Packet `019` is now complete on `main`. Packet `020` is the next bounded phase on paper only and
+is not yet implemented on the runtime path.
 
 This direction is tracked in:
 
+- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
+- `specs/020-verifier-gated-adaptive-orchestration/`
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
 - `specs/019-budget-backed-runtime-routing-control-loop/`
@@ -199,7 +206,7 @@ If you need to understand the repo quickly:
 
 1. read `docs/current-state.md`
 2. read `README.md`
-3. read `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`
+3. read `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
 4. read `WORKFLOW.md` and `docs/linear/LINEAR.md` only if you are working on the development
    control plane
 5. read `ROADMAP.md`, `spec/`, and `specs/` when you need the architectural or phase-level detail
@@ -207,9 +214,10 @@ If you need to understand the repo quickly:
 ## Source Of Truth Rules
 
 - Use this file for the repo's current broad state.
-- Use `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` for the current forward
-  checkpoint and `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
-  for the completed packet-016 closure evidence.
+- Use `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the current
+  forward-development checkpoint and
+  `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` for the completed
+  packet-019 scope-freeze and closure router.
 - Use `WORKFLOW.md` and `docs/linear/LINEAR.md` for development workflow rules.
 - Use `spec/` for architecture truth.
 - Use `specs/` for implementation packet truth.

@@ -17,6 +17,9 @@ Status: Current
 - Packet 019 is now complete on `main`: the runtime-backed task path accepts a typed
   `runtime_routing_profile`, can boot a bounded multi-provider cascade with JetStream-backed
   budget enforcement when configured, and keeps the no-profile single-provider fallback intact.
+- Packet 020 is now scope-frozen on `main` as the next bounded phase. It targets verifier-gated
+  adaptive orchestration: step-level verification, handoff clarification, failure-context
+  propagation, and bounded retry/re-plan decisions for workflow quality.
 - Task and autonomy provenance now surface runtime routing policy, budget root, and the latest
   accepted step tier/checkpoint evidence from the runtime task path.
 - one bounded packet-019 live proof now exists for the
@@ -29,14 +32,14 @@ Status: Current
   persisted proof-outcome visibility are now landed on `main`.
 - Smith now exposes workflow-family tools for issue and workpad mutation, backlog slicing, watched
   queue staging, lifecycle resolution, Ralph packet flows, and SpecKit task translation.
-- No newer post-019 scope-frozen packet is declared in this note.
+- Packet 020 exists as packet and planning truth only; it is not yet landed runtime behavior.
 
 ## Durable Sources To Read First
 
 1. `AGENTS.md`
 2. `docs/current-state.md`
-3. `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
-4. `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`
+3. `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
+4. `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
 5. `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
 6. `WORKFLOW.md`
 7. `docs/linear/LINEAR.md`
@@ -59,6 +62,8 @@ The current development-workflow program is still Smith-first, but the March 16 
 supporting history rather than the primary direction router:
 
 - `docs/current-state.md` is the current repo-wide router
+- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` is the current forward
+  development authority for the next bounded phase
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` is the bounded closure note for
   the completed packet-019 proof lane
 - `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` is the packet-019 scope
@@ -68,10 +73,9 @@ supporting history rather than the primary direction router:
 - `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
   records the completed packet-016 closure
 
-The next frontier planning action is no longer “identify a fresh gap.” That guardrail has been
-satisfied and packet `019` is now closed on `main`. The config/bootstrap/budget/evidence slices are
-landed, and the remaining honest boundary is that the live proof stays explicitly bounded to the
-committed `budget_softcap_openai_mock` profile rather than a broad alternate-provider claim.
+The next frontier planning action is no longer "identify a fresh gap." That guardrail has been
+satisfied twice: packet `019` closed on `main`, and packet `020` now freezes the next bounded
+orchestration-performance gap without yet claiming implementation or benchmark results.
 
 Closed frontier packet and recovery issues now include:
 
@@ -97,8 +101,7 @@ Closed frontier packet and recovery issues now include:
 - start with `route_workflow_request`, `get_control_plane_snapshot`, and
   `get_issue_execution_snapshot` before falling back to raw Linear or ad hoc workflow glue
 - use `docs/current-state.md` and
-  `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` as the first direction
-  read
+  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` as the first direction read
 - use `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the source of truth for the
   currently implemented Smith workflow-family surface
 - use `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`

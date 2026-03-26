@@ -3,20 +3,21 @@
 Date: March 21, 2026
 Status: Historical checkpoint; superseded as forward-development authority on 2026-03-26
 
-Superseded by: `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
+Superseded by: `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
 
 ## Purpose
 
 Freeze one repo-wide development checkpoint after packet `016` closed on `main` so every
 state-bearing doc points to the same next step.
 
-This note replaces the March 19 checkpoint as the forward-development authority.
+This note replaced the March 19 checkpoint as the forward-development authority before packet
+`019` and then packet `020` superseded it.
 
 ## Development Authority
 
 - `docs/current-state.md`: broad repo and product truth
-- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`: current
-  forward-development authority, closure posture, and next-step guardrails
+- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`: current
+  forward-development authority after packet `019` closure
 - `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`:
   packet-016 closure evidence
 - `WORKFLOW.md` and `docs/linear/LINEAR.md`: development control-plane contract

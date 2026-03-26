@@ -4,6 +4,9 @@
 
 Completed on `main` as of 2026-03-26
 
+Forward-development authority moved to
+`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
+
 ## Landed On Main So Far
 
 - typed `llm.runtime_routing_profile` config for one bounded shipped-provider routing profile
