@@ -124,7 +124,7 @@ mister-smith-agents = { path = "crates/mister-smith-agents" }
 # Observability — Phase 8
 opentelemetry = "0.31.0"
 opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.31.0", features = ["tonic"] }
+opentelemetry-otlp = { version = "0.31.1", features = ["tonic"] }
 tracing-opentelemetry = "0.32.1"
 
 # CLI — Phase 8
