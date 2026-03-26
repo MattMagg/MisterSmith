@@ -1,0 +1,19 @@
+[llm]
+provider_kind = "openai_chatgpt"
+model_id = "gpt-5.4"
+
+[llm.runtime_routing_profile]
+policy = "cascade"
+budget_root = "runtime.task_path"
+
+[[llm.runtime_routing_profile.tiers]]
+label = "primary"
+provider_kind = "openai_chatgpt"
+model_id = "gpt-5.4"
+metadata = { tier = "primary" }
+
+[[llm.runtime_routing_profile.tiers]]
+label = "fallback"
+provider_kind = "mock"
+model_id = "mock-budget-fallback"
+metadata = { tier = "fallback" }

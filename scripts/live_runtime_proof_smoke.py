@@ -17,6 +17,7 @@ import signal
 import socket
 import subprocess
 import sys
+import textwrap
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -32,6 +33,16 @@ DEFAULT_HTTP_PORT = 8080
 DEFAULT_NATS_URL = "nats://127.0.0.1:4222"
 DEFAULT_PROVIDER_KIND = "openai_chatgpt"
 DEFAULT_MODEL_ID = "gpt-5.4"
+DEFAULT_PROFILE = "baseline"
+DEFAULT_BUDGET_AWARE_PROFILE = "budget_softcap_openai_mock"
+DEFAULT_RUNTIME_BUDGET_BUCKET = "runtime_budget"
+DEFAULT_RUNTIME_BUDGET_ROOT = "runtime.task_path"
+DEFAULT_RUNTIME_BUDGET_POLICY = "soft_cap"
+DEFAULT_RUNTIME_BUDGET_LIMIT_TOKENS = 50_000
+DEFAULT_RUNTIME_BUDGET_PERIOD = "live_runtime_smoke"
+DEFAULT_FALLBACK_PROVIDER_KIND = "mock"
+DEFAULT_FALLBACK_MODEL_ID = "mock-budget-fallback"
+DEFAULT_BUDGET_SEED_TARGET_DIR = REPO_ROOT / "target" / "live_runtime_budget_seed"
 DEFAULT_TIMEOUT_SECONDS = 240.0
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TASK_DESCRIPTION = (
@@ -72,6 +83,15 @@ class HarnessConfig:
     poll_interval_seconds: float
     provider_kind: str
     model_id: str
+    profile: str
+    runtime_config_path: Path | None
+    routing_policy: str
+    registered_provider_count: int
+    budget_root: str | None
+    budget_policy: str | None
+    expected_step_action: str | None
+    expected_step_tier: str | None
+    required_step_checkpoints: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -125,6 +145,260 @@ def write_text(path: Path, text: str) -> None:
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def is_budget_aware_profile(profile: str) -> bool:
+    return profile == DEFAULT_BUDGET_AWARE_PROFILE
+
+
+def build_runtime_config_toml(profile: str) -> str | None:
+    if not is_budget_aware_profile(profile):
+        return None
+
+    return textwrap.dedent(
+        f"""
+        [llm]
+        provider_kind = "{DEFAULT_PROVIDER_KIND}"
+        model_id = "{DEFAULT_MODEL_ID}"
+
+        [llm.runtime_routing_profile]
+        policy = "cascade"
+        budget_root = "{DEFAULT_RUNTIME_BUDGET_ROOT}"
+
+        [[llm.runtime_routing_profile.tiers]]
+        label = "primary"
+        provider_kind = "{DEFAULT_PROVIDER_KIND}"
+        model_id = "{DEFAULT_MODEL_ID}"
+        metadata = {{ tier = "primary" }}
+
+        [[llm.runtime_routing_profile.tiers]]
+        label = "fallback"
+        provider_kind = "{DEFAULT_FALLBACK_PROVIDER_KIND}"
+        model_id = "{DEFAULT_FALLBACK_MODEL_ID}"
+        metadata = {{ tier = "fallback" }}
+        """
+    ).strip() + "\n"
+
+
+def write_runtime_config(artifact_dir: Path, profile: str) -> Path | None:
+    config_text = build_runtime_config_toml(profile)
+    if config_text is None:
+        return None
+
+    config_path = artifact_dir / "runtime-config.toml"
+    write_text(config_path, config_text)
+    return config_path
+
+
+def build_budget_seed_request(config: HarnessConfig) -> dict[str, Any]:
+    if config.budget_root is None or config.budget_policy is None:
+        raise SmokeHarnessError("budget seed requested without a configured budget-aware profile")
+
+    return {
+        "nats_url": DEFAULT_NATS_URL,
+        "bucket": DEFAULT_RUNTIME_BUDGET_BUCKET,
+        "key": config.budget_root,
+        "limit_tokens": DEFAULT_RUNTIME_BUDGET_LIMIT_TOKENS,
+        "used_tokens": 0,
+        "period": DEFAULT_RUNTIME_BUDGET_PERIOD,
+        "policy": config.budget_policy,
+    }
+
+
+def budget_seed_helper_manifest() -> str:
+    return textwrap.dedent(
+        """
+        [package]
+        name = "ms-live-runtime-budget-seed"
+        version = "0.1.0"
+        edition = "2021"
+
+        [workspace]
+
+        [dependencies]
+        async-nats = { version = "0.46.0", features = ["jetstream", "kv"] }
+        serde = { version = "1", features = ["derive"] }
+        serde_json = "1"
+        tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+        """
+    ).strip() + "\n"
+
+
+def budget_seed_helper_source() -> str:
+    return textwrap.dedent(
+        """
+        use std::env;
+
+        use async_nats::jetstream::{self, kv::{self, Operation as KvOperation}};
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        enum BudgetPolicy {
+            HardCap,
+            SoftCap,
+            Conditioned,
+        }
+
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        struct BudgetNode {
+            key: String,
+            limit_tokens: u64,
+            used_tokens: u64,
+            period: String,
+            policy: BudgetPolicy,
+            #[serde(default)]
+            revision: u64,
+        }
+
+        fn usage() -> &'static str {
+            "usage: seed <nats_url> <bucket> <key> <limit_tokens> <used_tokens> <period> <policy> | fetch <nats_url> <bucket> <key>"
+        }
+
+        #[tokio::main]
+        async fn main() -> Result<(), Box<dyn std::error::Error>> {
+            let args: Vec<String> = env::args().collect();
+            match args.get(1).map(String::as_str) {
+                Some("seed") => {
+                    if args.len() != 9 {
+                        return Err(usage().into());
+                    }
+                    let nats_url = &args[2];
+                    let bucket = &args[3];
+                    let key = &args[4];
+                    let limit_tokens = args[5].parse::<u64>()?;
+                    let used_tokens = args[6].parse::<u64>()?;
+                    let period = &args[7];
+                    let policy = serde_json::from_value::<BudgetPolicy>(serde_json::Value::String(args[8].clone()))?;
+
+                    let client = async_nats::connect(nats_url).await?;
+                    let jetstream = jetstream::new(client);
+                    let store = jetstream
+                        .create_or_update_key_value(kv::Config {
+                            bucket: bucket.to_string(),
+                            description: "Runtime budget state for the task-path router".to_string(),
+                            history: 1,
+                            ..Default::default()
+                        })
+                        .await?;
+
+                    let node = BudgetNode {
+                        key: key.to_string(),
+                        limit_tokens,
+                        used_tokens,
+                        period: period.to_string(),
+                        policy,
+                        revision: 0,
+                    };
+                    let payload = serde_json::to_vec(&node)?;
+                    store.put(key.as_str(), payload.into()).await?;
+                    println!("{}", serde_json::to_string_pretty(&node)?);
+                    Ok(())
+                }
+                Some("fetch") => {
+                    if args.len() != 5 {
+                        return Err(usage().into());
+                    }
+                    let nats_url = &args[2];
+                    let bucket = &args[3];
+                    let key = &args[4];
+
+                    let client = async_nats::connect(nats_url).await?;
+                    let jetstream = jetstream::new(client);
+                    let store = jetstream
+                        .create_or_update_key_value(kv::Config {
+                            bucket: bucket.to_string(),
+                            description: "Runtime budget state for the task-path router".to_string(),
+                            history: 1,
+                            ..Default::default()
+                        })
+                        .await?;
+
+                    let entry = store.entry(key).await?;
+                    let Some(entry) = entry else {
+                        return Err(format!("budget key '{key}' not found in bucket '{bucket}'").into());
+                    };
+                    if entry.operation != KvOperation::Put {
+                        return Err(format!("budget key '{key}' did not resolve to a put entry").into());
+                    }
+                    let mut node: BudgetNode = serde_json::from_slice(&entry.value)?;
+                    node.key = entry.key;
+                    node.revision = entry.revision;
+                    println!("{}", serde_json::to_string_pretty(&node)?);
+                    Ok(())
+                }
+                _ => Err(usage().into()),
+            }
+        }
+        """
+    ).strip() + "\n"
+
+
+def ensure_budget_seed_helper(config: HarnessConfig) -> Path:
+    helper_dir = config.artifact_dir / ".budget-seed-helper"
+    src_dir = helper_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    write_text(helper_dir / "Cargo.toml", budget_seed_helper_manifest())
+    write_text(src_dir / "main.rs", budget_seed_helper_source())
+    return helper_dir
+
+
+def run_budget_seed_helper(
+    config: HarnessConfig,
+    command_name: str,
+    *,
+    artifact_name: str,
+) -> dict[str, Any]:
+    helper_dir = ensure_budget_seed_helper(config)
+    try:
+        if command_name == "seed":
+            request = build_budget_seed_request(config)
+            helper_args = [
+                "seed",
+                request["nats_url"],
+                request["bucket"],
+                request["key"],
+                str(request["limit_tokens"]),
+                str(request["used_tokens"]),
+                request["period"],
+                request["policy"],
+            ]
+            write_json(config.artifact_dir / "budget-seed-request.json", request)
+        elif command_name == "fetch":
+            if config.budget_root is None:
+                raise SmokeHarnessError("budget fetch requested without a configured budget root")
+            helper_args = [
+                "fetch",
+                DEFAULT_NATS_URL,
+                DEFAULT_RUNTIME_BUDGET_BUCKET,
+                config.budget_root,
+            ]
+        else:
+            raise SmokeHarnessError(f"unknown budget helper command {command_name!r}")
+
+        env = os.environ.copy()
+        env["CARGO_TARGET_DIR"] = str(DEFAULT_BUDGET_SEED_TARGET_DIR)
+        command = [
+            "cargo",
+            "run",
+            "--quiet",
+            "--manifest-path",
+            str(helper_dir / "Cargo.toml"),
+            "--",
+            *helper_args,
+        ]
+        result = run_command(command, env=env)
+        write_text(config.artifact_dir / f"{artifact_name}.log", result.stdout + result.stderr)
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise SmokeHarnessError(
+                f"budget helper returned invalid JSON for {command_name}: {exc}"
+            ) from exc
+        write_json(config.artifact_dir / f"{artifact_name}.json", payload)
+        return payload
+    finally:
+        shutil.rmtree(helper_dir, ignore_errors=True)
 
 
 def format_command(command: list[str]) -> str:
@@ -385,8 +659,12 @@ def start_runtime(config: HarnessConfig) -> tuple[subprocess.Popen[str], Any]:
             "MISTER_SMITH_LLM__MODEL_ID": config.model_id,
         }
     )
+    command = ["cargo", "run", "-q", "-p", "mister-smith-app", "--"]
+    if config.runtime_config_path is not None:
+        command.extend(["--config", str(config.runtime_config_path)])
+    command.append("run")
     process = subprocess.Popen(
-        ["cargo", "run", "-q", "-p", "mister-smith-app", "--", "run"],
+        command,
         cwd=REPO_ROOT,
         env=env,
         stdout=runtime_log,
@@ -521,6 +799,9 @@ def summarize_task_status(task_status: dict[str, Any]) -> dict[str, Any]:
         "proof_outcome": result.get("proof_outcome")
         or result_envelope.get("proof_outcome"),
         "runtime_execution_mode": runtime_execution_mode,
+        "routing_policy": runtime_execution_mode.get("routing_policy"),
+        "registered_provider_count": runtime_execution_mode.get("registered_provider_count"),
+        "budget_root": runtime_execution_mode.get("budget_root"),
         "step_result_count": len(step_results),
         "step_summaries": step_summaries,
         "aggregated_result_count": aggregated_result_count,
@@ -532,6 +813,9 @@ def assert_task_summary(
     *,
     expected_provider_kind: str,
     expected_model_id: str,
+    expected_routing_policy: str = "round_robin",
+    expected_registered_provider_count: int = 1,
+    expected_budget_root: str = "disabled",
 ) -> None:
     if summary.get("status") != "completed":
         raise SmokeHarnessError(f"task did not complete successfully: {summary.get('status')!r}")
@@ -554,6 +838,9 @@ def assert_task_summary(
         "tool_name": "workflow.execute_step",
         "provider_kind": expected_provider_kind,
         "model_id": expected_model_id,
+        "routing_policy": expected_routing_policy,
+        "registered_provider_count": expected_registered_provider_count,
+        "budget_root": expected_budget_root,
     }
     for key, expected in expected_markers.items():
         actual = runtime_execution_mode.get(key)
@@ -610,6 +897,40 @@ def assert_autonomy_status(status_payload: dict[str, Any], workflow_id: str) -> 
         raise SmokeHarnessError("autonomy step_routing_history was empty")
     if not isinstance(branches, list) or len(branches) != int(graph.get("branch_count", 0)):
         raise SmokeHarnessError("autonomy branches did not match graph.branch_count")
+
+
+def assert_autonomy_step_routing_expectations(
+    status_payload: dict[str, Any],
+    *,
+    expected_action: str | None,
+    expected_tier: str | None,
+    required_checkpoints: tuple[str, ...],
+) -> None:
+    step_routing_history = status_payload.get("step_routing_history")
+    if not isinstance(step_routing_history, list) or not step_routing_history:
+        raise SmokeHarnessError("autonomy step_routing_history was empty")
+    latest = step_routing_history[-1]
+    if not isinstance(latest, dict):
+        raise SmokeHarnessError("latest step_routing_history entry was not a JSON object")
+
+    if expected_action is not None and latest.get("action") != expected_action:
+        raise SmokeHarnessError(
+            f"latest step action expected {expected_action!r}, observed {latest.get('action')!r}"
+        )
+    if expected_tier is not None and latest.get("tier") != expected_tier:
+        raise SmokeHarnessError(
+            f"latest step tier expected {expected_tier!r}, observed {latest.get('tier')!r}"
+        )
+
+    checkpoints = latest.get("triggered_checkpoints")
+    if not isinstance(checkpoints, list):
+        raise SmokeHarnessError("latest step_routing_history entry was missing checkpoints")
+    missing = [checkpoint for checkpoint in required_checkpoints if checkpoint not in checkpoints]
+    if missing:
+        raise SmokeHarnessError(
+            "latest step routing entry was missing required checkpoints: "
+            + ", ".join(missing)
+        )
 
 
 def wait_for_terminal_task_status(
@@ -671,11 +992,19 @@ def build_smoke_summary(
     task_id: str,
     task_summary: dict[str, Any],
     autonomy_status: dict[str, Any],
+    budget_state_after: dict[str, Any] | None,
 ) -> dict[str, Any]:
     graph = autonomy_status.get("graph", {})
     topology = autonomy_status.get("topology", {})
+    latest_step = {}
+    step_history = autonomy_status.get("step_routing_history")
+    if isinstance(step_history, list) and step_history:
+        latest = step_history[-1]
+        if isinstance(latest, dict):
+            latest_step = latest
     return {
         "run_id": config.run_id,
+        "profile": config.profile,
         "artifact_dir": repo_relative(config.artifact_dir),
         "database_name": config.database_name,
         "base_url": config.base_url,
@@ -683,8 +1012,15 @@ def build_smoke_summary(
         "provider_kind": task_summary.get("provider_kind"),
         "model_id": task_summary.get("model_id"),
         "runtime_execution_mode": task_summary.get("runtime_execution_mode"),
+        "routing_policy": task_summary.get("routing_policy"),
+        "registered_provider_count": task_summary.get("registered_provider_count"),
+        "budget_root": task_summary.get("budget_root"),
         "step_result_count": task_summary.get("step_result_count"),
         "aggregated_result_count": task_summary.get("aggregated_result_count"),
+        "latest_step_tier": latest_step.get("tier"),
+        "latest_step_action": latest_step.get("action"),
+        "latest_step_checkpoints": latest_step.get("triggered_checkpoints"),
+        "budget_state_after": budget_state_after,
         "graph_state": graph.get("state"),
         "branch_count": graph.get("branch_count"),
         "node_count": graph.get("node_count"),
@@ -699,6 +1035,8 @@ def build_config(args: argparse.Namespace) -> HarnessConfig:
     database_name = args.database_name or build_database_name(run_id)
     database_url = f"postgres://mistersmith:mistersmith_dev@127.0.0.1:5432/{database_name}"
     base_url = f"http://127.0.0.1:{args.http_port}"
+    runtime_config_path = write_runtime_config(artifact_dir, args.profile)
+    is_budget_profile = is_budget_aware_profile(args.profile)
     return HarnessConfig(
         run_id=run_id,
         compose_file=args.compose_file,
@@ -711,6 +1049,15 @@ def build_config(args: argparse.Namespace) -> HarnessConfig:
         poll_interval_seconds=args.poll_interval_seconds,
         provider_kind=DEFAULT_PROVIDER_KIND,
         model_id=DEFAULT_MODEL_ID,
+        profile=args.profile,
+        runtime_config_path=runtime_config_path,
+        routing_policy="cascade" if is_budget_profile else "round_robin",
+        registered_provider_count=2 if is_budget_profile else 1,
+        budget_root=DEFAULT_RUNTIME_BUDGET_ROOT if is_budget_profile else None,
+        budget_policy=DEFAULT_RUNTIME_BUDGET_POLICY if is_budget_profile else None,
+        expected_step_action="downgrade" if is_budget_profile else None,
+        expected_step_tier="primary" if is_budget_profile else None,
+        required_step_checkpoints=("budget_policy",) if is_budget_profile else (),
     )
 
 
@@ -745,6 +1092,16 @@ def parse_args() -> argparse.Namespace:
         help="Maximum time to wait for each long-running phase.",
     )
     parser.add_argument(
+        "--profile",
+        choices=(DEFAULT_PROFILE, DEFAULT_BUDGET_AWARE_PROFILE),
+        default=DEFAULT_PROFILE,
+        help=(
+            "Proof profile to exercise. 'baseline' preserves the existing "
+            "single-provider proof surface; 'budget_softcap_openai_mock' "
+            "boots the config-gated cascade profile with a seeded soft-cap budget root."
+        ),
+    )
+    parser.add_argument(
         "--poll-interval-seconds",
         type=float,
         default=DEFAULT_POLL_INTERVAL_SECONDS,
@@ -763,12 +1120,18 @@ def main() -> int:
             "compose_file": repo_relative(config.compose_file),
             "artifact_dir": repo_relative(config.artifact_dir),
             "database_url": redact_database_url(config.database_url),
+            "runtime_config_path": (
+                repo_relative(config.runtime_config_path)
+                if config.runtime_config_path is not None
+                else None
+            ),
         },
     )
 
     process: subprocess.Popen[str] | None = None
     runtime_log: Any | None = None
     started_services: tuple[str, ...] = ()
+    budget_state_after: dict[str, Any] | None = None
 
     try:
         ensure_required_tools("cargo", "docker", "python3")
@@ -795,6 +1158,12 @@ def main() -> int:
         wait_for_postgres_ready(config)
         fetch_nats_varz(config)
         check_openai_auth_status(config)
+        if is_budget_aware_profile(config.profile):
+            run_budget_seed_helper(
+                config,
+                "seed",
+                artifact_name="budget-state-before",
+            )
         create_database(config)
 
         process, runtime_log = start_runtime(config)
@@ -833,6 +1202,9 @@ def main() -> int:
             task_summary,
             expected_provider_kind=config.provider_kind,
             expected_model_id=config.model_id,
+            expected_routing_policy=config.routing_policy,
+            expected_registered_provider_count=config.registered_provider_count,
+            expected_budget_root=config.budget_root or "disabled",
         )
         write_json(config.artifact_dir / "task-result-summary.json", task_summary)
 
@@ -845,8 +1217,27 @@ def main() -> int:
         ).payload
         write_json(config.artifact_dir / "autonomy-status.json", autonomy_status)
         assert_autonomy_status(autonomy_status, task_id)
+        assert_autonomy_step_routing_expectations(
+            autonomy_status,
+            expected_action=config.expected_step_action,
+            expected_tier=config.expected_step_tier,
+            required_checkpoints=config.required_step_checkpoints,
+        )
 
-        smoke_summary = build_smoke_summary(config, task_id, task_summary, autonomy_status)
+        if is_budget_aware_profile(config.profile):
+            budget_state_after = run_budget_seed_helper(
+                config,
+                "fetch",
+                artifact_name="budget-state-after",
+            )
+
+        smoke_summary = build_smoke_summary(
+            config,
+            task_id,
+            task_summary,
+            autonomy_status,
+            budget_state_after,
+        )
         write_json(config.artifact_dir / "smoke-summary.json", smoke_summary)
         print(json.dumps(smoke_summary, indent=2, sort_keys=True))
         return 0

@@ -45,6 +45,17 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
             "postgres://mistersmith:<redacted>@127.0.0.1:5432/ms_test",
         )
 
+    def test_build_runtime_config_toml_for_budget_profile_contains_cascade_and_budget_root(self) -> None:
+        config_text = self.module.build_runtime_config_toml(
+            self.module.DEFAULT_BUDGET_AWARE_PROFILE
+        )
+
+        self.assertIsNotNone(config_text)
+        self.assertIn('policy = "cascade"', config_text)
+        self.assertIn('budget_root = "runtime.task_path"', config_text)
+        self.assertIn('provider_kind = "openai_chatgpt"', config_text)
+        self.assertIn('provider_kind = "mock"', config_text)
+
     def test_summarize_task_status_extracts_runtime_markers_and_step_summaries(self) -> None:
         task_status = {
             "task_id": "workflow-1",
@@ -63,6 +74,9 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                         "tool_name": "workflow.execute_step",
                         "provider_kind": "openai_chatgpt",
                         "model_id": "gpt-5.4",
+                        "routing_policy": "round_robin",
+                        "registered_provider_count": 1,
+                        "budget_root": "disabled",
                     },
                     "aggregated_result": [{}, {}, {}],
                     "step_results": [
@@ -85,6 +99,9 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
         self.assertEqual(summary["provider_kind"], "openai_chatgpt")
         self.assertEqual(summary["model_id"], "gpt-5.4")
         self.assertEqual(summary["proof_outcome"], "graph_formed_and_completed")
+        self.assertEqual(summary["routing_policy"], "round_robin")
+        self.assertEqual(summary["registered_provider_count"], 1)
+        self.assertEqual(summary["budget_root"], "disabled")
         self.assertEqual(summary["step_result_count"], 1)
         self.assertEqual(summary["aggregated_result_count"], 3)
         self.assertEqual(summary["step_summaries"][0]["task_id"], "step-1")
@@ -119,6 +136,40 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 expected_model_id="gpt-5.4",
             )
 
+    def test_assert_task_summary_accepts_budget_profile_runtime_markers(self) -> None:
+        summary = {
+            "status": "completed",
+            "provider_kind": "openai_chatgpt",
+            "model_id": "gpt-5.4",
+            "runtime_execution_mode": {
+                "workflow_runner": "tokio_task",
+                "planner_lifecycle": "supervised_actor",
+                "executor_lifecycle": "supervised_actor",
+                "execution_boundary": "tool_bus",
+                "tool_name": "workflow.execute_step",
+                "provider_kind": "openai_chatgpt",
+                "model_id": "gpt-5.4",
+                "routing_policy": "cascade",
+                "registered_provider_count": 2,
+                "budget_root": "runtime.task_path",
+            },
+            "step_summaries": [
+                {
+                    "execution_boundary": "tool_bus",
+                    "tool_name": "workflow.execute_step",
+                }
+            ],
+        }
+
+        self.module.assert_task_summary(
+            summary,
+            expected_provider_kind="openai_chatgpt",
+            expected_model_id="gpt-5.4",
+            expected_routing_policy="cascade",
+            expected_registered_provider_count=2,
+            expected_budget_root="runtime.task_path",
+        )
+
     def test_assert_autonomy_status_requires_completed_graph_and_histories(self) -> None:
         payload = {
             "graph": {
@@ -138,6 +189,32 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
         payload["step_routing_history"] = []
         with self.assertRaises(self.module.SmokeHarnessError):
             self.module.assert_autonomy_status(payload, "workflow-1")
+
+    def test_assert_autonomy_step_routing_expectations_checks_budget_checkpoint(self) -> None:
+        payload = {
+            "step_routing_history": [
+                {
+                    "tier": "primary",
+                    "action": "downgrade",
+                    "triggered_checkpoints": ["budget_policy", "confidence_review"],
+                }
+            ]
+        }
+
+        self.module.assert_autonomy_step_routing_expectations(
+            payload,
+            expected_action="downgrade",
+            expected_tier="primary",
+            required_checkpoints=("budget_policy",),
+        )
+
+        with self.assertRaises(self.module.SmokeHarnessError):
+            self.module.assert_autonomy_step_routing_expectations(
+                payload,
+                expected_action="fallback",
+                expected_tier="primary",
+                required_checkpoints=("budget_policy",),
+            )
 
     def test_assert_runtime_log_markers_requires_all_expected_markers(self) -> None:
         complete_log = "\n".join(self.module.REQUIRED_RUNTIME_LOG_MARKERS)
@@ -172,6 +249,15 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 poll_interval_seconds=0.01,
                 provider_kind="openai_chatgpt",
                 model_id="gpt-5.4",
+                profile="baseline",
+                runtime_config_path=None,
+                routing_policy="round_robin",
+                registered_provider_count=1,
+                budget_root=None,
+                budget_policy=None,
+                expected_step_action=None,
+                expected_step_tier=None,
+                required_step_checkpoints=(),
             )
 
             log_text = self.module.wait_for_runtime_log_markers(config, StubProcess())
@@ -207,6 +293,15 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 poll_interval_seconds=0.01,
                 provider_kind="openai_chatgpt",
                 model_id="gpt-5.4",
+                profile="baseline",
+                runtime_config_path=None,
+                routing_policy="round_robin",
+                registered_provider_count=1,
+                budget_root=None,
+                budget_policy=None,
+                expected_step_action=None,
+                expected_step_tier=None,
+                required_step_checkpoints=(),
             )
 
             class StubResponse:

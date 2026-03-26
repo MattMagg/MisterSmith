@@ -19,7 +19,8 @@ Use this file when you need one honest answer to:
 | Need | Primary document | Role |
 | ---- | ---------------- | ---- |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
-| What should happen next | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Current next-phase scope freeze and packet-019 router-control direction |
+| Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for the completed packet-019 runtime-routing slice |
+| What just closed | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Packet-019 scope freeze and closure router |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final-validation artifact for the completed packet-016 epic |
 | Packet 015 closure evidence | `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md` | Historical live-proof and validation artifact for the completed packet-015 epic |
 | Development workflow and watched queue | `WORKFLOW.md`, `docs/linear/LINEAR.md` | Development control plane contract |
@@ -76,12 +77,15 @@ external workflow services such as Linear or Symphony.
 - The default runtime path now selects `provider_kind` and `model_id` from framework
   configuration for the providers the current app binary ships: `openai_chatgpt`,
   `claude_subscription`, and `mock`.
-- Packet 019 is partially landed on `main`: when `llm.runtime_routing_profile` is configured, the
-  runtime-backed task path can now boot a bounded multi-provider cascade plus JetStream-backed
-  budget enforcement; when no profile is configured, the current single-provider `RoundRobin`
-  fallback remains intact.
+- Packet 019 is now landed on `main`: when `llm.runtime_routing_profile` is configured, the
+  runtime-backed task path can boot a bounded multi-provider cascade plus JetStream-backed budget
+  enforcement; when no profile is configured, the current single-provider `RoundRobin` fallback
+  remains intact.
 - Task and autonomy provenance now surface runtime routing policy, registered-provider count,
   budget root, and the latest accepted step tier/checkpoint evidence from the runtime task path.
+- one bounded packet-019 live proof now exists for the configured
+  `budget_softcap_openai_mock` profile, captured in
+  `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - Packet 015 is landed on `main` through `MS-94`, with the final evidence captured in
   `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`.
 - Packet 016 is landed on `main` through `MS-97` through `MS-100`, with final closure evidence
@@ -128,6 +132,10 @@ Read the current state in three layers:
 - bounded runtime provider/model selection through framework config for `openai_chatgpt`,
   `claude_subscription`, and `mock`, with the live proof baseline still recorded on
   `openai_chatgpt` and `gpt-5.4`
+- one config-gated budget-aware runtime profile with `routing_policy=cascade`,
+  `registered_provider_count=2`, `budget_root=runtime.task_path`, and a live
+  `latest step routing tier=primary action=downgrade checkpoints=budget_policy` proof surface,
+  recorded in `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - harder-workload graph proof on the default path when the planner supports it
 - one shared result contract across task, session, and operator-facing result views
 - bounded operator preview and provenance for proof-relevant inspection
@@ -142,7 +150,8 @@ These capabilities are real in the codebase, but the default runtime path does n
 them end to end:
 
 - a config-gated bounded multi-provider runtime routing profile with JetStream-backed budget
-  enforcement
+  enforcement that is now live-proven for one bounded profile but is still opt-in rather than the
+  no-profile default
 - additive external-agent interoperability surfaces and capability discovery adapters
 
 Current default runtime limitations to keep in mind:
@@ -151,8 +160,8 @@ Current default runtime limitations to keep in mind:
   provider selections need explicit runtime proof before they carry the same claim
 - when no runtime routing profile is configured, the fallback runtime router path remains plain
   round-robin
-- the config-gated budget-backed control-loop path is now landed on `main`, but it is not yet
-  recorded as the unqualified live-proof baseline
+- the config-gated budget-backed control-loop path is now landed on `main` and has one bounded
+  repeatable live-proof profile, but it is not yet the unqualified no-profile runtime baseline
 - the bounded MCP discovery and enforcement surface from `MS-77` is already landed on `main`
 - the previously narrow external-agent follow-on from packet `016` is now closed on `main`:
   accepted delegated HTTP task ingress via `POST /api/v1/tasks` is carried through persisted
@@ -170,18 +179,12 @@ The completed frontier epics are:
 - packet 016: external-agent boundary continuity and runtime proof (`MS-97` through `MS-100`,
   parent `MS-96`)
 
-The current next bounded phase is:
-
-- packet `019`: `specs/019-budget-backed-runtime-routing-control-loop/`
-- planning note:
-  `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
-- bounded objective:
-  finish the remaining proof-boundary work for the now-landed config-gated budget-aware
-  multi-provider control-loop path while preserving today's single-provider fallback and live-proof
-  baseline honestly
+Packet `019` is now complete on `main`. This repo note does not declare a newer post-019 bounded
+phase.
 
 This direction is tracked in:
 
+- `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
 - `specs/019-budget-backed-runtime-routing-control-loop/`
 - `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`

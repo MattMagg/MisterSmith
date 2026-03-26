@@ -1,0 +1,24 @@
+{
+  "artifact_dir": "docs/plans/artifacts/live-runtime-proof-smoke/20260326T190228Z",
+  "base_url": "http://127.0.0.1:8080",
+  "budget_policy": "soft_cap",
+  "budget_root": "runtime.task_path",
+  "compose_file": "deploy/docker-compose.yml",
+  "database_name": "mistersmith_live_runtime_smoke_20260326_190228",
+  "database_url": "postgres://mistersmith:<redacted>@127.0.0.1:5432/mistersmith_live_runtime_smoke_20260326_190228",
+  "expected_step_action": "downgrade",
+  "expected_step_tier": "primary",
+  "http_port": 8080,
+  "model_id": "gpt-5.4",
+  "poll_interval_seconds": 1.0,
+  "profile": "budget_softcap_openai_mock",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 2,
+  "required_step_checkpoints": [
+    "budget_policy"
+  ],
+  "routing_policy": "cascade",
+  "run_id": "20260326T190228Z",
+  "runtime_config_path": "docs/plans/artifacts/live-runtime-proof-smoke/20260326T190228Z/runtime-config.toml",
+  "timeout_seconds": 240.0
+}

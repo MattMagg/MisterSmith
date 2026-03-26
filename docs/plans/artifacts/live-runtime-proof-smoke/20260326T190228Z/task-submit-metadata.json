@@ -1,0 +1,10 @@
+{
+  "headers": {
+    "connection": "close",
+    "content-length": "127",
+    "content-type": "application/json",
+    "date": "Thu, 26 Mar 2026 19:02:44 GMT",
+    "x-request-id": "f63a3278-8167-4b30-96f7-9353bd7f9953"
+  },
+  "status_code": 202
+}

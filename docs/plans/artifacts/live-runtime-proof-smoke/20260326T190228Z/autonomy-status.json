@@ -1,0 +1,208 @@
+{
+  "branches": [
+    {
+      "assigned_agents": [
+        "4f84c4b5-4072-42ee-b901-95e36b76dbc8"
+      ],
+      "branch_id": "4f7f8833-9251-43b4-a41d-8f682dbb7362",
+      "checkpoint_id": null,
+      "graph_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+      "recovery_strategy": "Resume",
+      "state": "Completed"
+    },
+    {
+      "assigned_agents": [
+        "4f84c4b5-4072-42ee-b901-95e36b76dbc8"
+      ],
+      "branch_id": "ee8f9229-ced8-4e8f-bf85-f40ba22690c8",
+      "checkpoint_id": null,
+      "graph_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+      "recovery_strategy": "Resume",
+      "state": "Completed"
+    },
+    {
+      "assigned_agents": [
+        "e365d55a-7fb4-4458-b5e4-061b8c67b431"
+      ],
+      "branch_id": "f6ae0409-7d5c-4341-8cef-b0bf7d33d4cf",
+      "checkpoint_id": null,
+      "graph_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+      "recovery_strategy": "Resume",
+      "state": "Completed"
+    }
+  ],
+  "checkpoint_lineage": [],
+  "conservative_reasons": [],
+  "coordinator_agent_id": "8ca3b0b9-f2b2-42df-872c-86c0fc3ef865",
+  "delegation_alerts": [],
+  "delegation_capabilities": [],
+  "graph": {
+    "active_topology": "Hybrid",
+    "branch_count": 3,
+    "graph_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+    "node_count": 3,
+    "state": "Completed",
+    "workflow_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48"
+  },
+  "guard_decisions": [],
+  "interventions": [],
+  "memory_pressure": [],
+  "profiles": [],
+  "result_preview": {
+    "payload_location": "task.result",
+    "preview_text": "[{\"dependency_results\":[],\"execution_boundary\":\"tool_bus\",\"model_id\":\"gpt-5.4\",\"provider_kind\":\"openai_chatgpt\",\"status\":\"completed\",\"task\":{\"action\":\"Trace ...",
+    "proof_outcome": "graph_formed_and_completed",
+    "provenance_lines": [
+      "graph formed and completed before final result publication",
+      "provider=openai_chatgpt model=gpt-5.4",
+      "runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step routing_policy=cascade registered_providers=2 budget_root=runtime.task_path",
+      "graph state Completed with topology Hybrid (3 branch(es), 3 node(s))",
+      "routing history retained 3 decision(s)",
+      "latest step routing tier=primary action=downgrade checkpoints=budget_policy",
+      "canonical result stored in metadata.final_result",
+      "aggregated payload nested under metadata.aggregated_result",
+      "full payload remains recoverable from task.result",
+      "session assistant_result derives from the canonical result object",
+      "projection observed graph state Completed with topology Hybrid (3 branch(es), 3 node(s))",
+      "projection retained 3 branch detail record(s)"
+    ],
+    "workflow_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48"
+  },
+  "routing_history": [
+    {
+      "branch_id": "4f7f8833-9251-43b4-a41d-8f682dbb7362",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 0,
+      "graph_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 0 across ready branch frontier",
+        "checkpoint recovery scope covers 1 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "4f84c4b5-4072-42ee-b901-95e36b76dbc8",
+      "task_ids": [
+        "131dd60f-ac2d-425f-bd1e-fb06eaafb4f3"
+      ]
+    },
+    {
+      "branch_id": "f6ae0409-7d5c-4341-8cef-b0bf7d33d4cf",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 0,
+      "graph_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 0 across ready branch frontier",
+        "checkpoint recovery scope covers 1 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "e365d55a-7fb4-4458-b5e4-061b8c67b431",
+      "task_ids": [
+        "824c210c-7a3a-4de4-abe0-f4dcf8151f4b"
+      ]
+    },
+    {
+      "branch_id": "ee8f9229-ced8-4e8f-bf85-f40ba22690c8",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 1,
+      "graph_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 1 across ready branch frontier",
+        "checkpoint recovery scope covers 1 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "4f84c4b5-4072-42ee-b901-95e36b76dbc8",
+      "task_ids": [
+        "40eab3af-b15b-4a3a-8a75-587820bde098"
+      ]
+    }
+  ],
+  "step_routing_history": [
+    {
+      "action": "downgrade",
+      "change_rationale": [
+        "initial step routing decision for workflow-visible control state",
+        "triggered checkpoints: budget_policy"
+      ],
+      "confidence_score": 1.0,
+      "estimated_cost_tokens": 1268,
+      "model_id": "gpt-5.4",
+      "reason": "Cascade accepted at tier 'primary' (order 0, confidence: 1.00)",
+      "step_id": "planner.step.1",
+      "step_index": 1,
+      "step_kind": "planner",
+      "tier": "primary",
+      "triggered_checkpoints": [
+        "budget_policy"
+      ]
+    }
+  ],
+  "team_sizing": {
+    "available_workers": 2,
+    "branch_frontier_width": 1,
+    "budget_pressure": 0,
+    "cap_reason": null,
+    "conservative_mode": false,
+    "decided_at": "2026-03-26T19:03:11.121482Z",
+    "decision_phase": "frontier_rebalance",
+    "dependency_depth": 1,
+    "desired_workers": 1,
+    "graph_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+    "rationale_lines": [
+      "task shape fanout-join with frontier width 1",
+      "dependency depth 1 keeps coordination cost acceptable",
+      "frontier budget pressure 0",
+      "selected 1 workers from the available pool of 2",
+      "frontier health Unknown influenced active width"
+    ],
+    "selected_workers": 1,
+    "workflow_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48"
+  },
+  "topology": {
+    "coordination_policy": "Mixed",
+    "fallback_topology": "Sequential",
+    "graph_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+    "parallelism_width": 2,
+    "rationale": {
+      "dependency_shape": "fanout-join",
+      "fallback_reason": "fallback to sequential preserves dependency order under degraded signals",
+      "operational_signals": [
+        "health:healthy",
+        "budget_pressure:normal"
+      ],
+      "selected_for": "selected hybrid topology from compatible planner policy hint"
+    },
+    "task_shape": {
+      "has_fanout": false,
+      "has_join": true,
+      "kind": "fanout-join",
+      "max_depth": 1,
+      "max_parallel_width": 2,
+      "root_count": 2,
+      "structural_signals": [
+        "roots:2",
+        "max_parallel_width:2",
+        "max_depth:1",
+        "fanout:false",
+        "join:true"
+      ]
+    },
+    "topology_kind": "Hybrid"
+  }
+}

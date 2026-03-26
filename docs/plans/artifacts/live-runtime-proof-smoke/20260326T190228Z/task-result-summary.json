@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "runtime.task_path",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 2,
+  "routing_policy": "cascade",
+  "runtime_execution_mode": {
+    "budget_root": "runtime.task_path",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 2,
+    "routing_policy": "cascade",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "Trace task execution, autonomy status, and terminal result markers",
+      "execution_boundary": "tool_bus",
+      "task_id": "131dd60f-ac2d-425f-bd1e-fb06eaafb4f3",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "4f84c4b5-4072-42ee-b901-95e36b76dbc8"
+    },
+    {
+      "action": "Merge both traces into one concise runtime memo",
+      "execution_boundary": "tool_bus",
+      "task_id": "40eab3af-b15b-4a3a-8a75-587820bde098",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "4f84c4b5-4072-42ee-b901-95e36b76dbc8"
+    },
+    {
+      "action": "Trace bootstrap, readiness, and provider/runtime wiring evidence",
+      "execution_boundary": "tool_bus",
+      "task_id": "824c210c-7a3a-4de4-abe0-f4dcf8151f4b",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "e365d55a-7fb4-4458-b5e4-061b8c67b431"
+    }
+  ],
+  "task_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48"
+}

@@ -22,10 +22,10 @@
 
 - [x] Add one JetStream-backed `BudgetStore` implementation
 - [x] Wire `BudgetEnforcer` into runtime router bootstrap
-- [ ] Exercise cascade or downgrade behavior on the runtime task path
+- [x] Exercise cascade or downgrade behavior on the runtime task path
 
 ## T5. Extend routing evidence and validation boundaries
 
 - [x] Surface routing policy, accepted tier, and budget checkpoints on task/autonomy outputs
-- [ ] Update proof guidance or harness only if the path can be exercised honestly
+- [x] Update proof guidance or harness only if the path can be exercised honestly
 - [x] Refresh state-bearing docs with explicit deterministic vs live-proof boundaries

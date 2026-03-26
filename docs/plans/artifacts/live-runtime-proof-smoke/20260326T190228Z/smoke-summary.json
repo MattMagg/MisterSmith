@@ -1,0 +1,45 @@
+{
+  "aggregated_result_count": 3,
+  "artifact_dir": "docs/plans/artifacts/live-runtime-proof-smoke/20260326T190228Z",
+  "base_url": "http://127.0.0.1:8080",
+  "branch_count": 3,
+  "budget_root": "runtime.task_path",
+  "budget_state_after": {
+    "key": "runtime.task_path",
+    "limit_tokens": 50000,
+    "period": "live_runtime_smoke",
+    "policy": "soft_cap",
+    "revision": 3,
+    "used_tokens": 66029
+  },
+  "database_name": "mistersmith_live_runtime_smoke_20260326_190228",
+  "graph_state": "Completed",
+  "latest_step_action": "downgrade",
+  "latest_step_checkpoints": [
+    "budget_policy"
+  ],
+  "latest_step_tier": "primary",
+  "model_id": "gpt-5.4",
+  "node_count": 3,
+  "parallelism_width": 2,
+  "profile": "budget_softcap_openai_mock",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 2,
+  "routing_policy": "cascade",
+  "run_id": "20260326T190228Z",
+  "runtime_execution_mode": {
+    "budget_root": "runtime.task_path",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 2,
+    "routing_policy": "cascade",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "step_result_count": 3,
+  "task_id": "dc6e05d8-bdd8-46f5-92ea-d01fedebbe48",
+  "topology_kind": "Hybrid"
+}

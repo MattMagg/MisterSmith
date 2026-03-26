@@ -1,0 +1,9 @@
+{
+  "bucket": "runtime_budget",
+  "key": "runtime.task_path",
+  "limit_tokens": 50000,
+  "nats_url": "nats://127.0.0.1:4222",
+  "period": "live_runtime_smoke",
+  "policy": "soft_cap",
+  "used_tokens": 0
+}

@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress on `main` as of 2026-03-26
+Completed on `main` as of 2026-03-26
 
 ## Landed On Main So Far
 
@@ -16,9 +16,7 @@ In progress on `main` as of 2026-03-26
 
 ## Remaining Bounded Gap
 
-- honest proof guidance or repeatable runtime evidence for the configured budget-aware path
-- no expansion of the live-proof claim beyond the existing `openai_chatgpt` / `gpt-5.4` baseline
-  until that evidence exists
+- none within packet `019` scope
 
 ## Objective
 
@@ -45,6 +43,21 @@ runtime configuration and JetStream-backed budget state.
   shipped-provider tiers plus one configured budget root.
 - packet `018` is currently the smoke-harness lane in review, so the next packet number reserved in
   the main checkout for new scope is `019`.
+
+## Proof Closure
+
+- repo-owned harness support now includes one bounded budget-aware proof profile:
+  `python3 scripts/live_runtime_proof_smoke.py --profile budget_softcap_openai_mock`
+- committed live artifact bundle:
+  `docs/plans/artifacts/live-runtime-proof-smoke/20260326T190228Z/`
+- committed proof note:
+  `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
+- live proof remains explicitly bounded to:
+  - accepted provider-backed tier `openai_chatgpt` with `gpt-5.4`
+  - one registered `mock` fallback tier
+  - one seeded `soft_cap` budget root at `runtime.task_path`
+- this closes the packet only because the proof note and artifact bundle keep deterministic router
+  semantics separate from the narrower live runtime claim
 
 ## Scope
 

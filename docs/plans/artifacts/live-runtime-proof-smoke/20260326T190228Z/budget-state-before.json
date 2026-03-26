@@ -1,0 +1,8 @@
+{
+  "key": "runtime.task_path",
+  "limit_tokens": 50000,
+  "period": "live_runtime_smoke",
+  "policy": "soft_cap",
+  "revision": 0,
+  "used_tokens": 0
+}

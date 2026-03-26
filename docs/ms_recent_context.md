@@ -14,19 +14,22 @@ Status: Current
 - The runtime-backed task path now reads `provider_kind` and `model_id` from framework config for
   the supported shipped providers `openai_chatgpt`, `claude_subscription`, and `mock`; only the
   `openai_chatgpt` / `gpt-5.4` path has live proof so far.
-- Packet 019 is now in progress on `main`: the runtime-backed task path accepts a typed
+- Packet 019 is now complete on `main`: the runtime-backed task path accepts a typed
   `runtime_routing_profile`, can boot a bounded multi-provider cascade with JetStream-backed
   budget enforcement when configured, and keeps the no-profile single-provider fallback intact.
 - Task and autonomy provenance now surface runtime routing policy, budget root, and the latest
   accepted step tier/checkpoint evidence from the runtime task path.
+- one bounded packet-019 live proof now exists for the
+  `budget_softcap_openai_mock` profile; the accepted provider-backed tier remained
+  `openai_chatgpt` / `gpt-5.4`, while the live step-routing outcome recorded
+  `tier=primary`, `action=downgrade`, and `triggered_checkpoints=["budget_policy"]`
 - Packet 018 is the in-review smoke-harness lane and is not yet landed on `main`.
 - The bounded same-agent session slice is live on `main`.
 - Harder-workload graph proof, unified result projection, bounded operator preview/provenance, and
   persisted proof-outcome visibility are now landed on `main`.
 - Smith now exposes workflow-family tools for issue and workpad mutation, backlog slicing, watched
   queue staging, lifecycle resolution, Ralph packet flows, and SpecKit task translation.
-- The next scope-frozen packet after packet 017 is packet 019, the budget-backed runtime routing
-  control-loop lane.
+- No newer post-019 scope-frozen packet is declared in this note.
 
 ## Durable Sources To Read First
 
@@ -43,7 +46,7 @@ Status: Current
 
 - packet 016 closure through `MS-97` through `MS-100` and parent epic `MS-96`
 - packet 019 runtime routing slices for typed profile config, bounded multi-provider bootstrap,
-  JetStream-backed budget-store wiring, and routing-evidence surfacing
+  JetStream-backed budget-store wiring, routing-evidence surfacing, and bounded live-proof closure
 - harder-workload graph proof on the default path
 - shared result contract and proof-outcome taxonomy across task, session, and operator surfaces
 - bounded operator preview/provenance and persisted proof-outcome visibility
@@ -56,18 +59,19 @@ The current development-workflow program is still Smith-first, but the March 16 
 supporting history rather than the primary direction router:
 
 - `docs/current-state.md` is the current repo-wide router
-- `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` is the current
-  next-phase scope freeze
+- `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` is the bounded closure note for
+  the completed packet-019 proof lane
+- `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` is the packet-019 scope
+  freeze and closure router
 - `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` remains the checkpoint that
   required this fresh bounded packet
 - `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
   records the completed packet-016 closure
 
 The next frontier planning action is no longer “identify a fresh gap.” That guardrail has been
-satisfied. The next bounded planning lane is packet `019`, which freezes the budget-backed runtime
-routing control loop as the next development phase. The config/bootstrap/budget/evidence slices are
-now landed on `main`; the remaining bounded gap is honest proof guidance or equivalent repeatable
-runtime evidence for the configured budget-aware path.
+satisfied and packet `019` is now closed on `main`. The config/bootstrap/budget/evidence slices are
+landed, and the remaining honest boundary is that the live proof stays explicitly bounded to the
+committed `budget_softcap_openai_mock` profile rather than a broad alternate-provider claim.
 
 Closed frontier packet and recovery issues now include:
 
