@@ -1,6 +1,6 @@
 # Mister Smith Current State
 
-Date: March 21, 2026
+Date: March 26, 2026
 Status: Current
 
 ## Purpose
@@ -19,7 +19,7 @@ Use this file when you need one honest answer to:
 | Need | Primary document | Role |
 | ---- | ---------------- | ---- |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
-| What should happen next | `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` | Current forward-development checkpoint and next-step guardrails |
+| What should happen next | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Current next-phase scope freeze and packet-019 router-control direction |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final-validation artifact for the completed packet-016 epic |
 | Packet 015 closure evidence | `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md` | Historical live-proof and validation artifact for the completed packet-015 epic |
 | Development workflow and watched queue | `WORKFLOW.md`, `docs/linear/LINEAR.md` | Development control plane contract |
@@ -81,10 +81,13 @@ external workflow services such as Linear or Symphony.
 - Packet 016 is landed on `main` through `MS-97` through `MS-100`, with final closure evidence
   captured in `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
   and parent epic `MS-96` terminal.
+- Packet 017 is landed on `main` as bounded runtime provider selection, with the planning note in
+  `docs/plans/2026-03-26-bounded-runtime-provider-selection.md`.
+- Packet 018 is the in-review smoke-harness lane and is not yet part of landed `main` truth.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
-- The current watched-queue posture is terminal for the packet-016 family: no active issues, no
-  open PRs, and no honest refill candidates.
+- The packet-016 family remains terminal, but repo workflow activity has moved on to the packet-018
+  proof-harness review lane and the packet-019 next-phase scope freeze.
 
 ## Important Distinction
 
@@ -159,16 +162,20 @@ The completed frontier epics are:
 - packet 016: external-agent boundary continuity and runtime proof (`MS-97` through `MS-100`,
   parent `MS-96`)
 
-The next repo-wide planning action is:
+The current next bounded phase is:
 
-- use the March 21 post-packet-016 checkpoint and the packet-016 evaluation note as the current
-  authority
-- do not assume a next frontier implementation lane yet
-- before any new frontier execution or queue staging, identify one fresh bounded product gap from
-  current repo and runtime evidence and freeze it in a new planning note plus one new packet
+- packet `019`: `specs/019-budget-backed-runtime-routing-control-loop/`
+- planning note:
+  `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
+- bounded objective:
+  move the runtime-backed task path from a single-provider `RoundRobin` placeholder toward one
+  budget-aware multi-provider control-loop path while preserving today's single-provider fallback
+  honestly
 
 This direction is tracked in:
 
+- `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
+- `specs/019-budget-backed-runtime-routing-control-loop/`
 - `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`
 - `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
 - `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`

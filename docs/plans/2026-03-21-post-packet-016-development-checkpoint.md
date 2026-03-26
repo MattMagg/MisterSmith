@@ -1,7 +1,9 @@
 # Post-Packet-016 Development Checkpoint
 
 Date: March 21, 2026
-Status: Packet 016 complete; no active frontier packet
+Status: Historical checkpoint; superseded as forward-development authority on 2026-03-26
+
+Superseded by: `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
 
 ## Purpose
 
