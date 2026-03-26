@@ -129,6 +129,9 @@ For markdown linting:
 - Do not end a workflow or handoff with uncommitted or untracked repository changes; review
   leftovers immediately and either land them on a branch/PR or drop them only after verifying they
   are already landed or stale
+- Opening a PR is not closure. For task-owned branch/worktree lanes, closure is complete only
+  after the PR is merged, the task-owned branch/worktree is removed locally, and the primary
+  `/Users/macmain/MisterSmith` checkout is back on a clean synced `main`
 - PRs should include: concise problem/solution summary, touched files, validation commands run
 - PR references use `(#NNN)` suffix
 

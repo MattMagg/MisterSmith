@@ -24,7 +24,10 @@ branches, worktrees, or PRs.
 - Leave the current task either:
   - committed, pushed, and synced on `main`, or
   - committed, pushed, reviewed, merged, and cleaned up from its branch/worktree lane.
+- Do not stop at "PR opened" or "review requested". Those are mid-flight states, not closure.
 - Do not leave task-owned uncommitted changes behind.
+- Do not leave the task-owned worktree or local branch behind after merge. Closure is only complete
+  when the task lane is removed and the primary checkout is back on clean synced `main`.
 - Do not force-push unless the user explicitly approves it.
 - Do not close or rewrite unrelated PRs, worktrees, or branches; document them only.
 
@@ -157,8 +160,8 @@ git switch -C main origin/main
 scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync
 ```
 
-Delete the task branch or worktree only if it belongs to the just-completed task and is no longer
-needed.
+Delete the task branch or worktree if it belongs to the just-completed task and is no longer
+needed. Do not leave task-owned local lanes around after the merge is done.
 
 ### 7. If review is still pending
 
