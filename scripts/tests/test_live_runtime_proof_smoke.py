@@ -193,6 +193,51 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
         self.assertEqual(result["planner_output_trust"], "raw_untrusted")
         self.assertIn("runtime_execution_mode", result["planner_output_note"])
 
+    def test_wait_for_terminal_task_status_retries_transient_fetch_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.module.HarnessConfig(
+                run_id="20260326T200100Z",
+                compose_file=Path("/tmp/docker-compose.yml"),
+                artifact_dir=Path(temp_dir),
+                database_name="ms_test",
+                database_url="postgres://mistersmith:mistersmith_dev@127.0.0.1:5432/ms_test",
+                http_port=8080,
+                base_url="http://127.0.0.1:8080",
+                timeout_seconds=1.0,
+                poll_interval_seconds=0.01,
+                provider_kind="openai_chatgpt",
+                model_id="gpt-5.4",
+            )
+
+            class StubResponse:
+                def __init__(self, payload):
+                    self.payload = payload
+
+            responses = iter(
+                [
+                    self.module.SmokeHarnessError("temporary 503"),
+                    StubResponse({"task_id": "task-1", "status": "completed"}),
+                ]
+            )
+            original_fetch_json = self.module.fetch_json
+
+            def stub_fetch_json(_url: str):
+                response = next(responses)
+                if isinstance(response, Exception):
+                    raise response
+                return response
+
+            self.module.fetch_json = stub_fetch_json
+            try:
+                payload = self.module.wait_for_terminal_task_status(config, "task-1")
+            finally:
+                self.module.fetch_json = original_fetch_json
+
+            self.assertEqual(payload["status"], "completed")
+            poll_log = (config.artifact_dir / "task-poll.log").read_text(encoding="utf-8")
+            self.assertIn("error=temporary 503", poll_log)
+            self.assertIn("status=completed", poll_log)
+
 
 if __name__ == "__main__":
     unittest.main()

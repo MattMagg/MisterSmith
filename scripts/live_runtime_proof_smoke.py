@@ -619,22 +619,28 @@ def wait_for_terminal_task_status(
     deadline = time.monotonic() + config.timeout_seconds
     poll_log_path = config.artifact_dir / "task-poll.log"
     last_payload: dict[str, Any] | None = None
+    last_error = "task status never returned a successful response"
 
     with poll_log_path.open("w", encoding="utf-8") as poll_log:
         while time.monotonic() < deadline:
-            response = fetch_json(f"{config.base_url}/api/v1/tasks/{task_id}")
-            payload = response.payload
-            if not isinstance(payload, dict):
-                raise SmokeHarnessError("task status response was not a JSON object")
-            last_payload = payload
-            status = str(payload.get("status", "unknown"))
             timestamp = datetime.now(timezone.utc).isoformat()
-            poll_log.write(f"{timestamp} status={status}\n")
-            poll_log.flush()
-            if status.lower() in {"completed", "failed", "cancelled"}:
-                artifact_payload = annotate_task_status_artifact(payload)
-                write_json(config.artifact_dir / "task-status-latest.json", artifact_payload)
-                return artifact_payload
+            try:
+                response = fetch_json(f"{config.base_url}/api/v1/tasks/{task_id}")
+                payload = response.payload
+                if not isinstance(payload, dict):
+                    raise SmokeHarnessError("task status response was not a JSON object")
+                last_payload = payload
+                status = str(payload.get("status", "unknown"))
+                poll_log.write(f"{timestamp} status={status}\n")
+                poll_log.flush()
+                if status.lower() in {"completed", "failed", "cancelled"}:
+                    artifact_payload = annotate_task_status_artifact(payload)
+                    write_json(config.artifact_dir / "task-status-latest.json", artifact_payload)
+                    return artifact_payload
+            except SmokeHarnessError as exc:
+                last_error = str(exc)
+                poll_log.write(f"{timestamp} error={last_error}\n")
+                poll_log.flush()
             time.sleep(config.poll_interval_seconds)
 
     if last_payload is not None:
@@ -642,7 +648,9 @@ def wait_for_terminal_task_status(
             config.artifact_dir / "task-status-latest.json",
             annotate_task_status_artifact(last_payload),
         )
-    raise SmokeHarnessError(f"task {task_id} did not reach terminal state before timeout")
+    raise SmokeHarnessError(
+        f"task {task_id} did not reach terminal state before timeout: {last_error}"
+    )
 
 
 def shutdown_runtime(process: subprocess.Popen[str], runtime_log: Any) -> None:

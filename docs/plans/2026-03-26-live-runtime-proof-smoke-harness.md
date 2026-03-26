@@ -107,7 +107,7 @@ Validation:
 - live smoke proof passed:
   - `python3 scripts/live_runtime_proof_smoke.py`
 - durable artifacts captured under:
-  - `docs/plans/artifacts/live-runtime-proof-smoke/20260326T173652Z/`
+  - `docs/plans/artifacts/live-runtime-proof-smoke/20260326T174047Z/`
 
 ## Landed Surface
 
@@ -122,6 +122,7 @@ Validation:
   - explicit worker-only merge prompt so the smoke run stays on supported planner role metadata
     instead of failing on an unsupported synthetic `joiner` role
   - real `POST /api/v1/tasks` submission, task polling, and autonomy-status capture
+  - transient task-status fetch retries so brief HTTP hiccups do not abort an otherwise healthy run
   - raw `planner_output` preserved only as untrusted context while `runtime_execution_mode` and
     `step_results` remain the authoritative proof surfaces
   - predictable artifact output under `docs/plans/artifacts/live-runtime-proof-smoke/`
