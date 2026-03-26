@@ -76,6 +76,12 @@ external workflow services such as Linear or Symphony.
 - The default runtime path now selects `provider_kind` and `model_id` from framework
   configuration for the providers the current app binary ships: `openai_chatgpt`,
   `claude_subscription`, and `mock`.
+- Packet 019 is partially landed on `main`: when `llm.runtime_routing_profile` is configured, the
+  runtime-backed task path can now boot a bounded multi-provider cascade plus JetStream-backed
+  budget enforcement; when no profile is configured, the current single-provider `RoundRobin`
+  fallback remains intact.
+- Task and autonomy provenance now surface runtime routing policy, registered-provider count,
+  budget root, and the latest accepted step tier/checkpoint evidence from the runtime task path.
 - Packet 015 is landed on `main` through `MS-94`, with the final evidence captured in
   `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`.
 - Packet 016 is landed on `main` through `MS-97` through `MS-100`, with final closure evidence
@@ -135,16 +141,18 @@ This is the current OS path that has real end-to-end proof.
 These capabilities are real in the codebase, but the default runtime path does not yet use all of
 them end to end:
 
-- budget abstractions and router budget hooks
-- JetStream KV-backed budget and distributed state control
+- a config-gated bounded multi-provider runtime routing profile with JetStream-backed budget
+  enforcement
 - additive external-agent interoperability surfaces and capability discovery adapters
 
 Current default runtime limitations to keep in mind:
 
 - the live runtime-proof baseline is still `openai_chatgpt` with `gpt-5.4`; alternate supported
   provider selections need explicit runtime proof before they carry the same claim
-- the default runtime router path is currently a plain round-robin router, not the full
-  budget-backed control-loop path
+- when no runtime routing profile is configured, the fallback runtime router path remains plain
+  round-robin
+- the config-gated budget-backed control-loop path is now landed on `main`, but it is not yet
+  recorded as the unqualified live-proof baseline
 - the bounded MCP discovery and enforcement surface from `MS-77` is already landed on `main`
 - the previously narrow external-agent follow-on from packet `016` is now closed on `main`:
   accepted delegated HTTP task ingress via `POST /api/v1/tasks` is carried through persisted
@@ -168,9 +176,9 @@ The current next bounded phase is:
 - planning note:
   `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
 - bounded objective:
-  move the runtime-backed task path from a single-provider `RoundRobin` placeholder toward one
-  budget-aware multi-provider control-loop path while preserving today's single-provider fallback
-  honestly
+  finish the remaining proof-boundary work for the now-landed config-gated budget-aware
+  multi-provider control-loop path while preserving today's single-provider fallback and live-proof
+  baseline honestly
 
 This direction is tracked in:
 

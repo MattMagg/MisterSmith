@@ -2,7 +2,23 @@
 
 ## Status
 
-Scope frozen on 2026-03-26
+In progress on `main` as of 2026-03-26
+
+## Landed On Main So Far
+
+- typed `llm.runtime_routing_profile` config for one bounded shipped-provider routing profile
+- config-gated multi-provider runtime bootstrap with preserved single-provider fallback when no
+  profile is configured
+- one JetStream-backed runtime `BudgetStore` adapter plus runtime `BudgetEnforcer` bootstrap
+  preflight against the configured budget root
+- task/autonomy provenance that now surfaces runtime routing policy, budget root, and latest
+  accepted step tier/checkpoint evidence
+
+## Remaining Bounded Gap
+
+- honest proof guidance or repeatable runtime evidence for the configured budget-aware path
+- no expansion of the live-proof claim beyond the existing `openai_chatgpt` / `gpt-5.4` baseline
+  until that evidence exists
 
 ## Objective
 
@@ -14,20 +30,19 @@ runtime configuration and JetStream-backed budget state.
 
 - `docs/current-state.md` still records two remaining runtime gaps after packet `017`:
   - the live proof baseline is only `openai_chatgpt` / `gpt-5.4`
-  - the default runtime router path is still plain `RoundRobin`, not the full budget-backed
-    control-loop path
-- `crates/mister-smith-app/src/execution.rs` currently resolves one `RuntimeLlmSelection`,
-  constructs `ModelRouter::new(RoutingPolicy::RoundRobin)`, and registers exactly one provider at
-  boot.
+  - the config-gated budget-aware path is not yet the unqualified live-proof baseline
+- `crates/mister-smith-app/src/execution.rs` now derives a `RuntimeBootstrapPlan`, preserves the
+  single-provider fallback when no routing profile exists, and can boot a bounded registered
+  provider set plus `BudgetEnforcer` wiring when `llm.runtime_routing_profile` is configured.
 - `crates/mister-smith-llm/src/router.rs` already contains:
   - `RoutingPolicy::Cascade`
   - budget reservation and reconciliation hooks
   - routing checkpoints for budget pressure, confidence, and provider fallback
   - tests proving cascade plus budget behavior in isolation
-- `crates/mister-smith-llm/src/budget.rs` already contains the bounded budget abstraction:
+- `crates/mister-smith-llm/src/budget.rs` contains the bounded budget abstraction:
   `BudgetStore`, `BudgetEnforcer`, `BudgetPolicy`, and CAS-based reconciliation semantics.
-- `crates/mister-smith-config/src/types.rs` still exposes only one runtime `llm.provider_kind` /
-  `llm.model_id` pair; there is no typed runtime routing profile yet.
+- `crates/mister-smith-config/src/types.rs` now exposes typed runtime routing profile config for
+  shipped-provider tiers plus one configured budget root.
 - packet `018` is currently the smoke-harness lane in review, so the next packet number reserved in
   the main checkout for new scope is `019`.
 

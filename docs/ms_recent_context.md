@@ -14,6 +14,11 @@ Status: Current
 - The runtime-backed task path now reads `provider_kind` and `model_id` from framework config for
   the supported shipped providers `openai_chatgpt`, `claude_subscription`, and `mock`; only the
   `openai_chatgpt` / `gpt-5.4` path has live proof so far.
+- Packet 019 is now in progress on `main`: the runtime-backed task path accepts a typed
+  `runtime_routing_profile`, can boot a bounded multi-provider cascade with JetStream-backed
+  budget enforcement when configured, and keeps the no-profile single-provider fallback intact.
+- Task and autonomy provenance now surface runtime routing policy, budget root, and the latest
+  accepted step tier/checkpoint evidence from the runtime task path.
 - Packet 018 is the in-review smoke-harness lane and is not yet landed on `main`.
 - The bounded same-agent session slice is live on `main`.
 - Harder-workload graph proof, unified result projection, bounded operator preview/provenance, and
@@ -37,6 +42,8 @@ Status: Current
 ## What Just Landed
 
 - packet 016 closure through `MS-97` through `MS-100` and parent epic `MS-96`
+- packet 019 runtime routing slices for typed profile config, bounded multi-provider bootstrap,
+  JetStream-backed budget-store wiring, and routing-evidence surfacing
 - harder-workload graph proof on the default path
 - shared result contract and proof-outcome taxonomy across task, session, and operator surfaces
 - bounded operator preview/provenance and persisted proof-outcome visibility
@@ -58,7 +65,9 @@ supporting history rather than the primary direction router:
 
 The next frontier planning action is no longer “identify a fresh gap.” That guardrail has been
 satisfied. The next bounded planning lane is packet `019`, which freezes the budget-backed runtime
-routing control loop as the next development phase.
+routing control loop as the next development phase. The config/bootstrap/budget/evidence slices are
+now landed on `main`; the remaining bounded gap is honest proof guidance or equivalent repeatable
+runtime evidence for the configured budget-aware path.
 
 Closed frontier packet and recovery issues now include:
 
