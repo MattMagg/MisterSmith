@@ -13,12 +13,14 @@ use mister_smith_agents::config::TaskState;
 use mister_smith_agents::orchestrator::{LlmSupervision, LlmSupervisionConfig};
 use mister_smith_agents::roles::executor::{ExecutorAgent, ExecutorMessage, ExecutorState};
 use mister_smith_agents::roles::planner::PlannerAgent;
-use mister_smith_agents::roles::planner::{PlannerMessage, PlannerState, normalize_planner_output};
+use mister_smith_agents::roles::planner::{normalize_planner_output, PlannerMessage, PlannerState};
 use mister_smith_agents::scheduler::{
     ArrayAggregator, IdentityDecomposer, TaskAssignment, TaskScheduler,
 };
 use mister_smith_agents::{AgentConfig, Orchestrator, ToolBus, TopologyCompiler, TopologySignals};
-use mister_smith_config::FrameworkConfig;
+use mister_smith_config::{
+    FrameworkConfig, RuntimeProviderTier, RuntimeRoutingPolicy, RuntimeRoutingProfile,
+};
 use mister_smith_core::{
     AgentId, AgentType, BranchState, EscalationPolicy, ExternalDelegationEnvelope, GraphState,
     GuardTarget, LlmError, NodeState, SupervisionStrategy, TaskId, Tool, ToolCapabilities,
@@ -29,10 +31,10 @@ use mister_smith_http::server::{
     TaskExecutionService, TaskListRequest, TaskStatusView, TaskSubmissionRequest,
     TaskSubmissionResponse, TaskSummaryView,
 };
-use mister_smith_http::websocket::{WsEvent, broadcast_event};
+use mister_smith_http::websocket::{broadcast_event, WsEvent};
 use mister_smith_llm::{
-    CircuitBreakerConfig, ClaudeSubscriptionProvider, MockProvider, ModelProvider, ModelRouter,
-    OpenAiChatGptProvider, ProviderConfig, ProviderKind, RoutingPolicy,
+    CascadePolicy, CascadeTier, CircuitBreakerConfig, ClaudeSubscriptionProvider, MockProvider,
+    ModelProvider, ModelRouter, OpenAiChatGptProvider, ProviderConfig, ProviderKind, RoutingPolicy,
 };
 use mister_smith_nats::{JetStreamConfig, JetStreamManager, NatsTransport};
 use mister_smith_persistence::postgres::migrations::MigrationRunner;
@@ -41,7 +43,7 @@ use mister_smith_persistence::repository::task::TaskRepository;
 use mister_smith_persistence::{PostgresConnection, Repository};
 use mister_smith_supervision::SupervisedSystem;
 use mister_smith_transport::{MessageEnvelope, MessagePriority};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tokio::sync::broadcast;
 use tokio::task::JoinSet;
@@ -60,6 +62,7 @@ const ACCEPTED_TASK_INGRESS_METADATA_KEY: &str = "accepted_task_ingress";
 const TASK_INGRESS_REQUEST_SURFACE: &str = "POST /api/v1/tasks";
 const WORKFLOW_TOOL_NAMESPACE: &str = "workflow";
 const WORKFLOW_EXECUTE_STEP_TOOL: &str = "execute_step";
+const DEFAULT_RUNTIME_CASCADE_THRESHOLD: f32 = 0.5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RuntimeLlmSelection {
@@ -73,6 +76,13 @@ struct RuntimeEnvelopeProvenance {
     provider_kind: String,
     model_id: String,
     runtime_execution_mode: Value,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeBootstrapPlan {
+    active_selection: RuntimeLlmSelection,
+    registered_providers: Vec<RuntimeLlmSelection>,
+    routing_policy: RoutingPolicy,
 }
 
 impl Default for RuntimeLlmSelection {
@@ -94,6 +104,14 @@ impl RuntimeLlmSelection {
         }
     }
 
+    fn from_runtime_provider_tier(tier: &RuntimeProviderTier) -> Self {
+        Self {
+            provider_kind: tier.provider_kind,
+            provider_kind_name: tier.provider_kind.as_str().to_string(),
+            model_id: tier.model_id.clone(),
+        }
+    }
+
     fn provider_config(&self) -> ProviderConfig {
         ProviderConfig {
             provider_kind: self.provider_kind,
@@ -101,6 +119,71 @@ impl RuntimeLlmSelection {
             timeout_ms: 120_000,
             ..ProviderConfig::default()
         }
+    }
+}
+
+impl RuntimeBootstrapPlan {
+    fn from_config(config: &FrameworkConfig) -> Self {
+        let fallback_selection = RuntimeLlmSelection::from_config(config);
+        let Some(profile) = config.llm.runtime_routing_profile.as_ref() else {
+            return Self {
+                active_selection: fallback_selection.clone(),
+                registered_providers: vec![fallback_selection],
+                routing_policy: RoutingPolicy::RoundRobin,
+            };
+        };
+
+        if profile.tiers.is_empty() {
+            return Self {
+                active_selection: fallback_selection.clone(),
+                registered_providers: vec![fallback_selection],
+                routing_policy: RoutingPolicy::RoundRobin,
+            };
+        }
+
+        let registered_providers: Vec<RuntimeLlmSelection> = profile
+            .tiers
+            .iter()
+            .map(RuntimeLlmSelection::from_runtime_provider_tier)
+            .collect();
+        let active_selection = registered_providers
+            .first()
+            .cloned()
+            .unwrap_or_else(|| fallback_selection.clone());
+
+        Self {
+            active_selection,
+            registered_providers,
+            routing_policy: runtime_routing_policy_from_profile(profile),
+        }
+    }
+}
+
+fn runtime_routing_policy_from_profile(profile: &RuntimeRoutingProfile) -> RoutingPolicy {
+    match profile.policy {
+        RuntimeRoutingPolicy::Cascade => RoutingPolicy::Cascade(CascadePolicy {
+            tiers: profile
+                .tiers
+                .iter()
+                .map(|tier| CascadeTier {
+                    provider_config: RuntimeLlmSelection::from_runtime_provider_tier(tier)
+                        .provider_config(),
+                    label: tier.label.clone(),
+                })
+                .collect(),
+            escalation_threshold: DEFAULT_RUNTIME_CASCADE_THRESHOLD,
+            max_escalations: profile.tiers.len().saturating_sub(1) as u32,
+        }),
+    }
+}
+
+fn runtime_routing_policy_name(policy: &RoutingPolicy) -> &'static str {
+    match policy {
+        RoutingPolicy::RoundRobin => "round_robin",
+        RoutingPolicy::CostOptimized => "cost_optimized",
+        RoutingPolicy::CapabilityMatched => "capability_matched",
+        RoutingPolicy::Cascade(_) => "cascade",
+        _ => "other",
     }
 }
 
@@ -290,6 +373,29 @@ async fn verify_runtime_provider_auth(selection: &RuntimeLlmSelection) -> Result
     }
 }
 
+async fn verify_runtime_router_auth(plan: &RuntimeBootstrapPlan) -> Result<(), String> {
+    for selection in &plan.registered_providers {
+        verify_runtime_provider_auth(selection).await?;
+    }
+
+    Ok(())
+}
+
+async fn register_runtime_router_providers(
+    router: &ModelRouter,
+    selections: &[RuntimeLlmSelection],
+) -> Result<(), String> {
+    for selection in selections {
+        let provider_config = selection.provider_config();
+        let provider = build_runtime_provider(selection)?;
+        router
+            .add_provider(provider_config, provider, CircuitBreakerConfig::default())
+            .await;
+    }
+
+    Ok(())
+}
+
 fn runtime_supervision_strategy() -> SupervisionStrategy {
     SupervisionStrategy {
         max_failures: 32,
@@ -380,8 +486,8 @@ impl RuntimeTaskService {
             return Err("PostgreSQL migrations did not verify cleanly".to_string());
         }
 
-        let runtime_llm = RuntimeLlmSelection::from_config(config);
-        verify_runtime_provider_auth(&runtime_llm).await?;
+        let runtime_bootstrap = RuntimeBootstrapPlan::from_config(config);
+        verify_runtime_router_auth(&runtime_bootstrap).await?;
 
         let nats_transport = nats_transport
             .ok_or_else(|| "NATS transport must be configured for runtime execution".to_string())?;
@@ -402,12 +508,11 @@ impl RuntimeTaskService {
             .await
             .map_err(|error| format!("JetStream stream initialization failed: {error}"))?;
 
-        let provider_config = runtime_llm.provider_config();
-        let provider = build_runtime_provider(&runtime_llm)?;
-        let router = Arc::new(ModelRouter::new(RoutingPolicy::RoundRobin));
-        router
-            .add_provider(provider_config, provider, CircuitBreakerConfig::default())
-            .await;
+        let routing_policy_name = runtime_routing_policy_name(&runtime_bootstrap.routing_policy);
+        let registered_provider_count = runtime_bootstrap.registered_providers.len();
+        let router = Arc::new(ModelRouter::new(runtime_bootstrap.routing_policy.clone()));
+        register_runtime_router_providers(router.as_ref(), &runtime_bootstrap.registered_providers)
+            .await?;
 
         let scheduler = Arc::new(TaskScheduler::new());
         let orchestrator = Arc::new(
@@ -425,8 +530,13 @@ impl RuntimeTaskService {
         register_runtime_tools(tool_bus.as_ref(), runtime_supervisor_id);
 
         info!(
-            provider_kind = runtime_llm.provider_kind_name.as_str(),
-            model_id = runtime_llm.model_id.as_str(),
+            provider_kind = runtime_bootstrap
+                .active_selection
+                .provider_kind_name
+                .as_str(),
+            model_id = runtime_bootstrap.active_selection.model_id.as_str(),
+            routing_policy = routing_policy_name,
+            registered_provider_count,
             stream = WORKFLOW_STREAM,
             "Runtime task execution service ready"
         );
@@ -444,7 +554,7 @@ impl RuntimeTaskService {
             boot_started_at,
             default_coordinator_id: AgentId::new(),
             worker_ids: vec![AgentId::new(), AgentId::new()],
-            runtime_llm,
+            runtime_llm: runtime_bootstrap.active_selection,
         }))
     }
 
@@ -2310,6 +2420,73 @@ mod tests {
     }
 
     #[test]
+    fn runtime_bootstrap_plan_defaults_to_round_robin_single_provider() {
+        let plan = RuntimeBootstrapPlan::from_config(&FrameworkConfig::default());
+
+        assert_eq!(plan.active_selection, RuntimeLlmSelection::default());
+        assert_eq!(
+            plan.registered_providers,
+            vec![RuntimeLlmSelection::default()]
+        );
+        assert!(matches!(plan.routing_policy, RoutingPolicy::RoundRobin));
+    }
+
+    #[test]
+    fn runtime_bootstrap_plan_uses_profile_for_cascade_boot() {
+        let mut config = FrameworkConfig::default();
+        config.llm.provider_kind = ProviderKind::Mock;
+        config.llm.model_id = "mock-fallback".to_string();
+        config.llm.runtime_routing_profile = Some(RuntimeRoutingProfile {
+            policy: RuntimeRoutingPolicy::Cascade,
+            budget_root: "runtime.task_path".to_string(),
+            tiers: vec![
+                RuntimeProviderTier {
+                    label: "primary".to_string(),
+                    provider_kind: ProviderKind::OpenAiChatGpt,
+                    model_id: "gpt-5.4".to_string(),
+                    metadata: json!({}),
+                },
+                RuntimeProviderTier {
+                    label: "fallback".to_string(),
+                    provider_kind: ProviderKind::ClaudeSubscription,
+                    model_id: "claude-sonnet".to_string(),
+                    metadata: json!({}),
+                },
+            ],
+        });
+
+        let plan = RuntimeBootstrapPlan::from_config(&config);
+
+        assert_eq!(
+            plan.active_selection,
+            sample_runtime_llm_selection(ProviderKind::OpenAiChatGpt, "gpt-5.4")
+        );
+        assert_eq!(plan.registered_providers.len(), 2);
+
+        match plan.routing_policy {
+            RoutingPolicy::Cascade(policy) => {
+                assert_eq!(policy.tiers.len(), 2);
+                assert_eq!(
+                    policy.escalation_threshold,
+                    DEFAULT_RUNTIME_CASCADE_THRESHOLD
+                );
+                assert_eq!(policy.max_escalations, 1);
+                assert_eq!(policy.tiers[0].label, "primary");
+                assert_eq!(
+                    policy.tiers[0].provider_config.provider_kind,
+                    ProviderKind::OpenAiChatGpt
+                );
+                assert_eq!(policy.tiers[1].label, "fallback");
+                assert_eq!(
+                    policy.tiers[1].provider_config.provider_kind,
+                    ProviderKind::ClaudeSubscription
+                );
+            }
+            other => panic!("expected cascade routing policy, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn runtime_execution_mode_uses_selected_provider_and_model() {
         let selection = sample_runtime_llm_selection(ProviderKind::Mock, "mock-ops");
 
@@ -2372,6 +2549,21 @@ mod tests {
             assert!(error.contains(provider_kind.as_str()));
             assert!(error.contains("not supported"));
         }
+    }
+
+    #[tokio::test]
+    async fn register_runtime_router_providers_adds_every_registered_provider() {
+        let router = ModelRouter::new(RoutingPolicy::RoundRobin);
+        let selections = vec![
+            sample_runtime_llm_selection(ProviderKind::Mock, "mock-primary"),
+            sample_runtime_llm_selection(ProviderKind::Mock, "mock-fallback"),
+        ];
+
+        register_runtime_router_providers(&router, &selections)
+            .await
+            .expect("mock providers should register");
+
+        assert_eq!(router.provider_count().await, 2);
     }
 
     #[test]
@@ -2488,21 +2680,17 @@ mod tests {
         );
         assert_eq!(
             accepted["action_id"],
-            json!(
-                delegation
-                    .action
-                    .as_ref()
-                    .map(|action| action.action_id.clone())
-            )
+            json!(delegation
+                .action
+                .as_ref()
+                .map(|action| action.action_id.clone()))
         );
         assert_eq!(
             accepted["policy_resource_id"],
-            json!(
-                delegation
-                    .action
-                    .as_ref()
-                    .and_then(|action| action.policy.resource_id.clone())
-            )
+            json!(delegation
+                .action
+                .as_ref()
+                .and_then(|action| action.policy.resource_id.clone()))
         );
         assert_eq!(
             accepted["chain_depth"],
@@ -2592,12 +2780,10 @@ mod tests {
             summary.action_id.as_deref(),
             Some("tool:app.workflow#execute")
         );
-        assert!(
-            summary
-                .rationale
-                .iter()
-                .any(|line| line.contains("POST /api/v1/tasks"))
-        );
+        assert!(summary
+            .rationale
+            .iter()
+            .any(|line| line.contains("POST /api/v1/tasks")));
         assert!(summary.rationale.iter().any(|line| {
             line.contains("accepted_task_ingress sourced from external_delegation")
         }));
@@ -2649,12 +2835,10 @@ mod tests {
             summary.action_descriptor_id.as_deref(),
             Some("tool:app.workflow")
         );
-        assert!(
-            summary
-                .rationale
-                .iter()
-                .any(|line| line.contains("matched the requested external action"))
-        );
+        assert!(summary
+            .rationale
+            .iter()
+            .any(|line| line.contains("matched the requested external action")));
         assert!(summary.rationale.iter().any(|line| {
             line.contains("required scope InvokeTool matched capability scope InvokeTool")
         }));
@@ -3070,12 +3254,10 @@ mod tests {
         assert_eq!(recovered.session_id, Some(session_id));
         assert_eq!(recovered.turn_index, Some(2));
         assert_eq!(recovered.coordinator_agent_id, Some(coordinator_agent_id));
-        assert!(
-            recovered
-                .conservative_reasons
-                .iter()
-                .any(|line| line.contains("workflow failed before graph publication"))
-        );
+        assert!(recovered
+            .conservative_reasons
+            .iter()
+            .any(|line| line.contains("workflow failed before graph publication")));
 
         let preview = recovered
             .result_preview
@@ -3094,8 +3276,8 @@ mod tests {
     }
 
     #[test]
-    fn recover_persisted_autonomy_status_falls_back_to_metadata_final_result_when_task_result_mismatches()
-     {
+    fn recover_persisted_autonomy_status_falls_back_to_metadata_final_result_when_task_result_mismatches(
+    ) {
         let workflow_id = TaskId::new();
         let session_id = SessionId::new();
         let coordinator_agent_id = AgentId::new();
