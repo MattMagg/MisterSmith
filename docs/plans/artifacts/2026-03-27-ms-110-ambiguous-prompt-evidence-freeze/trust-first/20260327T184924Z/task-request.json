@@ -1,0 +1,4 @@
+{
+  "description": "Inspect the live runtime and answer one question: when task status and autonomy status disagree on emphasis, which surface should an operator trust first and why? Ground the answer only in directly observed evidence. Use the smallest workflow that can finish the task. Keep the answer under 140 words.",
+  "priority": "high"
+}

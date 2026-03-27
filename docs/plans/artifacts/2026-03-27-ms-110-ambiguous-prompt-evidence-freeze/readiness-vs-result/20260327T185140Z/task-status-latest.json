@@ -1,0 +1,287 @@
+{
+  "result": {
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [
+            {
+              "action": "inspect_runtime_evidence",
+              "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "inspect_runtime_evidence",
+                  "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+                  "dependencies": [],
+                  "description": "Review only directly observed live runtime evidence for both bootstrap/readiness state and terminal result state, excluding inferred, historical, or repo-only context.",
+                  "goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "step-1",
+                  "workflow_id": "baa9d70d-1a26-416a-b152-fb81c2a27688"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e",
+                "workflow_goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words."
+              },
+              "task_id": "56c4d901-ab94-40d6-8c30-c17cb5257749",
+              "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "compose_bounded_operator_answer",
+            "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+            "dependencies": [
+              "56c4d901-ab94-40d6-8c30-c17cb5257749"
+            ],
+            "description": "Decide whether the observed evidence supports one combined operator answer; if yes, write a single concise answer under 160 words that states the conclusion and evidence boundaries, and if not, state that the evidence is insufficient to combine without splitting.",
+            "goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "step-2",
+            "workflow_id": "baa9d70d-1a26-416a-b152-fb81c2a27688"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e",
+          "workflow_goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "inspect_runtime_evidence",
+            "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+            "dependencies": [],
+            "description": "Review only directly observed live runtime evidence for both bootstrap/readiness state and terminal result state, excluding inferred, historical, or repo-only context.",
+            "goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "step-1",
+            "workflow_id": "baa9d70d-1a26-416a-b152-fb81c2a27688"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e",
+          "workflow_goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words."
+        }
+      ],
+      "description": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "inspect_runtime_evidence",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Review only directly observed live runtime evidence for both bootstrap/readiness state and terminal result state, excluding inferred, historical, or repo-only context.",
+            "id": "step-1",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "compose_bounded_operator_answer",
+            "branch": "branch-a",
+            "depends_on": [
+              "step-1"
+            ],
+            "description": "Decide whether the observed evidence supports one combined operator answer; if yes, write a single concise answer under 160 words that states the conclusion and evidence boundaries, and if not, state that the evidence is insufficient to combine without splitting.",
+            "id": "step-2",
+            "role": "worker",
+            "step": 2
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "constraints": [
+            "return JSON only",
+            "ground answer only in directly observed runtime evidence",
+            "keep final operator answer under 160 words",
+            "prefer the smallest workflow",
+            "do not split unless the evidence itself requires it"
+          ],
+          "source": "conversation transcript only"
+        },
+        "goal": "Determine from directly observed live runtime evidence whether bootstrap/readiness evidence and terminal result evidence can be delivered as one bounded operator answer under 160 words without splitting the work.",
+        "steps": [
+          {
+            "action": "inspect_runtime_evidence",
+            "description": "Review only directly observed live runtime evidence for both bootstrap/readiness state and terminal result state, excluding inferred, historical, or repo-only context.",
+            "id": "step-1",
+            "step": 1
+          },
+          {
+            "action": "compose_bounded_operator_answer",
+            "depends_on": [
+              "step-1"
+            ],
+            "description": "Decide whether the observed evidence supports one combined operator answer; if yes, write a single concise answer under 160 words that states the conclusion and evidence boundaries, and if not, state that the evidence is insufficient to combine without splitting.",
+            "id": "step-2",
+            "step": 2
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "inspect_runtime_evidence",
+          "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "inspect_runtime_evidence",
+              "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+              "dependencies": [],
+              "description": "Review only directly observed live runtime evidence for both bootstrap/readiness state and terminal result state, excluding inferred, historical, or repo-only context.",
+              "goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "step-1",
+              "workflow_id": "baa9d70d-1a26-416a-b152-fb81c2a27688"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e",
+            "workflow_goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words."
+          },
+          "task_id": "56c4d901-ab94-40d6-8c30-c17cb5257749",
+          "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e"
+        },
+        {
+          "action": "compose_bounded_operator_answer",
+          "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "inspect_runtime_evidence",
+                "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "inspect_runtime_evidence",
+                    "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+                    "dependencies": [],
+                    "description": "Review only directly observed live runtime evidence for both bootstrap/readiness state and terminal result state, excluding inferred, historical, or repo-only context.",
+                    "goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "step-1",
+                    "workflow_id": "baa9d70d-1a26-416a-b152-fb81c2a27688"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e",
+                  "workflow_goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words."
+                },
+                "task_id": "56c4d901-ab94-40d6-8c30-c17cb5257749",
+                "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "compose_bounded_operator_answer",
+              "branch_id": "65480433-51fb-4316-bd77-b99ce66d1f6e",
+              "dependencies": [
+                "56c4d901-ab94-40d6-8c30-c17cb5257749"
+              ],
+              "description": "Decide whether the observed evidence supports one combined operator answer; if yes, write a single concise answer under 160 words that states the conclusion and evidence boundaries, and if not, state that the evidence is insufficient to combine without splitting.",
+              "goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "step-2",
+              "workflow_id": "baa9d70d-1a26-416a-b152-fb81c2a27688"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e",
+            "workflow_goal": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words."
+          },
+          "task_id": "ff3a2a4b-416c-4578-8ab1-b41a125c2682",
+          "worker_id": "a1d4fef5-ed14-4387-b14e-6942f66e436e"
+        }
+      ],
+      "workflow_id": "baa9d70d-1a26-416a-b152-fb81c2a27688"
+    },
+    "status": "completed",
+    "workflow_id": "baa9d70d-1a26-416a-b152-fb81c2a27688"
+  },
+  "status": "completed",
+  "task_id": "baa9d70d-1a26-416a-b152-fb81c2a27688"
+}

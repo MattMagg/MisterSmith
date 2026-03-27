@@ -1,0 +1,4 @@
+{
+  "description": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words.",
+  "priority": "high"
+}

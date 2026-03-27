@@ -1,0 +1,287 @@
+{
+  "result": {
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [
+            {
+              "action": "inspect_live_runtime",
+              "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "inspect_live_runtime",
+                  "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+                  "dependencies": [],
+                  "description": "Review the live runtime surfaces once and capture only directly observed evidence for the active provider/model, the actual execution graph shape (for example single-path vs branched/merged), and any operator-facing provenance signals attached to the result. Mark anything not directly visible as unknown.",
+                  "goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "step1",
+                  "workflow_id": "08f6b228-e46f-47de-999c-80446b7fd2f9"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe",
+                "workflow_goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words."
+              },
+              "task_id": "aa534c2b-cea2-4c97-9711-e5b60a03f773",
+              "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "compose_evidence_only_answer",
+            "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+            "dependencies": [
+              "aa534c2b-cea2-4c97-9711-e5b60a03f773"
+            ],
+            "description": "Write one concise answer under 180 words that compares the observed provider/model selection, graph shape, and result provenance, explicitly separating confirmed observations from unknowns and avoiding inference beyond the observed evidence.",
+            "goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "step2",
+            "workflow_id": "08f6b228-e46f-47de-999c-80446b7fd2f9"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe",
+          "workflow_goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "inspect_live_runtime",
+            "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+            "dependencies": [],
+            "description": "Review the live runtime surfaces once and capture only directly observed evidence for the active provider/model, the actual execution graph shape (for example single-path vs branched/merged), and any operator-facing provenance signals attached to the result. Mark anything not directly visible as unknown.",
+            "goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "step1",
+            "workflow_id": "08f6b228-e46f-47de-999c-80446b7fd2f9"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe",
+          "workflow_goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words."
+        }
+      ],
+      "description": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "inspect_live_runtime",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Review the live runtime surfaces once and capture only directly observed evidence for the active provider/model, the actual execution graph shape (for example single-path vs branched/merged), and any operator-facing provenance signals attached to the result. Mark anything not directly visible as unknown.",
+            "id": "step1",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "compose_evidence_only_answer",
+            "branch": "branch-a",
+            "depends_on": [
+              "step1"
+            ],
+            "description": "Write one concise answer under 180 words that compares the observed provider/model selection, graph shape, and result provenance, explicitly separating confirmed observations from unknowns and avoiding inference beyond the observed evidence.",
+            "id": "step2",
+            "role": "worker",
+            "step": 2
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "constraints": [
+            "return JSON-only workflow output",
+            "prefer the smallest workflow",
+            "default to sequential execution",
+            "final runtime answer must stay under 180 words"
+          ],
+          "deliverable": "A single concise comparison answer for the operator.",
+          "evidence_policy": "Use only directly observed live evidence; no repo memory, speculation, or indirect assumptions."
+        },
+        "goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence.",
+        "steps": [
+          {
+            "action": "inspect_live_runtime",
+            "description": "Review the live runtime surfaces once and capture only directly observed evidence for the active provider/model, the actual execution graph shape (for example single-path vs branched/merged), and any operator-facing provenance signals attached to the result. Mark anything not directly visible as unknown.",
+            "id": "step1",
+            "step": 1
+          },
+          {
+            "action": "compose_evidence_only_answer",
+            "depends_on": [
+              "step1"
+            ],
+            "description": "Write one concise answer under 180 words that compares the observed provider/model selection, graph shape, and result provenance, explicitly separating confirmed observations from unknowns and avoiding inference beyond the observed evidence.",
+            "id": "step2",
+            "step": 2
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "compose_evidence_only_answer",
+          "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "inspect_live_runtime",
+                "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "inspect_live_runtime",
+                    "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+                    "dependencies": [],
+                    "description": "Review the live runtime surfaces once and capture only directly observed evidence for the active provider/model, the actual execution graph shape (for example single-path vs branched/merged), and any operator-facing provenance signals attached to the result. Mark anything not directly visible as unknown.",
+                    "goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "step1",
+                    "workflow_id": "08f6b228-e46f-47de-999c-80446b7fd2f9"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe",
+                  "workflow_goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words."
+                },
+                "task_id": "aa534c2b-cea2-4c97-9711-e5b60a03f773",
+                "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "compose_evidence_only_answer",
+              "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+              "dependencies": [
+                "aa534c2b-cea2-4c97-9711-e5b60a03f773"
+              ],
+              "description": "Write one concise answer under 180 words that compares the observed provider/model selection, graph shape, and result provenance, explicitly separating confirmed observations from unknowns and avoiding inference beyond the observed evidence.",
+              "goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "step2",
+              "workflow_id": "08f6b228-e46f-47de-999c-80446b7fd2f9"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe",
+            "workflow_goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words."
+          },
+          "task_id": "07203408-62da-49df-9d02-dde334d71bcc",
+          "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe"
+        },
+        {
+          "action": "inspect_live_runtime",
+          "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "inspect_live_runtime",
+              "branch_id": "f592c7c0-d802-4e8c-8a0b-b438614a6c14",
+              "dependencies": [],
+              "description": "Review the live runtime surfaces once and capture only directly observed evidence for the active provider/model, the actual execution graph shape (for example single-path vs branched/merged), and any operator-facing provenance signals attached to the result. Mark anything not directly visible as unknown.",
+              "goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "step1",
+              "workflow_id": "08f6b228-e46f-47de-999c-80446b7fd2f9"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe",
+            "workflow_goal": "Inspect the live runtime and compare provider/model selection, execution graph shape, and operator-facing result provenance in one concise answer grounded only in directly observed evidence. Use whatever workflow is actually necessary and keep the answer under 180 words."
+          },
+          "task_id": "aa534c2b-cea2-4c97-9711-e5b60a03f773",
+          "worker_id": "0e2edc1f-903e-4303-a582-367a9ab9b7fe"
+        }
+      ],
+      "workflow_id": "08f6b228-e46f-47de-999c-80446b7fd2f9"
+    },
+    "status": "completed",
+    "workflow_id": "08f6b228-e46f-47de-999c-80446b7fd2f9"
+  },
+  "status": "completed",
+  "task_id": "08f6b228-e46f-47de-999c-80446b7fd2f9"
+}

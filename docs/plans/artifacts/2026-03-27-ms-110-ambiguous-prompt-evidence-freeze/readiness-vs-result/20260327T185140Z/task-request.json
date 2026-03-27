@@ -1,0 +1,4 @@
+{
+  "description": "Inspect the live runtime and explain whether bootstrap/readiness evidence and terminal result evidence can be summarized as one bounded operator answer without splitting the work. Ground the answer only in directly observed runtime evidence and keep it under 160 words.",
+  "priority": "high"
+}
