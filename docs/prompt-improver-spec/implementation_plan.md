@@ -9,7 +9,8 @@ do next after packet `020`, the March 27 runtime-planning follow-up, and the `MS
 ambiguous-prompt evidence freeze.
 
 The prompt should guide a research-and-spec-building session for the next honest development
-phase, without pre-deciding the answer or drifting into implementation.
+phase, explicitly grounded in `docs/research-output/` and the frontier mandate, without
+pre-deciding the answer or drifting into implementation.
 
 ### External Examples
 
@@ -45,6 +46,8 @@ Source:
 
 - the prompt should be a direct fresh-session briefing, not a generic reusable template
 - it should ground the agent in current repo truth before choosing a next phase
+- it should route the agent through the existing research corpus rather than treating "research" as
+  a blank-slate activity
 - it should keep the session on the planning/spec side, not implementation
 - it should tell the receiving agent when to freeze a new packet and when to stop because a new
   packet would be dishonest or premature
@@ -59,8 +62,8 @@ freeze the next bounded development phase after packet `020` and the March 27 fo
 **Who**: A fresh Codex session operating in `/Users/macmain/MisterSmith`.
 
 **Why**: The repo has no frozen post-packet-020 bounded phase yet. The next session needs a clear,
-repo-grounded brief for deciding whether the next move is research, checkpoint refresh, or a new
-SpecKit packet.
+repo-grounded brief for deciding whether the next move is frontier research synthesis, checkpoint
+refresh, or a new SpecKit packet.
 
 ### Deployment Summary
 
@@ -91,22 +94,29 @@ graph TD
 - `docs/current-state.md` now says there is no frozen post-packet-020 bounded phase
 - the March 27 runtime-planning simplification and `MS-110` evidence freeze both reduce pressure
   to treat topology shaping as the immediate next implementation packet
+- `docs/research-output/ROUTING_MANIFEST.md` and `consolidated/00-MASTER-FINDINGS.md` already rank
+  frontier opportunities, so the next-phase prompt should force the receiving agent to reuse that
+  corpus rather than restating generic market trends
 - the next phase should be chosen from current repo/code/proof truth, not by carrying forward an
   older packet assumption
 - the prompt should allow the receiving agent to conclude that research or checkpoint work comes
   first if a new packet would be premature
 - the prompt must forbid reopening already landed packet-020 work unless current repo truth shows a
   real defect
+- the frontier mandate requires a legitimacy/triage judgment before advancing speculative work
 
 ### Chain-of-Thought Approach
 
 Yes. The prompt should require the receiving agent to:
 
 1. verify current repo truth and proof boundaries
-2. inspect the main code surfaces that define remaining default-runtime and operator gaps
-3. compare candidate next-phase directions without pre-selecting one
-4. freeze one bounded packet only if the evidence supports it
-5. stop with a checkpoint note if no honest bounded packet is ready
+2. synthesize the existing `docs/research-output/` findings that are still relevant to the current
+   repo posture
+3. inspect the main code surfaces that define remaining default-runtime and operator gaps
+4. run frontier-legitimacy and follow-up classification before advancing a speculative next phase
+5. compare candidate next-phase directions without pre-selecting one
+6. freeze one bounded packet only if the evidence supports it
+7. stop with a checkpoint note if no honest bounded packet is ready
 
 ### Output Format
 
@@ -116,7 +126,9 @@ The handoff prompt should provide:
 
 - mission and current known repo posture
 - required reading order
+- required research-output reading order
 - code surfaces to inspect
+- frontier legitimacy gate
 - scope-decision rules
 - explicit non-goals and anti-patterns
 - packet output requirements if a packet is justified
@@ -139,6 +151,8 @@ The handoff prompt should provide:
 
 - keep the prompt research-and-spec oriented rather than implementation-oriented
 - front-load the fact that no frozen post-packet-020 bounded phase currently exists
+- treat the research corpus as a required frontier input, not a side reference
+- explicitly name the Smith legitimacy tools the receiving agent must use before freezing scope
 - tell the receiving agent to choose between new packet and checkpoint note based on evidence
 - preserve the repo's "clarify, do not overclaim" posture
 - explicitly forbid treating dormant planning items like `MS-110` as active bugs
@@ -178,17 +192,23 @@ current repo truth.
 4. **Missing anti-pattern guard** → Problem: the receiving agent could reopen packet-020 follow-up
    work or turn the session into implementation → Revision: add explicit anti-patterns and
    non-goals that forbid implementation, queue staging, or reopening dormant lanes.
+5. **Missing research-output and frontier gate** → Problem: "research" reads like generic forward
+   planning and ignores the repo's existing research corpus plus legitimacy tooling → Revision: add
+   a required research-output reading pass, frontier-mandate instructions, and a Smith
+   legitimacy/classification gate before any packet is frozen.
 
 ### Areas Needing Expansion
 
 - stronger decision rules for packet versus checkpoint note
 - clearer reading order anchored on current March 27 repo truth
+- explicit routing through `docs/research-output/` and the frontier mandate
 - a sharper definition of what the receiving agent should inspect in code
 - explicit final response requirements for scope, deferrals, and validation
 
 ### Structural Improvements
 
 - add a dedicated **Forward-Development Boundary** section
+- add a dedicated **Frontier Mandate** section
 - add a **Decision Rule** section for packet versus checkpoint note
 - add **Candidate Gap Families** as questions rather than answers
 - add **Anti-Patterns** near the stop conditions
@@ -199,3 +219,4 @@ current repo truth.
 - [x] The prompt preserves bounded-spec and checkpoint stop conditions
 - [x] The prompt avoids pre-solving the next packet choice
 - [x] The prompt stays grounded in current repo truth instead of stale packet direction
+- [x] The prompt treats existing research findings and frontier legitimacy as required inputs
