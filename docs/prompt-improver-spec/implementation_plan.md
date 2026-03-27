@@ -1,16 +1,14 @@
-# Implementation Plan — Mister Smith Post-Packet-020 Next Phase Spec Handoff Prompt
+# Implementation Plan — Mister Smith MS-114 Packet-021 Contract-Freeze Handoff Prompt
 
 ## Step 1: Example Identification
 
 ### Source Prompt (normalized from user request)
 
-Write a new forward-development handoff prompt for Mister Smith that tells a fresh agent what to
-do next after packet `020`, the March 27 runtime-planning follow-up, and the `MS-110`
-ambiguous-prompt evidence freeze.
+Create a fresh-session handoff prompt for the first implementation slice of packet `021` after
+the packet spec, tasks, and issue structure have been entered into Linear.
 
-The prompt should guide a research-and-spec-building session for the next honest development
-phase, explicitly grounded in `docs/research-output/` and the frontier mandate, without
-pre-deciding the answer or drifting into implementation.
+The prompt should initialize a new Codex session on the first runnable issue, grounded in the
+repo packet and Linear state, without pre-solving the implementation work.
 
 ### External Examples
 
@@ -18,105 +16,96 @@ pre-deciding the answer or drifting into implementation.
 
 ```text
 {
-  input: "Write a handoff to define the next bounded SpecKit packet for Mister Smith.",
-  ideal_output: "A fresh-session prompt that grounds the receiving agent on current repo truth,
-  current proof boundaries, code surfaces to inspect, scope-decision rules, and honest stop
-  conditions before freezing a new packet."
+  input: "Write a fresh-session handoff for a bounded packet child issue.",
+  ideal_output: "A direct implementation brief that names the issue, parent packet, reading
+  order, exact scope, validation floor, lifecycle expectations, and stop conditions without doing
+  the receiving agent's work."
 }
 ```
 
-Source: `docs/prompt-improver-spec/final-prompts/mister-smith-next-speckit-epic-handoff.md`
+Source:
+`docs/prompt-improver-spec/final-prompts/mister-smith-ms-106-orchestration-provenance-handoff.md`
 
 #### Example 2
 
 ```text
 {
-  input: "Write a forward-development prompt after a bounded runtime proof pass.",
-  ideal_output: "A repo-grounded planning brief that distinguishes landed proof from remaining
-  gaps, avoids reopening closed lanes, and tells the receiving agent when to produce a new packet
-  versus when to stop with a checkpoint note."
+  input: "Initialize implementation for a packet whose first milestone is a shared contract
+  freeze.",
+  ideal_output: "A handoff that keeps the session on the contract-freeze slice, points to the
+  contract artifact, blocks scope expansion into later slices, and requires shared-surface
+  validation before follow-on work."
 }
 ```
 
 Source:
-`docs/plans/2026-03-27-ms-110-adaptive-runtime-topology-planning.md` plus
-`docs/plans/2026-03-27-ms-110-ambiguous-prompt-evidence-freeze.md`
+`specs/015-complex-multi-agent-proof-and-unified-result-surfaces/contracts/result-surface-contract.md`
+and
+`specs/021-profile-aware-predictive-runtime-supervision/contracts/supervision-evidence-contract.md`
 
-### What the examples demonstrate
+### What The Examples Demonstrate
 
-- the prompt should be a direct fresh-session briefing, not a generic reusable template
-- it should ground the agent in current repo truth before choosing a next phase
-- it should route the agent through the existing research corpus rather than treating "research" as
-  a blank-slate activity
-- it should keep the session on the planning/spec side, not implementation
-- it should tell the receiving agent when to freeze a new packet and when to stop because a new
-  packet would be dishonest or premature
+- the prompt should target one concrete Linear issue, not the whole packet parent
+- it should ground the receiving agent on current repo and tracker truth before edits
+- it should preserve the repo's Smith-first workflow and clean-closure expectations
+- it should point to the shared contract artifact explicitly when the slice is a contract freeze
+- it should prevent drift into later child slices or generic frontier strategy work
 
 ## Step 2: Planning Analysis
 
 ### Intent Summary
 
-**What**: Produce a handoff prompt for a fresh Codex session to identify and, only if justified,
-freeze the next bounded development phase after packet `020` and the March 27 follow-up notes.
+**What**: produce a fresh-session handoff prompt for implementing `MS-114`, the first runnable
+packet-021 child issue.
 
-**Who**: A fresh Codex session operating in `/Users/macmain/MisterSmith`.
+**Who**: a fresh Codex session operating in `/Users/macmain/MisterSmith`.
 
-**Why**: The repo has no frozen post-packet-020 bounded phase yet. The next session needs a clear,
-repo-grounded brief for deciding whether the next move is frontier research synthesis, checkpoint
-refresh, or a new SpecKit packet.
+**Why**: packet `021` is now frozen and represented in Linear as parent `MS-113` plus bounded
+child slices. The next session should start at the first blocking slice rather than rediscovering
+scope or reopening packet framing.
 
 ### Deployment Summary
 
 - **Target environment**: fresh Codex session in `/Users/macmain/MisterSmith`
-- **Primary task**: determine the next honest bounded development phase from current repo truth
+- **Primary task**: execute `MS-114` end to end
 - **Expected outcome**:
-  - either one new bounded SpecKit packet under the next numbered `specs/` directory
-  - or one concise durable checkpoint note that explains why freezing a new packet would still be
-    premature
+  - shared supervision contract published and aligned across `core`, `events`, and `orchestrator`
+  - validation run for the touched shared-surface crates and docs
+  - repo and Linear state closed cleanly at the end
 
 ### Task Flowchart
 
 ```mermaid
 graph TD
-    A["Start fresh Codex session"] --> B["Read repo authority docs and March 27 follow-up notes"]
-    B --> C["Inspect current code surfaces and proven runtime boundaries"]
-    C --> D["List candidate remaining gaps without assuming the next packet"]
-    D --> E["Test each candidate against bounded-scope decision rules"]
-    E --> F{"One honest bounded packet exists?"}
-    F -- Yes --> G["Write one new SpecKit packet under next specs directory"]
-    F -- No --> H["Write one checkpoint note explaining why no packet should freeze yet"]
-    G --> I["Report scope, deferrals, and required validation/proof"]
-    H --> I
+    A["Start fresh Codex session"] --> B["Read repo authority and packet 021 docs"]
+    B --> C["Fetch Linear state for MS-113 and MS-114"]
+    C --> D["Reconcile workpad and move MS-114 to In Progress when implementation starts"]
+    D --> E["Freeze shared supervision contract and shared evidence fields"]
+    E --> F["Run narrow honest validation for touched crates and docs"]
+    F --> G["Update Linear/workpad state and return repo to clean synced main"]
 ```
 
-### Lessons from Examples and Current Repo Truth
+### Lessons From Examples And Current Repo Truth
 
-- `docs/current-state.md` now says there is no frozen post-packet-020 bounded phase
-- the March 27 runtime-planning simplification and `MS-110` evidence freeze both reduce pressure
-  to treat topology shaping as the immediate next implementation packet
-- `docs/research-output/ROUTING_MANIFEST.md` and `consolidated/00-MASTER-FINDINGS.md` already rank
-  frontier opportunities, so the next-phase prompt should force the receiving agent to reuse that
-  corpus rather than restating generic market trends
-- the next phase should be chosen from current repo/code/proof truth, not by carrying forward an
-  older packet assumption
-- the prompt should allow the receiving agent to conclude that research or checkpoint work comes
-  first if a new packet would be premature
-- the prompt must forbid reopening already landed packet-020 work unless current repo truth shows a
-  real defect
-- the frontier mandate requires a legitimacy/triage judgment before advancing speculative work
+- `MS-114` is the first blocking child slice under parent `MS-113`
+- the new packet includes a real contract artifact at
+  `specs/021-profile-aware-predictive-runtime-supervision/contracts/supervision-evidence-contract.md`
+- the receiving agent should implement only the contract-freeze slice, not `MS-115` through
+  `MS-118`
+- packet `020` repair lineage remains canonical and must stay coherent with the new contract
+- the prompt should preserve repo reading order, issue/workpad discipline, validation floor, and
+  clean-closure rules
 
 ### Chain-of-Thought Approach
 
 Yes. The prompt should require the receiving agent to:
 
-1. verify current repo truth and proof boundaries
-2. synthesize the existing `docs/research-output/` findings that are still relevant to the current
-   repo posture
-3. inspect the main code surfaces that define remaining default-runtime and operator gaps
-4. run frontier-legitimacy and follow-up classification before advancing a speculative next phase
-5. compare candidate next-phase directions without pre-selecting one
-6. freeze one bounded packet only if the evidence supports it
-7. stop with a checkpoint note if no honest bounded packet is ready
+1. verify current repo and Linear truth
+2. read the packet and contract artifacts before editing
+3. ground on the shared code surfaces that define the contract freeze
+4. execute only the first bounded slice
+5. validate touched crates and docs honestly before closure
+6. leave repo and Linear state aligned
 
 ### Output Format
 
@@ -124,99 +113,91 @@ Markdown.
 
 The handoff prompt should provide:
 
-- mission and current known repo posture
+- mission and current known state
 - required reading order
-- required research-output reading order
-- code surfaces to inspect
-- frontier legitimacy gate
-- scope-decision rules
-- explicit non-goals and anti-patterns
-- packet output requirements if a packet is justified
-- stop conditions if a packet is not yet honest
+- primary code surfaces
+- workflow expectations and lifecycle rules
+- exact scope and boundaries
+- validation floor
+- closure requirements
+- final response requirements
 
 ### Variable Plan
 
 | Variable | XML Tag | Description |
 | -------- | ------- | ----------- |
 | Repo root | `<repo_root>` | Absolute path to the Mister Smith repo |
-| Starting main SHA | `<starting_main_sha>` | Current clean synced `main` commit at handoff |
-| Current state note | `<current_state_note>` | Primary repo-state router file |
-| Latest closure note | `<latest_closure_note>` | Packet-020 closure note on current main |
-| March 27 follow-up note | `<march27_followup_note>` | Runtime-planning simplification note |
-| Evidence freeze note | `<evidence_freeze_note>` | `MS-110` ambiguous-prompt evidence note |
-| Next specs root | `<next_specs_root>` | Next numbered `specs/` directory if a packet is justified |
-| Checkpoint note path | `<checkpoint_note_path>` | Durable note path if a new packet would be premature |
+| Linear parent issue | `<linear_parent_issue>` | Packet parent issue identifier |
+| Linear issue | `<linear_issue>` | First runnable child issue identifier |
+| Linear doc | `<linear_doc>` | Packet doc attached to the parent issue |
+| Starting main SHA | `<starting_main_sha>` | Clean synced `main` commit at handoff |
+| Packet source | `<packet_source>` | Packet `021` directory |
+| Contract source | `<contract_source>` | Shared supervision contract artifact |
+| Branch name | `<branch_name>` | Suggested branch name if one is used |
 
 ### Structural Notes
 
-- keep the prompt research-and-spec oriented rather than implementation-oriented
-- front-load the fact that no frozen post-packet-020 bounded phase currently exists
-- treat the research corpus as a required frontier input, not a side reference
-- explicitly name the Smith legitimacy tools the receiving agent must use before freezing scope
-- tell the receiving agent to choose between new packet and checkpoint note based on evidence
-- preserve the repo's "clarify, do not overclaim" posture
-- explicitly forbid treating dormant planning items like `MS-110` as active bugs
+- target the prompt at `MS-114`, not the packet parent
+- front-load the fact that this is the first contract-freeze slice
+- use current repo truth and the new Linear issue structure rather than stale packet-020 language
+- keep the prompt implementation-oriented, not spec-selection-oriented
+- explicitly forbid widening into `MS-115` through `MS-118`
 
 ### Ambiguities & Questions
 
 None that block prompt creation.
 
-The prompt can safely instruct the receiving agent to choose the honest next-phase deliverable from
-current repo truth.
+The first runnable slice and its repo/Linear anchors are now explicit.
 
 ### Prompt Filename
 
-`mister-smith-post-packet-020-next-phase-spec-handoff`
+`mister-smith-ms-114-packet-021-contract-freeze-handoff`
 
 ### Constraint Preservation Checklist
 
-- [x] The output remains a handoff prompt, not execution of the next phase
-- [x] The prompt does not pre-select the next packet without evidence
-- [x] The prompt preserves research/spec-building boundaries
-- [x] The prompt keeps stop conditions for premature packet freezing
-- [x] The prompt stays grounded in current March 27 repo truth
+- [x] The output remains a handoff prompt, not execution of `MS-114`
+- [x] The prompt targets one bounded issue instead of the entire packet
+- [x] The prompt preserves repo authority, Linear, and clean-closure rules
+- [x] The prompt keeps later packet-021 slices explicitly out of scope
+- [x] The prompt grounds the receiving agent on the published contract artifact
 
 ## Step 4: Critique & Revision Plan
 
 ### Issues Identified
 
-1. **"write a prompt for the next phase of development"** → Problem: this could drift into
-   pre-choosing a packet or implementation lane → Revision: make the prompt explicitly decide
-   whether the next honest move is a new packet or a checkpoint note.
-2. **Older next-packet handoff language from packet-016 days** → Problem: it assumes a next packet
-   exists and uses stale authority notes → Revision: re-anchor the prompt to `docs/current-state.md`
-   plus the March 27 runtime-planning and evidence-freeze notes.
-3. **"research and spec building?"** → Problem: this can be read as two separate activities or as
-   a presumed decision → Revision: instruct the receiving agent to do research first and only then
-   freeze a packet if the repo truth supports it.
-4. **Missing anti-pattern guard** → Problem: the receiving agent could reopen packet-020 follow-up
-   work or turn the session into implementation → Revision: add explicit anti-patterns and
-   non-goals that forbid implementation, queue staging, or reopening dormant lanes.
-5. **Missing research-output and frontier gate** → Problem: "research" reads like generic forward
-   planning and ignores the repo's existing research corpus plus legitimacy tooling → Revision: add
-   a required research-output reading pass, frontier-mandate instructions, and a Smith
-   legitimacy/classification gate before any packet is frozen.
+1. **"initialize this spec implementation"** → Problem: could imply the whole packet parent
+   instead of the first runnable slice → Revision: target `MS-114` explicitly.
+2. **"input the issues/tasks/spec into Linear"** → Problem: a handoff prompt could ignore the new
+   tracker state and fall back to repo-only grounding → Revision: include parent `MS-113`, child
+   `MS-114`, and the attached Linear doc in the prompt.
+3. **Generic implementation handoff structure** → Problem: it could miss that this slice is a
+   shared contract freeze → Revision: make the contract artifact a first-class required read and a
+   scope boundary.
+4. **Missing anti-scope-drift guard** → Problem: the receiving agent could widen into runtime
+   wiring, fingerprints, or operator-console work → Revision: add explicit out-of-scope language
+   for `MS-115` through `MS-118`.
+5. **Validation floor too vague** → Problem: shared-surface work can regress quietly across
+   multiple crates → Revision: name the narrowest honest test/clippy/build/doc checks for this
+   slice.
 
 ### Areas Needing Expansion
 
-- stronger decision rules for packet versus checkpoint note
-- clearer reading order anchored on current March 27 repo truth
-- explicit routing through `docs/research-output/` and the frontier mandate
-- a sharper definition of what the receiving agent should inspect in code
-- explicit final response requirements for scope, deferrals, and validation
+- stronger issue-state grounding from Linear
+- a clearer contract-first reading order
+- explicit closure requirements for repo and Linear state
+- sharper separation between `MS-114` and the later packet-021 child slices
 
 ### Structural Improvements
 
-- add a dedicated **Forward-Development Boundary** section
-- add a dedicated **Frontier Mandate** section
-- add a **Decision Rule** section for packet versus checkpoint note
-- add **Candidate Gap Families** as questions rather than answers
-- add **Anti-Patterns** near the stop conditions
+- add a **Current Known State** section with issue IDs and repo SHA
+- add a **Scope For MS-114 Only** section
+- add a **Boundaries** section that names later child issues explicitly
+- add a **Closure Requirements** section matching current repo workflow expectations
 
 ### Constraint Preservation Check
 
-- [x] The prompt remains briefing-only and does not do the next agent's work
-- [x] The prompt preserves bounded-spec and checkpoint stop conditions
-- [x] The prompt avoids pre-solving the next packet choice
-- [x] The prompt stays grounded in current repo truth instead of stale packet direction
-- [x] The prompt treats existing research findings and frontier legitimacy as required inputs
+- [x] The prompt stays briefing-only and does not do the receiving agent's work
+- [x] The prompt preserves repo authority and tracker grounding
+- [x] The prompt keeps the packet slice bounded to contract freeze only
+- [x] The prompt keeps validation and closure requirements explicit
+- [x] The prompt avoids prescribing exact implementation details beyond necessary scope control

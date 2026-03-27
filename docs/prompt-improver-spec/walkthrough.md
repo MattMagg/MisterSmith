@@ -1,71 +1,58 @@
-# Walkthrough — Mister Smith Post-Packet-020 Next Phase Spec Handoff Prompt
+# Walkthrough — Mister Smith MS-114 Packet-021 Contract-Freeze Handoff Prompt
 
 ## Original Prompt Summary
 
-The source request asked for a prompt, built through the prompt-improver workflow, that tells a
-fresh agent what to do next after the March 27 packet-020 follow-up work.
+The source request asked for two things:
 
-The key challenge was not writing a generic "next phase" prompt. It was producing a forward
-development handoff that:
+1. mirror packet `021` into Linear as issues/tasks/spec context
+2. create a new-session prompt, using the prompt-improver workflow, that initializes
+   implementation of the new packet
 
-- starts from current repo truth
-- routes through the existing `docs/research-output/` corpus
-- respects the frontier mandate instead of drifting toward framework imitation
-- does not assume a next packet already exists
-- keeps the receiving session on research/spec-building rather than implementation
+The main prompt-design challenge was deciding what the receiving session should actually start on.
+Once the Linear packet structure existed, the honest answer was not the packet parent. It was the
+first runnable child issue: `MS-114`.
 
 ## Key Improvements Made
 
-- converted the vague "what's next?" request into a concrete fresh-session handoff for deciding
-  whether the next honest deliverable is:
-  - one bounded new SpecKit packet
-  - or one checkpoint note explaining why freezing a packet would be premature
-- anchored the prompt on the current March 27 authority stack:
-  - `docs/current-state.md`
-  - packet-020 closure note
-  - March 27 runtime-planning simplification note
-  - March 27 `MS-110` evidence-freeze note
-- added the repo's research corpus to the required grounding pass:
-  - `docs/research-output/ROUTING_MANIFEST.md`
-  - `docs/research-output/consolidated/00-MASTER-FINDINGS.md`
-  - the most relevant consolidated frontier documents
-- added a frontier-legitimacy gate so the next agent must use Smith tooling before turning a
-  speculative research direction into a new packet
-- added explicit code-grounding surfaces so the receiving agent checks current runtime and operator
-  gaps before freezing scope
-- added anti-patterns that forbid reopening packet-020 work or slipping into implementation
-- kept the prompt from pre-solving the next packet choice
+- converted a broad "initialize this spec implementation" ask into a direct fresh-session handoff
+  for `MS-114`
+- grounded the prompt on the new tracker structure:
+  - parent packet `MS-113`
+  - first runnable slice `MS-114`
+  - attached Linear doc `Packet 021 spec packet`
+- made the contract artifact a first-class read instead of assuming the receiving agent would
+  infer it from `plan.md` or `tasks.md`
+- added explicit boundaries that keep the session out of `MS-115`, `MS-116`, `MS-117`, and
+  `MS-118`
+- kept the repo's Smith-first lifecycle, validation, and clean-closure requirements intact
 
 ## Before / After Comparison
 
-### Scope framing
+### Session target
 
-- Before: "write up a prompt for the next phase of development"
-- After: a prompt that tells the receiving agent to verify whether a new bounded phase is actually
-  ready to freeze
+- Before: ambiguous between packet-parent initialization and first-slice implementation
+- After: explicitly targets `MS-114`, the first runnable contract-freeze slice
 
-### Forward-development posture
+### Contract grounding
 
-- Before: ambiguous between research, spec writing, and implementation
-- After: explicitly a research-and-spec session with a stop path when a new packet would be
-  dishonest, plus a required frontier-legitimacy check before packet freeze
+- Before: could have treated the contract artifact as just one more packet file
+- After: the prompt requires the receiving agent to read and honor the published supervision
+  contract before editing code
 
-### Repo-truth grounding
+### Tracker integration
 
-- Before: could have reused older pre-packet prompts
-- After: uses the current March 27 repo state, the existing research-output corpus, and recent
-  evidence notes as the authority base
+- Before: "put it in Linear" did not yet give the next session actionable issue context
+- After: the prompt is anchored on the concrete Linear parent, child issue, attached packet doc,
+  and suggested branch name
 
 ## How To Use The Improved Prompt
 
 1. Start a fresh Codex session in `/Users/macmain/MisterSmith`.
 2. Paste the final prompt from the file below.
-3. Let the receiving agent determine whether current repo truth supports:
-   - one new bounded SpecKit packet
-   - or one checkpoint note instead
-4. Expect the receiving agent to stop at checkpoint/triage if the research corpus and legitimacy
-   checks do not yet justify a frontier-worthy bounded packet
+3. Let the receiving agent execute `MS-114` end to end before moving to later packet-021 slices.
+4. Expect the receiving agent to keep repo and Linear state aligned and to stop at the contract
+   freeze boundary rather than widening into later packet work.
 
 ## Final Prompt Location
 
-- `docs/prompt-improver-spec/final-prompts/mister-smith-post-packet-020-next-phase-spec-handoff.md`
+- `docs/prompt-improver-spec/final-prompts/mister-smith-ms-114-packet-021-contract-freeze-handoff.md`

@@ -21,8 +21,8 @@ Use initiatives as the strategic layer, not as Symphony's dispatch boundary. His
 remain useful for reporting and status updates, but the current repo-wide router is
 `docs/current-state.md`. The latest landed frontier closure notes are
 `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` and
-`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`, and no newer post-packet-020
-bounded phase is frozen yet.
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`, and the current frozen
+post-packet-020 phase is `specs/021-profile-aware-predictive-runtime-supervision/`.
 
 ### Current Strategy
 
@@ -32,6 +32,8 @@ bounded phase is frozen yet.
   `main`; treat it as closed backlog history rather than current runnable direction
 - packet `019` and packet `020` are complete on `main`; treat them as the latest landed frontier
   history unless current repo truth shows a defect
+- packet `021` is now frozen on `main` as the next bounded implementation packet; keep it in
+  validated backlog until one child slice is explicitly staged
 - the historical `Smith MCP Development` project is archived and should not be reopened as a
   separate forward program
 - the next active planning move is not an automatic queue refill; start from `docs/current-state.md`
@@ -44,7 +46,8 @@ bounded phase is frozen yet.
 - the watched queue should remain empty until that next bounded slice is explicitly staged
 - the current repo-owned direction notes are `docs/current-state.md`,
   `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`, and
-  `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`; the March 21 checkpoint and
+  `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`, plus
+  `specs/021-profile-aware-predictive-runtime-supervision/`; the March 21 checkpoint and
   packet-016 closure note remain useful historical support references
 
 ### Projects
