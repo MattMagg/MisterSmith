@@ -1,169 +1,210 @@
-# Implementation Plan — Mister Smith MS-106 Orchestration Provenance Handoff Prompt
+# Implementation Plan — Mister Smith MS-103 Packet-020 Live Evaluation Handoff Prompt
 
 ## Step 1: Example Identification
 
 ### Source Prompt (normalized from user request)
 
-Create a continuation prompt for the next Mister Smith task after `MS-105`, using the
-`prompt-improver` workflow so the next session receives a clear, bounded, repo-grounded briefing.
+Create a fresh-session handoff prompt for live runtime evaluations of completed packet `020`
+parent issue `MS-103`, using the prompt-improver workflow and current repo truth from `MS-103`
+through `MS-107`.
 
-### Normalized Example
+### External Examples
+
+#### Example 1
 
 ```text
 {
-  input: "Produce a prompt for the next task after the just-landed packet-020 slice.",
-  ideal_output: "A fresh-session handoff prompt that identifies the real next Linear issue, grounds
-  the agent on current repo and packet authority, preserves Smith-first workflow requirements, and
-  keeps the next implementation slice bounded to its actual acceptance criteria."
+  input: "Write a live-run evaluation handoff for Mister Smith.",
+  ideal_output: "A fresh-session prompt that grounds the receiving agent on current runtime docs,
+  verifies the actual live path from code, requires durable evidence capture, and distinguishes
+  live proof from code inference."
 }
 ```
 
-### What the example demonstrates
+Source: `docs/prompt-improver-spec/final-prompts/mister-smith-live-run-trace-evaluation.md`
 
-- the output should be a briefing for a new agent session, not execution of the next task
-- the prompt must identify the actual next issue from current repo and Linear state instead of
-  guessing from packet headings alone
-- the prompt should carry forward the repo's Smith-first control-plane discipline
-- the prompt must preserve bounded scope and clean-closure expectations
+#### Example 2
+
+```text
+{
+  input: "Write a bounded packet implementation handoff for a specific Linear slice.",
+  ideal_output: "A repo-grounded prompt with exact issue context, reading order, workflow rules,
+  bounded scope, validation expectations, and clean-closure requirements."
+}
+```
+
+Source:
+`docs/prompt-improver-spec/final-prompts/mister-smith-ms-106-orchestration-provenance-handoff.md`
+
+### What the examples demonstrate
+
+- the prompt should be a direct fresh-session briefing, not a reusable generic template
+- live evaluation prompts need explicit proof-boundary language and durable artifact requirements
+- issue-specific handoff prompts work best when they include current known state plus instructions
+  to verify mutable state before acting
+- the receiving agent should be told what to prove and what not to overclaim, without pre-solving
+  the evaluation outcomes
 
 ## Step 2: Planning Analysis
 
 ### Intent Summary
 
-**What**: Produce a fresh-session handoff prompt for the next packet-020 implementation slice.
+**What**: Produce a handoff prompt for a new Codex session to run live evaluations against the
+completed packet-020 runtime path after `MS-103` through `MS-107` closed on `main`.
 
-**Who**: A new Codex session operating in `/Users/macmain/MisterSmith`.
+**Who**: A fresh Codex session operating in `/Users/macmain/MisterSmith`.
 
-**Why**: `MS-105` is now landed, so the next session needs a concise but fully grounded prompt for
-`MS-106` without re-deriving the packet state from scratch.
+**Why**: The next session needs to validate what packet `020` actually proves live on the shipped
+runtime path, without reopening implementation work or overstating claims beyond observed
+evidence.
 
 ### Deployment Summary
 
 - **Target environment**: fresh Codex session in `/Users/macmain/MisterSmith`
-- **Primary task**: execute `MS-106` end to end
-- **Control-plane posture**: Smith-first, with current issue state checked before mutation
-- **Expected outcome**: a prompt that is immediately usable to start `MS-106` from clean synced
-  `main`
+- **Primary task**: run bounded live runtime evaluations for completed packet `020`
+- **Control-plane posture**: verify issue state, but execute locally and directly instead of using
+  Symphony or reopening the completed implementation lane
+- **Expected outcome**: one durable evaluation note plus supporting artifacts that separate
+  baseline live proof, packet-020-specific live evidence, and remaining deterministic-only claims
 
 ### Task Flowchart
 
 ```mermaid
 graph TD
-    A["Start fresh Codex session"] --> B["Read repo authority docs and packet 020 files"]
-    B --> C["Fetch current MS-106 control-plane state"]
-    C --> D["Stage issue into watched queue if still in validated backlog"]
-    D --> E["Move issue to In Progress and reconcile single workpad comment"]
-    E --> F["Implement bounded provenance surfaces for task and autonomy views"]
-    F --> G["Run honest app-focused validation and doc checks"]
-    G --> H["Push, review, merge, and return repo to clean synced main"]
-    H --> I["Update Linear/workpad and report closure"]
+    A["Start fresh Codex session"] --> B["Read repo authority docs and packet 020 closure notes"]
+    B --> C["Fetch current MS-103 control-plane state"]
+    C --> D["Ground on current runtime and packet-020 code surfaces"]
+    D --> E["Verify local infra, auth, and live entrypoint readiness"]
+    E --> F["Run one baseline live runtime evaluation"]
+    F --> G["Run one bounded packet-020 probe evaluation if the path supports it"]
+    G --> H["Inspect task and autonomy outputs plus runtime logs"]
+    H --> I["Write durable evaluation note and artifact index"]
+    I --> J["Report what packet 020 proved live versus what remains deterministic-only"]
 ```
 
-### Lessons from Current Repo State
+### Lessons from Examples and Current Repo Truth
 
-- the next bounded packet-020 slice is `MS-106`, not a generic packet heading
-- `MS-106` is currently `Backlog` in `MisterSmith Validated Backlog`, so the prompt should tell
-  the next session to verify and, if still necessary, stage it into `MisterSmith Execution Queue`
-- the issue is blocked by `MS-105`, but that blocker is now landed and `MS-105` is `Done`
-- the runtime/core contract work for verifier verdicts, clarification, and failure-context
-  checkpoint lineage is already present from `MS-104` and `MS-105`
-- the next slice is about projecting that provenance on task/autonomy inspection surfaces and
-  keeping deterministic versus live-proof boundaries explicit
+- `MS-103` is already `Done`, so the handoff should not tell the receiving agent to reopen or
+  restage the packet just to run evaluation
+- packet `020` closure is documented in
+  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`, and its quickstart already
+  defines the live-proof boundary as one bounded runtime transcript
+- packet `019` already has a bounded repeatable live proof on the current shipped baseline, so the
+  new prompt should reuse that baseline as grounding without confusing packet-019 proof with
+  packet-020 proof
+- the receiving agent needs a two-part evaluation posture:
+  - confirm the current baseline live runtime path still works
+  - attempt a bounded packet-020-specific transcript that honestly shows verifier or repair
+    behavior, or record that the current path could not trigger it
+- the prompt must be explicit that the goal is evaluation, not implementation, router changes, or
+  benchmark claims
 
 ### Chain-of-Thought Approach
 
-Yes. The prompt should tell the next session to:
+Yes. The prompt should require the receiving agent to:
 
-1. ground on current repo and issue truth
-2. refresh the issue/control-plane state before mutating it
-3. implement only the bounded provenance projection slice
-4. validate the affected behavior honestly
-5. finish the git/PR/Linear closure lane
+1. verify current repo and issue truth
+2. inspect code and existing proof harnesses before choosing the live procedure
+3. run the narrowest honest live evaluation(s)
+4. compare observed evidence with packet-020 claims
+5. record proof boundaries and follow-up gaps explicitly
 
 ### Output Format
 
 Markdown.
 
-The prompt should give:
+The handoff prompt should provide:
 
-- the mission and exact issue identifier
+- the mission and current known packet state
 - the file-reading order
-- the bounded scope and non-goals
-- validation requirements
-- closure requirements
-- a short final-response format
+- current control-plane rules for a completed parent issue
+- live evaluation goals and boundaries
+- required evidence and durable artifact locations
+- stop conditions and final-response requirements
 
 ### Variable Plan
 
 | Variable | XML Tag | Description |
 | -------- | ------- | ----------- |
 | Repo root | `<repo_root>` | Absolute path to the Mister Smith repo |
-| Next issue | `<linear_issue>` | The next Linear issue to execute |
+| Parent issue | `<linear_issue>` | Completed parent packet issue to evaluate |
 | Packet source | `<packet_source>` | Packet 020 spec directory |
-| Suggested branch | `<branch_name>` | Linear-provided branch name for the next slice |
-| Merge base | `<starting_main_sha>` | Current clean synced `main` commit at handoff |
+| Current main SHA | `<starting_main_sha>` | Current clean synced `main` commit at handoff |
+| Base URL | `<base_url>` | Runtime base URL when HTTP surfaces are used |
+| Artifact root | `<artifact_root>` | Directory for collected evaluation artifacts |
+| Evidence note path | `<evidence_note_path>` | Durable markdown note for the evaluation summary |
 
 ### Structural Notes
 
-- preserve the user's preferred direct task-handoff format rather than turning the prompt into a
-  generic reusable template
-- include current known repo state, but instruct the receiving agent to verify it before acting
-- keep the prompt specific enough to start `MS-106` immediately without pre-solving the actual code
-  changes
-- include Smith-first lifecycle steps because the next issue starts in backlog rather than already
-  in progress
+- keep the prompt direct and issue-specific rather than turning it into a generic evaluation
+  template
+- front-load the fact that packet `020` is already landed and completed
+- preserve the repo's "clarify, do not overclaim" proof-boundary posture
+- instruct the receiving agent to prefer existing live harnesses and runtime surfaces over ad hoc
+  one-off evaluation code
+- explicitly forbid reopening `MS-103` or child issues unless evaluation reveals a real defect
 
 ### Ambiguities & Questions
 
-None that block prompt creation. The next task is concretely identified as `MS-106`, and the
-prompt can instruct the next session to verify any mutable state before acting.
+None that block prompt creation.
+
+The prompt can instruct the receiving agent to choose the narrowest honest live method from current
+repo surfaces and to stop if packet-020 behavior cannot be triggered without unsupported changes.
 
 ### Prompt Filename
 
-`mister-smith-ms-106-orchestration-provenance-handoff`
+`mister-smith-ms-103-packet-020-live-evaluation-handoff`
 
 ### Constraint Preservation Checklist
 
-- [x] The output remains a prompt, not execution of the next issue
-- [x] Smith-first workflow expectations are preserved
-- [x] Bounded packet-020 scope is preserved
-- [x] Clean-closure expectations are preserved
-- [x] Deterministic versus live-proof boundaries remain explicit
+- [x] The output remains a handoff prompt, not execution of the evaluation
+- [x] Live proof versus deterministic proof boundaries remain explicit
+- [x] The prompt does not reopen closed implementation scope
+- [x] The prompt stays grounded in current packet-020 repo truth
+- [x] The prompt requires durable evidence instead of terminal-only narration
 
 ## Step 4: Critique & Revision Plan
 
 ### Issues Identified
 
-1. **"continue with the next task"** → Problem: on its own, this is ambiguous because packet task
-   headings and actual Linear issues can diverge → Revision: explicitly identify `MS-106` as the
-   next real issue and tell the receiving agent to verify current state before acting.
-2. **A handoff prompt can drift into implementing the issue.** → Problem: too much detail would
-   start doing the next session's work → Revision: keep the prompt focused on mission, scope,
-   reading order, validation, and closure, not a step-by-step patch design.
-3. **Backlog-to-queue lifecycle is easy to miss.** → Problem: the next issue is still in
-   validated backlog, so a generic prompt could skip Smith-first staging → Revision: include
-   explicit control-plane staging instructions with verification-first language.
-4. **The prompt could blur deterministic and live-proof expectations.** → Problem: `MS-106`
-   touches docs and operator-facing provenance, so the next session could overclaim runtime proof
-   → Revision: add a hard boundary that docs must keep deterministic versus live-proof language
-   explicit.
+1. **"attempt one bounded packet-020-focused probe run if the current path supports it"** →
+   Problem: this is directionally correct but still too open-ended about how to choose that run →
+   Revision: add a run-selection rule that prefers existing harnesses and current runtime surfaces,
+   then stops after one honest bounded probe instead of turning into an exploration program.
+2. **"Suggested evidence note: `<evidence_note_path>`...2026-03-27..."** → Problem: the fixed
+   date is useful as a handoff default but could be mistaken for a hard requirement in a later
+   session → Revision: tell the receiving agent to keep the slug but update the date prefix if the
+   session date differs.
+3. **The draft lacked an explicit evaluation-only anti-pattern section.** → Problem: a capable
+   receiving agent might still widen into implementation or issue reopening once a defect appears →
+   Revision: add an anti-patterns section that forbids reopening completed work, patching code, or
+   turning evaluation into a new development lane unless explicitly asked later.
+4. **"You may use `scripts/live_runtime_proof_smoke.py` as the baseline entrypoint..."** →
+   Problem: the draft did not explicitly say to follow a baseline-only result with either a
+   packet-020 probe or a clear statement that packet-020 remains unproven live → Revision: make
+   that proof-boundary rule explicit.
+5. **The final response requirements were still slightly summary-heavy.** → Problem: the receiving
+   agent could summarize the run without naming the actual packet-020 fields observed or missing →
+   Revision: require an explicit statement of which packet-020 fields and behaviors were observed,
+   absent, or only inferred.
 
 ### Areas Needing Expansion
 
-- exact next-issue identification and current known status
-- the dependency on `MS-105`-landed provenance fields
-- closure requirements so the new session does not stop at PR open
+- explicit run-selection guidance for the packet-020 probe
+- explicit anti-patterns for evaluation-only work
+- artifact path guidance when the receiving session date differs from the handoff date
+- stronger final reporting requirements around packet-020-specific observed fields
 
 ### Structural Improvements
 
-- front-load current known state and verification instructions
-- separate scope from non-goals clearly
-- include a dedicated Smith-first workflow section
-- include a final-response shape that matches the repo's recent delivery style
+- add a dedicated **Evaluation-Only Boundary** section
+- add a dedicated **Run Selection Rule** section after the live evaluation shape
+- add a short **Anti-Patterns** section near the stop conditions
+- tighten the final response requirements around observed packet-020 evidence
 
 ### Constraint Preservation Check
 
-- [x] The handoff remains a prompt, not partial implementation
-- [x] All bounded-scope constraints are preserved
-- [x] The repo's lifecycle/closure discipline is preserved
-- [x] The prompt stays specific to `MS-106` instead of becoming generic
+- [x] All core "do not overclaim" boundaries are preserved
+- [x] The prompt still avoids doing the receiving agent's job
+- [x] The prompt remains specific to `MS-103` packet-020 evaluation
+- [x] The prompt stays evaluation-focused rather than implementation-focused
