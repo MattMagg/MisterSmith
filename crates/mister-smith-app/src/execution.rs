@@ -23,8 +23,9 @@ use mister_smith_config::{
     FrameworkConfig, RuntimeProviderTier, RuntimeRoutingPolicy, RuntimeRoutingProfile,
 };
 use mister_smith_core::{
-    AgentId, AgentType, BranchState, EscalationPolicy, ExternalDelegationEnvelope, GraphState,
-    GuardTarget, LlmError, NodeState, RepairDirective, StepEvaluationRecord, SupervisionStrategy,
+    AgentId, AgentType, BranchState, EscalationPolicy, ExternalDelegationEnvelope,
+    FailureContextCheckpoint, GraphState, GuardTarget, HandoffClarificationRequest, LlmError,
+    NodeState, RepairDirective, RepairDirectiveAction, StepEvaluationRecord, SupervisionStrategy,
     TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema, VerifierVerdict,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
@@ -294,7 +295,7 @@ struct PreparedTaskExecution {
     execution_input: Value,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct CompletedTaskExecution {
     task_id: TaskId,
     worker_id: AgentId,
@@ -332,6 +333,36 @@ struct InjectedVerifierPolicy {
     checkpoint_ref: Option<String>,
     #[serde(default)]
     repair_directive: Option<RepairDirective>,
+    #[serde(default)]
+    clarification_request: Option<HandoffClarificationRequest>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+struct LocalRepairState {
+    clarification_request: Option<HandoffClarificationRequest>,
+    failure_context_checkpoint: Option<FailureContextCheckpoint>,
+}
+
+struct StepExecutionContext<'a> {
+    workflow_id: TaskId,
+    task: &'a TaskAssignment,
+    worker_id: AgentId,
+    branch_id: Value,
+    action: String,
+    repair_state: &'a LocalRepairState,
+}
+
+enum StepExecutionDisposition {
+    Completed(CompletedTaskExecution),
+    Continue(LocalRepairTransition),
+    Failed(FailedTaskExecution),
+}
+
+struct LocalRepairTransition {
+    repair_action: RepairDirectiveAction,
+    repair_state: LocalRepairState,
+    step_evaluation: StepEvaluationRecord,
+    result: Value,
 }
 
 #[derive(Clone)]
@@ -1430,39 +1461,97 @@ impl RuntimeTaskService {
                 "Executing workflow step"
             );
 
-            let result = match runtime
-                .ask(
-                    ExecutorMessage::ExecutePlan {
-                        plan: prepared_task.execution_input,
-                        managed_context: None,
-                    },
-                    executor_timeout,
-                )
-                .await
-            {
-                Ok(result) => result,
-                Err(error) => {
-                    let _ = runtime.stop().await;
-                    return Err(FailedTaskExecution {
-                        completed_steps,
-                        task_id,
-                        worker_id,
-                        branch_id: branch_id.clone(),
-                        action,
-                        message: format!("worker {worker_id} failed task {task_id}: {error}"),
-                        result: None,
-                        step_evaluation: None,
-                    });
-                }
-            };
+            let verifier_policies = verifier_policies_from_task_input(&prepared_task.task)
+                .map_err(|message| FailedTaskExecution {
+                    completed_steps: completed_steps.clone(),
+                    task_id,
+                    worker_id,
+                    branch_id: branch_id.clone(),
+                    action: action.clone(),
+                    message,
+                    result: None,
+                    step_evaluation: None,
+                })?;
+            let mut active_policy_index = 0usize;
+            let mut repair_state = LocalRepairState::default();
+            let mut execution_input = prepared_task.execution_input;
 
-            match gate_step_execution_result(workflow_id, &prepared_task.task, worker_id, result) {
-                Ok(completed_step) => completed_steps.push(completed_step),
-                Err(failed_step) => {
-                    let mut failed_step = *failed_step;
-                    failed_step.completed_steps = completed_steps;
-                    let _ = runtime.stop().await;
-                    return Err(failed_step);
+            loop {
+                let result = match runtime
+                    .ask(
+                        ExecutorMessage::ExecutePlan {
+                            plan: execution_input.clone(),
+                            managed_context: None,
+                        },
+                        executor_timeout,
+                    )
+                    .await
+                {
+                    Ok(result) => result,
+                    Err(error) => {
+                        let _ = runtime.stop().await;
+                        return Err(FailedTaskExecution {
+                            completed_steps,
+                            task_id,
+                            worker_id,
+                            branch_id: branch_id.clone(),
+                            action: action.clone(),
+                            message: format!("worker {worker_id} failed task {task_id}: {error}"),
+                            result: None,
+                            step_evaluation: None,
+                        });
+                    }
+                };
+
+                let context = StepExecutionContext {
+                    workflow_id,
+                    task: &prepared_task.task,
+                    worker_id,
+                    branch_id: branch_id.clone(),
+                    action: action.clone(),
+                    repair_state: &repair_state,
+                };
+
+                match step_execution_disposition(
+                    &context,
+                    result,
+                    verifier_policies.get(active_policy_index).cloned(),
+                )
+                .map_err(|failed_step| *failed_step)?
+                {
+                    StepExecutionDisposition::Completed(completed_step) => {
+                        completed_steps.push(completed_step);
+                        break;
+                    }
+                    StepExecutionDisposition::Failed(mut failed_step) => {
+                        failed_step.completed_steps = completed_steps;
+                        let _ = runtime.stop().await;
+                        return Err(failed_step);
+                    }
+                    StepExecutionDisposition::Continue(transition) => {
+                        if verifier_policies.get(active_policy_index + 1).is_none() {
+                            let mut failed_step = repair_failure(
+                                &prepared_task.task,
+                                worker_id,
+                                branch_id.clone(),
+                                action.clone(),
+                                transition.result,
+                                transition.step_evaluation,
+                                Some("no follow-up verifier policy available for local repair"),
+                            );
+                            failed_step.completed_steps = completed_steps;
+                            let _ = runtime.stop().await;
+                            return Err(failed_step);
+                        }
+
+                        repair_state = transition.repair_state;
+                        active_policy_index += 1;
+                        apply_local_repair_context(
+                            &mut execution_input,
+                            transition.repair_action,
+                            &repair_state,
+                        );
+                    }
                 }
             }
         }
@@ -3954,19 +4043,26 @@ fn step_identifier(task: &TaskAssignment) -> String {
         .unwrap_or_else(|| task.task_id.to_string())
 }
 
-fn verifier_policy_from_task_input(
-    task: &TaskAssignment,
-) -> Result<Option<InjectedVerifierPolicy>, String> {
-    let Some(policy) = task.input.get("verifier_policy") else {
-        return Ok(None);
-    };
+fn last_stable_step_identifier(task: &TaskAssignment) -> Option<String> {
+    task.input
+        .get("dependencies")
+        .and_then(Value::as_array)
+        .and_then(|dependencies| dependencies.last())
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
 
+fn parse_injected_verifier_policy(
+    task: &TaskAssignment,
+    policy: &Value,
+    label: &str,
+) -> Result<Option<InjectedVerifierPolicy>, String> {
     let enabled = policy
         .get("enabled")
         .and_then(Value::as_bool)
         .ok_or_else(|| {
             format!(
-                "workflow step '{}' has invalid verifier_policy.enabled",
+                "workflow step '{}' has invalid {label}.enabled",
                 step_identifier(task)
             )
         })?;
@@ -3975,21 +4071,57 @@ fn verifier_policy_from_task_input(
         return Ok(None);
     }
 
-    let parsed =
-        serde_json::from_value::<InjectedVerifierPolicy>(policy.clone()).map_err(|error| {
+    serde_json::from_value::<InjectedVerifierPolicy>(policy.clone())
+        .map(Some)
+        .map_err(|error| {
             format!(
-                "workflow step '{}' has invalid verifier_policy: {error}",
+                "workflow step '{}' has invalid {label}: {error}",
+                step_identifier(task)
+            )
+        })
+}
+
+fn verifier_policy_from_task_input(
+    task: &TaskAssignment,
+) -> Result<Option<InjectedVerifierPolicy>, String> {
+    let Some(policy) = task.input.get("verifier_policy") else {
+        return Ok(None);
+    };
+
+    parse_injected_verifier_policy(task, policy, "verifier_policy")
+}
+
+fn verifier_policies_from_task_input(
+    task: &TaskAssignment,
+) -> Result<Vec<InjectedVerifierPolicy>, String> {
+    if let Some(sequence) = task.input.get("verifier_policy_sequence") {
+        let entries = sequence.as_array().ok_or_else(|| {
+            format!(
+                "workflow step '{}' has invalid verifier_policy_sequence",
                 step_identifier(task)
             )
         })?;
+        let mut parsed = Vec::new();
+        for (index, policy) in entries.iter().enumerate() {
+            if let Some(policy) = parse_injected_verifier_policy(
+                task,
+                policy,
+                &format!("verifier_policy_sequence[{index}]"),
+            )? {
+                parsed.push(policy);
+            }
+        }
+        return Ok(parsed);
+    }
 
-    Ok(Some(parsed))
+    Ok(verifier_policy_from_task_input(task)?.into_iter().collect())
 }
 
 fn build_step_evaluation_record(
     workflow_id: TaskId,
     task: &TaskAssignment,
     policy: InjectedVerifierPolicy,
+    repair_state: &LocalRepairState,
 ) -> Result<StepEvaluationRecord, String> {
     let step_id = step_identifier(task);
     let verdict = policy.verdict.ok_or_else(|| {
@@ -4017,6 +4149,49 @@ fn build_step_evaluation_record(
         })?),
     };
 
+    let clarification_request = match repair_directive.as_ref().map(|directive| directive.action) {
+        Some(RepairDirectiveAction::ClarifyHandoff) => {
+            let request = repair_state
+                .clarification_request
+                .clone()
+                .or(policy.clarification_request)
+                .ok_or_else(|| {
+                    format!(
+                        "workflow step '{step_id}' clarify_handoff repair missing clarification_request"
+                    )
+                })?;
+            Some(HandoffClarificationRequest {
+                attempt_count: request.attempt_count + 1,
+                ..request
+            })
+        }
+        _ => repair_state.clarification_request.clone(),
+    };
+
+    let failure_context_checkpoint = if verdict == VerifierVerdict::Rejected {
+        let failure_context_ref = repair_directive
+            .as_ref()
+            .map(|directive| directive.failure_context_ref.clone())
+            .ok_or_else(|| {
+                format!("workflow step '{step_id}' rejected verifier_policy missing failure_context_ref")
+            })?;
+        Some(FailureContextCheckpoint {
+            failed_step_id: step_id.clone(),
+            last_stable_step_id: last_stable_step_identifier(task),
+            checkpoint_ref: policy.checkpoint_ref.clone(),
+            failure_context_ref,
+            failure_code: policy.failure_code.clone(),
+            reason: reason.clone(),
+            attempt_count: repair_state
+                .failure_context_checkpoint
+                .as_ref()
+                .map(|checkpoint| checkpoint.attempt_count + 1)
+                .unwrap_or(1),
+        })
+    } else {
+        repair_state.failure_context_checkpoint.clone()
+    };
+
     Ok(StepEvaluationRecord {
         workflow_id,
         step_id,
@@ -4026,21 +4201,241 @@ fn build_step_evaluation_record(
         failure_code: policy.failure_code,
         checkpoint_ref: policy.checkpoint_ref,
         repair_directive,
+        clarification_request,
+        failure_context_checkpoint,
     })
+}
+
+fn repair_state_from_evaluation(step_evaluation: &StepEvaluationRecord) -> LocalRepairState {
+    LocalRepairState {
+        clarification_request: step_evaluation.clarification_request.clone(),
+        failure_context_checkpoint: step_evaluation.failure_context_checkpoint.clone(),
+    }
+}
+
+fn repair_budget_exhausted(step_evaluation: &StepEvaluationRecord) -> bool {
+    let Some(repair_directive) = step_evaluation.repair_directive.as_ref() else {
+        return false;
+    };
+
+    match repair_directive.action {
+        RepairDirectiveAction::ClarifyHandoff => step_evaluation
+            .clarification_request
+            .as_ref()
+            .map(|request| request.attempt_count > repair_directive.retry_budget_remaining)
+            .unwrap_or(true),
+        RepairDirectiveAction::RetryStep | RepairDirectiveAction::ReplanFromCheckpoint => {
+            step_evaluation
+                .failure_context_checkpoint
+                .as_ref()
+                .map(|checkpoint| {
+                    checkpoint.attempt_count > repair_directive.retry_budget_remaining
+                })
+                .unwrap_or(true)
+        }
+        RepairDirectiveAction::Stop => false,
+    }
+}
+
+fn apply_local_repair_context(
+    execution_input: &mut Value,
+    repair_action: RepairDirectiveAction,
+    repair_state: &LocalRepairState,
+) {
+    let Some(task) = execution_input
+        .get_mut("task")
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+
+    task.insert("repair_action".to_string(), json!(repair_action.as_str()));
+
+    if let Some(clarification_request) = repair_state.clarification_request.as_ref() {
+        task.insert(
+            "clarification_request".to_string(),
+            serde_json::to_value(clarification_request)
+                .expect("clarification request should serialize"),
+        );
+    } else {
+        task.remove("clarification_request");
+    }
+
+    if let Some(failure_context_checkpoint) = repair_state.failure_context_checkpoint.as_ref() {
+        task.insert(
+            "failure_context_checkpoint".to_string(),
+            serde_json::to_value(failure_context_checkpoint)
+                .expect("failure context checkpoint should serialize"),
+        );
+        task.insert(
+            "repair_attempt_count".to_string(),
+            json!(failure_context_checkpoint.attempt_count),
+        );
+    } else {
+        task.remove("failure_context_checkpoint");
+        task.remove("repair_attempt_count");
+    }
 }
 
 fn rejected_step_message(step_evaluation: &StepEvaluationRecord) -> String {
     let repair_action = step_evaluation
         .repair_directive
         .as_ref()
-        .map(|directive| directive.action.as_str())
-        .unwrap_or("unknown");
-    format!(
-        "workflow step '{}' rejected by verifier: {} (repair={repair_action})",
-        step_evaluation.step_id, step_evaluation.reason
-    )
+        .map(|directive| directive.action)
+        .unwrap_or(RepairDirectiveAction::Stop);
+
+    match repair_action {
+        RepairDirectiveAction::ClarifyHandoff => {
+            let missing = step_evaluation
+                .clarification_request
+                .as_ref()
+                .map(|request| request.missing_constraints.join(", "))
+                .filter(|missing| !missing.is_empty())
+                .unwrap_or_else(|| "missing clarification details".to_string());
+            format!(
+                "workflow step '{}' requested clarification: {} (repair={})",
+                step_evaluation.step_id,
+                missing,
+                repair_action.as_str()
+            )
+        }
+        RepairDirectiveAction::ReplanFromCheckpoint => {
+            let checkpoint_ref = step_evaluation
+                .failure_context_checkpoint
+                .as_ref()
+                .and_then(|checkpoint| checkpoint.checkpoint_ref.as_deref())
+                .unwrap_or("unknown");
+            format!(
+                "workflow step '{}' rejected by verifier: {} (repair={} checkpoint={checkpoint_ref})",
+                step_evaluation.step_id,
+                step_evaluation.reason,
+                repair_action.as_str()
+            )
+        }
+        _ => format!(
+            "workflow step '{}' rejected by verifier: {} (repair={})",
+            step_evaluation.step_id,
+            step_evaluation.reason,
+            repair_action.as_str()
+        ),
+    }
 }
 
+fn repair_failure(
+    task: &TaskAssignment,
+    worker_id: AgentId,
+    branch_id: Value,
+    action: String,
+    result: Value,
+    step_evaluation: StepEvaluationRecord,
+    suffix: Option<&str>,
+) -> FailedTaskExecution {
+    let mut message = rejected_step_message(&step_evaluation);
+    if let Some(suffix) = suffix {
+        message.push_str(&format!(" ({suffix})"));
+    }
+
+    FailedTaskExecution {
+        completed_steps: Vec::new(),
+        task_id: task.task_id,
+        worker_id,
+        branch_id,
+        action,
+        message,
+        result: Some(result),
+        step_evaluation: Some(step_evaluation),
+    }
+}
+
+fn step_execution_disposition(
+    context: &StepExecutionContext<'_>,
+    result: Value,
+    policy: Option<InjectedVerifierPolicy>,
+) -> Result<StepExecutionDisposition, Box<FailedTaskExecution>> {
+    let Some(policy) = policy else {
+        return Ok(StepExecutionDisposition::Completed(
+            CompletedTaskExecution {
+                task_id: context.task.task_id,
+                worker_id: context.worker_id,
+                branch_id: context.branch_id.clone(),
+                action: context.action.clone(),
+                result,
+                step_evaluation: None,
+            },
+        ));
+    };
+
+    let step_evaluation = build_step_evaluation_record(
+        context.workflow_id,
+        context.task,
+        policy,
+        context.repair_state,
+    )
+    .map_err(|message| {
+        Box::new(FailedTaskExecution {
+            completed_steps: Vec::new(),
+            task_id: context.task.task_id,
+            worker_id: context.worker_id,
+            branch_id: context.branch_id.clone(),
+            action: context.action.clone(),
+            message,
+            result: Some(result.clone()),
+            step_evaluation: None,
+        })
+    })?;
+
+    if step_evaluation.verdict == VerifierVerdict::Rejected {
+        let repair_action = step_evaluation
+            .repair_directive
+            .as_ref()
+            .map(|directive| directive.action)
+            .unwrap_or(RepairDirectiveAction::Stop);
+
+        if repair_action == RepairDirectiveAction::Stop {
+            return Ok(StepExecutionDisposition::Failed(repair_failure(
+                context.task,
+                context.worker_id,
+                context.branch_id.clone(),
+                context.action.clone(),
+                result,
+                step_evaluation,
+                None,
+            )));
+        }
+
+        if repair_budget_exhausted(&step_evaluation) {
+            return Ok(StepExecutionDisposition::Failed(repair_failure(
+                context.task,
+                context.worker_id,
+                context.branch_id.clone(),
+                context.action.clone(),
+                result,
+                step_evaluation,
+                Some("local repair budget exhausted"),
+            )));
+        }
+
+        return Ok(StepExecutionDisposition::Continue(LocalRepairTransition {
+            repair_action,
+            repair_state: repair_state_from_evaluation(&step_evaluation),
+            step_evaluation,
+            result,
+        }));
+    }
+
+    Ok(StepExecutionDisposition::Completed(
+        CompletedTaskExecution {
+            task_id: context.task.task_id,
+            worker_id: context.worker_id,
+            branch_id: context.branch_id.clone(),
+            action: context.action.clone(),
+            result,
+            step_evaluation: Some(step_evaluation),
+        },
+    ))
+}
+
+#[cfg(test)]
 fn gate_step_execution_result(
     workflow_id: TaskId,
     task: &TaskAssignment,
@@ -4049,58 +4444,42 @@ fn gate_step_execution_result(
 ) -> Result<CompletedTaskExecution, Box<FailedTaskExecution>> {
     let branch_id = task.input.get("branch_id").cloned().unwrap_or(Value::Null);
     let action = task.task_type.clone();
-    let step_evaluation =
-        match verifier_policy_from_task_input(task).and_then(|policy| match policy {
-            Some(policy) => build_step_evaluation_record(workflow_id, task, policy).map(Some),
-            None => Ok(None),
-        }) {
-            Ok(step_evaluation) => step_evaluation,
-            Err(message) => {
-                return Err(Box::new(FailedTaskExecution {
-                    completed_steps: Vec::new(),
-                    task_id: task.task_id,
-                    worker_id,
-                    branch_id,
-                    action,
-                    message,
-                    result: Some(result),
-                    step_evaluation: None,
-                }));
-            }
-        };
-
-    if let Some(step_evaluation) = step_evaluation {
-        if step_evaluation.verdict == VerifierVerdict::Rejected {
-            return Err(Box::new(FailedTaskExecution {
-                completed_steps: Vec::new(),
-                task_id: task.task_id,
-                worker_id,
-                branch_id,
-                action,
-                message: rejected_step_message(&step_evaluation),
-                result: Some(result),
-                step_evaluation: Some(step_evaluation),
-            }));
-        }
-
-        return Ok(CompletedTaskExecution {
+    let policy = verifier_policy_from_task_input(task).map_err(|message| {
+        Box::new(FailedTaskExecution {
+            completed_steps: Vec::new(),
             task_id: task.task_id,
+            worker_id,
+            branch_id: branch_id.clone(),
+            action: action.clone(),
+            message,
+            result: Some(result.clone()),
+            step_evaluation: None,
+        })
+    })?;
+    let repair_state = LocalRepairState::default();
+    let context = StepExecutionContext {
+        workflow_id,
+        task,
+        worker_id,
+        branch_id: branch_id.clone(),
+        action: action.clone(),
+        repair_state: &repair_state,
+    };
+
+    match step_execution_disposition(&context, result, policy) {
+        Ok(StepExecutionDisposition::Completed(completed_step)) => Ok(completed_step),
+        Ok(StepExecutionDisposition::Failed(failed_step)) => Err(Box::new(failed_step)),
+        Ok(StepExecutionDisposition::Continue(transition)) => Err(Box::new(repair_failure(
+            task,
             worker_id,
             branch_id,
             action,
-            result,
-            step_evaluation: Some(step_evaluation),
-        });
+            transition.result,
+            transition.step_evaluation,
+            Some("no follow-up verifier policy available for local repair"),
+        ))),
+        Err(failed_step) => Err(failed_step),
     }
-
-    Ok(CompletedTaskExecution {
-        task_id: task.task_id,
-        worker_id,
-        branch_id,
-        action,
-        result,
-        step_evaluation: None,
-    })
 }
 
 fn build_step_result_payload(
@@ -4135,6 +4514,88 @@ fn build_step_result_payload(
 #[cfg(test)]
 mod runtime_plan_tests {
     use super::*;
+
+    fn simulated_step_result(execution_input: &Value) -> Value {
+        let mut object = execution_input
+            .as_object()
+            .cloned()
+            .expect("execution input should be an object");
+        object.insert("status".to_string(), json!("completed"));
+        object.insert("execution_boundary".to_string(), json!("tool_bus"));
+        object.insert(
+            "tool_name".to_string(),
+            json!(format!(
+                "{WORKFLOW_TOOL_NAMESPACE}.{WORKFLOW_EXECUTE_STEP_TOOL}"
+            )),
+        );
+        Value::Object(object)
+    }
+
+    fn run_local_repair_sequence(
+        workflow_id: TaskId,
+        task: &TaskAssignment,
+        worker_id: AgentId,
+    ) -> Result<(CompletedTaskExecution, Value), FailedTaskExecution> {
+        let branch_id = task.input.get("branch_id").cloned().unwrap_or(Value::Null);
+        let action = task.task_type.clone();
+        let verifier_policies = verifier_policies_from_task_input(task)
+            .expect("verifier policies should parse for deterministic tests");
+        let mut active_policy_index = 0usize;
+        let mut repair_state = LocalRepairState::default();
+        let mut execution_input = json!({
+            "workflow_goal": "ship proof",
+            "provider_kind": PROVIDER_KIND_NAME,
+            "model_id": MODEL_ID,
+            "worker_id": worker_id,
+            "task": task.input.clone(),
+            "dependency_results": [],
+        });
+
+        loop {
+            let result = simulated_step_result(&execution_input);
+            let context = StepExecutionContext {
+                workflow_id,
+                task,
+                worker_id,
+                branch_id: branch_id.clone(),
+                action: action.clone(),
+                repair_state: &repair_state,
+            };
+            match step_execution_disposition(
+                &context,
+                result,
+                verifier_policies.get(active_policy_index).cloned(),
+            )
+            .expect("deterministic repair sequence should not fail parsing")
+            {
+                StepExecutionDisposition::Completed(completed) => {
+                    return Ok((completed, execution_input));
+                }
+                StepExecutionDisposition::Failed(failed) => return Err(failed),
+                StepExecutionDisposition::Continue(transition) => {
+                    if verifier_policies.get(active_policy_index + 1).is_none() {
+                        return Err(repair_failure(
+                            task,
+                            worker_id,
+                            branch_id.clone(),
+                            action.clone(),
+                            transition.result,
+                            transition.step_evaluation,
+                            Some("no follow-up verifier policy available for local repair"),
+                        ));
+                    }
+
+                    repair_state = transition.repair_state;
+                    active_policy_index += 1;
+                    apply_local_repair_context(
+                        &mut execution_input,
+                        transition.repair_action,
+                        &repair_state,
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn runtime_supervision_strategy_avoids_root_shutdown_budget() {
@@ -4642,7 +5103,198 @@ mod runtime_plan_tests {
             payload["step_evaluation"]["repair_directive"]["action"],
             json!("retry_step")
         );
+        assert_eq!(
+            payload["step_evaluation"]["failure_context_checkpoint"]["checkpoint_ref"],
+            json!("checkpoint-2")
+        );
         assert!(failed.message.contains("repair=retry_step"));
+    }
+
+    #[test]
+    fn verifier_gate_clarifies_handoff_before_accepting_follow_up() {
+        let workflow_id = TaskId::new();
+        let worker_id = AgentId::new();
+        let task = TaskAssignment::new(
+            "analyze",
+            json!({
+                "id": "draft-outline",
+                "branch_id": "branch-a",
+                "description": "draft the outline",
+                "verifier_policy_sequence": [
+                    {
+                        "enabled": true,
+                        "verdict": "rejected",
+                        "reason": "missing budget ceiling and target audience",
+                        "failure_code": "missing_constraints",
+                        "checkpoint_ref": "checkpoint-clarify",
+                        "repair_directive": {
+                            "action": "clarify_handoff",
+                            "issued_by": "verifier.runtime",
+                            "failure_context_ref": "draft-outline/clarify",
+                            "retry_budget_remaining": 1
+                        },
+                        "clarification_request": {
+                            "source_step_id": "draft-outline",
+                            "target_step_id": "write-brief",
+                            "missing_constraints": ["budget ceiling", "target audience"],
+                            "attempt_count": 0,
+                            "expires_at": "2026-03-27T12:00:00Z"
+                        }
+                    },
+                    {
+                        "enabled": true,
+                        "verdict": "accepted",
+                        "confidence": 0.91,
+                        "reason": "clarified handoff is sufficient",
+                        "checkpoint_ref": "checkpoint-clarify"
+                    }
+                ]
+            }),
+        );
+
+        let (completed, execution_input) = run_local_repair_sequence(workflow_id, &task, worker_id)
+            .expect("clarification follow-up should complete");
+        let step_evaluation = completed
+            .step_evaluation
+            .expect("clarification repair should preserve final step evaluation");
+
+        assert_eq!(step_evaluation.verdict, VerifierVerdict::Accepted);
+        assert_eq!(
+            step_evaluation
+                .clarification_request
+                .as_ref()
+                .map(|request| request.attempt_count),
+            Some(1)
+        );
+        assert_eq!(
+            step_evaluation
+                .failure_context_checkpoint
+                .as_ref()
+                .and_then(|checkpoint| checkpoint.checkpoint_ref.as_deref()),
+            Some("checkpoint-clarify")
+        );
+        assert_eq!(
+            execution_input["task"]["repair_action"],
+            json!("clarify_handoff")
+        );
+        assert_eq!(
+            execution_input["task"]["clarification_request"]["missing_constraints"],
+            json!(["budget ceiling", "target audience"])
+        );
+    }
+
+    #[test]
+    fn verifier_gate_stops_when_retry_budget_is_exhausted() {
+        let workflow_id = TaskId::new();
+        let worker_id = AgentId::new();
+        let task = TaskAssignment::new(
+            "analyze",
+            json!({
+                "id": "draft-outline",
+                "branch_id": "branch-a",
+                "description": "draft the outline",
+                "verifier_policy_sequence": [
+                    {
+                        "enabled": true,
+                        "verdict": "rejected",
+                        "reason": "first retry requested",
+                        "failure_code": "retryable_context_gap",
+                        "checkpoint_ref": "checkpoint-retry",
+                        "repair_directive": {
+                            "action": "retry_step",
+                            "issued_by": "verifier.runtime",
+                            "failure_context_ref": "draft-outline/retry-1",
+                            "retry_budget_remaining": 1
+                        }
+                    },
+                    {
+                        "enabled": true,
+                        "verdict": "rejected",
+                        "reason": "retry still missing context",
+                        "failure_code": "retryable_context_gap",
+                        "checkpoint_ref": "checkpoint-retry",
+                        "repair_directive": {
+                            "action": "retry_step",
+                            "issued_by": "verifier.runtime",
+                            "failure_context_ref": "draft-outline/retry-2",
+                            "retry_budget_remaining": 1
+                        }
+                    }
+                ]
+            }),
+        );
+
+        let failed = run_local_repair_sequence(workflow_id, &task, worker_id)
+            .expect_err("retry budget exhaustion should stop local repair");
+
+        assert!(failed.message.contains("local repair budget exhausted"));
+        assert_eq!(
+            failed
+                .step_evaluation
+                .as_ref()
+                .and_then(|evaluation| evaluation.failure_context_checkpoint.as_ref())
+                .map(|checkpoint| checkpoint.attempt_count),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn verifier_gate_replans_from_checkpoint_with_preserved_failure_context() {
+        let workflow_id = TaskId::new();
+        let worker_id = AgentId::new();
+        let task = TaskAssignment::new(
+            "analyze",
+            json!({
+                "id": "draft-outline",
+                "branch_id": "branch-a",
+                "description": "draft the outline",
+                "verifier_policy_sequence": [
+                    {
+                        "enabled": true,
+                        "verdict": "rejected",
+                        "reason": "resume from stable checkpoint",
+                        "failure_code": "checkpoint_resume",
+                        "checkpoint_ref": "checkpoint-replan",
+                        "repair_directive": {
+                            "action": "replan_from_checkpoint",
+                            "issued_by": "verifier.runtime",
+                            "failure_context_ref": "draft-outline/replan",
+                            "retry_budget_remaining": 1
+                        }
+                    },
+                    {
+                        "enabled": true,
+                        "verdict": "accepted",
+                        "confidence": 0.84,
+                        "reason": "checkpoint-scoped replan succeeded",
+                        "checkpoint_ref": "checkpoint-replan"
+                    }
+                ]
+            }),
+        );
+
+        let (completed, execution_input) = run_local_repair_sequence(workflow_id, &task, worker_id)
+            .expect("checkpoint-scoped replan should complete");
+        let step_evaluation = completed
+            .step_evaluation
+            .expect("checkpoint repair should preserve final step evaluation");
+
+        assert_eq!(step_evaluation.verdict, VerifierVerdict::Accepted);
+        assert_eq!(
+            step_evaluation
+                .failure_context_checkpoint
+                .as_ref()
+                .and_then(|checkpoint| checkpoint.checkpoint_ref.as_deref()),
+            Some("checkpoint-replan")
+        );
+        assert_eq!(
+            execution_input["task"]["repair_action"],
+            json!("replan_from_checkpoint")
+        );
+        assert_eq!(
+            execution_input["task"]["failure_context_checkpoint"]["failure_context_ref"],
+            json!("draft-outline/replan")
+        );
     }
 
     #[test]
