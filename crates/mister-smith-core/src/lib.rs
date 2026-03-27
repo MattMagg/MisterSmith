@@ -21,10 +21,10 @@ pub use autonomy::{
     AuthorityPrincipal, CapabilityActionKind, ContextBudget, DelegatedAction,
     DelegatedActionPolicy, DelegationCapability, ExternalDelegationEnvelope, GuardDecision,
     GuardEvidence, GuardTarget, HandoffClarificationRequest, InterventionRecord, MetricWindow,
-    OperatorResultPreview, ProfileSnapshot, ProofOutcomeClassification, ProvenanceChain,
-    ProvenanceLink, ResultProvenanceSummary, SemanticSignal, SessionRetainedResultView,
-    StepEvaluationRecord, TaskResultView, TaskShapeClassification, TaskShapeKind,
-    TeamSizingDecision, TopologyPlan, TopologyRationale, UnifiedResultEnvelope,
+    OperatorResultPreview, OrchestrationQualityView, ProfileSnapshot, ProofOutcomeClassification,
+    ProvenanceChain, ProvenanceLink, ResultProvenanceSummary, SemanticSignal,
+    SessionRetainedResultView, StepEvaluationRecord, TaskResultView, TaskShapeClassification,
+    TaskShapeKind, TeamSizingDecision, TopologyPlan, TopologyRationale, UnifiedResultEnvelope,
 };
 
 // Core enums

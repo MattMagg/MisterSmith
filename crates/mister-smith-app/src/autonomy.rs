@@ -12,9 +12,11 @@ use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{
     AgentId, CapabilityId, CoordinationPolicy, DelegationScope, ExecutionGraphId, GraphState,
-    OperatorResultPreview, ProofOutcomeClassification, ResultProvenanceSummary, RevocationState,
-    SessionId, SessionRetainedResultView, TaskId, TaskResultView, TaskShapeClassification,
-    TaskShapeKind, TopologyKind, TopologyRationale, UnifiedResultEnvelope,
+    OperatorResultPreview, OrchestrationQualityView, ProofOutcomeClassification,
+    RepairDirectiveAction, ResultProvenanceSummary, RevocationState, SessionId,
+    SessionRetainedResultView, StepEvaluationRecord, TaskId, TaskResultView,
+    TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale, UnifiedResultEnvelope,
+    VerifierVerdict,
 };
 use mister_smith_events::autonomy::merge_operator_result_preview;
 use mister_smith_events::{
@@ -103,6 +105,14 @@ pub(crate) struct ResumeProvenanceDetails {
     pub recovery_reason: Option<String>,
     pub resumed_from_workflow_id: Option<TaskId>,
     pub resumed_from_turn_index: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+struct StepEvaluationCandidate {
+    record: StepEvaluationRecord,
+    plan_index: usize,
+    repair_attempt_count: u32,
+    verdict_rank: u8,
 }
 
 /// Derive the local autonomy inspection base URL from framework config.
@@ -763,10 +773,12 @@ pub(crate) fn build_task_result_view(
     status: &str,
     canonical_result: UnifiedResultEnvelope,
 ) -> TaskResultView {
+    let orchestration_quality = orchestration_quality_view(&canonical_result);
     TaskResultView {
         workflow_id: canonical_result.workflow_id,
         status: status.to_string(),
         proof_outcome: canonical_result.proof_outcome,
+        orchestration_quality,
         result: canonical_result,
     }
 }
@@ -940,6 +952,7 @@ fn operator_result_preview(
         proof_outcome: canonical_result.proof_outcome,
         preview_text: preview_text(&canonical_result.aggregated_result),
         payload_location: payload_location.to_string(),
+        orchestration_quality: orchestration_quality_view(canonical_result),
         provenance_lines: result_preview_provenance(canonical_result, payload_location, view),
     }
 }
@@ -1242,6 +1255,9 @@ fn result_preview_provenance(
     if let Some(step_line) = latest_step_routing_provenance(view) {
         lines.push(step_line);
     }
+    if let Some(orchestration_quality) = orchestration_quality_view(canonical_result) {
+        lines.push(render_orchestration_quality_line(&orchestration_quality));
+    }
     lines.extend([
         "canonical result stored in metadata.final_result".to_string(),
         "aggregated payload nested under metadata.aggregated_result".to_string(),
@@ -1249,6 +1265,215 @@ fn result_preview_provenance(
         "session assistant_result derives from the canonical result object".to_string(),
     ]);
     lines
+}
+
+fn orchestration_quality_view(
+    canonical_result: &UnifiedResultEnvelope,
+) -> Option<OrchestrationQualityView> {
+    let plan_index_by_step = execution_plan_step_indices(&canonical_result.execution_plan);
+    let candidates = step_evaluation_candidates(canonical_result, &plan_index_by_step);
+    let terminal = select_terminal_step_evaluation(&candidates)?;
+    let recovered_repair_action = terminal
+        .record
+        .repair_directive
+        .as_ref()
+        .map(|directive| directive.action)
+        .or_else(|| recover_prior_repair_action(&candidates, &terminal.record));
+    let clarification_attempt_count = terminal
+        .record
+        .clarification_request
+        .as_ref()
+        .map(|request| request.attempt_count)
+        .unwrap_or(0);
+    let checkpoint_ref = terminal
+        .record
+        .failure_context_checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.checkpoint_ref.clone())
+        .or_else(|| terminal.record.checkpoint_ref.clone());
+    let last_stable_step_id = terminal
+        .record
+        .failure_context_checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.last_stable_step_id.clone());
+    let failure_context_ref = failure_context_ref(&terminal.record);
+
+    Some(OrchestrationQualityView {
+        step_id: terminal.record.step_id.clone(),
+        verdict: terminal.record.verdict,
+        repair_action: recovered_repair_action,
+        clarification_attempt_count,
+        checkpoint_ref,
+        last_stable_step_id,
+        failure_context_ref,
+        outcome_summary: orchestration_outcome_summary(
+            terminal.record.verdict,
+            recovered_repair_action,
+        ),
+    })
+}
+
+fn execution_plan_step_indices(execution_plan: &Value) -> BTreeMap<String, usize> {
+    execution_plan
+        .get("steps")
+        .and_then(Value::as_array)
+        .map(|steps| {
+            steps
+                .iter()
+                .enumerate()
+                .filter_map(|(index, step)| {
+                    step.get("id")
+                        .and_then(Value::as_str)
+                        .map(|step_id| (step_id.to_string(), index + 1))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn step_evaluation_candidates(
+    canonical_result: &UnifiedResultEnvelope,
+    plan_index_by_step: &BTreeMap<String, usize>,
+) -> Vec<StepEvaluationCandidate> {
+    canonical_result
+        .step_results
+        .iter()
+        .filter_map(|step_result| {
+            let evaluation = step_result
+                .get("step_evaluation")
+                .cloned()
+                .and_then(|value| serde_json::from_value::<StepEvaluationRecord>(value).ok())?;
+            let repair_attempt_count = evaluation
+                .failure_context_checkpoint
+                .as_ref()
+                .map(|checkpoint| checkpoint.attempt_count)
+                .or_else(|| {
+                    evaluation
+                        .clarification_request
+                        .as_ref()
+                        .map(|request| request.attempt_count)
+                })
+                .unwrap_or(0);
+
+            Some(StepEvaluationCandidate {
+                plan_index: plan_index_by_step
+                    .get(&evaluation.step_id)
+                    .copied()
+                    .unwrap_or(0),
+                repair_attempt_count,
+                verdict_rank: if evaluation.verdict == VerifierVerdict::Accepted {
+                    1
+                } else {
+                    0
+                },
+                record: evaluation,
+            })
+        })
+        .collect()
+}
+
+fn select_terminal_step_evaluation(
+    candidates: &[StepEvaluationCandidate],
+) -> Option<&StepEvaluationCandidate> {
+    candidates.iter().max_by_key(|candidate| {
+        (
+            candidate.plan_index,
+            candidate.repair_attempt_count,
+            candidate.verdict_rank,
+        )
+    })
+}
+
+fn recover_prior_repair_action(
+    candidates: &[StepEvaluationCandidate],
+    terminal_record: &StepEvaluationRecord,
+) -> Option<RepairDirectiveAction> {
+    let terminal_failure_context = failure_context_ref(terminal_record);
+
+    let by_failure_context = terminal_failure_context
+        .as_deref()
+        .and_then(|terminal_failure_ref| {
+            candidates
+                .iter()
+                .filter(|candidate| {
+                    failure_context_ref(&candidate.record).as_deref() == Some(terminal_failure_ref)
+                })
+                .filter_map(|candidate| {
+                    candidate
+                        .record
+                        .repair_directive
+                        .as_ref()
+                        .map(|directive| (candidate.repair_attempt_count, directive.action))
+                })
+                .max_by_key(|(attempt_count, _)| *attempt_count)
+                .map(|(_, action)| action)
+        });
+
+    by_failure_context.or_else(|| {
+        candidates
+            .iter()
+            .filter(|candidate| candidate.record.step_id == terminal_record.step_id)
+            .filter_map(|candidate| {
+                candidate
+                    .record
+                    .repair_directive
+                    .as_ref()
+                    .map(|directive| (candidate.repair_attempt_count, directive.action))
+            })
+            .max_by_key(|(attempt_count, _)| *attempt_count)
+            .map(|(_, action)| action)
+    })
+}
+
+fn failure_context_ref(record: &StepEvaluationRecord) -> Option<String> {
+    record
+        .failure_context_checkpoint
+        .as_ref()
+        .map(|checkpoint| checkpoint.failure_context_ref.clone())
+        .or_else(|| {
+            record
+                .repair_directive
+                .as_ref()
+                .map(|directive| directive.failure_context_ref.clone())
+        })
+}
+
+fn orchestration_outcome_summary(
+    verdict: VerifierVerdict,
+    repair_action: Option<RepairDirectiveAction>,
+) -> String {
+    match (verdict, repair_action) {
+        (VerifierVerdict::Accepted, Some(action)) => {
+            format!("accepted_after_{}", action.as_str())
+        }
+        (VerifierVerdict::Accepted, None) => "accepted_without_repair".to_string(),
+        (VerifierVerdict::Rejected, Some(action)) => {
+            format!("rejected_with_{}", action.as_str())
+        }
+        (VerifierVerdict::Rejected, None) => "rejected_without_repair".to_string(),
+    }
+}
+
+fn render_orchestration_quality_line(summary: &OrchestrationQualityView) -> String {
+    let repair_action = summary
+        .repair_action
+        .map(RepairDirectiveAction::as_str)
+        .unwrap_or("none");
+    let checkpoint_ref = summary.checkpoint_ref.as_deref().unwrap_or("none");
+    let last_stable_step = summary.last_stable_step_id.as_deref().unwrap_or("none");
+    let failure_context = summary.failure_context_ref.as_deref().unwrap_or("none");
+
+    format!(
+        "orchestration quality step={} verdict={} repair={} clarification_attempts={} checkpoint={} last_stable_step={} failure_context={} outcome={}",
+        summary.step_id,
+        summary.verdict.as_str(),
+        repair_action,
+        summary.clarification_attempt_count,
+        checkpoint_ref,
+        last_stable_step,
+        failure_context,
+        summary.outcome_summary
+    )
 }
 
 fn runtime_execution_mode_provenance(runtime_execution_mode: &Value) -> Option<String> {
@@ -1535,6 +1760,48 @@ fn render_result_preview(summary: &OperatorResultPreview) -> String {
             rendered.push_str("\n  - ");
             rendered.push_str(line);
         }
+    }
+    if let Some(orchestration_quality) = summary.orchestration_quality.as_ref() {
+        let repair_action = orchestration_quality
+            .repair_action
+            .map(RepairDirectiveAction::as_str)
+            .unwrap_or("none");
+        rendered.push_str("\n  orchestration_quality:");
+        rendered.push_str("\n  - step=");
+        rendered.push_str(&orchestration_quality.step_id);
+        rendered.push_str(" verdict=");
+        rendered.push_str(orchestration_quality.verdict.as_str());
+        rendered.push_str(" repair=");
+        rendered.push_str(repair_action);
+        rendered.push_str(" clarification_attempts=");
+        rendered.push_str(
+            &orchestration_quality
+                .clarification_attempt_count
+                .to_string(),
+        );
+        rendered.push_str(" checkpoint=");
+        rendered.push_str(
+            orchestration_quality
+                .checkpoint_ref
+                .as_deref()
+                .unwrap_or("none"),
+        );
+        rendered.push_str(" last_stable_step=");
+        rendered.push_str(
+            orchestration_quality
+                .last_stable_step_id
+                .as_deref()
+                .unwrap_or("none"),
+        );
+        rendered.push_str(" failure_context=");
+        rendered.push_str(
+            orchestration_quality
+                .failure_context_ref
+                .as_deref()
+                .unwrap_or("none"),
+        );
+        rendered.push_str(" outcome=");
+        rendered.push_str(&orchestration_quality.outcome_summary);
     }
     rendered
 }
