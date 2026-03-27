@@ -60,6 +60,8 @@ runtime.
   - `resolve_issue_lifecycle`
   - `prepare_ralph_packet`, `record_ralph_outcome`
   - `prepare_speckit_context`, `translate_speckit_tasks`
+- When a task explicitly calls for Ralph, use `./scripts/ralph` instead of bare `ralph`; rerun
+  `./scripts/ralph prompt --packet <packet.json>` before each `./scripts/ralph run`.
 - Treat `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` as the
   forward-development authority, `docs/plans/2026-03-16-smith-first-development-system.md` as
   historical control-plane background, and
@@ -99,6 +101,9 @@ cargo build --workspace                    # Build all crates
 cargo test --workspace                     # Run all tests (1115+)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 cargo test -p <crate-name>                 # Test a single crate
+./scripts/ralph --version                  # Check the repo-managed Ralph wrapper
+scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync
+                                           # Verify clean synced closure state
 ```
 
 For markdown linting:
@@ -132,6 +137,8 @@ For markdown linting:
 - Opening a PR is not closure. For task-owned branch/worktree lanes, closure is complete only
   after the PR is merged, the task-owned branch/worktree is removed locally, and the primary
   `/Users/macmain/MisterSmith` checkout is back on a clean synced `main`
+- Run `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync` after push,
+  before `Human Review`, and again after merge
 - PRs should include: concise problem/solution summary, touched files, validation commands run
 - PR references use `(#NNN)` suffix
 
