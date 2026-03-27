@@ -33,33 +33,45 @@ Example authoritative payload shape:
 
 ```json
 {
-  "workflow_id": "11111111-1111-1111-1111-111111111111",
   "target_scope": {
     "kind": "branch",
-    "branch_id": "22222222-2222-2222-2222-222222222222",
-    "node_id": "33333333-3333-3333-3333-333333333333"
+    "graph_id": "11111111-1111-1111-1111-111111111111",
+    "branch_id": "22222222-2222-2222-2222-222222222222"
   },
   "fingerprint_ref": {
+    "fingerprint_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     "fingerprint_key": "executor:branch",
     "confidence": 0.81,
     "expires_at": "2026-03-28T15:00:00Z"
   },
   "profile_snapshot": {
-    "health": "degraded",
-    "failure_tendency": "context_stall"
+    "profile_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    "target": "branch",
+    "health_state": "degraded",
+    "fingerprint_ref": {
+      "fingerprint_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "fingerprint_key": "executor:branch",
+      "confidence": 0.81,
+      "expires_at": "2026-03-28T15:00:00Z"
+    }
   },
   "guard_decision": {
     "failure_class": "recoverable_context_loss",
-    "action": "context_refresh"
+    "action": "context_refresh",
+    "evidence": {
+      "decision_basis": "fingerprint_reinforced"
+    }
   },
   "intervention_record": {
     "action": "context_refresh",
     "result": "applied"
   },
+  "decision_basis": "fingerprint_reinforced",
   "repair_lineage_ref": {
     "source": "packet-020",
-    "checkpoint_id": "last-stable-checkpoint"
-  }
+    "checkpoint_ref": "last-stable-checkpoint"
+  },
+  "proof_boundary": "deterministic-only"
 }
 ```
 
@@ -68,8 +80,11 @@ Behavior:
 - branch and node targets are preferred whenever graph context exists
 - provider scope is allowed only before graph context is available
 - fingerprint references are advisory and may reinforce, but not override, live failure signals
+- `decision_basis` is frozen as `live_signals_only`, `fingerprint_reinforced`, or
+  `conservative_fallback`
 - packet `020` repair lineage may be linked or projected alongside supervision evidence, but it
-  is not replaced
+  is not replaced and may remain absent until the runtime already has a trustworthy packet-020
+  checkpoint reference
 
 ## Fingerprint Storage Contract
 
@@ -105,6 +120,8 @@ Expected behavior:
 - autonomy status carries the latest supervision summary derived from the canonical runtime state
 - autonomy views expose target scope, current health, selected intervention, and fingerprint
   reference when present
+- autonomy views may leave `repair_lineage_ref` or `proof_boundary` unset until later packet-021
+  slices start projecting those fields from the supported runtime path
 - autonomy status remains bounded and points back to task result or run detail for deeper
   inspection
 

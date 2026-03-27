@@ -299,6 +299,12 @@ define_uuid_id!(
     "Create a profile snapshot ID from an existing UUID."
 );
 define_uuid_id!(
+    /// Stable identifier for a profile fingerprint.
+    ProfileFingerprintId,
+    "Create a new random profile fingerprint ID.",
+    "Create a profile fingerprint ID from an existing UUID."
+);
+define_uuid_id!(
     /// Stable identifier for a Guard decision.
     GuardDecisionId,
     "Create a new random Guard decision ID.",

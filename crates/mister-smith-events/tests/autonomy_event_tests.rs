@@ -3,10 +3,12 @@ use mister_smith_core::{
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
     GuardEvidence, HealthState, InterventionRecordId, InterventionType, OperatorResultPreview,
-    OrchestrationQualityView, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
-    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirectiveAction,
-    ResultProvenanceSummary, RevocationState, TaskId, TaskShapeClassification, TaskShapeKind,
-    TeamSizingDecision, TopologyKind, TopologyRationale, VerifierVerdict,
+    OrchestrationQualityView, ProfileFingerprintId, ProfileFingerprintRef, ProfileSnapshot,
+    ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification, ProvenanceChain, ProvenanceLink,
+    RepairDirectiveAction, RepairLineageRef, ResultProvenanceSummary, RevocationState,
+    SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
+    SupervisionTargetScope, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
+    TopologyKind, TopologyRationale, VerifierVerdict,
 };
 use mister_smith_events::autonomy::{
     infer_proof_outcome_from_projection, merge_operator_result_preview,
@@ -439,6 +441,13 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
     let workflow_id = TaskId::new();
     let graph_id = ExecutionGraphId::new();
     let branch_id = ExecutionBranchId::new();
+    let decision_id = GuardDecisionId::new();
+    let fingerprint_ref = ProfileFingerprintRef {
+        fingerprint_id: ProfileFingerprintId::new(),
+        fingerprint_key: "executor:branch".to_string(),
+        confidence: 0.81,
+        expires_at: chrono::Utc::now(),
+    };
     let view = AutonomyStatusView {
         session_id: None,
         turn_index: None,
@@ -586,14 +595,16 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             latency_window: None,
             error_window: None,
             semantic_signals: vec![],
+            fingerprint_ref: Some(fingerprint_ref.clone()),
             updated_at: chrono::Utc::now(),
         }],
         guard_decisions: vec![GuardDecision {
-            decision_id: GuardDecisionId::new(),
+            decision_id,
             failure_class: FailureClass::Semantic,
             intervention: InterventionType::ContextRefresh,
             evidence: GuardEvidence {
                 profile_id: None,
+                decision_basis: SupervisionDecisionBasis::FingerprintReinforced,
                 signal_descriptions: vec!["loop detected".to_string()],
                 checkpoint_ids: vec![],
                 notes: vec!["operator review available".to_string()],
@@ -601,6 +612,29 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             target_scope: mister_smith_core::GuardTarget::Branch(branch_id),
             operator_visibility: true,
         }],
+        supervision_evidence: Some(SupervisionEvidenceView {
+            target_scope: SupervisionTargetScope {
+                kind: SupervisionTargetKind::Branch,
+                provider: None,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                node_id: None,
+            },
+            fingerprint_ref: Some(fingerprint_ref),
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: Some(
+                SupervisionDecisionBasis::FingerprintReinforced
+                    .as_str()
+                    .to_string(),
+            ),
+            repair_lineage_ref: Some(RepairLineageRef {
+                source: "packet-020".to_string(),
+                checkpoint_ref: Some("last-stable-checkpoint".to_string()),
+            }),
+            proof_boundary: Some("deterministic-only".to_string()),
+        }),
         conservative_reasons: vec!["control-plane state unavailable".to_string()],
     };
 
@@ -615,6 +649,183 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             .expect("resume provenance should round-trip")
             .resumed_after_restart
     );
+}
+
+#[tokio::test]
+async fn event_bus_synthesizes_supervision_evidence_from_runtime_events() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch_id = ExecutionBranchId::new();
+    let profile_id = ProfileSnapshotId::new();
+    let decision_id = GuardDecisionId::new();
+    let fingerprint_ref = ProfileFingerprintRef {
+        fingerprint_id: ProfileFingerprintId::new(),
+        fingerprint_key: "executor:branch".to_string(),
+        confidence: 0.67,
+        expires_at: chrono::Utc::now(),
+    };
+
+    event_bus
+        .publish(
+            AutonomyEvent::GraphUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: ExecutionGraphSummary {
+                    graph_id,
+                    workflow_id,
+                    state: GraphState::Running,
+                    branch_count: 1,
+                    node_count: 2,
+                    active_topology: Some(TopologyKind::Sequential),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::TopologySelected(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: TopologyPlanSummary {
+                    graph_id,
+                    topology_kind: TopologyKind::Sequential,
+                    parallelism_width: 1,
+                    task_shape: sample_task_shape(TaskShapeKind::StrictChain),
+                    coordination_policy: CoordinationPolicy::Barrier,
+                    rationale: TopologyRationale {
+                        dependency_shape: "single branch".to_string(),
+                        operational_signals: vec!["predictive supervision".to_string()],
+                        selected_for: "bounded recovery".to_string(),
+                        fallback_reason: None,
+                    },
+                    fallback_topology: Some(TopologyKind::Sequential),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: BranchSummary {
+                    branch_id,
+                    graph_id,
+                    state: BranchState::Running,
+                    assigned_agents: vec![AgentId::new()],
+                    checkpoint_id: None,
+                    recovery_strategy: BranchRecoveryStrategy::Resume,
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::ProfileSnapshotRecorded(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: ProfileSnapshot {
+                    profile_id,
+                    target: ProfileTarget::Branch,
+                    health_state: HealthState::Degraded,
+                    latency_window: None,
+                    error_window: None,
+                    semantic_signals: vec![],
+                    fingerprint_ref: Some(fingerprint_ref.clone()),
+                    updated_at: chrono::Utc::now(),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::GuardDecisionEvaluated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: GuardDecision {
+                    decision_id,
+                    failure_class: FailureClass::Semantic,
+                    intervention: InterventionType::ContextRefresh,
+                    evidence: GuardEvidence {
+                        profile_id: Some(profile_id),
+                        decision_basis: SupervisionDecisionBasis::FingerprintReinforced,
+                        signal_descriptions: vec!["loop detected".to_string()],
+                        checkpoint_ids: vec![],
+                        notes: vec!["fingerprint reinforced local recovery".to_string()],
+                    },
+                    target_scope: mister_smith_core::GuardTarget::Branch(branch_id),
+                    operator_visibility: true,
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::InterventionRecorded(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: mister_smith_core::InterventionRecord {
+                    record_id: InterventionRecordId::new(),
+                    decision_id,
+                    before_state: serde_json::json!({"state": "running"}),
+                    after_state: Some(serde_json::json!({"state": "refreshed"})),
+                    rationale: "context refresh".to_string(),
+                    emitted_at: chrono::Utc::now(),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+
+    let status = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .expect("status should be available");
+    let supervision_evidence = status
+        .supervision_evidence
+        .expect("supervision evidence should be synthesized");
+
+    assert_eq!(
+        supervision_evidence.target_scope.kind,
+        SupervisionTargetKind::Branch
+    );
+    assert_eq!(supervision_evidence.target_scope.branch_id, Some(branch_id));
+    assert_eq!(
+        supervision_evidence
+            .fingerprint_ref
+            .as_ref()
+            .map(|reference| reference.fingerprint_key.as_str()),
+        Some("executor:branch")
+    );
+    assert_eq!(
+        supervision_evidence.decision_basis.as_deref(),
+        Some(SupervisionDecisionBasis::FingerprintReinforced.as_str())
+    );
+    assert!(supervision_evidence.repair_lineage_ref.is_none());
 }
 
 #[test]
@@ -698,6 +909,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
+        supervision_evidence: None,
         conservative_reasons: vec!["control-plane freshness unavailable".to_string()],
     };
     let event = AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
@@ -900,6 +1112,7 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
                     intervention: InterventionType::Escalation,
                     evidence: GuardEvidence {
                         profile_id: None,
+                        decision_basis: SupervisionDecisionBasis::ConservativeFallback,
                         signal_descriptions: vec!["missing profile".to_string()],
                         checkpoint_ids: vec![checkpoint_id],
                         notes: vec![
@@ -1329,6 +1542,7 @@ async fn event_bus_merges_explicit_preview_with_projection_provenance() {
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
+        supervision_evidence: None,
         conservative_reasons: vec![],
     };
 
@@ -1439,6 +1653,7 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
+        supervision_evidence: None,
         conservative_reasons: vec![],
     };
 
@@ -1623,6 +1838,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
+        supervision_evidence: None,
         conservative_reasons: vec!["delegation scope suspended".to_string()],
     };
 

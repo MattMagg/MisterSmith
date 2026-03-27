@@ -11,6 +11,6 @@ pub use error::ConfigValidationError;
 pub use loader::{apply_env_overlay, discover_config_paths, load_config, load_from_file};
 pub use types::{
     AgentConfig, FrameworkConfig, LlmConfig, LogFormat, MonitoringConfig, ObservabilityConfig,
-    OtlpProtocol, RuntimeConfig, RuntimeProviderTier, RuntimeRoutingPolicy,
-    RuntimeRoutingProfile, SecurityConfig, SupervisionConfig, TransportConfig,
+    OtlpProtocol, RuntimeConfig, RuntimeProviderTier, RuntimeRoutingPolicy, RuntimeRoutingProfile,
+    SecurityConfig, SupervisionConfig, TransportConfig,
 };

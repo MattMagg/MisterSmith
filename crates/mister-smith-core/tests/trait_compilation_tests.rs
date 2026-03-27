@@ -367,10 +367,14 @@ fn autonomy_types_compile_with_shared_trait_bounds() {
     assert_autonomy_traits::<ContextBudget>();
     assert_autonomy_traits::<MetricWindow>();
     assert_autonomy_traits::<SemanticSignal>();
+    assert_autonomy_traits::<ProfileFingerprint>();
+    assert_autonomy_traits::<ProfileFingerprintRef>();
     assert_autonomy_traits::<ProfileSnapshot>();
     assert_autonomy_traits::<GuardEvidence>();
     assert_autonomy_traits::<GuardDecision>();
     assert_autonomy_traits::<InterventionRecord>();
+    assert_autonomy_traits::<RepairLineageRef>();
+    assert_autonomy_traits::<SupervisionEvidenceView>();
     assert_autonomy_traits::<DelegationCapability>();
     assert_autonomy_traits::<ProvenanceLink>();
     assert_autonomy_traits::<ProvenanceChain>();
@@ -438,12 +442,63 @@ fn autonomy_ids_enums_and_errors_are_available() {
         intervention: InterventionType::BranchIsolation,
         evidence: GuardEvidence {
             profile_id: None,
+            decision_basis: SupervisionDecisionBasis::ConservativeFallback,
             signal_descriptions: vec!["stream stalled".to_string()],
             checkpoint_ids: vec![],
             notes: vec!["operator-visible conservative intervention".to_string()],
         },
         target_scope: GuardTarget::Graph(graph_id),
         operator_visibility: true,
+    };
+    let fingerprint_ref = ProfileFingerprintRef {
+        fingerprint_id: ProfileFingerprintId::new(),
+        fingerprint_key: "executor:branch".to_string(),
+        confidence: 0.81,
+        expires_at: chrono::Utc::now(),
+    };
+    let _fingerprint = ProfileFingerprint {
+        fingerprint_id: fingerprint_ref.fingerprint_id,
+        target_kind: "executor".to_string(),
+        target_selector: "branch".to_string(),
+        source_refs: vec!["fixture://bounded-packet-021".to_string()],
+        summary_payload: serde_json::json!({"health": "degraded"}),
+        dominant_failure_modes: vec!["context_stall".to_string()],
+        preferred_interventions: vec![InterventionType::ContextRefresh],
+        confidence: 0.81,
+        expires_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+    let _supervision_evidence = SupervisionEvidenceView {
+        target_scope: SupervisionTargetScope {
+            kind: SupervisionTargetKind::Graph,
+            provider: None,
+            graph_id: Some(graph_id),
+            branch_id: None,
+            node_id: None,
+        },
+        fingerprint_ref: Some(fingerprint_ref.clone()),
+        profile_snapshot: Some(ProfileSnapshot {
+            profile_id: ProfileSnapshotId::new(),
+            target: ProfileTarget::Provider,
+            health_state: HealthState::Degraded,
+            latency_window: None,
+            error_window: None,
+            semantic_signals: vec![],
+            fingerprint_ref: Some(fingerprint_ref),
+            updated_at: chrono::Utc::now(),
+        }),
+        guard_decision: Some(decision.clone()),
+        intervention_record: None,
+        decision_basis: Some(
+            SupervisionDecisionBasis::ConservativeFallback
+                .as_str()
+                .to_string(),
+        ),
+        repair_lineage_ref: Some(RepairLineageRef {
+            source: "packet-020".to_string(),
+            checkpoint_ref: Some("checkpoint-1".to_string()),
+        }),
+        proof_boundary: Some("deterministic-only".to_string()),
     };
     let canonical_result = UnifiedResultEnvelope {
         workflow_id,

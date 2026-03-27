@@ -900,6 +900,7 @@ pub(crate) fn synthesize_failed_before_graph_status(
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
+        supervision_evidence: None,
         conservative_reasons: vec![
             "workflow failed before graph publication".to_string(),
             "autonomy status reconstructed from persisted canonical result".to_string(),
@@ -1348,7 +1349,8 @@ fn orchestration_quality_projection(
         });
     }
 
-    let planner_repair_candidates = planner_repair_candidates(canonical_result, &plan_index_by_step);
+    let planner_repair_candidates =
+        planner_repair_candidates(canonical_result, &plan_index_by_step);
     let inferred = select_terminal_planner_repair_candidate(&planner_repair_candidates)?;
     let verdict = if canonical_result.proof_outcome == ProofOutcomeClassification::FailedBeforeGraph
     {
@@ -1373,10 +1375,7 @@ fn orchestration_quality_projection(
                 inferred.step_id,
                 inferred.repair_action.as_str()
             )),
-            outcome_summary: orchestration_outcome_summary(
-                verdict,
-                Some(inferred.repair_action),
-            ),
+            outcome_summary: orchestration_outcome_summary(verdict, Some(inferred.repair_action)),
         },
         source: OrchestrationQualityProjectionSource::PlannerRepairStep,
     })
@@ -1530,7 +1529,8 @@ fn planner_repair_candidates(
                 plan_index: plan_index_by_step.get(&step_id).copied().unwrap_or(0),
                 step_id,
                 repair_action,
-                clarification_attempt_count: if repair_action == RepairDirectiveAction::ClarifyHandoff
+                clarification_attempt_count: if repair_action
+                    == RepairDirectiveAction::ClarifyHandoff
                 {
                     1
                 } else {
@@ -1545,13 +1545,12 @@ fn planner_repair_candidates(
 fn select_terminal_planner_repair_candidate(
     candidates: &[PlannerRepairCandidate],
 ) -> Option<&PlannerRepairCandidate> {
-    candidates.iter().max_by_key(|candidate| candidate.plan_index)
+    candidates
+        .iter()
+        .max_by_key(|candidate| candidate.plan_index)
 }
 
-fn infer_planner_repair_action(
-    action: &str,
-    description: &str,
-) -> Option<RepairDirectiveAction> {
+fn infer_planner_repair_action(action: &str, description: &str) -> Option<RepairDirectiveAction> {
     let normalized_action = action.trim().to_ascii_lowercase();
     let normalized_description = description.trim().to_ascii_lowercase();
     let action_is_final_output = [

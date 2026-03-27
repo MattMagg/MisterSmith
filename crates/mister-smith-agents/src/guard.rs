@@ -2,7 +2,7 @@
 
 use mister_smith_core::{
     FailureClass, GuardDecision, GuardDecisionId, GuardError, GuardEvidence, GuardTarget,
-    HealthState, InterventionType,
+    HealthState, InterventionType, SupervisionDecisionBasis,
 };
 
 use crate::execution_graph::BranchCheckpoint;
@@ -125,6 +125,7 @@ impl Guard {
                 intervention: InterventionType::Escalation,
                 evidence: GuardEvidence {
                     profile_id: profile.map(|snapshot| snapshot.profile_id),
+                    decision_basis: SupervisionDecisionBasis::ConservativeFallback,
                     signal_descriptions,
                     checkpoint_ids: context
                         .checkpoints
@@ -203,6 +204,7 @@ impl Guard {
             intervention,
             evidence: GuardEvidence {
                 profile_id: Some(profile.profile_id),
+                decision_basis: SupervisionDecisionBasis::LiveSignalsOnly,
                 signal_descriptions,
                 checkpoint_ids: context
                     .checkpoints

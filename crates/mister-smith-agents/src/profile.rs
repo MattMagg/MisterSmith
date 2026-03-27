@@ -59,6 +59,7 @@ impl ProfileAssessment {
                 latency_window: None,
                 error_window: None,
                 semantic_signals,
+                fingerprint_ref: None,
                 updated_at: Utc::now(),
             }),
             notes,

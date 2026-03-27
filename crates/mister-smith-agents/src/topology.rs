@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use petgraph::algo::toposort;
 use petgraph::graph::DiGraph;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 use mister_smith_core::{

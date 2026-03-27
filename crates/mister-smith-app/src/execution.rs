@@ -2542,6 +2542,7 @@ mod tests {
             external_capability_decisions: vec![],
             profiles: vec![],
             guard_decisions: vec![],
+            supervision_evidence: None,
             conservative_reasons: vec!["restart-safe recovery".to_string()],
         }
     }

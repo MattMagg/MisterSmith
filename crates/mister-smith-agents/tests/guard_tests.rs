@@ -16,7 +16,8 @@ use mister_smith_agents::{
 use mister_smith_core::AgentId;
 use mister_smith_core::{
     BranchState, ExecutionBranchId, ExecutionNodeId, FailureClass, GraphState, GuardTarget,
-    HealthState, InterventionType, SemanticSignal, SemanticSignalKind, TaskId,
+    HealthState, InterventionType, SemanticSignal, SemanticSignalKind, SupervisionDecisionBasis,
+    TaskId,
 };
 use serde_json::json;
 
@@ -41,6 +42,7 @@ fn stalled_profile_context(branch_id: ExecutionBranchId) -> GuardContext {
                 88,
                 "stream stalled mid-branch",
             )],
+            fingerprint_ref: None,
             updated_at: Utc::now(),
         }),
         Vec::new(),
@@ -72,6 +74,7 @@ fn semantic_profile_context(branch_id: ExecutionBranchId) -> GuardContext {
                 72,
                 "analysis loop repeated the same conclusion",
             )],
+            fingerprint_ref: None,
             updated_at: Utc::now(),
         }),
         Vec::new(),
@@ -273,6 +276,7 @@ fn branch_decision(
         intervention,
         evidence: mister_smith_core::GuardEvidence {
             profile_id: None,
+            decision_basis: SupervisionDecisionBasis::LiveSignalsOnly,
             signal_descriptions: vec!["stream stalled".to_string()],
             checkpoint_ids: Vec::new(),
             notes: Vec::new(),
@@ -357,6 +361,7 @@ fn intervention_engine_isolates_branch_without_restarting_other_branches() {
                             95,
                             "branch is trapped in a reasoning loop",
                         )],
+                        fingerprint_ref: None,
                         updated_at: Utc::now(),
                     }),
                     Vec::new(),
@@ -471,6 +476,20 @@ async fn orchestrator_supervises_stream_degradation_and_forwards_messages() {
         .expect("status should be available");
     assert_eq!(status.guard_decisions.len(), 1);
     assert_eq!(status.interventions.len(), 1);
+    let supervision_evidence = status
+        .supervision_evidence
+        .expect("supervision evidence should be projected");
+    assert_eq!(
+        supervision_evidence.target_scope.kind,
+        mister_smith_core::SupervisionTargetKind::Branch
+    );
+    assert_eq!(supervision_evidence.target_scope.branch_id, Some(branch_id));
+    assert!(supervision_evidence.target_scope.node_id.is_none());
+    assert!(supervision_evidence.fingerprint_ref.is_none());
+    assert_eq!(
+        supervision_evidence.decision_basis.as_deref(),
+        Some(SupervisionDecisionBasis::LiveSignalsOnly.as_str())
+    );
     assert!(status.guard_decisions[0]
         .evidence
         .notes
@@ -622,6 +641,7 @@ fn intervention_engine_graph_abort_fails_all_scheduled_work() {
         intervention: InterventionType::Abort,
         evidence: mister_smith_core::GuardEvidence {
             profile_id: None,
+            decision_basis: SupervisionDecisionBasis::LiveSignalsOnly,
             signal_descriptions: vec!["operator abort".to_string()],
             checkpoint_ids: Vec::new(),
             notes: Vec::new(),
