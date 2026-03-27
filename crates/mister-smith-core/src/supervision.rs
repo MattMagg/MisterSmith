@@ -82,6 +82,28 @@ pub struct RepairDirective {
     pub retry_budget_remaining: u32,
 }
 
+/// Preserved failure context anchored to the last stable checkpoint used for local repair.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FailureContextCheckpoint {
+    /// Rejected step that created this repair context.
+    pub failed_step_id: String,
+    /// Last stable upstream step when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_stable_step_id: Option<String>,
+    /// Stable checkpoint reference used for local repair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint_ref: Option<String>,
+    /// Stable reference to the preserved rejection diagnostics.
+    pub failure_context_ref: String,
+    /// Structured failure code when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<String>,
+    /// Human-readable rejection summary preserved for repair decisions.
+    pub reason: String,
+    /// Number of local repair attempts consumed so far.
+    pub attempt_count: u32,
+}
+
 /// Complete supervision configuration for a supervisor node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupervisionStrategy {
@@ -177,5 +199,22 @@ mod tests {
         let json = serde_json::to_string(&directive).unwrap();
         let deserialized: RepairDirective = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, directive);
+    }
+
+    #[test]
+    fn failure_context_checkpoint_serde_roundtrip() {
+        let checkpoint = FailureContextCheckpoint {
+            failed_step_id: "draft-outline".to_string(),
+            last_stable_step_id: Some("collect-evidence".to_string()),
+            checkpoint_ref: Some("checkpoint-2".to_string()),
+            failure_context_ref: "draft-outline/missing-context".to_string(),
+            failure_code: Some("missing_context".to_string()),
+            reason: "missing bounded repair context".to_string(),
+            attempt_count: 1,
+        };
+
+        let json = serde_json::to_string(&checkpoint).unwrap();
+        let deserialized: FailureContextCheckpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, checkpoint);
     }
 }

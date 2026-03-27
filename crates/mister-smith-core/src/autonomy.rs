@@ -18,7 +18,7 @@ use crate::ids::{
     AgentId, CapabilityId, CheckpointId, ContextBudgetId, ExecutionBranchId, ExecutionGraphId,
     ExecutionNodeId, GuardDecisionId, InterventionRecordId, ProfileSnapshotId, TaskId,
 };
-use crate::supervision::RepairDirective;
+use crate::supervision::{FailureContextCheckpoint, RepairDirective};
 
 /// Coarse task-structure class derived from dependency analysis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -208,6 +208,28 @@ pub struct StepEvaluationRecord {
     /// Optional bounded repair directive when the step is rejected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repair_directive: Option<RepairDirective>,
+    /// Optional first-class clarification request for weak or incomplete handoffs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clarification_request: Option<HandoffClarificationRequest>,
+    /// Optional preserved failure context and checkpoint for local repair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_context_checkpoint: Option<FailureContextCheckpoint>,
+}
+
+/// First-class clarification request emitted for a weak handoff.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandoffClarificationRequest {
+    /// Step that produced the incomplete handoff.
+    pub source_step_id: String,
+    /// Step that is blocked waiting for clarification.
+    pub target_step_id: String,
+    /// Explicit constraints or assumptions that must be clarified.
+    pub missing_constraints: Vec<String>,
+    /// Number of clarification attempts already consumed.
+    pub attempt_count: u32,
+    /// Optional guardrail for abandoning stale clarification loops.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 /// Task-facing result envelope exposed through `task.result`.
@@ -566,6 +588,22 @@ mod tests {
                 issued_by: "verifier.runtime".to_string(),
                 failure_context_ref: "draft-outline/missing-cost".to_string(),
                 retry_budget_remaining: 1,
+            }),
+            clarification_request: Some(HandoffClarificationRequest {
+                source_step_id: "draft-outline".to_string(),
+                target_step_id: "write-brief".to_string(),
+                missing_constraints: vec!["budget ceiling".to_string()],
+                attempt_count: 1,
+                expires_at: Some(Utc::now()),
+            }),
+            failure_context_checkpoint: Some(FailureContextCheckpoint {
+                failed_step_id: "draft-outline".to_string(),
+                last_stable_step_id: Some("collect-evidence".to_string()),
+                checkpoint_ref: Some("checkpoint-1".to_string()),
+                failure_context_ref: "draft-outline/missing-cost".to_string(),
+                failure_code: Some("missing_constraint".to_string()),
+                reason: "missing cost constraint in handoff".to_string(),
+                attempt_count: 1,
             }),
         };
 
