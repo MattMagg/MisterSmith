@@ -3,14 +3,13 @@
 Date: March 19, 2026
 Status: Historical
 
-Use `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` for the current repo-wide
-forward-development authority and
-`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` for the last
-completed frontier-packet closure evidence. This note is now the March 19 frontier-recovery
-direction snapshot that led into the later checkpoint chain.
-
-Use `docs/current-state.md` for the current whole-repo overview. This note is the forward-direction
-artifact, not the general repo-state document.
+Use `docs/current-state.md` for the current whole-repo overview,
+`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the latest landed frontier
+packet note, and `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for the latest
+bounded live-proof and closure note. Use
+`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` only when the
+historical packet-016 closure evidence matters. This note is now a historical frontier-direction
+artifact, not the active direction router.
 
 ## Objective
 
