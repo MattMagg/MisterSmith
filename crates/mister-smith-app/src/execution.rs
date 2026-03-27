@@ -992,22 +992,27 @@ impl RuntimeTaskService {
                 })
             }).unwrap_or(Value::Null),
             "execution_contract": {
-                "require_real_multi_agent_workflow": true,
-                "require_parallel_workers": 2,
-                "require_join_step": true,
                 "return_json_only": true,
+                "workflow_policy": {
+                    "prefer_smallest_workflow": true,
+                    "default_shape": "sequential",
+                    "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+                    "merge_when": "multiple branch outputs must be combined",
+                    "merge_role": "coordinator",
+                    "preserve_requested_output_shape": true
+                },
                 "schema": {
                     "goal": "string",
-                    "topology_hint": "hybrid",
+                    "topology_hint": "optional string",
                     "steps": [
                         {
                             "id": "string",
                             "step": 1,
                             "action": "string",
                             "description": "string",
-                            "role": "worker",
-                            "branch": "branch-a",
-                            "depends_on": []
+                            "role": "optional string",
+                            "branch": "optional string",
+                            "depends_on": "optional array of step ids"
                         }
                     ]
                 }
@@ -2345,21 +2350,6 @@ fn next_join_branch_label(index: usize) -> String {
     }
 }
 
-fn is_supported_planner_role(role: &str) -> bool {
-    matches!(
-        role.to_ascii_lowercase().as_str(),
-        "supervisor"
-            | "worker"
-            | "coordinator"
-            | "monitor"
-            | "planner"
-            | "executor"
-            | "critic"
-            | "router"
-            | "memory"
-    )
-}
-
 fn canonicalize_topology_hint(raw_hint: &str) -> String {
     let lowered = raw_hint.trim().to_ascii_lowercase();
     if lowered.starts_with("sequential") {
@@ -2445,14 +2435,7 @@ fn normalize_explicit_runtime_steps(goal: &str, steps: &[Value]) -> Vec<Value> {
         };
 
         if is_merge_node {
-            let should_coerce_role = step
-                .get("role")
-                .and_then(Value::as_str)
-                .map(is_supported_planner_role)
-                .unwrap_or(true);
-            if should_coerce_role {
-                step.insert("role".to_string(), json!("coordinator"));
-            }
+            step.insert("role".to_string(), json!("coordinator"));
         } else {
             step.entry("role".to_string())
                 .or_insert_with(|| json!("worker"));
@@ -3880,8 +3863,7 @@ fn normalize_runtime_plan(goal: &str, context: &Value, raw_plan: Value) -> Value
         normalize_explicit_runtime_steps(goal, &steps)
     } else {
         let mut runtime_steps = Vec::new();
-        let mut previous_join_id: Option<String> = None;
-        let mut root_ids = Vec::new();
+        let mut previous_step_id: Option<String> = None;
 
         for (index, raw_step) in steps.iter().enumerate() {
             let mut step = raw_step.as_object().cloned().unwrap_or_default();
@@ -3901,39 +3883,16 @@ fn normalize_runtime_plan(goal: &str, context: &Value, raw_plan: Value) -> Value
                 step.insert("role".to_string(), json!("worker"));
                 step.insert("branch".to_string(), json!("branch-a"));
                 step.insert("depends_on".to_string(), json!([]));
-                root_ids.push(step_id.clone());
-            } else if index == 1 {
-                step.insert("role".to_string(), json!("worker"));
-                step.insert("branch".to_string(), json!("branch-b"));
-                step.insert("depends_on".to_string(), json!([]));
-                root_ids.push(step_id.clone());
             } else {
-                step.insert("role".to_string(), json!("coordinator"));
-                step.insert("branch".to_string(), json!("join"));
-                let deps = if let Some(previous_join_id) = &previous_join_id {
-                    vec![previous_join_id.clone()]
-                } else {
-                    root_ids.clone()
-                };
+                step.entry("role".to_string())
+                    .or_insert_with(|| json!("worker"));
+                step.insert("branch".to_string(), json!("branch-a"));
+                let deps = previous_step_id.iter().cloned().collect::<Vec<String>>();
                 step.insert("depends_on".to_string(), json!(deps));
-                previous_join_id = Some(step_id.clone());
             }
 
+            previous_step_id = Some(step_id.clone());
             runtime_steps.push(Value::Object(step));
-        }
-
-        if runtime_steps.len() == 2 {
-            runtime_steps.push(json!({
-                "id": "join-step",
-                "step": 3,
-                "action": "synthesize",
-                "description": format!(
-                    "Synthesize both worker branch results into one final answer for: {goal}"
-                ),
-                "role": "coordinator",
-                "branch": "join",
-                "depends_on": root_ids,
-            }));
         }
 
         runtime_steps
@@ -3943,8 +3902,6 @@ fn normalize_runtime_plan(goal: &str, context: &Value, raw_plan: Value) -> Value
         plan.get("topology_hint")
             .and_then(Value::as_str)
             .map(canonicalize_topology_hint)
-    } else if runtime_steps.len() >= 3 {
-        Some("hybrid".to_string())
     } else {
         Some("sequential".to_string())
     };
@@ -4635,7 +4592,53 @@ mod runtime_plan_tests {
             .filter_map(|step| step["step"].as_u64())
             .collect();
 
-        assert_eq!(numeric_steps, vec![1, 2, 3]);
+        assert_eq!(numeric_steps, vec![1, 2]);
+        assert_eq!(steps[0]["branch"], json!("branch-a"));
+        assert_eq!(steps[0]["depends_on"], json!([]));
+        assert_eq!(steps[1]["branch"], json!("branch-a"));
+        assert_eq!(steps[1]["depends_on"], json!(["plan-a"]));
+        assert_eq!(plan["topology_hint"], json!("sequential"));
+        assert_eq!(plan["runtime_normalized"], json!(true));
+    }
+
+    #[test]
+    fn normalize_runtime_plan_defaults_plain_multistep_plans_to_sequential_chain() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "steps": [
+                    {
+                        "id": "step-1",
+                        "step": 4,
+                        "action": "inspect",
+                        "description": "inspect runtime"
+                    },
+                    {
+                        "id": "step-2",
+                        "step": 7,
+                        "action": "compare",
+                        "description": "compare operator evidence"
+                    },
+                    {
+                        "id": "step-3",
+                        "step": 9,
+                        "action": "answer",
+                        "description": "return final answer"
+                    }
+                ]
+            }),
+        );
+
+        let steps = plan["steps"].as_array().expect("normalized steps array");
+        assert_eq!(steps.len(), 3);
+        assert_eq!(steps[0]["depends_on"], json!([]));
+        assert_eq!(steps[1]["depends_on"], json!(["step-1"]));
+        assert_eq!(steps[2]["depends_on"], json!(["step-2"]));
+        assert_eq!(steps[0]["branch"], json!("branch-a"));
+        assert_eq!(steps[1]["branch"], json!("branch-a"));
+        assert_eq!(steps[2]["branch"], json!("branch-a"));
+        assert_eq!(plan["topology_hint"], json!("sequential"));
         assert_eq!(plan["runtime_normalized"], json!(true));
     }
 
@@ -4789,7 +4792,7 @@ mod runtime_plan_tests {
     }
 
     #[test]
-    fn normalize_runtime_plan_preserves_unsupported_merge_role_for_early_rejection() {
+    fn normalize_runtime_plan_coerces_unsupported_merge_role_by_structure() {
         let plan = normalize_runtime_plan(
             "ship proof",
             &json!({}),
@@ -4826,8 +4829,49 @@ mod runtime_plan_tests {
         );
 
         let steps = plan["steps"].as_array().expect("normalized steps array");
-        assert_eq!(steps[2]["role"], json!("joiner"));
+        assert_eq!(steps[2]["role"], json!("coordinator"));
         assert_eq!(steps[2]["branch"], json!("join"));
+    }
+
+    #[test]
+    fn normalize_runtime_plan_then_compile_accepts_merge_step_with_join_role_hint() {
+        let plan = normalize_runtime_plan(
+            "ship proof",
+            &json!({}),
+            json!({
+                "topology_hint": "hybrid",
+                "steps": [
+                    {
+                        "id": "branch-a",
+                        "step": 1,
+                        "action": "inspect-a",
+                        "description": "inspect a",
+                        "role": "worker",
+                        "branch": "branch-a"
+                    },
+                    {
+                        "id": "branch-b",
+                        "step": 2,
+                        "action": "inspect-b",
+                        "description": "inspect b",
+                        "role": "worker",
+                        "branch": "branch-b"
+                    },
+                    {
+                        "id": "join",
+                        "step": 3,
+                        "action": "join",
+                        "description": "merge both branches",
+                        "role": "join",
+                        "branch": "join",
+                        "depends_on": ["branch-a", "branch-b"]
+                    }
+                ]
+            }),
+        );
+
+        compile_execution_plan(TaskId::new(), &plan)
+            .expect("normalized merge step should compile with coordinator semantics");
     }
 
     #[test]

@@ -1,0 +1,406 @@
+{
+  "result": {
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "inspect_runtime_markers",
+            "branch_id": "32528e97-0561-4b37-aab0-a805232ad315",
+            "dependencies": [],
+            "description": "Trace only directly observed task result, autonomy result, and terminal proof markers. Record observed evidence and explicitly exclude bootstrap or routing interpretation unless directly shown in the runtime output.",
+            "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "track_terminal_outcomes",
+            "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b",
+          "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "inspect_runtime_markers",
+              "branch_id": "a346e7c9-03a1-49c2-96d8-56e3909dbe5e",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "inspect_runtime_markers",
+                  "branch_id": "a346e7c9-03a1-49c2-96d8-56e3909dbe5e",
+                  "dependencies": [],
+                  "description": "Trace only directly observed bootstrap, readiness, provider/model selection, and routing markers. Record observed evidence and explicitly exclude inferred state or downstream outcome claims.",
+                  "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "track_bootstrap",
+                  "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "bc1a91e1-e773-4fae-bdfc-35741acdfcd7",
+                "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+              },
+              "task_id": "a4028890-6517-4650-a869-99ae5ac5b961",
+              "worker_id": "bc1a91e1-e773-4fae-bdfc-35741acdfcd7"
+            },
+            {
+              "action": "inspect_runtime_markers",
+              "branch_id": "32528e97-0561-4b37-aab0-a805232ad315",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "inspect_runtime_markers",
+                  "branch_id": "32528e97-0561-4b37-aab0-a805232ad315",
+                  "dependencies": [],
+                  "description": "Trace only directly observed task result, autonomy result, and terminal proof markers. Record observed evidence and explicitly exclude bootstrap or routing interpretation unless directly shown in the runtime output.",
+                  "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "track_terminal_outcomes",
+                  "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b",
+                "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+              },
+              "task_id": "b9902ca8-380c-4247-b961-37916a7801a8",
+              "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "synthesize_final_answer",
+            "branch_id": "1e1b361b-3b35-450d-889a-3c4ce5a7d3cd",
+            "dependencies": [
+              "a4028890-6517-4650-a869-99ae5ac5b961",
+              "b9902ca8-380c-4247-b961-37916a7801a8"
+            ],
+            "description": "Combine both branch outputs into one concise final answer under 220 words, using only overlapping directly observed runtime evidence, clearly separating confirmed markers from anything not proven by the trace.",
+            "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "combine_observed_evidence",
+            "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b",
+          "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "inspect_runtime_markers",
+            "branch_id": "a346e7c9-03a1-49c2-96d8-56e3909dbe5e",
+            "dependencies": [],
+            "description": "Trace only directly observed bootstrap, readiness, provider/model selection, and routing markers. Record observed evidence and explicitly exclude inferred state or downstream outcome claims.",
+            "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "track_bootstrap",
+            "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "bc1a91e1-e773-4fae-bdfc-35741acdfcd7",
+          "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+        }
+      ],
+      "description": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "inspect_runtime_markers",
+            "branch": "bootstrap_readiness_routing",
+            "depends_on": [],
+            "description": "Trace only directly observed bootstrap, readiness, provider/model selection, and routing markers. Record observed evidence and explicitly exclude inferred state or downstream outcome claims.",
+            "id": "track_bootstrap",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "inspect_runtime_markers",
+            "branch": "result_autonomy_terminal",
+            "depends_on": [],
+            "description": "Trace only directly observed task result, autonomy result, and terminal proof markers. Record observed evidence and explicitly exclude bootstrap or routing interpretation unless directly shown in the runtime output.",
+            "id": "track_terminal_outcomes",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "synthesize_final_answer",
+            "branch": "join",
+            "depends_on": [
+              "track_bootstrap",
+              "track_terminal_outcomes"
+            ],
+            "description": "Combine both branch outputs into one concise final answer under 220 words, using only overlapping directly observed runtime evidence, clearly separating confirmed markers from anything not proven by the trace.",
+            "id": "combine_observed_evidence",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "parallel"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": "Two parallel tracks are required because the marker sets are clearly independent: branch one covers bootstrap/readiness/provider-model/routing evidence, branch two covers task-result/autonomy/terminal-proof evidence. Final synthesis must be concise and runtime-evidence-only.",
+        "goal": "Split the runtime inspection into two independent parallel evidence tracks, then combine them into one concise final answer grounded only in directly observed runtime evidence.",
+        "steps": [
+          {
+            "action": "inspect_runtime_markers",
+            "branch": "bootstrap_readiness_routing",
+            "description": "Trace only directly observed bootstrap, readiness, provider/model selection, and routing markers. Record observed evidence and explicitly exclude inferred state or downstream outcome claims.",
+            "id": "track_bootstrap",
+            "step": 1
+          },
+          {
+            "action": "inspect_runtime_markers",
+            "branch": "result_autonomy_terminal",
+            "description": "Trace only directly observed task result, autonomy result, and terminal proof markers. Record observed evidence and explicitly exclude bootstrap or routing interpretation unless directly shown in the runtime output.",
+            "id": "track_terminal_outcomes",
+            "step": 2
+          },
+          {
+            "action": "synthesize_final_answer",
+            "depends_on": [
+              "track_bootstrap",
+              "track_terminal_outcomes"
+            ],
+            "description": "Combine both branch outputs into one concise final answer under 220 words, using only overlapping directly observed runtime evidence, clearly separating confirmed markers from anything not proven by the trace.",
+            "id": "combine_observed_evidence",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "parallel_then_merge"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "inspect_runtime_markers",
+          "branch_id": "a346e7c9-03a1-49c2-96d8-56e3909dbe5e",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "inspect_runtime_markers",
+              "branch_id": "a346e7c9-03a1-49c2-96d8-56e3909dbe5e",
+              "dependencies": [],
+              "description": "Trace only directly observed bootstrap, readiness, provider/model selection, and routing markers. Record observed evidence and explicitly exclude inferred state or downstream outcome claims.",
+              "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "track_bootstrap",
+              "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "bc1a91e1-e773-4fae-bdfc-35741acdfcd7",
+            "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+          },
+          "task_id": "a4028890-6517-4650-a869-99ae5ac5b961",
+          "worker_id": "bc1a91e1-e773-4fae-bdfc-35741acdfcd7"
+        },
+        {
+          "action": "inspect_runtime_markers",
+          "branch_id": "32528e97-0561-4b37-aab0-a805232ad315",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "inspect_runtime_markers",
+              "branch_id": "32528e97-0561-4b37-aab0-a805232ad315",
+              "dependencies": [],
+              "description": "Trace only directly observed task result, autonomy result, and terminal proof markers. Record observed evidence and explicitly exclude bootstrap or routing interpretation unless directly shown in the runtime output.",
+              "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "track_terminal_outcomes",
+              "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b",
+            "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+          },
+          "task_id": "b9902ca8-380c-4247-b961-37916a7801a8",
+          "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b"
+        },
+        {
+          "action": "synthesize_final_answer",
+          "branch_id": "1e1b361b-3b35-450d-889a-3c4ce5a7d3cd",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "inspect_runtime_markers",
+                "branch_id": "a346e7c9-03a1-49c2-96d8-56e3909dbe5e",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "inspect_runtime_markers",
+                    "branch_id": "a346e7c9-03a1-49c2-96d8-56e3909dbe5e",
+                    "dependencies": [],
+                    "description": "Trace only directly observed bootstrap, readiness, provider/model selection, and routing markers. Record observed evidence and explicitly exclude inferred state or downstream outcome claims.",
+                    "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "track_bootstrap",
+                    "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "bc1a91e1-e773-4fae-bdfc-35741acdfcd7",
+                  "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+                },
+                "task_id": "a4028890-6517-4650-a869-99ae5ac5b961",
+                "worker_id": "bc1a91e1-e773-4fae-bdfc-35741acdfcd7"
+              },
+              {
+                "action": "inspect_runtime_markers",
+                "branch_id": "32528e97-0561-4b37-aab0-a805232ad315",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "inspect_runtime_markers",
+                    "branch_id": "32528e97-0561-4b37-aab0-a805232ad315",
+                    "dependencies": [],
+                    "description": "Trace only directly observed task result, autonomy result, and terminal proof markers. Record observed evidence and explicitly exclude bootstrap or routing interpretation unless directly shown in the runtime output.",
+                    "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "track_terminal_outcomes",
+                    "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b",
+                  "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+                },
+                "task_id": "b9902ca8-380c-4247-b961-37916a7801a8",
+                "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "synthesize_final_answer",
+              "branch_id": "1e1b361b-3b35-450d-889a-3c4ce5a7d3cd",
+              "dependencies": [
+                "a4028890-6517-4650-a869-99ae5ac5b961",
+                "b9902ca8-380c-4247-b961-37916a7801a8"
+              ],
+              "description": "Combine both branch outputs into one concise final answer under 220 words, using only overlapping directly observed runtime evidence, clearly separating confirmed markers from anything not proven by the trace.",
+              "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "combine_observed_evidence",
+              "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b",
+            "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. Keep the answer under 220 words."
+          },
+          "task_id": "fa209abc-4db9-4c45-9879-48d31e697a3c",
+          "worker_id": "5c7af845-a14c-4708-a4ba-76e904a78c9b"
+        }
+      ],
+      "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+    },
+    "status": "completed",
+    "workflow_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+  },
+  "status": "completed",
+  "task_id": "53074366-1cf4-4ada-aab3-847345c1ecd8"
+}

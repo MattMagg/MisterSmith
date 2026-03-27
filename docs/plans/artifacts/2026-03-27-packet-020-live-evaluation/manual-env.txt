@@ -1,0 +1,56 @@
+date: 2026-03-27
+repo_root: /Users/macmain/MisterSmith
+head_sha: b66766a92d9d5909e42d906e5520ac5a86f75c40
+branch: main
+upstream: origin/main
+worktree_status: clean and synced before artifact creation
+
+control_plane:
+- route: development_workflow
+- issue: MS-103
+- issue_state: Done
+- issue_mutation_required: no
+
+docs_grounded:
+- AGENTS.md
+- WORKFLOW.md
+- docs/linear/LINEAR.md
+- docs/current-state.md
+- docs/ms_recent_context.md
+- docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md
+- docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md
+- docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md
+- specs/020-verifier-gated-adaptive-orchestration/spec.md
+- specs/020-verifier-gated-adaptive-orchestration/quickstart.md
+- specs/020-verifier-gated-adaptive-orchestration/tasks.md
+- crates/mister-smith-app/src/execution.rs
+- crates/mister-smith-app/src/autonomy.rs
+- crates/mister-smith-app/src/agent_inspection.rs
+- crates/mister-smith-core/src/autonomy.rs
+- crates/mister-smith-core/src/supervision.rs
+- scripts/live_runtime_proof_smoke.py
+
+provider_auth:
+- command: cargo run -q -p mister-smith-app -- auth openai-chatgpt status
+- result: Authenticated ChatGPT account: matthewtmaggio@gmail.com (pro)
+
+docker_services:
+- postgres: healthy on 127.0.0.1:5432
+- nats: healthy on 127.0.0.1:4222
+- nats_http_monitor: available on 127.0.0.1:8222
+
+nats_monitor:
+- varz: server version 2.12.4, jetstream enabled
+- jsz: streams=2, consumers=0, messages=389, bytes=1913311
+
+runtime_ports:
+- 8080: free before baseline smoke
+
+autonomy_route:
+- http: GET /api/v1/autonomy/status/{workflow_id}
+- cli: mister-smith autonomy list --base-url <url>
+- cli: mister-smith autonomy status --workflow-id <id> --base-url <url>
+
+notes:
+- public live task ingress remains description-only via POST /api/v1/tasks
+- no supported live ingress for verifier_policy or verifier_policy_sequence was found

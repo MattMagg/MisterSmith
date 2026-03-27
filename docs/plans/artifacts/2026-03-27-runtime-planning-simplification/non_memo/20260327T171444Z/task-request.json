@@ -1,0 +1,4 @@
+{
+  "description": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+  "priority": "high"
+}

@@ -1,0 +1,22 @@
+{
+  "artifact_dir": "docs/plans/artifacts/2026-03-27-packet-020-live-evaluation/baseline/20260327T161631Z",
+  "base_url": "http://127.0.0.1:8080",
+  "budget_policy": null,
+  "budget_root": null,
+  "compose_file": "deploy/docker-compose.yml",
+  "database_name": "mistersmith_live_runtime_smoke_20260327_161631",
+  "database_url": "postgres://mistersmith:<redacted>@127.0.0.1:5432/mistersmith_live_runtime_smoke_20260327_161631",
+  "expected_step_action": null,
+  "expected_step_tier": null,
+  "http_port": 8080,
+  "model_id": "gpt-5.4",
+  "poll_interval_seconds": 1.0,
+  "profile": "baseline",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "required_step_checkpoints": [],
+  "routing_policy": "round_robin",
+  "run_id": "20260327T161631Z",
+  "runtime_config_path": null,
+  "timeout_seconds": 240.0
+}

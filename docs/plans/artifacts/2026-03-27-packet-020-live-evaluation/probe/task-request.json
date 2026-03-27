@@ -1,0 +1,4 @@
+{
+  "description": "Create exactly two parallel worker steps and one final merge memo. Worker one must trace bootstrap, readiness, provider and model selection, and routing markers from the live runtime. Worker two must trace task result, autonomy result, and operator-facing provenance. The final memo must include only directly observed evidence. If any worker handoff is missing required context, request clarification or do bounded local repair from the last stable step instead of guessing. Keep the final memo under 220 words.",
+  "priority": "high"
+}

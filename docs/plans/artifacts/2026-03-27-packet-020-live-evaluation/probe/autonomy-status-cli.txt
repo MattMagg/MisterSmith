@@ -1,0 +1,35 @@
+workflow: 83531132-4f6b-414e-84e1-36852c1dfac6
+graph: 83531132-4f6b-414e-84e1-36852c1dfac6 Failed
+session: none
+resume provenance: none
+topology: Hybrid width=2 shape=fanout-join structure=stored_plan_nodes:3 | stored_plan_roots:2 | stored_plan_frontier_width:2 | stored_plan_depth:2 dependency=stored execution plan reconstructed with 3 node(s) rationale=preserve bounded operator-visible parity from persisted failure metadata signals=workflow failed before graph publication | proof_outcome=failed_before_graph | recorded_step_results=0
+fallback: graph compilation failed before a live autonomy snapshot could be published
+team sizing: none
+branches:
+none
+checkpoints:
+none
+routing:
+none
+step routing:
+planner.step.1#1 kind=planner action=continue previous=none changed=false tier=direct preferred=none cost=1269 confidence=1.00 checkpoints=none reason=Selected via RoundRobin delta=initial step routing decision for workflow-visible control state
+result preview: proof=failed_before_graph location=task.result preview=workflow planning produced an invalid execution graph during topology compilation: Unsupported topology contract: unsupported planner role 'join'
+  provenance:
+  - workflow failed before usable graph formation
+  - provider=openai_chatgpt model=gpt-5.4
+  - runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step routing_policy=round_robin registered_providers=1 budget_root=disabled
+  - graph state Failed with topology Hybrid (2 branch(es), 3 node(s))
+  - latest step routing tier=direct action=continue checkpoints=none
+  - canonical result stored in metadata.final_result
+  - aggregated payload nested under metadata.aggregated_result
+  - full payload remains recoverable from task.result
+  - session assistant_result derives from the canonical result object
+interventions:
+none
+delegation:
+none
+delegation alerts:
+none
+external capability decisions:
+none
+conservative: workflow failed before graph publication | autonomy status reconstructed from persisted canonical result

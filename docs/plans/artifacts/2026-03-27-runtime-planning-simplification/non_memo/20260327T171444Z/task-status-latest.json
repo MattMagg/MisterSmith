@@ -1,0 +1,498 @@
+{
+  "result": {
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [
+            {
+              "action": "inspect_live_runtime",
+              "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "inspect_live_runtime",
+                  "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                  "dependencies": [],
+                  "description": "Reproduce the issue in the live runtime and capture the concrete failing behavior, relevant logs, and exact affected path without making changes.",
+                  "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "s1",
+                  "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+                "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+              },
+              "task_id": "3c7eac98-64ea-4d38-8e58-56b23668fdee",
+              "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "identify_smallest_fix",
+            "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+            "dependencies": [
+              "3c7eac98-64ea-4d38-8e58-56b23668fdee"
+            ],
+            "description": "Trace the failure to the narrowest responsible code path and determine the smallest safe patch that directly addresses the observed runtime behavior.",
+            "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "s2",
+            "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+          "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "inspect_live_runtime",
+            "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+            "dependencies": [],
+            "description": "Reproduce the issue in the live runtime and capture the concrete failing behavior, relevant logs, and exact affected path without making changes.",
+            "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "s1",
+            "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+          "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "identify_smallest_fix",
+              "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+              "result": {
+                "dependency_results": [
+                  {
+                    "action": "inspect_live_runtime",
+                    "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                    "result": {
+                      "dependency_results": [],
+                      "execution_boundary": "tool_bus",
+                      "model_id": "gpt-5.4",
+                      "provider_kind": "openai_chatgpt",
+                      "status": "completed",
+                      "task": {
+                        "action": "inspect_live_runtime",
+                        "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                        "dependencies": [],
+                        "description": "Reproduce the issue in the live runtime and capture the concrete failing behavior, relevant logs, and exact affected path without making changes.",
+                        "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+                        "planner_metadata": {
+                          "planner_index": 0
+                        },
+                        "step_id": "s1",
+                        "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+                      },
+                      "tool_name": "workflow.execute_step",
+                      "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+                      "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+                    },
+                    "task_id": "3c7eac98-64ea-4d38-8e58-56b23668fdee",
+                    "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d"
+                  }
+                ],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "identify_smallest_fix",
+                  "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                  "dependencies": [
+                    "3c7eac98-64ea-4d38-8e58-56b23668fdee"
+                  ],
+                  "description": "Trace the failure to the narrowest responsible code path and determine the smallest safe patch that directly addresses the observed runtime behavior.",
+                  "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "s2",
+                  "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+                "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+              },
+              "task_id": "0245cca4-5687-46d7-a65a-f6ac91a2624e",
+              "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "write_three_section_recommendation",
+            "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+            "dependencies": [
+              "0245cca4-5687-46d7-a65a-f6ac91a2624e"
+            ],
+            "description": "Return only a short patch recommendation with exactly these sections: Problem, Evidence, and Smallest Fix, using the live-runtime findings and the minimal patch choice.",
+            "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "s3",
+            "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+          "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+        }
+      ],
+      "description": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "inspect_live_runtime",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Reproduce the issue in the live runtime and capture the concrete failing behavior, relevant logs, and exact affected path without making changes.",
+            "id": "s1",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "identify_smallest_fix",
+            "branch": "branch-a",
+            "depends_on": [
+              "s1"
+            ],
+            "description": "Trace the failure to the narrowest responsible code path and determine the smallest safe patch that directly addresses the observed runtime behavior.",
+            "id": "s2",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "write_three_section_recommendation",
+            "branch": "branch-a",
+            "depends_on": [
+              "s2"
+            ],
+            "description": "Return only a short patch recommendation with exactly these sections: Problem, Evidence, and Smallest Fix, using the live-runtime findings and the minimal patch choice.",
+            "id": "s3",
+            "role": "worker",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix.",
+        "steps": [
+          {
+            "action": "inspect_live_runtime",
+            "description": "Reproduce the issue in the live runtime and capture the concrete failing behavior, relevant logs, and exact affected path without making changes.",
+            "id": "s1",
+            "step": 1
+          },
+          {
+            "action": "identify_smallest_fix",
+            "description": "Trace the failure to the narrowest responsible code path and determine the smallest safe patch that directly addresses the observed runtime behavior.",
+            "id": "s2",
+            "step": 2
+          },
+          {
+            "action": "write_three_section_recommendation",
+            "description": "Return only a short patch recommendation with exactly these sections: Problem, Evidence, and Smallest Fix, using the live-runtime findings and the minimal patch choice.",
+            "id": "s3",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "identify_smallest_fix",
+          "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "inspect_live_runtime",
+                "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "inspect_live_runtime",
+                    "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                    "dependencies": [],
+                    "description": "Reproduce the issue in the live runtime and capture the concrete failing behavior, relevant logs, and exact affected path without making changes.",
+                    "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "s1",
+                    "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+                  "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+                },
+                "task_id": "3c7eac98-64ea-4d38-8e58-56b23668fdee",
+                "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "identify_smallest_fix",
+              "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+              "dependencies": [
+                "3c7eac98-64ea-4d38-8e58-56b23668fdee"
+              ],
+              "description": "Trace the failure to the narrowest responsible code path and determine the smallest safe patch that directly addresses the observed runtime behavior.",
+              "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "s2",
+              "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+            "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+          },
+          "task_id": "0245cca4-5687-46d7-a65a-f6ac91a2624e",
+          "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d"
+        },
+        {
+          "action": "write_three_section_recommendation",
+          "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "identify_smallest_fix",
+                "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                "result": {
+                  "dependency_results": [
+                    {
+                      "action": "inspect_live_runtime",
+                      "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                      "result": {
+                        "dependency_results": [],
+                        "execution_boundary": "tool_bus",
+                        "model_id": "gpt-5.4",
+                        "provider_kind": "openai_chatgpt",
+                        "status": "completed",
+                        "task": {
+                          "action": "inspect_live_runtime",
+                          "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                          "dependencies": [],
+                          "description": "Reproduce the issue in the live runtime and capture the concrete failing behavior, relevant logs, and exact affected path without making changes.",
+                          "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+                          "planner_metadata": {
+                            "planner_index": 0
+                          },
+                          "step_id": "s1",
+                          "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+                        },
+                        "tool_name": "workflow.execute_step",
+                        "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+                        "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+                      },
+                      "task_id": "3c7eac98-64ea-4d38-8e58-56b23668fdee",
+                      "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d"
+                    }
+                  ],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "identify_smallest_fix",
+                    "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+                    "dependencies": [
+                      "3c7eac98-64ea-4d38-8e58-56b23668fdee"
+                    ],
+                    "description": "Trace the failure to the narrowest responsible code path and determine the smallest safe patch that directly addresses the observed runtime behavior.",
+                    "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "s2",
+                    "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+                  "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+                },
+                "task_id": "0245cca4-5687-46d7-a65a-f6ac91a2624e",
+                "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "write_three_section_recommendation",
+              "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+              "dependencies": [
+                "0245cca4-5687-46d7-a65a-f6ac91a2624e"
+              ],
+              "description": "Return only a short patch recommendation with exactly these sections: Problem, Evidence, and Smallest Fix, using the live-runtime findings and the minimal patch choice.",
+              "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "s3",
+              "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+            "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+          },
+          "task_id": "0c2fe305-099a-41ab-b1eb-f670922fbd74",
+          "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d"
+        },
+        {
+          "action": "inspect_live_runtime",
+          "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "inspect_live_runtime",
+              "branch_id": "abca2be8-7856-4a7a-a160-4980eba4c0eb",
+              "dependencies": [],
+              "description": "Reproduce the issue in the live runtime and capture the concrete failing behavior, relevant logs, and exact affected path without making changes.",
+              "goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "s1",
+              "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d",
+            "workflow_goal": "Inspect the live runtime and return a short patch recommendation with exactly three sections: Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. Do not return an operator memo unless the task actually needs one."
+          },
+          "task_id": "3c7eac98-64ea-4d38-8e58-56b23668fdee",
+          "worker_id": "b13dd790-1a84-4485-ad05-6e880c07255d"
+        }
+      ],
+      "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+    },
+    "status": "completed",
+    "workflow_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+  },
+  "status": "completed",
+  "task_id": "4c13e42a-880c-4d47-be27-4d8496fb58bf"
+}

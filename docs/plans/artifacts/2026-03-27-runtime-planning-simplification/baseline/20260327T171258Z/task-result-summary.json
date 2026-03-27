@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "disabled",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "routing_policy": "round_robin",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "Extract evidence-backed findings",
+      "execution_boundary": "tool_bus",
+      "task_id": "2853111e-3e28-41f8-a729-19728e65c7a1",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "0d6c7401-ca06-44d8-9702-803ee1742b38"
+    },
+    {
+      "action": "Inspect live runtime surfaces",
+      "execution_boundary": "tool_bus",
+      "task_id": "5d54abc3-ec9c-417a-b7a8-a09ac08fdaae",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "0d6c7401-ca06-44d8-9702-803ee1742b38"
+    },
+    {
+      "action": "Write operator summary",
+      "execution_boundary": "tool_bus",
+      "task_id": "7871b557-ae31-4b8f-aa29-e416409d452f",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "0d6c7401-ca06-44d8-9702-803ee1742b38"
+    }
+  ],
+  "task_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555"
+}

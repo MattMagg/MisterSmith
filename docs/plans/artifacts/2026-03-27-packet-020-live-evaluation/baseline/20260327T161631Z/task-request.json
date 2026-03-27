@@ -1,0 +1,4 @@
+{
+  "description": "Create a concise live runtime trace summary using multiple agents. Create exactly two parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; one worker traces task execution, autonomy status, and terminal result markers. Then create one final worker step that merges both worker outputs into one concise runtime memo with sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and keep every claim tied to directly observed runtime evidence.",
+  "priority": "high"
+}

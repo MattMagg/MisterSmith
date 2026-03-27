@@ -1,0 +1,90 @@
+{
+  "auth_timeout": 2,
+  "cluster": {},
+  "config_digest": "",
+  "config_load_time": "2026-03-26T15:35:34.191312295Z",
+  "connections": 0,
+  "cores": 15,
+  "cpu": 0,
+  "gateway": {},
+  "git_commit": "34894c1",
+  "go": "go1.25.6",
+  "gomaxprocs": 15,
+  "host": "0.0.0.0",
+  "http_base_path": "",
+  "http_host": "0.0.0.0",
+  "http_port": 8222,
+  "http_req_stats": {
+    "/jsz": 1,
+    "/varz": 17580
+  },
+  "https_port": 0,
+  "in_bytes": 435479,
+  "in_msgs": 121,
+  "jetstream": {
+    "config": {
+      "max_memory": 6162269184,
+      "max_storage": 689496302592,
+      "store_dir": "/data/jetstream",
+      "strict": true,
+      "sync_interval": 120000000000
+    },
+    "limits": {},
+    "stats": {
+      "accounts": 1,
+      "api": {
+        "errors": 3,
+        "level": 2,
+        "total": 27
+      },
+      "ha_assets": 0,
+      "memory": 0,
+      "reserved_memory": 0,
+      "reserved_storage": 0,
+      "storage": 2045884
+    }
+  },
+  "leaf": {},
+  "leafnodes": 0,
+  "max_connections": 65536,
+  "max_control_line": 4096,
+  "max_payload": 1048576,
+  "max_pending": 67108864,
+  "mem": 36327424,
+  "mqtt": {},
+  "now": "2026-03-27T17:14:44.807775846Z",
+  "out_bytes": 25136,
+  "out_msgs": 121,
+  "ping_interval": 120000000000,
+  "ping_max": 2,
+  "port": 4222,
+  "proto": 1,
+  "remotes": 0,
+  "routes": 0,
+  "server_id": "NBP3Q5D4ISKML7LHWFHLO5BCXGUGOT6CDHRXL7CT4HRSO6ESZMVPMS52",
+  "server_name": "NBP3Q5D4ISKML7LHWFHLO5BCXGUGOT6CDHRXL7CT4HRSO6ESZMVPMS52",
+  "slow_consumer_stats": {
+    "clients": 0,
+    "gateways": 0,
+    "leafs": 0,
+    "routes": 0
+  },
+  "slow_consumers": 0,
+  "stale_connection_stats": {
+    "clients": 0,
+    "gateways": 0,
+    "leafs": 0,
+    "routes": 0
+  },
+  "stale_connections": 0,
+  "stalled_clients": 0,
+  "start": "2026-03-26T15:35:34.191312295Z",
+  "subscriptions": 68,
+  "system_account": "$SYS",
+  "tls_timeout": 2,
+  "total_connections": 17,
+  "uptime": "1d0h37m41s",
+  "version": "2.12.4",
+  "websocket": {},
+  "write_deadline": 10000000000
+}

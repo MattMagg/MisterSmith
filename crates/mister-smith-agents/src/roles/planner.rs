@@ -173,9 +173,17 @@ impl PlannerAgent {
 #[cfg(feature = "llm")]
 fn planner_system_prompt(routing_control: &StepRoutingControl) -> String {
     let mut prompt = "You are a task planning agent. Given a goal and context, \
-                      decompose it into concrete steps. Return a JSON object with \
-                      'goal', 'steps' (array of objects with 'step' number, 'action', \
-                      and 'description'), and 'context'."
+                      return a JSON object with 'goal', 'steps' (array of objects with \
+                      'step', 'action', and 'description'), and 'context'. Use the smallest \
+                      workflow that can complete the task. Keep the plan sequential by \
+                      default. Only add parallel branches when the work clearly has \
+                      independent subproblems or the user explicitly asks for parallel \
+                      execution. Only add a merge or synthesis step when multiple branch \
+                      results actually need to be combined, and use role 'coordinator' for \
+                      that step. Let the final output shape follow the user's request instead \
+                      of forcing a memo or fixed report template. Steps may optionally include \
+                      'role', 'branch', and 'depends_on' when those fields are needed to \
+                      describe real runtime dependencies."
         .to_string();
     if let Some(guidance) = routing_control.verification_guidance() {
         prompt.push_str("\n\n");

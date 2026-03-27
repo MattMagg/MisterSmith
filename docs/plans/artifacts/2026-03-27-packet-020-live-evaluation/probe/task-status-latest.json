@@ -1,0 +1,149 @@
+{
+  "result": {
+    "proof_outcome": "failed_before_graph",
+    "result": {
+      "aggregated_result": {
+        "error": "workflow planning produced an invalid execution graph during topology compilation: Unsupported topology contract: unsupported planner role 'join'"
+      },
+      "description": "Create exactly two parallel worker steps and one final merge memo. Worker one must trace bootstrap, readiness, provider and model selection, and routing markers from the live runtime. Worker two must trace task result, autonomy result, and operator-facing provenance. The final memo must include only directly observed evidence. If any worker handoff is missing required context, request clarification or do bounded local repair from the last stable step instead of guessing. Keep the final memo under 220 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "require_join_step": true,
+            "require_parallel_workers": 2,
+            "require_real_multi_agent_workflow": true,
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "branch-a",
+                  "depends_on": [],
+                  "description": "string",
+                  "id": "string",
+                  "role": "worker",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "hybrid"
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Create exactly two parallel worker steps and one final merge memo. Worker one must trace bootstrap, readiness, provider and model selection, and routing markers from the live runtime. Worker two must trace task result, autonomy result, and operator-facing provenance. The final memo must include only directly observed evidence. If any worker handoff is missing required context, request clarification or do bounded local repair from the last stable step instead of guessing. Keep the final memo under 220 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "Trace live runtime bootstrap and routing evidence",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "From the last stable live-runtime step, collect only directly observed evidence for bootstrap flow, readiness state, provider selection, model selection, and routing markers. If required handoff context is missing, request clarification or do bounded local repair from the last stable step instead of guessing.",
+            "id": "worker-1-runtime-trace",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "Trace live runtime result and provenance evidence",
+            "branch": "branch-b",
+            "depends_on": [],
+            "description": "From the last stable live-runtime step, collect only directly observed evidence for task result, autonomy result, and operator-facing provenance. If required handoff context is missing, request clarification or do bounded local repair from the last stable step instead of guessing.",
+            "id": "worker-2-result-provenance-trace",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "Merge worker handoffs into the final memo",
+            "branch": "join",
+            "depends_on": [
+              "worker-1-runtime-trace",
+              "worker-2-result-provenance-trace"
+            ],
+            "description": "Combine both worker handoffs into one memo under 220 words using only directly observed evidence. Include explicit gaps or unverified items when present, and do not add inferred conclusions, reconstructed context, or unsupported claims.",
+            "id": "join-merge-memo",
+            "role": "join",
+            "step": 3
+          }
+        ],
+        "topology_hint": "hybrid"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "evidence_rule": "Final output must contain only directly observed live-runtime evidence.",
+          "execution_contract": {
+            "require_join_step": true,
+            "require_parallel_workers": 2,
+            "require_real_multi_agent_workflow": true,
+            "return_json_only": true
+          },
+          "handoff_rule": "If a worker handoff lacks required context, request clarification or perform bounded local repair from the last stable step; never guess.",
+          "parallelism": "Steps 1 and 2 run in parallel; step 3 waits for both.",
+          "runtime_target": {
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "submission_path": "http"
+          }
+        },
+        "goal": "Create a hybrid three-step workflow with exactly two parallel workers and one final merge memo: worker one traces bootstrap, readiness, provider/model selection, and routing markers from the live runtime; worker two traces task result, autonomy result, and operator-facing provenance; the final memo uses only directly observed evidence and stays under 220 words.",
+        "steps": [
+          {
+            "action": "Trace live runtime bootstrap and routing evidence",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "From the last stable live-runtime step, collect only directly observed evidence for bootstrap flow, readiness state, provider selection, model selection, and routing markers. If required handoff context is missing, request clarification or do bounded local repair from the last stable step instead of guessing.",
+            "id": "worker-1-runtime-trace",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "Trace live runtime result and provenance evidence",
+            "branch": "branch-b",
+            "depends_on": [],
+            "description": "From the last stable live-runtime step, collect only directly observed evidence for task result, autonomy result, and operator-facing provenance. If required handoff context is missing, request clarification or do bounded local repair from the last stable step instead of guessing.",
+            "id": "worker-2-result-provenance-trace",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "Merge worker handoffs into the final memo",
+            "branch": "merge-memo",
+            "depends_on": [
+              "worker-1-runtime-trace",
+              "worker-2-result-provenance-trace"
+            ],
+            "description": "Combine both worker handoffs into one memo under 220 words using only directly observed evidence. Include explicit gaps or unverified items when present, and do not add inferred conclusions, reconstructed context, or unsupported claims.",
+            "id": "join-merge-memo",
+            "role": "join",
+            "step": 3
+          }
+        ],
+        "topology_hint": "hybrid"
+      },
+      "proof_outcome": "failed_before_graph",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [],
+      "workflow_id": "83531132-4f6b-414e-84e1-36852c1dfac6"
+    },
+    "status": "failed",
+    "workflow_id": "83531132-4f6b-414e-84e1-36852c1dfac6"
+  },
+  "status": "failed",
+  "task_id": "83531132-4f6b-414e-84e1-36852c1dfac6"
+}

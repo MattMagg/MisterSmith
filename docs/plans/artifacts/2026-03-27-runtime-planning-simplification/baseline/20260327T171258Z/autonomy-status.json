@@ -1,0 +1,184 @@
+{
+  "branches": [
+    {
+      "assigned_agents": [
+        "0d6c7401-ca06-44d8-9702-803ee1742b38"
+      ],
+      "branch_id": "ab88077a-ed07-454a-9d7c-45341ebf9cca",
+      "checkpoint_id": null,
+      "graph_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555",
+      "recovery_strategy": "Resume",
+      "state": "Completed"
+    }
+  ],
+  "checkpoint_lineage": [],
+  "conservative_reasons": [],
+  "coordinator_agent_id": "38eee8bf-90a0-464c-a501-b6849696dd51",
+  "delegation_alerts": [],
+  "delegation_capabilities": [],
+  "graph": {
+    "active_topology": "Sequential",
+    "branch_count": 1,
+    "graph_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555",
+    "node_count": 3,
+    "state": "Completed",
+    "workflow_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555"
+  },
+  "guard_decisions": [],
+  "interventions": [],
+  "memory_pressure": [],
+  "profiles": [],
+  "result_preview": {
+    "payload_location": "task.result",
+    "preview_text": "[{\"dependency_results\":[{\"action\":\"Inspect live runtime surfaces\",\"branch_id\":\"ab88077a-ed07-454a-9d7c-45341ebf9cca\",\"result\":{\"dependency_results\":[],\"execu...",
+    "proof_outcome": "graph_formed_and_completed",
+    "provenance_lines": [
+      "graph formed and completed before final result publication",
+      "provider=openai_chatgpt model=gpt-5.4",
+      "runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step routing_policy=round_robin registered_providers=1 budget_root=disabled",
+      "graph state Completed with topology Sequential (1 branch(es), 3 node(s))",
+      "routing history retained 3 decision(s)",
+      "latest step routing tier=direct action=continue checkpoints=none",
+      "canonical result stored in metadata.final_result",
+      "aggregated payload nested under metadata.aggregated_result",
+      "full payload remains recoverable from task.result",
+      "session assistant_result derives from the canonical result object",
+      "projection observed graph state Completed with topology Sequential (1 branch(es), 3 node(s))",
+      "projection retained 1 branch detail record(s)"
+    ],
+    "workflow_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555"
+  },
+  "routing_history": [
+    {
+      "branch_id": "ab88077a-ed07-454a-9d7c-45341ebf9cca",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 0,
+      "graph_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 0 across ready branch frontier",
+        "checkpoint recovery scope covers 3 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "0d6c7401-ca06-44d8-9702-803ee1742b38",
+      "task_ids": [
+        "5d54abc3-ec9c-417a-b7a8-a09ac08fdaae"
+      ]
+    },
+    {
+      "branch_id": "ab88077a-ed07-454a-9d7c-45341ebf9cca",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 1,
+      "graph_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 1 across ready branch frontier",
+        "checkpoint recovery scope covers 3 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "0d6c7401-ca06-44d8-9702-803ee1742b38",
+      "task_ids": [
+        "2853111e-3e28-41f8-a729-19728e65c7a1"
+      ]
+    },
+    {
+      "branch_id": "ab88077a-ed07-454a-9d7c-45341ebf9cca",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 2,
+      "graph_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 2 across ready branch frontier",
+        "checkpoint recovery scope covers 3 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "0d6c7401-ca06-44d8-9702-803ee1742b38",
+      "task_ids": [
+        "7871b557-ae31-4b8f-aa29-e416409d452f"
+      ]
+    }
+  ],
+  "step_routing_history": [
+    {
+      "action": "continue",
+      "change_rationale": [
+        "initial step routing decision for workflow-visible control state"
+      ],
+      "confidence_score": 1.0,
+      "estimated_cost_tokens": 1298,
+      "model_id": "gpt-5.4",
+      "reason": "Selected via RoundRobin",
+      "step_id": "planner.step.1",
+      "step_index": 1,
+      "step_kind": "planner",
+      "tier": "direct"
+    }
+  ],
+  "team_sizing": {
+    "available_workers": 2,
+    "branch_frontier_width": 1,
+    "budget_pressure": 0,
+    "cap_reason": null,
+    "conservative_mode": false,
+    "decided_at": "2026-03-27T17:13:34.174588Z",
+    "decision_phase": "frontier_rebalance",
+    "dependency_depth": 2,
+    "desired_workers": 1,
+    "graph_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555",
+    "rationale_lines": [
+      "task shape strict-chain with frontier width 1",
+      "dependency depth 2 keeps coordination cost acceptable",
+      "frontier budget pressure 0",
+      "selected 1 workers from the available pool of 2",
+      "frontier health Unknown influenced active width"
+    ],
+    "selected_workers": 1,
+    "workflow_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555"
+  },
+  "topology": {
+    "coordination_policy": "StrictSequence",
+    "fallback_topology": null,
+    "graph_id": "1684ac27-fc0e-402c-9d37-c0e3dbf43555",
+    "parallelism_width": 1,
+    "rationale": {
+      "dependency_shape": "strict-chain",
+      "fallback_reason": null,
+      "operational_signals": [
+        "health:healthy",
+        "budget_pressure:normal"
+      ],
+      "selected_for": "selected sequential topology from compatible planner policy hint"
+    },
+    "task_shape": {
+      "has_fanout": false,
+      "has_join": false,
+      "kind": "strict-chain",
+      "max_depth": 2,
+      "max_parallel_width": 1,
+      "root_count": 1,
+      "structural_signals": [
+        "roots:1",
+        "max_parallel_width:1",
+        "max_depth:2",
+        "fanout:false",
+        "join:false"
+      ]
+    },
+    "topology_kind": "Sequential"
+  }
+}

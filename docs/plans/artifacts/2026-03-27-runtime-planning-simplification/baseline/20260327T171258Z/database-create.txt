@@ -1,0 +1,9 @@
+timestamp: 2026-03-27T17:13:00.200736+00:00
+database_name: mistersmith_live_runtime_smoke_20260327_171258
+command: docker compose -f /Users/macmain/MisterSmith/deploy/docker-compose.yml exec -T postgres psql -U mistersmith -d postgres -v ON_ERROR_STOP=1 -c CREATE DATABASE mistersmith_live_runtime_smoke_20260327_171258;
+sql: CREATE DATABASE mistersmith_live_runtime_smoke_20260327_171258;
+returncode: 0
+stdout:
+CREATE DATABASE
+stderr:
+

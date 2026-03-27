@@ -34,6 +34,7 @@ DEFAULT_NATS_URL = "nats://127.0.0.1:4222"
 DEFAULT_PROVIDER_KIND = "openai_chatgpt"
 DEFAULT_MODEL_ID = "gpt-5.4"
 DEFAULT_PROFILE = "baseline"
+DEFAULT_SCENARIO = "baseline"
 DEFAULT_BUDGET_AWARE_PROFILE = "budget_softcap_openai_mock"
 DEFAULT_RUNTIME_BUDGET_BUCKET = "runtime_budget"
 DEFAULT_RUNTIME_BUDGET_ROOT = "runtime.task_path"
@@ -46,12 +47,29 @@ DEFAULT_BUDGET_SEED_TARGET_DIR = REPO_ROOT / "target" / "live_runtime_budget_see
 DEFAULT_TIMEOUT_SECONDS = 240.0
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_TASK_DESCRIPTION = (
-    "Create a concise live runtime trace summary using multiple agents. Create exactly two "
-    "parallel worker steps: one worker traces bootstrap, readiness, and provider/runtime wiring; "
-    "one worker traces task execution, autonomy status, and terminal result markers. Then create "
-    "one final worker step that merges both worker outputs into one concise runtime memo with "
-    "sections Observed Evidence and Follow-up Needed. Keep the final memo under 180 words and "
-    "keep every claim tied to directly observed runtime evidence."
+    "Inspect the live runtime and return a concise operator summary grounded only in directly "
+    "observed runtime evidence. Choose the smallest workflow that can finish the task. Only "
+    "split work into parallel branches if that clearly helps, and only add a synthesis step if "
+    "multiple branch results really need to be combined. Keep the final answer under 180 words."
+)
+EXPLICIT_PARALLEL_TASK_DESCRIPTION = (
+    "Split this runtime inspection into two clearly independent parallel tracks: one track traces "
+    "bootstrap, readiness, provider/model selection, and routing markers; one track traces task "
+    "result, autonomy result, and terminal proof markers. Then add one final coordinator step to "
+    "combine both branch outputs into a concise final answer grounded only in directly observed "
+    "runtime evidence. Keep the answer under 220 words."
+)
+NON_MEMO_TASK_DESCRIPTION = (
+    "Inspect the live runtime and return a short patch recommendation with exactly three sections: "
+    "Problem, Evidence, and Smallest Fix. Choose the smallest workflow that can finish the task. "
+    "Do not return an operator memo unless the task actually needs one."
+)
+REPAIR_PROBE_TASK_DESCRIPTION = (
+    "Inspect the live runtime and produce an answer grounded only in directly observed evidence. "
+    "If any worker handoff or intermediate result is missing required context, request "
+    "clarification or perform bounded local repair from the last stable step instead of "
+    "guessing. Use the smallest workflow that can finish the task, and only create parallel "
+    "branches or a synthesis step when they are genuinely needed."
 )
 REQUIRED_RUNTIME_LOG_MARKERS = (
     "JetStream stream created/updated",
@@ -84,6 +102,8 @@ class HarnessConfig:
     provider_kind: str
     model_id: str
     profile: str
+    scenario: str
+    task_description: str
     runtime_config_path: Path | None
     routing_policy: str
     registered_provider_count: int
@@ -92,6 +112,33 @@ class HarnessConfig:
     expected_step_action: str | None
     expected_step_tier: str | None
     required_step_checkpoints: tuple[str, ...]
+    expected_topology_kind: str | None
+    min_parallelism_width: int | None
+    max_parallelism_width: int | None
+
+
+@dataclass(frozen=True)
+class ScenarioConfig:
+    description: str
+    expected_topology_kind: str | None = None
+    min_parallelism_width: int | None = None
+    max_parallelism_width: int | None = None
+
+
+SCENARIOS: dict[str, ScenarioConfig] = {
+    "baseline": ScenarioConfig(
+        description=DEFAULT_TASK_DESCRIPTION,
+        expected_topology_kind="Sequential",
+        max_parallelism_width=1,
+    ),
+    "explicit_parallel": ScenarioConfig(
+        description=EXPLICIT_PARALLEL_TASK_DESCRIPTION,
+        expected_topology_kind="Hybrid",
+        min_parallelism_width=2,
+    ),
+    "non_memo": ScenarioConfig(description=NON_MEMO_TASK_DESCRIPTION),
+    "repair_probe": ScenarioConfig(description=REPAIR_PROBE_TASK_DESCRIPTION),
+}
 
 
 @dataclass(frozen=True)
@@ -923,8 +970,10 @@ def assert_autonomy_step_routing_expectations(
         )
 
     checkpoints = latest.get("triggered_checkpoints")
+    if checkpoints is None:
+        checkpoints = []
     if not isinstance(checkpoints, list):
-        raise SmokeHarnessError("latest step_routing_history entry was missing checkpoints")
+        raise SmokeHarnessError("latest step_routing_history entry checkpoints was not a list")
     missing = [checkpoint for checkpoint in required_checkpoints if checkpoint not in checkpoints]
     if missing:
         raise SmokeHarnessError(
@@ -1005,6 +1054,7 @@ def build_smoke_summary(
     return {
         "run_id": config.run_id,
         "profile": config.profile,
+        "scenario": config.scenario,
         "artifact_dir": repo_relative(config.artifact_dir),
         "database_name": config.database_name,
         "base_url": config.base_url,
@@ -1037,6 +1087,8 @@ def build_config(args: argparse.Namespace) -> HarnessConfig:
     base_url = f"http://127.0.0.1:{args.http_port}"
     runtime_config_path = write_runtime_config(artifact_dir, args.profile)
     is_budget_profile = is_budget_aware_profile(args.profile)
+    scenario = SCENARIOS[args.scenario]
+    task_description = args.task_description or scenario.description
     return HarnessConfig(
         run_id=run_id,
         compose_file=args.compose_file,
@@ -1050,6 +1102,8 @@ def build_config(args: argparse.Namespace) -> HarnessConfig:
         provider_kind=DEFAULT_PROVIDER_KIND,
         model_id=DEFAULT_MODEL_ID,
         profile=args.profile,
+        scenario=args.scenario,
+        task_description=task_description,
         runtime_config_path=runtime_config_path,
         routing_policy="cascade" if is_budget_profile else "round_robin",
         registered_provider_count=2 if is_budget_profile else 1,
@@ -1058,6 +1112,9 @@ def build_config(args: argparse.Namespace) -> HarnessConfig:
         expected_step_action="downgrade" if is_budget_profile else None,
         expected_step_tier="primary" if is_budget_profile else None,
         required_step_checkpoints=("budget_policy",) if is_budget_profile else (),
+        expected_topology_kind=scenario.expected_topology_kind,
+        min_parallelism_width=scenario.min_parallelism_width,
+        max_parallelism_width=scenario.max_parallelism_width,
     )
 
 
@@ -1100,6 +1157,16 @@ def parse_args() -> argparse.Namespace:
             "single-provider proof surface; 'budget_softcap_openai_mock' "
             "boots the config-gated cascade profile with a seeded soft-cap budget root."
         ),
+    )
+    parser.add_argument(
+        "--scenario",
+        choices=tuple(SCENARIOS.keys()),
+        default=DEFAULT_SCENARIO,
+        help="Named runtime proof scenario to submit through POST /api/v1/tasks.",
+    )
+    parser.add_argument(
+        "--task-description",
+        help="Optional explicit task description. Overrides the named scenario prompt.",
     )
     parser.add_argument(
         "--poll-interval-seconds",
@@ -1170,7 +1237,7 @@ def main() -> int:
         wait_for_runtime_ready(config, process)
         wait_for_runtime_log_markers(config, process)
 
-        task_request = build_task_request()
+        task_request = build_task_request(config.task_description)
         write_json(config.artifact_dir / "task-request.json", task_request)
         submit_response = fetch_json(
             f"{config.base_url}/api/v1/tasks",
@@ -1217,6 +1284,37 @@ def main() -> int:
         ).payload
         write_json(config.artifact_dir / "autonomy-status.json", autonomy_status)
         assert_autonomy_status(autonomy_status, task_id)
+        if (
+            config.expected_topology_kind is not None
+            or config.min_parallelism_width is not None
+            or config.max_parallelism_width is not None
+        ):
+            topology = autonomy_status.get("topology", {})
+            actual_topology = topology.get("topology_kind")
+            if (
+                config.expected_topology_kind is not None
+                and actual_topology != config.expected_topology_kind
+            ):
+                raise SmokeHarnessError(
+                    f"autonomy topology_kind expected {config.expected_topology_kind!r}, observed {actual_topology!r}"
+                )
+            parallelism_width = topology.get("parallelism_width")
+            if not isinstance(parallelism_width, int):
+                raise SmokeHarnessError("autonomy topology parallelism_width was not an integer")
+            if (
+                config.min_parallelism_width is not None
+                and parallelism_width < config.min_parallelism_width
+            ):
+                raise SmokeHarnessError(
+                    f"autonomy parallelism_width expected >= {config.min_parallelism_width}, observed {parallelism_width}"
+                )
+            if (
+                config.max_parallelism_width is not None
+                and parallelism_width > config.max_parallelism_width
+            ):
+                raise SmokeHarnessError(
+                    f"autonomy parallelism_width expected <= {config.max_parallelism_width}, observed {parallelism_width}"
+                )
         assert_autonomy_step_routing_expectations(
             autonomy_status,
             expected_action=config.expected_step_action,
