@@ -345,6 +345,54 @@ pub enum InterventionType {
     Abort,
 }
 
+/// Verifier-owned verdict for one workflow step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VerifierVerdict {
+    /// The step satisfied the verifier contract and may continue.
+    Accepted,
+    /// The step failed verification and must be repaired or stopped.
+    Rejected,
+}
+
+impl VerifierVerdict {
+    /// Return the stable contract label for this verdict.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Rejected => "rejected",
+        }
+    }
+}
+
+/// Bounded repair action emitted after verifier rejection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RepairDirectiveAction {
+    /// Retry the same step with preserved failure context.
+    RetryStep,
+    /// Clarify an incomplete upstream handoff before continuing.
+    ClarifyHandoff,
+    /// Re-plan from the last stable checkpoint.
+    ReplanFromCheckpoint,
+    /// Stop local repair and surface failure honestly.
+    Stop,
+}
+
+impl RepairDirectiveAction {
+    /// Return the stable contract label for this repair action.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::RetryStep => "retry_step",
+            Self::ClarifyHandoff => "clarify_handoff",
+            Self::ReplanFromCheckpoint => "replan_from_checkpoint",
+            Self::Stop => "stop",
+        }
+    }
+}
+
 /// Scope granted by a delegation capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DelegationScope {
@@ -404,5 +452,32 @@ mod tests {
         let json = serde_json::to_string(&state).unwrap();
         let deserialized: AgentState = serde_json::from_str(&json).unwrap();
         assert_eq!(state, deserialized);
+    }
+
+    #[test]
+    fn verifier_verdict_contract_labels_round_trip() {
+        for verdict in [VerifierVerdict::Accepted, VerifierVerdict::Rejected] {
+            let json = serde_json::to_string(&verdict).unwrap();
+            let deserialized: VerifierVerdict = serde_json::from_str(&json).unwrap();
+            assert_eq!(verdict, deserialized);
+            assert_eq!(json.trim_matches('"'), verdict.as_str());
+        }
+    }
+
+    #[test]
+    fn repair_directive_action_contract_labels_round_trip() {
+        let actions = [
+            RepairDirectiveAction::RetryStep,
+            RepairDirectiveAction::ClarifyHandoff,
+            RepairDirectiveAction::ReplanFromCheckpoint,
+            RepairDirectiveAction::Stop,
+        ];
+
+        for action in actions {
+            let json = serde_json::to_string(&action).unwrap();
+            let deserialized: RepairDirectiveAction = serde_json::from_str(&json).unwrap();
+            assert_eq!(action, deserialized);
+            assert_eq!(json.trim_matches('"'), action.as_str());
+        }
     }
 }

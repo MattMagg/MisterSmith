@@ -24,8 +24,8 @@ use mister_smith_config::{
 };
 use mister_smith_core::{
     AgentId, AgentType, BranchState, EscalationPolicy, ExternalDelegationEnvelope, GraphState,
-    GuardTarget, LlmError, NodeState, SupervisionStrategy, TaskId, Tool, ToolCapabilities,
-    ToolError, ToolId, ToolSchema,
+    GuardTarget, LlmError, NodeState, RepairDirective, StepEvaluationRecord, SupervisionStrategy,
+    TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema, VerifierVerdict,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -45,6 +45,7 @@ use mister_smith_persistence::repository::task::TaskRepository;
 use mister_smith_persistence::{PostgresConnection, Repository};
 use mister_smith_supervision::SupervisedSystem;
 use mister_smith_transport::{MessageEnvelope, MessagePriority};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use tokio::sync::broadcast;
@@ -293,20 +294,44 @@ struct PreparedTaskExecution {
     execution_input: Value,
 }
 
+#[derive(Debug)]
 struct CompletedTaskExecution {
     task_id: TaskId,
     worker_id: AgentId,
     branch_id: Value,
     action: String,
     result: Value,
+    step_evaluation: Option<StepEvaluationRecord>,
 }
 
+#[derive(Debug)]
 struct FailedTaskExecution {
     completed_steps: Vec<CompletedTaskExecution>,
     task_id: TaskId,
     worker_id: AgentId,
     branch_id: Value,
+    action: String,
     message: String,
+    result: Option<Value>,
+    step_evaluation: Option<StepEvaluationRecord>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+struct InjectedVerifierPolicy {
+    #[serde(default)]
+    enabled: bool,
+    #[serde(default)]
+    verdict: Option<VerifierVerdict>,
+    #[serde(default)]
+    confidence: Option<f32>,
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    failure_code: Option<String>,
+    #[serde(default)]
+    checkpoint_ref: Option<String>,
+    #[serde(default)]
+    repair_directive: Option<RepairDirective>,
 }
 
 #[derive(Clone)]
@@ -1150,7 +1175,10 @@ impl RuntimeTaskService {
                             task_id,
                             worker_id,
                             branch_id,
+                            action,
                             message,
+                            result,
+                            step_evaluation,
                         } = failed_step;
                         for completed_step in completed_steps {
                             self.record_completed_step(
@@ -1166,12 +1194,16 @@ impl RuntimeTaskService {
                             workflow_id,
                             coordinator_id,
                             &mut metadata,
+                            &mut step_results,
                             FailedTaskExecution {
                                 completed_steps: Vec::new(),
                                 task_id,
                                 worker_id,
                                 branch_id,
+                                action,
                                 message: message.clone(),
+                                result,
+                                step_evaluation,
                             },
                         )
                         .await?;
@@ -1336,7 +1368,10 @@ impl RuntimeTaskService {
                 .get("branch_id")
                 .cloned()
                 .unwrap_or(Value::Null),
+            action: task.task.task_type.clone(),
             message: String::new(),
+            result: None,
+            step_evaluation: None,
         });
         let executor_runtime_id = AgentId::new();
         let executor_config = AgentConfig::for_type(AgentType::Executor);
@@ -1365,7 +1400,10 @@ impl RuntimeTaskService {
                 task_id: TaskId::new(),
                 worker_id: AgentId::new(),
                 branch_id: Value::Null,
+                action: "unknown".to_string(),
                 message: String::new(),
+                result: None,
+                step_evaluation: None,
             });
             failed.message =
                 format!("failed to spawn supervised executor for workflow {workflow_id}: {error}");
@@ -1410,18 +1448,23 @@ impl RuntimeTaskService {
                         task_id,
                         worker_id,
                         branch_id: branch_id.clone(),
+                        action,
                         message: format!("worker {worker_id} failed task {task_id}: {error}"),
+                        result: None,
+                        step_evaluation: None,
                     });
                 }
             };
 
-            completed_steps.push(CompletedTaskExecution {
-                task_id,
-                worker_id,
-                branch_id,
-                action,
-                result,
-            });
+            match gate_step_execution_result(workflow_id, &prepared_task.task, worker_id, result) {
+                Ok(completed_step) => completed_steps.push(completed_step),
+                Err(failed_step) => {
+                    let mut failed_step = *failed_step;
+                    failed_step.completed_steps = completed_steps;
+                    let _ = runtime.stop().await;
+                    return Err(failed_step);
+                }
+            }
         }
 
         let _ = runtime.stop().await;
@@ -1702,13 +1745,14 @@ impl RuntimeTaskService {
             })?;
         self.transition_graph(workflow_id, completed_step.task_id, NodeState::Completed);
 
-        let step_result = json!({
-            "task_id": completed_step.task_id,
-            "worker_id": completed_step.worker_id,
-            "branch_id": completed_step.branch_id,
-            "action": completed_step.action,
-            "result": completed_step.result,
-        });
+        let step_result = build_step_result_payload(
+            completed_step.task_id,
+            completed_step.worker_id,
+            completed_step.branch_id.clone(),
+            completed_step.action.clone(),
+            Some(completed_step.result.clone()),
+            completed_step.step_evaluation.clone(),
+        );
         step_results.insert(completed_step.task_id.to_string(), step_result.clone());
         put_metadata(
             metadata,
@@ -1733,8 +1777,26 @@ impl RuntimeTaskService {
         workflow_id: TaskId,
         coordinator_id: AgentId,
         metadata: &mut Value,
+        step_results: &mut BTreeMap<String, Value>,
         failed_step: FailedTaskExecution,
     ) -> Result<(), String> {
+        if failed_step.step_evaluation.is_some() {
+            let step_result = build_step_result_payload(
+                failed_step.task_id,
+                failed_step.worker_id,
+                failed_step.branch_id.clone(),
+                failed_step.action.clone(),
+                failed_step.result.clone(),
+                failed_step.step_evaluation.clone(),
+            );
+            step_results.insert(failed_step.task_id.to_string(), step_result);
+            put_metadata(
+                metadata,
+                "step_results",
+                json!(step_results.values().cloned().collect::<Vec<_>>()),
+            );
+        }
+
         self.orchestrator
             .scheduler()
             .fail(&failed_step.task_id, failed_step.message.clone())
@@ -1762,7 +1824,9 @@ impl RuntimeTaskService {
                 "task_id": failed_step.task_id,
                 "worker_id": failed_step.worker_id,
                 "branch_id": failed_step.branch_id,
+                "action": failed_step.action,
                 "error": failed_step.message,
+                "step_evaluation": failed_step.step_evaluation,
             }),
         )
         .await
@@ -3881,6 +3945,193 @@ fn execution_input_for_task(
     })
 }
 
+fn step_identifier(task: &TaskAssignment) -> String {
+    task.input
+        .get("id")
+        .and_then(Value::as_str)
+        .or_else(|| task.input.get("step_id").and_then(Value::as_str))
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| task.task_id.to_string())
+}
+
+fn verifier_policy_from_task_input(
+    task: &TaskAssignment,
+) -> Result<Option<InjectedVerifierPolicy>, String> {
+    let Some(policy) = task.input.get("verifier_policy") else {
+        return Ok(None);
+    };
+
+    let enabled = policy
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| {
+            format!(
+                "workflow step '{}' has invalid verifier_policy.enabled",
+                step_identifier(task)
+            )
+        })?;
+
+    if !enabled {
+        return Ok(None);
+    }
+
+    let parsed =
+        serde_json::from_value::<InjectedVerifierPolicy>(policy.clone()).map_err(|error| {
+            format!(
+                "workflow step '{}' has invalid verifier_policy: {error}",
+                step_identifier(task)
+            )
+        })?;
+
+    Ok(Some(parsed))
+}
+
+fn build_step_evaluation_record(
+    workflow_id: TaskId,
+    task: &TaskAssignment,
+    policy: InjectedVerifierPolicy,
+) -> Result<StepEvaluationRecord, String> {
+    let step_id = step_identifier(task);
+    let verdict = policy.verdict.ok_or_else(|| {
+        format!("workflow step '{step_id}' enabled verifier_policy missing verdict")
+    })?;
+    let reason = policy
+        .reason
+        .map(|reason| reason.trim().to_string())
+        .filter(|reason| !reason.is_empty())
+        .ok_or_else(|| {
+            format!("workflow step '{step_id}' enabled verifier_policy missing reason")
+        })?;
+
+    let repair_directive = match verdict {
+        VerifierVerdict::Accepted => {
+            if policy.repair_directive.is_some() {
+                return Err(format!(
+                    "workflow step '{step_id}' accepted verifier_policy must not include repair_directive"
+                ));
+            }
+            None
+        }
+        VerifierVerdict::Rejected => Some(policy.repair_directive.ok_or_else(|| {
+            format!("workflow step '{step_id}' rejected verifier_policy missing repair_directive")
+        })?),
+    };
+
+    Ok(StepEvaluationRecord {
+        workflow_id,
+        step_id,
+        verdict,
+        confidence: policy.confidence,
+        reason,
+        failure_code: policy.failure_code,
+        checkpoint_ref: policy.checkpoint_ref,
+        repair_directive,
+    })
+}
+
+fn rejected_step_message(step_evaluation: &StepEvaluationRecord) -> String {
+    let repair_action = step_evaluation
+        .repair_directive
+        .as_ref()
+        .map(|directive| directive.action.as_str())
+        .unwrap_or("unknown");
+    format!(
+        "workflow step '{}' rejected by verifier: {} (repair={repair_action})",
+        step_evaluation.step_id, step_evaluation.reason
+    )
+}
+
+fn gate_step_execution_result(
+    workflow_id: TaskId,
+    task: &TaskAssignment,
+    worker_id: AgentId,
+    result: Value,
+) -> Result<CompletedTaskExecution, Box<FailedTaskExecution>> {
+    let branch_id = task.input.get("branch_id").cloned().unwrap_or(Value::Null);
+    let action = task.task_type.clone();
+    let step_evaluation =
+        match verifier_policy_from_task_input(task).and_then(|policy| match policy {
+            Some(policy) => build_step_evaluation_record(workflow_id, task, policy).map(Some),
+            None => Ok(None),
+        }) {
+            Ok(step_evaluation) => step_evaluation,
+            Err(message) => {
+                return Err(Box::new(FailedTaskExecution {
+                    completed_steps: Vec::new(),
+                    task_id: task.task_id,
+                    worker_id,
+                    branch_id,
+                    action,
+                    message,
+                    result: Some(result),
+                    step_evaluation: None,
+                }));
+            }
+        };
+
+    if let Some(step_evaluation) = step_evaluation {
+        if step_evaluation.verdict == VerifierVerdict::Rejected {
+            return Err(Box::new(FailedTaskExecution {
+                completed_steps: Vec::new(),
+                task_id: task.task_id,
+                worker_id,
+                branch_id,
+                action,
+                message: rejected_step_message(&step_evaluation),
+                result: Some(result),
+                step_evaluation: Some(step_evaluation),
+            }));
+        }
+
+        return Ok(CompletedTaskExecution {
+            task_id: task.task_id,
+            worker_id,
+            branch_id,
+            action,
+            result,
+            step_evaluation: Some(step_evaluation),
+        });
+    }
+
+    Ok(CompletedTaskExecution {
+        task_id: task.task_id,
+        worker_id,
+        branch_id,
+        action,
+        result,
+        step_evaluation: None,
+    })
+}
+
+fn build_step_result_payload(
+    task_id: TaskId,
+    worker_id: AgentId,
+    branch_id: Value,
+    action: String,
+    result: Option<Value>,
+    step_evaluation: Option<StepEvaluationRecord>,
+) -> Value {
+    let mut payload = serde_json::Map::from_iter([
+        ("task_id".to_string(), json!(task_id)),
+        ("worker_id".to_string(), json!(worker_id)),
+        ("branch_id".to_string(), branch_id),
+        ("action".to_string(), json!(action)),
+    ]);
+
+    if let Some(result) = result {
+        payload.insert("result".to_string(), result);
+    }
+
+    if let Some(step_evaluation) = step_evaluation {
+        payload.insert(
+            "step_evaluation".to_string(),
+            serde_json::to_value(step_evaluation).expect("step evaluation should serialize"),
+        );
+    }
+
+    Value::Object(payload)
+}
+
 #[cfg(test)]
 mod runtime_plan_tests {
     use super::*;
@@ -4276,6 +4527,163 @@ mod runtime_plan_tests {
         persist_step_routing_history(&mut metadata, &history);
 
         assert_eq!(metadata["step_routing_history"], json!(history));
+    }
+
+    #[test]
+    fn verifier_gate_accepts_enabled_policy_and_records_step_evaluation() {
+        let workflow_id = TaskId::new();
+        let worker_id = AgentId::new();
+        let task = TaskAssignment::new(
+            "analyze",
+            json!({
+                "id": "draft-outline",
+                "branch_id": "branch-a",
+                "description": "draft the outline",
+                "verifier_policy": {
+                    "enabled": true,
+                    "verdict": "accepted",
+                    "confidence": 0.91,
+                    "reason": "handoff satisfied the verifier contract",
+                    "failure_code": null,
+                    "checkpoint_ref": "checkpoint-1",
+                    "repair_directive": null
+                }
+            }),
+        );
+        let result = json!({
+            "summary": "accepted outline"
+        });
+
+        let completed = gate_step_execution_result(workflow_id, &task, worker_id, result.clone())
+            .expect("accepted verifier policy should keep the step completed");
+
+        assert_eq!(completed.result, result);
+        let step_evaluation = completed
+            .step_evaluation
+            .clone()
+            .expect("accepted steps should record verifier evaluation");
+        assert_eq!(step_evaluation.verdict, VerifierVerdict::Accepted);
+        assert_eq!(
+            step_evaluation.reason,
+            "handoff satisfied the verifier contract"
+        );
+
+        let payload = build_step_result_payload(
+            completed.task_id,
+            completed.worker_id,
+            completed.branch_id,
+            completed.action,
+            Some(completed.result),
+            Some(step_evaluation),
+        );
+        assert_eq!(payload["step_evaluation"]["verdict"], json!("accepted"));
+        assert_eq!(
+            payload["step_evaluation"]["checkpoint_ref"],
+            json!("checkpoint-1")
+        );
+    }
+
+    #[test]
+    fn verifier_gate_rejects_enabled_policy_and_records_repair_directive() {
+        let workflow_id = TaskId::new();
+        let worker_id = AgentId::new();
+        let task = TaskAssignment::new(
+            "analyze",
+            json!({
+                "id": "draft-outline",
+                "branch_id": "branch-a",
+                "description": "draft the outline",
+                "verifier_policy": {
+                    "enabled": true,
+                    "verdict": "rejected",
+                    "confidence": 0.23,
+                    "reason": "missing bounded retry context",
+                    "failure_code": "missing_context",
+                    "checkpoint_ref": "checkpoint-2",
+                    "repair_directive": {
+                        "action": "retry_step",
+                        "issued_by": "verifier.runtime",
+                        "failure_context_ref": "draft-outline/missing-context",
+                        "retry_budget_remaining": 1
+                    }
+                }
+            }),
+        );
+        let result = json!({
+            "summary": "rejected outline"
+        });
+
+        let failed = gate_step_execution_result(workflow_id, &task, worker_id, result.clone())
+            .expect_err("rejected verifier policy should stop downstream progression");
+
+        let step_evaluation = failed
+            .step_evaluation
+            .clone()
+            .expect("rejected steps should record verifier evaluation");
+        assert_eq!(step_evaluation.verdict, VerifierVerdict::Rejected);
+        assert_eq!(
+            step_evaluation
+                .repair_directive
+                .as_ref()
+                .map(|directive| directive.action.as_str()),
+            Some("retry_step")
+        );
+
+        let payload = build_step_result_payload(
+            failed.task_id,
+            failed.worker_id,
+            failed.branch_id.clone(),
+            failed.action.clone(),
+            failed.result.clone(),
+            failed.step_evaluation.clone(),
+        );
+        assert_eq!(payload["step_evaluation"]["verdict"], json!("rejected"));
+        assert_eq!(
+            payload["step_evaluation"]["repair_directive"]["action"],
+            json!("retry_step")
+        );
+        assert!(failed.message.contains("repair=retry_step"));
+    }
+
+    #[test]
+    fn verifier_gate_preserves_current_behavior_when_policy_disabled() {
+        let workflow_id = TaskId::new();
+        let worker_id = AgentId::new();
+        let task = TaskAssignment::new(
+            "analyze",
+            json!({
+                "id": "draft-outline",
+                "branch_id": "branch-a",
+                "description": "draft the outline",
+                "verifier_policy": {
+                    "enabled": false,
+                    "verdict": "invalid",
+                    "repair_directive": "ignore me"
+                }
+            }),
+        );
+        let result = json!({
+            "summary": "current behavior preserved"
+        });
+
+        let completed = gate_step_execution_result(workflow_id, &task, worker_id, result.clone())
+            .expect("disabled verifier policy should preserve the current happy path");
+
+        assert_eq!(completed.result, result);
+        assert!(
+            completed.step_evaluation.is_none(),
+            "disabled verifier policy must not annotate the step"
+        );
+
+        let payload = build_step_result_payload(
+            completed.task_id,
+            completed.worker_id,
+            completed.branch_id,
+            completed.action,
+            Some(completed.result),
+            completed.step_evaluation,
+        );
+        assert!(payload.get("step_evaluation").is_none());
     }
 }
 
