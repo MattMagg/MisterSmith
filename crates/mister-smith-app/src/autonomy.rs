@@ -773,7 +773,8 @@ pub(crate) fn build_task_result_view(
     status: &str,
     canonical_result: UnifiedResultEnvelope,
 ) -> TaskResultView {
-    let orchestration_quality = orchestration_quality_view(&canonical_result);
+    let orchestration_quality =
+        orchestration_quality_projection(&canonical_result).map(|projection| projection.view);
     TaskResultView {
         workflow_id: canonical_result.workflow_id,
         status: status.to_string(),
@@ -952,7 +953,8 @@ fn operator_result_preview(
         proof_outcome: canonical_result.proof_outcome,
         preview_text: preview_text(&canonical_result.aggregated_result),
         payload_location: payload_location.to_string(),
-        orchestration_quality: orchestration_quality_view(canonical_result),
+        orchestration_quality: orchestration_quality_projection(canonical_result)
+            .map(|projection| projection.view),
         provenance_lines: result_preview_provenance(canonical_result, payload_location, view),
     }
 }
@@ -1255,8 +1257,17 @@ fn result_preview_provenance(
     if let Some(step_line) = latest_step_routing_provenance(view) {
         lines.push(step_line);
     }
-    if let Some(orchestration_quality) = orchestration_quality_view(canonical_result) {
-        lines.push(render_orchestration_quality_line(&orchestration_quality));
+    if let Some(projection) = orchestration_quality_projection(canonical_result) {
+        lines.push(render_orchestration_quality_line(&projection.view));
+        if matches!(
+            projection.source,
+            OrchestrationQualityProjectionSource::PlannerRepairStep
+        ) {
+            lines.push(format!(
+                "orchestration quality inferred from planner repair step '{}' without verifier_policy",
+                projection.view.step_id
+            ));
+        }
     }
     lines.extend([
         "canonical result stored in metadata.final_result".to_string(),
@@ -1267,49 +1278,107 @@ fn result_preview_provenance(
     lines
 }
 
-fn orchestration_quality_view(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OrchestrationQualityProjectionSource {
+    StepEvaluation,
+    PlannerRepairStep,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct OrchestrationQualityProjection {
+    view: OrchestrationQualityView,
+    source: OrchestrationQualityProjectionSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PlannerRepairCandidate {
+    plan_index: usize,
+    step_id: String,
+    repair_action: RepairDirectiveAction,
+    clarification_attempt_count: u32,
+    last_stable_step_id: Option<String>,
+}
+
+fn orchestration_quality_projection(
     canonical_result: &UnifiedResultEnvelope,
-) -> Option<OrchestrationQualityView> {
+) -> Option<OrchestrationQualityProjection> {
     let plan_index_by_step = execution_plan_step_indices(&canonical_result.execution_plan);
     let candidates = step_evaluation_candidates(canonical_result, &plan_index_by_step);
-    let terminal = select_terminal_step_evaluation(&candidates)?;
-    let recovered_repair_action = terminal
-        .record
-        .repair_directive
-        .as_ref()
-        .map(|directive| directive.action)
-        .or_else(|| recover_prior_repair_action(&candidates, &terminal.record));
-    let clarification_attempt_count = terminal
-        .record
-        .clarification_request
-        .as_ref()
-        .map(|request| request.attempt_count)
-        .unwrap_or(0);
-    let checkpoint_ref = terminal
-        .record
-        .failure_context_checkpoint
-        .as_ref()
-        .and_then(|checkpoint| checkpoint.checkpoint_ref.clone())
-        .or_else(|| terminal.record.checkpoint_ref.clone());
-    let last_stable_step_id = terminal
-        .record
-        .failure_context_checkpoint
-        .as_ref()
-        .and_then(|checkpoint| checkpoint.last_stable_step_id.clone());
-    let failure_context_ref = failure_context_ref(&terminal.record);
+    if let Some(terminal) = select_terminal_step_evaluation(&candidates) {
+        let recovered_repair_action = terminal
+            .record
+            .repair_directive
+            .as_ref()
+            .map(|directive| directive.action)
+            .or_else(|| recover_prior_repair_action(&candidates, &terminal.record));
+        let clarification_attempt_count = terminal
+            .record
+            .clarification_request
+            .as_ref()
+            .map(|request| request.attempt_count)
+            .unwrap_or(0);
+        let checkpoint_ref = terminal
+            .record
+            .failure_context_checkpoint
+            .as_ref()
+            .and_then(|checkpoint| checkpoint.checkpoint_ref.clone())
+            .or_else(|| terminal.record.checkpoint_ref.clone());
+        let last_stable_step_id = terminal
+            .record
+            .failure_context_checkpoint
+            .as_ref()
+            .and_then(|checkpoint| checkpoint.last_stable_step_id.clone());
+        let failure_context_ref = failure_context_ref(&terminal.record);
 
-    Some(OrchestrationQualityView {
-        step_id: terminal.record.step_id.clone(),
-        verdict: terminal.record.verdict,
-        repair_action: recovered_repair_action,
-        clarification_attempt_count,
-        checkpoint_ref,
-        last_stable_step_id,
-        failure_context_ref,
-        outcome_summary: orchestration_outcome_summary(
-            terminal.record.verdict,
-            recovered_repair_action,
-        ),
+        return Some(OrchestrationQualityProjection {
+            view: OrchestrationQualityView {
+                step_id: terminal.record.step_id.clone(),
+                verdict: terminal.record.verdict,
+                repair_action: recovered_repair_action,
+                clarification_attempt_count,
+                checkpoint_ref,
+                last_stable_step_id,
+                failure_context_ref,
+                outcome_summary: orchestration_outcome_summary(
+                    terminal.record.verdict,
+                    recovered_repair_action,
+                ),
+            },
+            source: OrchestrationQualityProjectionSource::StepEvaluation,
+        });
+    }
+
+    let planner_repair_candidates = planner_repair_candidates(canonical_result, &plan_index_by_step);
+    let inferred = select_terminal_planner_repair_candidate(&planner_repair_candidates)?;
+    let verdict = if canonical_result.proof_outcome == ProofOutcomeClassification::FailedBeforeGraph
+    {
+        VerifierVerdict::Rejected
+    } else {
+        VerifierVerdict::Accepted
+    };
+
+    Some(OrchestrationQualityProjection {
+        view: OrchestrationQualityView {
+            step_id: inferred.step_id.clone(),
+            verdict,
+            repair_action: Some(inferred.repair_action),
+            clarification_attempt_count: inferred.clarification_attempt_count,
+            checkpoint_ref: inferred
+                .last_stable_step_id
+                .as_ref()
+                .map(|step_id| format!("planner-step:{step_id}")),
+            last_stable_step_id: inferred.last_stable_step_id.clone(),
+            failure_context_ref: Some(format!(
+                "planner:{}/{}",
+                inferred.step_id,
+                inferred.repair_action.as_str()
+            )),
+            outcome_summary: orchestration_outcome_summary(
+                verdict,
+                Some(inferred.repair_action),
+            ),
+        },
+        source: OrchestrationQualityProjectionSource::PlannerRepairStep,
     })
 }
 
@@ -1423,6 +1492,112 @@ fn recover_prior_repair_action(
             .max_by_key(|(attempt_count, _)| *attempt_count)
             .map(|(_, action)| action)
     })
+}
+
+fn planner_repair_candidates(
+    canonical_result: &UnifiedResultEnvelope,
+    plan_index_by_step: &BTreeMap<String, usize>,
+) -> Vec<PlannerRepairCandidate> {
+    canonical_result
+        .step_results
+        .iter()
+        .filter_map(|step_result| {
+            let task = step_result
+                .get("result")
+                .and_then(|result| result.get("task"))
+                .and_then(Value::as_object)?;
+            let step_id = task
+                .get("step_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)?;
+            let action = task
+                .get("action")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let description = task
+                .get("description")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let repair_action = infer_planner_repair_action(action, description)?;
+            let last_stable_step_id = task
+                .get("dependencies")
+                .and_then(Value::as_array)
+                .and_then(|dependencies| dependencies.last())
+                .and_then(Value::as_str)
+                .map(str::to_string);
+
+            Some(PlannerRepairCandidate {
+                plan_index: plan_index_by_step.get(&step_id).copied().unwrap_or(0),
+                step_id,
+                repair_action,
+                clarification_attempt_count: if repair_action == RepairDirectiveAction::ClarifyHandoff
+                {
+                    1
+                } else {
+                    0
+                },
+                last_stable_step_id,
+            })
+        })
+        .collect()
+}
+
+fn select_terminal_planner_repair_candidate(
+    candidates: &[PlannerRepairCandidate],
+) -> Option<&PlannerRepairCandidate> {
+    candidates.iter().max_by_key(|candidate| candidate.plan_index)
+}
+
+fn infer_planner_repair_action(
+    action: &str,
+    description: &str,
+) -> Option<RepairDirectiveAction> {
+    let normalized_action = action.trim().to_ascii_lowercase();
+    let normalized_description = description.trim().to_ascii_lowercase();
+    let action_is_final_output = [
+        "deliver",
+        "write",
+        "return",
+        "summarize",
+        "combine",
+        "merge",
+        "answer",
+    ]
+    .iter()
+    .any(|token| normalized_action.contains(token));
+
+    if action_is_final_output {
+        return None;
+    }
+
+    if normalized_action.contains("clarify")
+        || normalized_action.contains("missing_context")
+        || normalized_action.contains("check_context")
+        || normalized_action.contains("resolve_missing_context")
+        || normalized_description.contains("request clarification")
+        || normalized_description.contains("missing required context")
+        || normalized_description.contains("if context is missing")
+        || normalized_description.contains("missing context")
+        || normalized_description.contains("missing-context")
+        || normalized_description.contains("missing_context")
+    {
+        return Some(RepairDirectiveAction::ClarifyHandoff);
+    }
+    if normalized_action.contains("replan")
+        || normalized_description.contains("replan from checkpoint")
+    {
+        return Some(RepairDirectiveAction::ReplanFromCheckpoint);
+    }
+    if normalized_action.contains("retry")
+        || normalized_action.contains("repair")
+        || normalized_action.contains("resolve")
+        || normalized_description.contains("retry")
+        || normalized_description.contains("bounded local repair")
+    {
+        return Some(RepairDirectiveAction::RetryStep);
+    }
+
+    None
 }
 
 fn failure_context_ref(record: &StepEvaluationRecord) -> Option<String> {

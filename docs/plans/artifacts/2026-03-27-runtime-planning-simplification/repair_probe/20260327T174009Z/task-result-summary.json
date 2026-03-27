@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "disabled",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "routing_policy": "round_robin",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "inspect_runtime",
+      "execution_boundary": "tool_bus",
+      "task_id": "1e3bfe33-051d-493e-8b4a-3451031c56d3",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "6f623b34-eae1-4842-8c11-2ae1f80236b9"
+    },
+    {
+      "action": "check_context_completeness",
+      "execution_boundary": "tool_bus",
+      "task_id": "815a6e89-01d8-4e44-8047-c3c10e1a81cf",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "6f623b34-eae1-4842-8c11-2ae1f80236b9"
+    },
+    {
+      "action": "produce_grounded_answer",
+      "execution_boundary": "tool_bus",
+      "task_id": "a5e1d08c-8ef3-4b27-9092-0736b450fb30",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "6f623b34-eae1-4842-8c11-2ae1f80236b9"
+    }
+  ],
+  "task_id": "bffb5666-8970-4be0-b0f5-c93690049070"
+}

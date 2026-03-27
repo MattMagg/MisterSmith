@@ -391,6 +391,25 @@ fn sample_step_result_with_evaluation(
     })
 }
 
+fn sample_step_result_with_task_payload(
+    step_id: &str,
+    action: &str,
+    description: &str,
+    dependencies: &[&str],
+) -> serde_json::Value {
+    serde_json::json!({
+        "task_id": TaskId::new(),
+        "result": {
+            "task": {
+                "step_id": step_id,
+                "action": action,
+                "description": description,
+                "dependencies": dependencies,
+            }
+        }
+    })
+}
+
 fn sample_task_result_payload_with_details(
     workflow_id: TaskId,
     status: &str,
@@ -879,6 +898,58 @@ fn build_task_result_view_surfaces_rejected_retry_orchestration_quality() {
 }
 
 #[test]
+fn build_task_result_view_infers_planner_repair_orchestration_quality_without_verifier_policy() {
+    let workflow_id = TaskId::new();
+    let canonical_result = sample_canonical_result(
+        workflow_id,
+        "completed",
+        vec![
+            serde_json::json!({ "id": "s1" }),
+            serde_json::json!({ "id": "s2" }),
+            serde_json::json!({ "id": "s3" }),
+        ],
+        vec![
+            sample_step_result_with_task_payload(
+                "s1",
+                "inspect_live_runtime",
+                "Capture directly observed runtime evidence.",
+                &[],
+            ),
+            sample_step_result_with_task_payload(
+                "s2",
+                "resolve_missing_context",
+                "Request clarification or perform bounded local repair instead of guessing.",
+                &["s1"],
+            ),
+            sample_step_result_with_task_payload(
+                "s3",
+                "deliver_evidence_grounded_answer",
+                "Return the final answer grounded in observed evidence.",
+                &["s2"],
+            ),
+        ],
+    );
+
+    let summary = autonomy::build_task_result_view("completed", canonical_result)
+        .orchestration_quality
+        .expect("planner repair step should surface orchestration quality");
+
+    assert_eq!(
+        summary,
+        OrchestrationQualityView {
+            step_id: "s2".to_string(),
+            verdict: VerifierVerdict::Accepted,
+            repair_action: Some(RepairDirectiveAction::ClarifyHandoff),
+            clarification_attempt_count: 1,
+            checkpoint_ref: Some("planner-step:s1".to_string()),
+            last_stable_step_id: Some("s1".to_string()),
+            failure_context_ref: Some("planner:s2/clarify_handoff".to_string()),
+            outcome_summary: "accepted_after_clarify_handoff".to_string(),
+        }
+    );
+}
+
+#[test]
 fn enrich_result_preview_surfaces_accepted_after_clarify_orchestration_quality() {
     let (mut view, _, _) = sample_view();
     view.graph.state = GraphState::Completed;
@@ -962,6 +1033,60 @@ fn enrich_result_preview_surfaces_accepted_after_clarify_orchestration_quality()
     ));
     assert!(rendered
         .contains("failure_context=draft-outline/clarify outcome=accepted_after_clarify_handoff"));
+}
+
+#[test]
+fn enrich_result_preview_marks_planner_repair_inference_when_verifier_surface_is_absent() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    let workflow_id = view.graph.workflow_id;
+    let task_result = sample_task_result_payload_with_details(
+        workflow_id,
+        "completed",
+        vec![
+            serde_json::json!({ "id": "s1" }),
+            serde_json::json!({ "id": "s2" }),
+            serde_json::json!({ "id": "s3" }),
+        ],
+        vec![
+            sample_step_result_with_task_payload(
+                "s1",
+                "inspect_live_runtime",
+                "Capture directly observed runtime evidence.",
+                &[],
+            ),
+            sample_step_result_with_task_payload(
+                "s2",
+                "resolve_missing_context",
+                "Request clarification or perform bounded local repair instead of guessing.",
+                &["s1"],
+            ),
+            sample_step_result_with_task_payload(
+                "s3",
+                "deliver_evidence_grounded_answer",
+                "Return the final answer grounded in observed evidence.",
+                &["s2"],
+            ),
+        ],
+        Some(ProofOutcomeClassification::GraphFormedAndCompleted),
+    );
+
+    autonomy::enrich_result_preview(&mut view, &serde_json::json!({}), Some(&task_result));
+
+    let preview = view
+        .result_preview
+        .expect("planner repair inference should still produce an operator preview");
+    let orchestration_quality = preview
+        .orchestration_quality
+        .expect("planner repair inference should surface orchestration quality");
+    assert_eq!(orchestration_quality.step_id, "s2");
+    assert_eq!(
+        orchestration_quality.repair_action,
+        Some(RepairDirectiveAction::ClarifyHandoff)
+    );
+    assert!(preview.provenance_lines.iter().any(|line| {
+        line.contains("inferred from planner repair step 's2' without verifier_policy")
+    }));
 }
 
 #[test]

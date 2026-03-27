@@ -30,8 +30,8 @@ Bottom line:
 - explicitly parallel prompts still produce a legal fanout-plus-coordinator workflow
 - non-memo prompts preserve the requested output shape
 - packet-020-style repair probes no longer fail on `unsupported planner role 'join'`
-- packet-020 verifier and repair provenance fields still did not surface on the supported live
-  ingress, so that proof remains incomplete
+- supported task and autonomy surfaces now project packet-020-style repair provenance on the live
+  ingress by inferring it from the planner repair step when no verifier policy is injected
 
 ## Baseline
 
@@ -189,16 +189,32 @@ What this did prove:
 - the planner/runtime can now carry a bounded missing-context step through to completion on the
   live path
 
-What this did not prove:
+Follow-up live rerun after the operator-surface patch:
 
-- no `orchestration_quality` field was emitted
-- no verifier `verdict` surfaced
-- no `clarification_attempt_count` surfaced
-- no `repair_action` surfaced
-- no `checkpoint_ref` or `failure_context_ref` surfaced
+Artifact directory:
 
-So the live repair probe is now topology-clean, but packet-020 proof is still not complete at the
-operator-surface level.
+- `docs/plans/artifacts/2026-03-27-runtime-planning-simplification/repair_probe/20260327T174330Z/`
+
+Observed task and autonomy result fields:
+
+- `task.result.orchestration_quality.step_id = "s2"`
+- `task.result.orchestration_quality.repair_action = "clarify_handoff"`
+- `task.result.orchestration_quality.clarification_attempt_count = 1`
+- `task.result.orchestration_quality.checkpoint_ref = "planner-step:d6d4e0e2-1c60-4227-af6d-7832d20840c0"`
+- `task.result.orchestration_quality.failure_context_ref = "planner:s2/clarify_handoff"`
+- `autonomy.result_preview.orchestration_quality` matched the task result projection
+- `autonomy.result_preview.provenance_lines` now includes:
+  `orchestration quality inferred from planner repair step 's2' without verifier_policy`
+
+This means the supported operator surfaces now expose packet-020-style repair provenance for the
+description-only live ingress used by the harness.
+
+What is still not proven:
+
+- this is planner-step inference, not a verifier-policy-backed `step_evaluation` record
+- the supported live ingress still does not inject `verifier_policy` or `verifier_policy_sequence`
+- so the live path now surfaces operator-visible repair lineage, but not full verifier-owned
+  telemetry
 
 ## Evaluation Result
 
@@ -217,13 +233,17 @@ The live matrix also changed the failure story materially:
   `unsupported planner role 'join'`
 - after this pass, the same class of probe forms a graph and completes
 
-That is real progress, but it is not the same as proving full packet-020 verifier or repair
-provenance on the supported ingress.
+That means the earlier operator-surface gap is closed for supported description-only traffic: live
+packet-020-style probes now form a graph, complete, and expose repair provenance on both task and
+autonomy surfaces.
+
+It is still not the same as proving full verifier-policy-backed packet-020 telemetry on the
+supported ingress.
 
 ## Remaining Limits
 
-- Packet-020-specific operator fields are still absent on the supported task and autonomy surfaces
-  used here.
+- Packet-020-specific operator fields are now present on the supported task and autonomy surfaces,
+  but they are inferred from planner repair steps when verifier policy is absent.
 - The broader question of when the runtime should choose sequential versus parallel versus merged
   topology still deserves a scoped planning packet; that is tracked in `MS-110`.
 - Proof claims should stay bounded to what was actually observed in
