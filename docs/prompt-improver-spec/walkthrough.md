@@ -1,57 +1,50 @@
-# Walkthrough — Mister Smith Next SpecKit Epic Handoff Prompt
+# Walkthrough — Mister Smith MS-106 Orchestration Provenance Handoff Prompt
 
-Status: Historical prompt-improver walkthrough for the packet-016 planning session. Do not use
-this file as a current routing document; use
-`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` for the current forward
-checkpoint.
+## Original Prompt Summary
 
-## Original Request Summary
-
-Generate a handoff prompt for a new Codex session that starts the next phase of development by
-creating and scoping the next bounded SpecKit epic for Mister Smith.
+Produce a prompt to continue with the next task after the just-landed packet-020 slice, using the
+`prompt-improver` workflow.
 
 ## Key Improvements Made
 
-- anchored the prompt to the March 19 checkpoint instead of the older frontier-direction note
-- forced the next session to ground on current runtime and stress-evaluation evidence before
-  choosing scope
-- kept the work bounded to one next SpecKit packet instead of implementation or general cleanup
-- required a real `specs/` packet as output rather than an informal planning memo
-- added an explicit decision point for whether any remaining post-`MS-77` external-agent work
-  belongs in the same epic or a later one
+- identified the real next task as `MS-106` instead of assuming the next packet heading alone was
+  sufficient
+- grounded the prompt on current repo, packet, and Linear issue truth
+- preserved Smith-first staging requirements because `MS-106` is still in backlog
+- kept the prompt bounded to provenance projection and inspection surfaces rather than solving the
+  implementation itself
+- made validation and clean-closure expectations explicit
 
-## Before / After Shape
+## Before / After Comparison
 
 ### Before
 
-- broad request to start the next phase
-- no explicit forward-authority document
-- no requirement to use the March 19 evaluation notes
-- no forced decision on external-agent follow-on scope
+- generic request for a continuation prompt
+- no explicit next issue id
+- no control-plane staging instructions
+- no explicit scope guardrails or validation requirements
 
 ### After
 
-- ordered read sequence through current-state, the March 19 checkpoint, runtime proof, stress
-  evaluation, and `MS-77`
-- bounded mission: create one next SpecKit packet only
-- explicit packet deliverables under the next numbered `specs/` directory
-- direct requirement to state what is in scope now and what is deferred
+- concrete fresh-session prompt for `MS-106`
+- direct reading order through repo authority and packet-020 docs
+- Smith-first issue staging and workpad reconciliation instructions
+- bounded scope, non-goals, validation, and closure sections
 
-## How To Use The Prompt
+## How To Use The Improved Prompt
 
 Start a new Codex session in `/Users/macmain/MisterSmith` and give it the final prompt from:
 
-`docs/prompt-improver-spec/final-prompts/mister-smith-next-speckit-epic-handoff.md`
+`docs/prompt-improver-spec/final-prompts/mister-smith-ms-106-orchestration-provenance-handoff.md`
 
 The receiving session should then:
 
-1. ground on current repo authority and March 19 evidence
-2. decide the next bounded epic honestly
-3. write the next full SpecKit packet under `specs/`
-4. state whether any post-`MS-77` external-agent work stays inside that epic or moves to a later
-   one
-5. stop before implementation
+1. verify current repo and issue state
+2. stage `MS-106` into the watched queue if needed
+3. execute the bounded provenance-projection slice
+4. validate honestly
+5. finish the full git/PR/Linear closure lane
 
 ## Final Prompt Location
 
-`docs/prompt-improver-spec/final-prompts/mister-smith-next-speckit-epic-handoff.md`
+`docs/prompt-improver-spec/final-prompts/mister-smith-ms-106-orchestration-provenance-handoff.md`
