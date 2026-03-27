@@ -69,7 +69,7 @@ pub enum BackoffStrategy {
     },
 }
 
-/// Bounded repair action emitted after verifier rejection.
+/// Bounded repair action emitted when the runtime selects a repair path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RepairDirective {
     /// Repair action selected for the rejected step.

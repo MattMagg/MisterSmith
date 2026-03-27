@@ -312,18 +312,14 @@ fn sample_step_evaluation_record(
     last_stable_step_id: Option<&str>,
     failure_context_ref: Option<&str>,
 ) -> StepEvaluationRecord {
-    let repair_directive = if verdict == VerifierVerdict::Rejected {
-        repair_action.map(|action| RepairDirective {
-            action,
-            issued_by: "verifier.runtime".to_string(),
-            failure_context_ref: failure_context_ref
-                .unwrap_or("draft-outline/failure")
-                .to_string(),
-            retry_budget_remaining: 1,
-        })
-    } else {
-        None
-    };
+    let repair_directive = repair_action.map(|action| RepairDirective {
+        action,
+        issued_by: "verifier.runtime".to_string(),
+        failure_context_ref: failure_context_ref
+            .unwrap_or("draft-outline/failure")
+            .to_string(),
+        retry_budget_remaining: 1,
+    });
 
     let clarification_request = if clarification_attempt_count > 0 {
         Some(HandoffClarificationRequest {
@@ -1087,6 +1083,91 @@ fn enrich_result_preview_marks_planner_repair_inference_when_verifier_surface_is
     assert!(preview.provenance_lines.iter().any(|line| {
         line.contains("inferred from planner repair step 's2' without verifier_policy")
     }));
+}
+
+#[test]
+fn enrich_result_preview_prefers_explicit_runtime_repair_evaluation_over_inference() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    let workflow_id = view.graph.workflow_id;
+    let task_result = sample_task_result_payload_with_details(
+        workflow_id,
+        "completed",
+        vec![
+            serde_json::json!({ "id": "s1" }),
+            serde_json::json!({ "id": "s2" }),
+            serde_json::json!({ "id": "s3" }),
+        ],
+        vec![
+            sample_step_result_with_task_payload(
+                "s1",
+                "inspect_live_runtime",
+                "Capture directly observed runtime evidence.",
+                &[],
+            ),
+            sample_step_result_with_evaluation(
+                "s2",
+                StepEvaluationRecord {
+                    workflow_id,
+                    step_id: "s2".to_string(),
+                    verdict: VerifierVerdict::Accepted,
+                    confidence: None,
+                    reason: "runtime executed planner-directed clarification step on description-only ingress"
+                        .to_string(),
+                    failure_code: None,
+                    checkpoint_ref: Some("planner-step:s1".to_string()),
+                    repair_directive: Some(RepairDirective {
+                        action: RepairDirectiveAction::ClarifyHandoff,
+                        issued_by: "runtime.planner_repair".to_string(),
+                        failure_context_ref: "planner:s2/clarify_handoff".to_string(),
+                        retry_budget_remaining: 0,
+                    }),
+                    clarification_request: Some(HandoffClarificationRequest {
+                        source_step_id: "s1".to_string(),
+                        target_step_id: "s2".to_string(),
+                        missing_constraints: vec!["required context".to_string()],
+                        attempt_count: 1,
+                        expires_at: None,
+                    }),
+                    failure_context_checkpoint: Some(FailureContextCheckpoint {
+                        failed_step_id: "s2".to_string(),
+                        last_stable_step_id: Some("s1".to_string()),
+                        checkpoint_ref: Some("planner-step:s1".to_string()),
+                        failure_context_ref: "planner:s2/clarify_handoff".to_string(),
+                        failure_code: None,
+                        reason: "runtime executed planner-directed clarification step on description-only ingress"
+                            .to_string(),
+                        attempt_count: 1,
+                    }),
+                },
+            ),
+            sample_step_result_with_task_payload(
+                "s3",
+                "deliver_evidence_grounded_answer",
+                "Return the final answer grounded in observed evidence.",
+                &["s2"],
+            ),
+        ],
+        Some(ProofOutcomeClassification::GraphFormedAndCompleted),
+    );
+
+    autonomy::enrich_result_preview(&mut view, &serde_json::json!({}), Some(&task_result));
+
+    let preview = view
+        .result_preview
+        .expect("runtime-generated repair evaluation should produce an operator preview");
+    let orchestration_quality = preview
+        .orchestration_quality
+        .expect("runtime-generated repair evaluation should surface orchestration quality");
+    assert_eq!(orchestration_quality.step_id, "s2");
+    assert_eq!(
+        orchestration_quality.repair_action,
+        Some(RepairDirectiveAction::ClarifyHandoff)
+    );
+    assert!(!preview
+        .provenance_lines
+        .iter()
+        .any(|line| { line.contains("inferred from planner repair step") }));
 }
 
 #[test]

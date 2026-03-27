@@ -1,0 +1,217 @@
+{
+  "branches": [
+    {
+      "assigned_agents": [
+        "5f045034-969f-4d79-9f50-68dbed126a37"
+      ],
+      "branch_id": "31f7ada6-3cf5-4f86-9d30-40cc2b87fde5",
+      "checkpoint_id": null,
+      "graph_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4",
+      "recovery_strategy": "Resume",
+      "state": "Completed"
+    }
+  ],
+  "checkpoint_lineage": [],
+  "conservative_reasons": [],
+  "coordinator_agent_id": "6dd2a831-6e4c-47e6-896a-42ea1d5bd1c6",
+  "delegation_alerts": [],
+  "delegation_capabilities": [],
+  "graph": {
+    "active_topology": "Sequential",
+    "branch_count": 1,
+    "graph_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4",
+    "node_count": 4,
+    "state": "Completed",
+    "workflow_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4"
+  },
+  "guard_decisions": [],
+  "interventions": [],
+  "memory_pressure": [],
+  "profiles": [],
+  "result_preview": {
+    "orchestration_quality": {
+      "checkpoint_ref": "planner-step:65dbb514-69c4-4d06-90c7-03cbbe5d8a1f",
+      "clarification_attempt_count": 1,
+      "failure_context_ref": "planner:s3/clarify_handoff",
+      "last_stable_step_id": "65dbb514-69c4-4d06-90c7-03cbbe5d8a1f",
+      "outcome_summary": "accepted_after_clarify_handoff",
+      "repair_action": "clarify_handoff",
+      "step_id": "s3",
+      "verdict": "accepted"
+    },
+    "payload_location": "task.result",
+    "preview_text": "[{\"dependency_results\":[{\"action\":\"resolve_missing_handoff_context\",\"branch_id\":\"31f7ada6-3cf5-4f86-9d30-40cc2b87fde5\",\"result\":{\"dependency_results\":[{\"acti...",
+    "proof_outcome": "graph_formed_and_completed",
+    "provenance_lines": [
+      "graph formed and completed before final result publication",
+      "provider=openai_chatgpt model=gpt-5.4",
+      "runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step routing_policy=round_robin registered_providers=1 budget_root=disabled",
+      "graph state Completed with topology Sequential (1 branch(es), 4 node(s))",
+      "routing history retained 4 decision(s)",
+      "latest step routing tier=direct action=continue checkpoints=none",
+      "orchestration quality step=s3 verdict=accepted repair=clarify_handoff clarification_attempts=1 checkpoint=planner-step:65dbb514-69c4-4d06-90c7-03cbbe5d8a1f last_stable_step=65dbb514-69c4-4d06-90c7-03cbbe5d8a1f failure_context=planner:s3/clarify_handoff outcome=accepted_after_clarify_handoff",
+      "orchestration quality inferred from planner repair step 's3' without verifier_policy",
+      "canonical result stored in metadata.final_result",
+      "aggregated payload nested under metadata.aggregated_result",
+      "full payload remains recoverable from task.result",
+      "session assistant_result derives from the canonical result object",
+      "projection observed graph state Completed with topology Sequential (1 branch(es), 4 node(s))",
+      "projection retained 1 branch detail record(s)"
+    ],
+    "workflow_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4"
+  },
+  "routing_history": [
+    {
+      "branch_id": "31f7ada6-3cf5-4f86-9d30-40cc2b87fde5",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 0,
+      "graph_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 0 across ready branch frontier",
+        "checkpoint recovery scope covers 4 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "5f045034-969f-4d79-9f50-68dbed126a37",
+      "task_ids": [
+        "ab5747f5-2e8b-42e9-b17e-2ba6fdc3c924"
+      ]
+    },
+    {
+      "branch_id": "31f7ada6-3cf5-4f86-9d30-40cc2b87fde5",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 1,
+      "graph_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 1 across ready branch frontier",
+        "checkpoint recovery scope covers 4 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "5f045034-969f-4d79-9f50-68dbed126a37",
+      "task_ids": [
+        "65dbb514-69c4-4d06-90c7-03cbbe5d8a1f"
+      ]
+    },
+    {
+      "branch_id": "31f7ada6-3cf5-4f86-9d30-40cc2b87fde5",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 2,
+      "graph_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 2 across ready branch frontier",
+        "checkpoint recovery scope covers 4 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "5f045034-969f-4d79-9f50-68dbed126a37",
+      "task_ids": [
+        "3a99cda9-0d60-4f7d-9153-2974537315ac"
+      ]
+    },
+    {
+      "branch_id": "31f7ada6-3cf5-4f86-9d30-40cc2b87fde5",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 3,
+      "graph_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 3 across ready branch frontier",
+        "checkpoint recovery scope covers 4 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "5f045034-969f-4d79-9f50-68dbed126a37",
+      "task_ids": [
+        "6f36119b-3d78-49ef-af9e-41517900b760"
+      ]
+    }
+  ],
+  "step_routing_history": [
+    {
+      "action": "continue",
+      "change_rationale": [
+        "initial step routing decision for workflow-visible control state"
+      ],
+      "confidence_score": 1.0,
+      "estimated_cost_tokens": 1310,
+      "model_id": "gpt-5.4",
+      "reason": "Selected via RoundRobin",
+      "step_id": "planner.step.1",
+      "step_index": 1,
+      "step_kind": "planner",
+      "tier": "direct"
+    }
+  ],
+  "team_sizing": {
+    "available_workers": 2,
+    "branch_frontier_width": 1,
+    "budget_pressure": 0,
+    "cap_reason": null,
+    "conservative_mode": false,
+    "decided_at": "2026-03-27T17:58:40.580093Z",
+    "decision_phase": "frontier_rebalance",
+    "dependency_depth": 3,
+    "desired_workers": 1,
+    "graph_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4",
+    "rationale_lines": [
+      "task shape strict-chain with frontier width 1",
+      "dependency depth 3 keeps coordination cost acceptable",
+      "frontier budget pressure 0",
+      "selected 1 workers from the available pool of 2",
+      "frontier health Unknown influenced active width"
+    ],
+    "selected_workers": 1,
+    "workflow_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4"
+  },
+  "topology": {
+    "coordination_policy": "StrictSequence",
+    "fallback_topology": null,
+    "graph_id": "3b802c25-7b8a-4dca-9344-35946c4ea3b4",
+    "parallelism_width": 1,
+    "rationale": {
+      "dependency_shape": "strict-chain",
+      "fallback_reason": null,
+      "operational_signals": [
+        "health:healthy",
+        "budget_pressure:normal"
+      ],
+      "selected_for": "selected sequential topology from compatible planner policy hint"
+    },
+    "task_shape": {
+      "has_fanout": false,
+      "has_join": false,
+      "kind": "strict-chain",
+      "max_depth": 3,
+      "max_parallel_width": 1,
+      "root_count": 1,
+      "structural_signals": [
+        "roots:1",
+        "max_parallel_width:1",
+        "max_depth:3",
+        "fanout:false",
+        "join:false"
+      ]
+    },
+    "topology_kind": "Sequential"
+  }
+}

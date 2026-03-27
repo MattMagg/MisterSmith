@@ -185,7 +185,7 @@ pub struct UnifiedResultEnvelope {
     pub proof_outcome: ProofOutcomeClassification,
 }
 
-/// Verifier-owned evaluation of one workflow step.
+/// Execution-owned evaluation of one workflow step.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StepEvaluationRecord {
     /// Workflow that owns the evaluated step.
@@ -205,7 +205,7 @@ pub struct StepEvaluationRecord {
     /// Optional reference to the last stable checkpoint used for repair.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkpoint_ref: Option<String>,
-    /// Optional bounded repair directive when the step is rejected.
+    /// Optional bounded repair directive retained for repair-loop provenance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repair_directive: Option<RepairDirective>,
     /// Optional first-class clarification request for weak or incomplete handoffs.

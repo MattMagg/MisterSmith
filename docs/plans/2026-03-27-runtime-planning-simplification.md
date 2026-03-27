@@ -30,8 +30,8 @@ Bottom line:
 - explicitly parallel prompts still produce a legal fanout-plus-coordinator workflow
 - non-memo prompts preserve the requested output shape
 - packet-020-style repair probes no longer fail on `unsupported planner role 'join'`
-- supported task and autonomy surfaces now project packet-020-style repair provenance on the live
-  ingress by inferring it from the planner repair step when no verifier policy is injected
+- supported task and autonomy surfaces now project packet-020-style repair provenance from an
+  explicit runtime-owned repair record on the live description-only ingress
 
 ## Baseline
 
@@ -189,7 +189,7 @@ What this did prove:
 - the planner/runtime can now carry a bounded missing-context step through to completion on the
   live path
 
-Follow-up live rerun after the operator-surface patch:
+Interim live rerun after the first operator-surface patch:
 
 Artifact directory:
 
@@ -203,18 +203,45 @@ Observed task and autonomy result fields:
 - `task.result.orchestration_quality.checkpoint_ref = "planner-step:d6d4e0e2-1c60-4227-af6d-7832d20840c0"`
 - `task.result.orchestration_quality.failure_context_ref = "planner:s2/clarify_handoff"`
 - `autonomy.result_preview.orchestration_quality` matched the task result projection
-- `autonomy.result_preview.provenance_lines` now includes:
+- `autonomy.result_preview.provenance_lines` included:
   `orchestration quality inferred from planner repair step 's2' without verifier_policy`
 
-This means the supported operator surfaces now expose packet-020-style repair provenance for the
-description-only live ingress used by the harness.
+That proved the operator surfaces could show repair provenance, but they were still reconstructing
+it after the fact from planner output rather than reading a runtime-owned record.
+
+Final live rerun after the runtime-owned repair-record patch:
+
+Artifact directory:
+
+- `docs/plans/artifacts/2026-03-27-runtime-planning-simplification/repair_probe/20260327T180001Z/`
+
+Observed live result:
+
+- topology `Hybrid`
+- `parallelism_width = 2`
+- `branch_count = 3`
+- `node_count = 4`
+- the repair step action was `repair_or_clarify`
+- `task.result.step_results` now contains an explicit `step_evaluation` record on that repair step
+- `task.result.orchestration_quality` and `autonomy.result_preview.orchestration_quality` both
+  resolved from that explicit runtime record
+- `autonomy.result_preview.provenance_lines` no longer includes the old
+  `inferred from planner repair step` fallback line
+
+Observed runtime-owned repair fields:
+
+- `step_id = "step-3"`
+- `repair_action = "clarify_handoff"`
+- `clarification_attempt_count = 1`
+- `checkpoint_ref = "planner-step:f7ecde5f-50d2-4c82-81fc-908c647b32b2"`
+- `failure_context_ref = "planner:step-3/clarify_handoff"`
+- `repair_directive.issued_by = "runtime.planner_repair"`
 
 What is still not proven:
 
-- this is planner-step inference, not a verifier-policy-backed `step_evaluation` record
 - the supported live ingress still does not inject `verifier_policy` or `verifier_policy_sequence`
-- so the live path now surfaces operator-visible repair lineage, but not full verifier-owned
-  telemetry
+- the repair telemetry now comes from a runtime-owned repair record rather than an injected
+  verifier-policy contract
 
 ## Evaluation Result
 
@@ -235,15 +262,15 @@ The live matrix also changed the failure story materially:
 
 That means the earlier operator-surface gap is closed for supported description-only traffic: live
 packet-020-style probes now form a graph, complete, and expose repair provenance on both task and
-autonomy surfaces.
+autonomy surfaces from an explicit runtime record.
 
-It is still not the same as proving full verifier-policy-backed packet-020 telemetry on the
-supported ingress.
+This is stronger than planner-output inference. It is still different from proving an injected
+verifier-policy contract on the supported ingress.
 
 ## Remaining Limits
 
-- Packet-020-specific operator fields are now present on the supported task and autonomy surfaces,
-  but they are inferred from planner repair steps when verifier policy is absent.
+- Packet-020-specific operator fields are now present on the supported task and autonomy surfaces
+  as runtime-owned repair records on the description-only ingress.
 - The broader question of when the runtime should choose sequential versus parallel versus merged
   topology still deserves a scoped planning packet; that is tracked in `MS-110`.
 - Proof claims should stay bounded to what was actually observed in

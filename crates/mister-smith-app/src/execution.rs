@@ -4009,6 +4009,169 @@ fn last_stable_step_identifier(task: &TaskAssignment) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn runtime_repair_action(task: &TaskAssignment) -> Option<RepairDirectiveAction> {
+    let action = task
+        .input
+        .get("action")
+        .and_then(Value::as_str)
+        .unwrap_or(task.task_type.as_str())
+        .trim()
+        .to_ascii_lowercase();
+    let description = task
+        .input
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+
+    if action.contains("clarify")
+        || action.contains("missing_context")
+        || action.contains("handoff_context")
+        || (action.contains("resolve")
+            && (description.contains("missing required context")
+                || description.contains("request the minimum clarification")
+                || description.contains("bounded local repair")))
+    {
+        return Some(RepairDirectiveAction::ClarifyHandoff);
+    }
+    if action.contains("replan") {
+        return Some(RepairDirectiveAction::ReplanFromCheckpoint);
+    }
+    if action.contains("retry") || action.contains("repair") {
+        return Some(RepairDirectiveAction::RetryStep);
+    }
+
+    None
+}
+
+fn runtime_repair_reason(repair_action: RepairDirectiveAction) -> &'static str {
+    match repair_action {
+        RepairDirectiveAction::ClarifyHandoff => {
+            "runtime executed planner-directed clarification step on description-only ingress"
+        }
+        RepairDirectiveAction::RetryStep => {
+            "runtime executed planner-directed retry step on description-only ingress"
+        }
+        RepairDirectiveAction::ReplanFromCheckpoint => {
+            "runtime executed planner-directed replan step on description-only ingress"
+        }
+        RepairDirectiveAction::Stop => {
+            "runtime executed planner-directed stop step on description-only ingress"
+        }
+    }
+}
+
+fn runtime_repair_step_evaluation(
+    workflow_id: TaskId,
+    task: &TaskAssignment,
+    repair_state: &LocalRepairState,
+) -> Option<StepEvaluationRecord> {
+    let repair_action = runtime_repair_action(task)?;
+    if repair_action == RepairDirectiveAction::Stop {
+        return None;
+    }
+
+    let step_id = step_identifier(task);
+    let last_stable_step_id = repair_state
+        .failure_context_checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.last_stable_step_id.clone())
+        .or_else(|| last_stable_step_identifier(task));
+    let checkpoint_ref = repair_state
+        .failure_context_checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.checkpoint_ref.clone())
+        .or_else(|| {
+            last_stable_step_id
+                .as_ref()
+                .map(|step_id| format!("planner-step:{step_id}"))
+        });
+    let failure_context_ref = repair_state
+        .failure_context_checkpoint
+        .as_ref()
+        .map(|checkpoint| checkpoint.failure_context_ref.clone())
+        .unwrap_or_else(|| format!("planner:{}/{}", step_id, repair_action.as_str()));
+    let attempt_count = match repair_action {
+        RepairDirectiveAction::ClarifyHandoff => repair_state
+            .clarification_request
+            .as_ref()
+            .map(|request| request.attempt_count + 1)
+            .unwrap_or(1),
+        RepairDirectiveAction::RetryStep | RepairDirectiveAction::ReplanFromCheckpoint => {
+            repair_state
+                .failure_context_checkpoint
+                .as_ref()
+                .map(|checkpoint| checkpoint.attempt_count + 1)
+                .unwrap_or(1)
+        }
+        RepairDirectiveAction::Stop => 0,
+    };
+    let reason = runtime_repair_reason(repair_action).to_string();
+    let failure_code = repair_state
+        .failure_context_checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.failure_code.clone());
+    let clarification_request = if repair_action == RepairDirectiveAction::ClarifyHandoff {
+        Some(HandoffClarificationRequest {
+            source_step_id: repair_state
+                .clarification_request
+                .as_ref()
+                .map(|request| request.source_step_id.clone())
+                .or_else(|| last_stable_step_id.clone())
+                .unwrap_or_else(|| step_id.clone()),
+            target_step_id: repair_state
+                .clarification_request
+                .as_ref()
+                .map(|request| request.target_step_id.clone())
+                .unwrap_or_else(|| step_id.clone()),
+            missing_constraints: repair_state
+                .clarification_request
+                .as_ref()
+                .map(|request| request.missing_constraints.clone())
+                .filter(|constraints| !constraints.is_empty())
+                .unwrap_or_else(|| vec!["required context".to_string()]),
+            attempt_count,
+            expires_at: repair_state
+                .clarification_request
+                .as_ref()
+                .and_then(|request| request.expires_at),
+        })
+    } else {
+        repair_state.clarification_request.clone()
+    };
+
+    Some(StepEvaluationRecord {
+        workflow_id,
+        step_id: step_id.clone(),
+        verdict: VerifierVerdict::Accepted,
+        confidence: None,
+        reason: reason.clone(),
+        failure_code: failure_code.clone(),
+        checkpoint_ref: checkpoint_ref.clone(),
+        repair_directive: Some(RepairDirective {
+            action: repair_action,
+            issued_by: "runtime.planner_repair".to_string(),
+            failure_context_ref: failure_context_ref.clone(),
+            retry_budget_remaining: 0,
+        }),
+        clarification_request,
+        failure_context_checkpoint: Some(FailureContextCheckpoint {
+            failed_step_id: repair_state
+                .failure_context_checkpoint
+                .as_ref()
+                .map(|checkpoint| checkpoint.failed_step_id.clone())
+                .unwrap_or_else(|| step_id.clone()),
+            last_stable_step_id,
+            checkpoint_ref,
+            failure_context_ref,
+            failure_code,
+            reason,
+            attempt_count,
+        }),
+    })
+}
+
 fn parse_injected_verifier_policy(
     task: &TaskAssignment,
     policy: &Value,
@@ -4310,6 +4473,8 @@ fn step_execution_disposition(
     policy: Option<InjectedVerifierPolicy>,
 ) -> Result<StepExecutionDisposition, Box<FailedTaskExecution>> {
     let Some(policy) = policy else {
+        let step_evaluation =
+            runtime_repair_step_evaluation(context.workflow_id, context.task, context.repair_state);
         return Ok(StepExecutionDisposition::Completed(
             CompletedTaskExecution {
                 task_id: context.task.task_id,
@@ -4317,7 +4482,7 @@ fn step_execution_disposition(
                 branch_id: context.branch_id.clone(),
                 action: context.action.clone(),
                 result,
-                step_evaluation: None,
+                step_evaluation,
             },
         ));
     };
@@ -5338,6 +5503,79 @@ mod runtime_plan_tests {
         assert_eq!(
             execution_input["task"]["failure_context_checkpoint"]["failure_context_ref"],
             json!("draft-outline/replan")
+        );
+    }
+
+    #[test]
+    fn description_only_repair_step_records_runtime_generated_step_evaluation() {
+        let workflow_id = TaskId::new();
+        let worker_id = AgentId::new();
+        let task = TaskAssignment::new(
+            "resolve_missing_handoff_context",
+            json!({
+                "id": "s2",
+                "step_id": "s2",
+                "branch_id": "branch-a",
+                "action": "resolve_missing_handoff_context",
+                "description": "Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context.",
+                "dependencies": ["s1"]
+            }),
+        );
+        let result = json!({
+            "summary": "clarified context"
+        });
+
+        let completed = gate_step_execution_result(workflow_id, &task, worker_id, result.clone())
+            .expect("description-only repair step should still complete");
+
+        assert_eq!(completed.result, result);
+        let step_evaluation = completed
+            .step_evaluation
+            .clone()
+            .expect("planner repair step should emit a runtime-generated evaluation");
+        assert_eq!(step_evaluation.verdict, VerifierVerdict::Accepted);
+        assert_eq!(
+            step_evaluation
+                .repair_directive
+                .as_ref()
+                .map(|directive| directive.action.as_str()),
+            Some("clarify_handoff")
+        );
+        assert_eq!(
+            step_evaluation
+                .repair_directive
+                .as_ref()
+                .map(|directive| directive.issued_by.as_str()),
+            Some("runtime.planner_repair")
+        );
+        assert_eq!(
+            step_evaluation
+                .clarification_request
+                .as_ref()
+                .map(|request| request.attempt_count),
+            Some(1)
+        );
+        assert_eq!(
+            step_evaluation.checkpoint_ref.as_deref(),
+            Some("planner-step:s1")
+        );
+
+        let payload = build_step_result_payload(
+            completed.task_id,
+            completed.worker_id,
+            completed.branch_id,
+            completed.action,
+            Some(completed.result),
+            Some(step_evaluation),
+        );
+        assert_eq!(payload["step_evaluation"]["verdict"], json!("accepted"));
+        assert_eq!(
+            payload["step_evaluation"]["repair_directive"]["issued_by"],
+            json!("runtime.planner_repair")
+        );
+        assert_eq!(
+            payload["step_evaluation"]["failure_context_checkpoint"]["last_stable_step_id"],
+            json!("s1")
         );
     }
 
