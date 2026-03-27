@@ -1,6 +1,6 @@
 # Mister Smith Recent Context
 
-Date: March 26, 2026
+Date: March 27, 2026
 Status: Current
 
 ## Current State
@@ -17,11 +17,12 @@ Status: Current
 - Packet 019 is now complete on `main`: the runtime-backed task path accepts a typed
   `runtime_routing_profile`, can boot a bounded multi-provider cascade with JetStream-backed
   budget enforcement when configured, and keeps the no-profile single-provider fallback intact.
-- Packet 020 is now scope-frozen on `main` as the next bounded phase. It targets verifier-gated
-  adaptive orchestration: step-level verification, handoff clarification, failure-context
-  propagation, and bounded retry/re-plan decisions for workflow quality.
-- Task and autonomy provenance now surface runtime routing policy, budget root, and the latest
-  accepted step tier/checkpoint evidence from the runtime task path.
+- Packet 020 is now landed on `main` through `MS-104` through `MS-107`: verifier-gated
+  workflow-step decisions, first-class handoff clarification, preserved failure-context repair
+  lineage, and operator-visible orchestration-quality provenance are now part of the runtime task
+  path.
+- Task and autonomy provenance now surface runtime routing policy, budget root, the latest
+  accepted step tier/checkpoint evidence, and verifier/repair lineage from the runtime task path.
 - one bounded packet-019 live proof now exists for the
   `budget_softcap_openai_mock` profile; the accepted provider-backed tier remained
   `openai_chatgpt` / `gpt-5.4`, while the live step-routing outcome recorded
@@ -32,7 +33,7 @@ Status: Current
   persisted proof-outcome visibility are now landed on `main`.
 - Smith now exposes workflow-family tools for issue and workpad mutation, backlog slicing, watched
   queue staging, lifecycle resolution, Ralph packet flows, and SpecKit task translation.
-- Packet 020 exists as packet and planning truth only; it is not yet landed runtime behavior.
+- No newer post-packet-020 bounded phase is frozen yet.
 
 ## Durable Sources To Read First
 
@@ -62,8 +63,8 @@ The current development-workflow program is still Smith-first, but the March 16 
 supporting history rather than the primary direction router:
 
 - `docs/current-state.md` is the current repo-wide router
-- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` is the current forward
-  development authority for the next bounded phase
+- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` is the packet-020 scope and
+  closure note for the most recently landed frontier slice
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` is the bounded closure note for
   the completed packet-019 proof lane
 - `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` is the packet-019 scope
@@ -73,9 +74,8 @@ supporting history rather than the primary direction router:
 - `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
   records the completed packet-016 closure
 
-The next frontier planning action is no longer "identify a fresh gap." That guardrail has been
-satisfied twice: packet `019` closed on `main`, and packet `020` now freezes the next bounded
-orchestration-performance gap without yet claiming implementation or benchmark results.
+The next frontier planning action is no longer "close packet 020." Packet `020` is now landed on
+`main`; the next bounded post-packet-020 phase has not yet been frozen.
 
 Closed frontier packet and recovery issues now include:
 
@@ -101,7 +101,8 @@ Closed frontier packet and recovery issues now include:
 - start with `route_workflow_request`, `get_control_plane_snapshot`, and
   `get_issue_execution_snapshot` before falling back to raw Linear or ad hoc workflow glue
 - use `docs/current-state.md` and
-  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` as the first direction read
+  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` as the first packet-020
+  closure/context read
 - use `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the source of truth for the
   currently implemented Smith workflow-family surface
 - use `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`

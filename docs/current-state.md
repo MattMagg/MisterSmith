@@ -1,6 +1,6 @@
 # Mister Smith Current State
 
-Date: March 26, 2026
+Date: March 27, 2026
 Status: Current
 
 ## Purpose
@@ -19,9 +19,9 @@ Use this file when you need one honest answer to:
 | Need | Primary document | Role |
 | ---- | ---------------- | ---- |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
-| Next bounded phase | `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` | Current forward-development authority for the post-packet-019 orchestration-performance packet |
+| Latest frontier packet | `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` | Packet-020 scope and closure note for the landed verifier-gated orchestration slice |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for the completed packet-019 runtime-routing slice |
-| What just closed | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Packet-019 scope freeze and closure router |
+| Previous frontier closure | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Packet-019 scope freeze and closure router |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final-validation artifact for the completed packet-016 epic |
 | Packet 015 closure evidence | `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md` | Historical live-proof and validation artifact for the completed packet-015 epic |
 | Development workflow and watched queue | `WORKFLOW.md`, `docs/linear/LINEAR.md` | Development control plane contract |
@@ -82,12 +82,13 @@ external workflow services such as Linear or Symphony.
   runtime-backed task path can boot a bounded multi-provider cascade plus JetStream-backed budget
   enforcement; when no profile is configured, the current single-provider `RoundRobin` fallback
   remains intact.
-- Packet 020 is now scope-frozen on `main` as the next bounded phase: verifier-gated adaptive
-  orchestration focused on step-level verification, handoff clarification, checkpoint-based repair,
-  and orchestration-quality provenance. Those packet artifacts are planning truth only; they are
-  not yet landed runtime behavior.
+- Packet 020 is now landed on `main` through `MS-104` through `MS-107`: the runtime-backed task
+  path now supports verifier-gated step decisions, first-class handoff clarification, preserved
+  failure-context plus last stable checkpoint repair lineage, and operator-visible
+  orchestration-quality provenance.
 - Task and autonomy provenance now surface runtime routing policy, registered-provider count,
-  budget root, and the latest accepted step tier/checkpoint evidence from the runtime task path.
+  budget root, the latest accepted step tier/checkpoint evidence, and verifier/repair lineage from
+  the runtime task path.
 - one bounded packet-019 live proof now exists for the configured
   `budget_softcap_openai_mock` profile, captured in
   `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
@@ -101,8 +102,9 @@ external workflow services such as Linear or Symphony.
 - Packet 018 is the in-review smoke-harness lane and is not yet part of landed `main` truth.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
-- The packet-016 family remains terminal, packet `019` is closed, packet `018` remains an
-  out-of-main review lane, and repo forward planning now points at the packet-020 scope freeze.
+- The packet-016 family remains terminal, packet `019` is closed, packet `020` is now closed on
+  `main`, packet `018` remains an out-of-main review lane, and no newer post-packet-020 bounded
+  phase is frozen yet.
 
 ## Important Distinction
 
@@ -184,8 +186,8 @@ The completed frontier epics are:
 - packet 016: external-agent boundary continuity and runtime proof (`MS-97` through `MS-100`,
   parent `MS-96`)
 
-Packet `019` is now complete on `main`. Packet `020` is the next bounded phase on paper only and
-is not yet implemented on the runtime path.
+Packet `019` is complete on `main`. Packet `020` is now landed on `main` through `MS-104`
+through `MS-107`. No newer post-packet-020 bounded phase is frozen yet.
 
 This direction is tracked in:
 
@@ -214,8 +216,8 @@ If you need to understand the repo quickly:
 ## Source Of Truth Rules
 
 - Use this file for the repo's current broad state.
-- Use `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the current
-  forward-development checkpoint and
+- Use `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the landed
+  packet-020 scope and closure context and
   `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` for the completed
   packet-019 scope-freeze and closure router.
 - Use `WORKFLOW.md` and `docs/linear/LINEAR.md` for development workflow rules.

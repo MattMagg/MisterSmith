@@ -2,7 +2,16 @@
 
 ## Status
 
-Scope frozen on `main` as of 2026-03-26
+Landed on `main` through `MS-104` through `MS-107` as of 2026-03-27
+
+## Closure Boundary
+
+- packet `020` is now landed on the runtime-backed task path: verifier-gated step decisions,
+  first-class handoff clarification, preserved failure-context plus last stable checkpoint repair
+  lineage, and operator-visible orchestration-quality provenance
+- deterministic validation for the landed slice is current through `MS-107`
+- no new live runtime-proof claim is introduced in this packet; the existing provider-backed proof
+  baseline remains the packet-019 `openai_chatgpt` / `gpt-5.4` smoke path
 
 ## Objective
 
@@ -19,13 +28,14 @@ work locally before a whole task degrades.
 - the current shipped runtime path already has supervised planner and executor lifecycles,
   ToolBus-backed execution, task and autonomy provenance, and repeatable local smoke proof on the
   `openai_chatgpt` / `gpt-5.4` baseline
-- the current runtime path still treats most intermediate workflow quality as downstream success or
-  failure rather than a first-class verifier-gated control loop
-- there is no explicit handoff clarification contract on the default planner-to-executor or
-  executor-to-follow-on step path
-- there is no first-class runtime repair directive that says "retry this step", "clarify this
-  handoff", "re-plan from the last stable checkpoint", or "stop" with preserved failure context
-- research already captured in this repo points at the missing seam:
+- the current runtime path now has a first-class verifier-gated workflow-step control loop with
+  typed verdicts and repair directives
+- handoff clarification is now explicit on weak downstream step transitions
+- failure context and last stable checkpoint lineage are now preserved for bounded retry or
+  re-plan decisions
+- task and autonomy inspection now surface verifier and repair provenance without requiring raw
+  log archaeology
+- research already captured in this repo motivated the landed seam:
   - `docs/research-output/research/discovery-sweep-R4.md`: PRMs and the
     planner-executor-verifier decomposition
   - `docs/research-output/research/targeted-step-level-intelligence-R6.md`: strict
@@ -36,13 +46,13 @@ work locally before a whole task degrades.
   - `docs/research-output/research/discovery-sweep-R7b.md`: adaptive workflow refinement and
     edge-level error mitigation
 
-## Why This Is The Next Bounded Gap
+## Why This Was The Next Bounded Gap
 
 The next benchmark-relevant gain is not another routing packet. It is workflow quality control.
 High-score coding runs fail when a weak intermediate step propagates, when a handoff misses a
 constraint, or when the system restarts too much work instead of repairing the local branch.
 
-This packet therefore freezes one bounded next phase:
+This packet therefore froze and landed one bounded phase:
 
 1. add a verifier-gated step contract on the runtime-backed task path
 2. add bounded clarification and repair actions at workflow handoffs
@@ -87,6 +97,8 @@ This packet therefore freezes one bounded next phase:
 
 ### Milestone 1: Freeze packet and verifier/repair contract
 
+Status: landed
+
 Deliverables:
 
 - this planning note
@@ -98,6 +110,8 @@ Validation:
 - packet and note cite current repo truth and name the missing workflow-quality seam explicitly
 
 ### Milestone 2: Add verifier-gated workflow step decisions
+
+Status: landed via `MS-104`
 
 Deliverables:
 
@@ -111,6 +125,8 @@ Validation:
 
 ### Milestone 3: Add clarification and contextual repair
 
+Status: landed via `MS-105`
+
 Deliverables:
 
 - handoff clarification request path
@@ -122,6 +138,8 @@ Validation:
 - targeted tests for clarification loops, retry budgets, and checkpoint-based repair
 
 ### Milestone 4: Extend provenance and proof boundaries
+
+Status: landed via `MS-106` and closed with deterministic validation/doc sync in `MS-107`
 
 Deliverables:
 
@@ -140,8 +158,8 @@ Validation:
 - the packet cannot preserve the current shipped happy path while the verifier loop is introduced
 - benchmark claims would get ahead of actual measurable evidence
 
-## Forward-Development Authority
+## Current Role
 
-This note is now the current forward-development authority after packet `019` closure. Packet
-`019` remains complete and closed; packet `020` is the next bounded phase on paper only until
-implementation begins.
+This note is no longer the forward-development authority. It now serves as the packet-020 scope
+and closure note for the landed verifier-gated orchestration slice on `main`. No newer
+post-packet-020 bounded phase is frozen yet.
