@@ -469,8 +469,9 @@ fn autonomy_ids_enums_and_errors_are_available() {
     let task_result = TaskResultView {
         workflow_id,
         status: "completed".to_string(),
-        result: canonical_result.clone(),
         proof_outcome: canonical_result.proof_outcome,
+        orchestration_quality: None,
+        result: canonical_result.clone(),
     };
     let session_result = SessionRetainedResultView {
         workflow_id,
@@ -488,6 +489,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
         proof_outcome: canonical_result.proof_outcome,
         preview_text: Some("bounded answer preview".to_string()),
         payload_location: "task.result".to_string(),
+        orchestration_quality: None,
         provenance_lines: vec![
             "canonical result stored in metadata.final_result".to_string(),
             "aggregated payload nested under metadata.aggregated_result".to_string(),

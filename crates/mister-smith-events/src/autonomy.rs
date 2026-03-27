@@ -559,6 +559,7 @@ pub fn infer_result_preview_from_projection(
         proof_outcome,
         preview_text,
         payload_location: "task.result".to_string(),
+        orchestration_quality: None,
         provenance_lines,
     })
 }
@@ -575,6 +576,9 @@ pub fn merge_operator_result_preview(
     }
     if merged.payload_location.is_empty() {
         merged.payload_location = fallback.payload_location.clone();
+    }
+    if merged.orchestration_quality.is_none() {
+        merged.orchestration_quality = fallback.orchestration_quality.clone();
     }
     for line in &fallback.provenance_lines {
         if !merged.provenance_lines.contains(line) {

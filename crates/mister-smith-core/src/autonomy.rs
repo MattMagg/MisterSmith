@@ -11,8 +11,8 @@ use serde_json::Value;
 
 use crate::enums::{
     BudgetPolicy, BudgetScope, CoordinationPolicy, DelegationScope, FailureClass, HealthState,
-    InterventionType, ProfileTarget, RevocationState, SemanticSignalKind, TopologyKind,
-    VerifierVerdict,
+    InterventionType, ProfileTarget, RepairDirectiveAction, RevocationState, SemanticSignalKind,
+    TopologyKind, VerifierVerdict,
 };
 use crate::ids::{
     AgentId, CapabilityId, CheckpointId, ContextBudgetId, ExecutionBranchId, ExecutionGraphId,
@@ -216,6 +216,36 @@ pub struct StepEvaluationRecord {
     pub failure_context_checkpoint: Option<FailureContextCheckpoint>,
 }
 
+fn is_zero(value: &u32) -> bool {
+    *value == 0
+}
+
+/// Operator-facing projection of verifier and repair history for one workflow.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OrchestrationQualityView {
+    /// Stable identifier for the latest evaluated workflow step or handoff.
+    pub step_id: String,
+    /// Final verifier verdict visible to operators.
+    pub verdict: VerifierVerdict,
+    /// Bounded repair action when a repair path was taken.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repair_action: Option<RepairDirectiveAction>,
+    /// Number of clarification attempts retained for the rendered step.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub clarification_attempt_count: u32,
+    /// Stable checkpoint reference anchoring the repair branch when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint_ref: Option<String>,
+    /// Last stable upstream step retained for local repair when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_stable_step_id: Option<String>,
+    /// Stable failure-context reference retained across repair attempts when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_context_ref: Option<String>,
+    /// Bounded operator-facing summary of the final repair-loop outcome.
+    pub outcome_summary: String,
+}
+
 /// First-class clarification request emitted for a weak handoff.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HandoffClarificationRequest {
@@ -239,10 +269,13 @@ pub struct TaskResultView {
     pub workflow_id: TaskId,
     /// Terminal workflow status.
     pub status: String,
-    /// Canonical result envelope exposed by the task surface.
-    pub result: UnifiedResultEnvelope,
     /// Task-facing outcome classification.
     pub proof_outcome: ProofOutcomeClassification,
+    /// Bounded verifier and repair provenance when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orchestration_quality: Option<OrchestrationQualityView>,
+    /// Canonical result envelope exposed by the task surface.
+    pub result: UnifiedResultEnvelope,
 }
 
 /// Shared provenance summary reused by session and operator result projections.
@@ -290,6 +323,9 @@ pub struct OperatorResultPreview {
     pub preview_text: Option<String>,
     /// Where the full result comes from, for example `task.result`.
     pub payload_location: String,
+    /// Bounded verifier and repair provenance when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orchestration_quality: Option<OrchestrationQualityView>,
     /// Compact explanation of how the result was produced and classified.
     pub provenance_lines: Vec<String>,
 }
@@ -610,5 +646,23 @@ mod tests {
         let json = serde_json::to_string(&record).unwrap();
         let deserialized: StepEvaluationRecord = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, record);
+    }
+
+    #[test]
+    fn orchestration_quality_view_serde_roundtrip() {
+        let summary = OrchestrationQualityView {
+            step_id: "draft-outline".to_string(),
+            verdict: VerifierVerdict::Accepted,
+            repair_action: Some(RepairDirectiveAction::ClarifyHandoff),
+            clarification_attempt_count: 1,
+            checkpoint_ref: Some("checkpoint-clarify".to_string()),
+            last_stable_step_id: Some("collect-evidence".to_string()),
+            failure_context_ref: Some("draft-outline/clarify".to_string()),
+            outcome_summary: "accepted_after_clarify_handoff".to_string(),
+        };
+
+        let json = serde_json::to_string(&summary).unwrap();
+        let deserialized: OrchestrationQualityView = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, summary);
     }
 }

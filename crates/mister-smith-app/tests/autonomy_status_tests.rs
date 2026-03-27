@@ -7,11 +7,13 @@ mod observability;
 
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope, CheckpointId,
-    CoordinationPolicy, ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState,
-    GuardDecision, GuardDecisionId, GuardEvidence, HealthState, InterventionRecord,
-    InterventionRecordId, InterventionType, MemorySnapshotId, ProfileSnapshotId, ProfileTarget,
-    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RevocationState, TaskId,
-    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
+    CoordinationPolicy, ExecutionBranchId, ExecutionGraphId, FailureClass,
+    FailureContextCheckpoint, GraphState, GuardDecision, GuardDecisionId, GuardEvidence,
+    HandoffClarificationRequest, HealthState, InterventionRecord, InterventionRecordId,
+    InterventionType, MemorySnapshotId, OrchestrationQualityView, ProfileSnapshotId, ProfileTarget,
+    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirective,
+    RepairDirectiveAction, RevocationState, StepEvaluationRecord, TaskId, TaskShapeClassification,
+    TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale, VerifierVerdict,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
@@ -300,33 +302,102 @@ fn sample_accepted_task_ingress_metadata(
     })
 }
 
-fn sample_task_result_view(
+fn sample_step_evaluation_record(
     workflow_id: TaskId,
-    proof_outcome: ProofOutcomeClassification,
-) -> serde_json::Value {
-    sample_task_result_payload(workflow_id, "completed", 1, 1, Some(proof_outcome))
+    step_id: &str,
+    verdict: VerifierVerdict,
+    repair_action: Option<RepairDirectiveAction>,
+    clarification_attempt_count: u32,
+    checkpoint_ref: Option<&str>,
+    last_stable_step_id: Option<&str>,
+    failure_context_ref: Option<&str>,
+) -> StepEvaluationRecord {
+    let repair_directive = if verdict == VerifierVerdict::Rejected {
+        repair_action.map(|action| RepairDirective {
+            action,
+            issued_by: "verifier.runtime".to_string(),
+            failure_context_ref: failure_context_ref
+                .unwrap_or("draft-outline/failure")
+                .to_string(),
+            retry_budget_remaining: 1,
+        })
+    } else {
+        None
+    };
+
+    let clarification_request = if clarification_attempt_count > 0 {
+        Some(HandoffClarificationRequest {
+            source_step_id: step_id.to_string(),
+            target_step_id: "write-brief".to_string(),
+            missing_constraints: vec!["budget ceiling".to_string()],
+            attempt_count: clarification_attempt_count,
+            expires_at: Some(chrono::Utc::now()),
+        })
+    } else {
+        None
+    };
+
+    let failure_context_checkpoint = if failure_context_ref.is_some()
+        || checkpoint_ref.is_some()
+        || last_stable_step_id.is_some()
+    {
+        Some(FailureContextCheckpoint {
+            failed_step_id: step_id.to_string(),
+            last_stable_step_id: last_stable_step_id.map(ToOwned::to_owned),
+            checkpoint_ref: checkpoint_ref.map(ToOwned::to_owned),
+            failure_context_ref: failure_context_ref
+                .unwrap_or("draft-outline/failure")
+                .to_string(),
+            failure_code: Some("missing_constraint".to_string()),
+            reason: "missing context".to_string(),
+            attempt_count: clarification_attempt_count.max(1),
+        })
+    } else {
+        None
+    };
+
+    StepEvaluationRecord {
+        workflow_id,
+        step_id: step_id.to_string(),
+        verdict,
+        confidence: Some(0.91),
+        reason: match verdict {
+            VerifierVerdict::Accepted => "accepted after bounded repair".to_string(),
+            VerifierVerdict::Rejected => "missing context".to_string(),
+        },
+        failure_code: if verdict == VerifierVerdict::Rejected {
+            Some("missing_constraint".to_string())
+        } else {
+            None
+        },
+        checkpoint_ref: checkpoint_ref.map(ToOwned::to_owned),
+        repair_directive,
+        clarification_request,
+        failure_context_checkpoint,
+    }
 }
 
-fn sample_task_result_payload(
+fn sample_step_result_with_evaluation(
+    step_id: &str,
+    step_evaluation: StepEvaluationRecord,
+) -> serde_json::Value {
+    serde_json::json!({
+        "task_id": TaskId::new(),
+        "step_id": step_id,
+        "result": {
+            "summary": "bounded answer preview"
+        },
+        "step_evaluation": step_evaluation
+    })
+}
+
+fn sample_task_result_payload_with_details(
     workflow_id: TaskId,
     status: &str,
-    execution_step_count: usize,
-    step_result_count: usize,
+    execution_steps: Vec<serde_json::Value>,
+    step_results: Vec<serde_json::Value>,
     proof_outcome: Option<ProofOutcomeClassification>,
 ) -> serde_json::Value {
-    let execution_steps = (1..=execution_step_count)
-        .map(|index| serde_json::json!({ "id": format!("step-{index}") }))
-        .collect::<Vec<_>>();
-    let step_results = (0..step_result_count)
-        .map(|_| {
-            serde_json::json!({
-                "task_id": TaskId::new(),
-                "result": {
-                    "summary": "bounded answer preview"
-                }
-            })
-        })
-        .collect::<Vec<_>>();
     let proof_outcome = proof_outcome.map(ProofOutcomeClassification::as_str);
 
     serde_json::json!({
@@ -357,6 +428,70 @@ fn sample_task_result_payload(
             },
             "proof_outcome": proof_outcome
         }
+    })
+}
+
+fn sample_task_result_view(
+    workflow_id: TaskId,
+    proof_outcome: ProofOutcomeClassification,
+) -> serde_json::Value {
+    sample_task_result_payload(workflow_id, "completed", 1, 1, Some(proof_outcome))
+}
+
+fn sample_task_result_payload(
+    workflow_id: TaskId,
+    status: &str,
+    execution_step_count: usize,
+    step_result_count: usize,
+    proof_outcome: Option<ProofOutcomeClassification>,
+) -> serde_json::Value {
+    let execution_steps = (1..=execution_step_count)
+        .map(|index| serde_json::json!({ "id": format!("step-{index}") }))
+        .collect::<Vec<_>>();
+    let step_results = (0..step_result_count)
+        .map(|_| {
+            serde_json::json!({
+                "task_id": TaskId::new(),
+                "result": {
+                    "summary": "bounded answer preview"
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    sample_task_result_payload_with_details(
+        workflow_id,
+        status,
+        execution_steps,
+        step_results,
+        proof_outcome,
+    )
+}
+
+fn sample_canonical_result(
+    workflow_id: TaskId,
+    status: &str,
+    execution_steps: Vec<serde_json::Value>,
+    step_results: Vec<serde_json::Value>,
+) -> mister_smith_core::UnifiedResultEnvelope {
+    autonomy::build_canonical_result_envelope(autonomy::CanonicalResultEnvelopeInput {
+        workflow_id,
+        provider_kind: "openai_chatgpt",
+        model_id: "gpt-5.4",
+        description: "freeze the result contract",
+        runtime_execution_mode: serde_json::json!({
+            "execution_boundary": "tool_bus",
+            "workflow_runner": "tokio_task",
+            "routing_policy": "round_robin",
+            "registered_provider_count": 1,
+            "budget_root": "disabled"
+        }),
+        planner_output: serde_json::json!({ "steps": execution_steps.len() }),
+        execution_plan: serde_json::json!({ "steps": execution_steps }),
+        step_results,
+        aggregated_result: serde_json::json!({
+            "summary": "bounded answer preview"
+        }),
+        status,
     })
 }
 
@@ -662,6 +797,296 @@ fn classify_proof_outcome_covers_success_collapse_and_failure_visible_matrix() {
 }
 
 #[test]
+fn build_task_result_view_surfaces_accepted_without_repair_orchestration_quality() {
+    let workflow_id = TaskId::new();
+    let canonical_result = sample_canonical_result(
+        workflow_id,
+        "completed",
+        vec![serde_json::json!({ "id": "draft-outline" })],
+        vec![sample_step_result_with_evaluation(
+            "draft-outline",
+            sample_step_evaluation_record(
+                workflow_id,
+                "draft-outline",
+                VerifierVerdict::Accepted,
+                None,
+                0,
+                None,
+                None,
+                None,
+            ),
+        )],
+    );
+
+    let summary = autonomy::build_task_result_view("completed", canonical_result)
+        .orchestration_quality
+        .expect("accepted evaluation should surface orchestration quality");
+
+    assert_eq!(
+        summary,
+        OrchestrationQualityView {
+            step_id: "draft-outline".to_string(),
+            verdict: VerifierVerdict::Accepted,
+            repair_action: None,
+            clarification_attempt_count: 0,
+            checkpoint_ref: None,
+            last_stable_step_id: None,
+            failure_context_ref: None,
+            outcome_summary: "accepted_without_repair".to_string(),
+        }
+    );
+}
+
+#[test]
+fn build_task_result_view_surfaces_rejected_retry_orchestration_quality() {
+    let workflow_id = TaskId::new();
+    let canonical_result = sample_canonical_result(
+        workflow_id,
+        "failed",
+        vec![serde_json::json!({ "id": "draft-outline" })],
+        vec![sample_step_result_with_evaluation(
+            "draft-outline",
+            sample_step_evaluation_record(
+                workflow_id,
+                "draft-outline",
+                VerifierVerdict::Rejected,
+                Some(RepairDirectiveAction::RetryStep),
+                0,
+                Some("checkpoint-retry"),
+                Some("collect-evidence"),
+                Some("draft-outline/retry"),
+            ),
+        )],
+    );
+
+    let summary = autonomy::build_task_result_view("failed", canonical_result)
+        .orchestration_quality
+        .expect("rejected evaluation should surface orchestration quality");
+
+    assert_eq!(
+        summary,
+        OrchestrationQualityView {
+            step_id: "draft-outline".to_string(),
+            verdict: VerifierVerdict::Rejected,
+            repair_action: Some(RepairDirectiveAction::RetryStep),
+            clarification_attempt_count: 0,
+            checkpoint_ref: Some("checkpoint-retry".to_string()),
+            last_stable_step_id: Some("collect-evidence".to_string()),
+            failure_context_ref: Some("draft-outline/retry".to_string()),
+            outcome_summary: "rejected_with_retry_step".to_string(),
+        }
+    );
+}
+
+#[test]
+fn enrich_result_preview_surfaces_accepted_after_clarify_orchestration_quality() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    view.step_routing_history[0].triggered_checkpoints =
+        vec!["budget_policy".to_string(), "confidence_review".to_string()];
+    let workflow_id = view.graph.workflow_id;
+    let task_result = sample_task_result_payload_with_details(
+        workflow_id,
+        "completed",
+        vec![serde_json::json!({ "id": "draft-outline" })],
+        vec![
+            sample_step_result_with_evaluation(
+                "draft-outline",
+                sample_step_evaluation_record(
+                    workflow_id,
+                    "draft-outline",
+                    VerifierVerdict::Accepted,
+                    None,
+                    2,
+                    Some("checkpoint-clarify"),
+                    Some("collect-evidence"),
+                    Some("draft-outline/clarify"),
+                ),
+            ),
+            sample_step_result_with_evaluation(
+                "draft-outline",
+                sample_step_evaluation_record(
+                    workflow_id,
+                    "draft-outline",
+                    VerifierVerdict::Rejected,
+                    Some(RepairDirectiveAction::ClarifyHandoff),
+                    1,
+                    Some("checkpoint-clarify"),
+                    Some("collect-evidence"),
+                    Some("draft-outline/clarify"),
+                ),
+            ),
+        ],
+        Some(ProofOutcomeClassification::CollapsedToSequential),
+    );
+
+    autonomy::enrich_result_preview(&mut view, &serde_json::json!({}), Some(&task_result));
+
+    let preview = view
+        .result_preview
+        .clone()
+        .expect("accepted clarify path should produce a preview");
+    assert_eq!(
+        preview.orchestration_quality,
+        Some(OrchestrationQualityView {
+            step_id: "draft-outline".to_string(),
+            verdict: VerifierVerdict::Accepted,
+            repair_action: Some(RepairDirectiveAction::ClarifyHandoff),
+            clarification_attempt_count: 2,
+            checkpoint_ref: Some("checkpoint-clarify".to_string()),
+            last_stable_step_id: Some("collect-evidence".to_string()),
+            failure_context_ref: Some("draft-outline/clarify".to_string()),
+            outcome_summary: "accepted_after_clarify_handoff".to_string(),
+        })
+    );
+    assert!(preview.provenance_lines.iter().any(|line| {
+        line.contains("latest step routing tier=llm-tier action=continue")
+            && line.contains("budget_policy")
+            && line.contains("confidence_review")
+    }));
+    assert!(preview.provenance_lines.iter().any(|line| {
+        line.contains("orchestration quality step=draft-outline verdict=accepted")
+            && line.contains("repair=clarify_handoff")
+            && line.contains("clarification_attempts=2")
+            && line.contains("checkpoint=checkpoint-clarify")
+            && line.contains("last_stable_step=collect-evidence")
+            && line.contains("failure_context=draft-outline/clarify")
+            && line.contains("outcome=accepted_after_clarify_handoff")
+    }));
+
+    let rendered = autonomy::render_status(&view);
+    assert!(rendered.contains("orchestration_quality:"));
+    assert!(rendered.contains("step=draft-outline verdict=accepted repair=clarify_handoff"));
+    assert!(rendered.contains(
+        "clarification_attempts=2 checkpoint=checkpoint-clarify last_stable_step=collect-evidence"
+    ));
+    assert!(rendered
+        .contains("failure_context=draft-outline/clarify outcome=accepted_after_clarify_handoff"));
+}
+
+#[test]
+fn enrich_result_preview_recovers_replan_checkpoint_lineage() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    let workflow_id = view.graph.workflow_id;
+    let task_result = sample_task_result_payload_with_details(
+        workflow_id,
+        "completed",
+        vec![
+            serde_json::json!({ "id": "collect-evidence" }),
+            serde_json::json!({ "id": "draft-outline" }),
+        ],
+        vec![
+            sample_step_result_with_evaluation(
+                "draft-outline",
+                sample_step_evaluation_record(
+                    workflow_id,
+                    "draft-outline",
+                    VerifierVerdict::Rejected,
+                    Some(RepairDirectiveAction::ReplanFromCheckpoint),
+                    1,
+                    Some("checkpoint-replan"),
+                    Some("collect-evidence"),
+                    Some("draft-outline/replan"),
+                ),
+            ),
+            sample_step_result_with_evaluation(
+                "draft-outline",
+                sample_step_evaluation_record(
+                    workflow_id,
+                    "draft-outline",
+                    VerifierVerdict::Accepted,
+                    None,
+                    2,
+                    Some("checkpoint-replan"),
+                    Some("collect-evidence"),
+                    Some("draft-outline/replan"),
+                ),
+            ),
+        ],
+        Some(ProofOutcomeClassification::GraphFormedAndCompleted),
+    );
+
+    autonomy::enrich_result_preview(&mut view, &serde_json::json!({}), Some(&task_result));
+
+    let summary = view
+        .result_preview
+        .expect("accepted replan path should produce a preview")
+        .orchestration_quality
+        .expect("accepted replan path should retain orchestration quality");
+    assert_eq!(
+        summary,
+        OrchestrationQualityView {
+            step_id: "draft-outline".to_string(),
+            verdict: VerifierVerdict::Accepted,
+            repair_action: Some(RepairDirectiveAction::ReplanFromCheckpoint),
+            clarification_attempt_count: 2,
+            checkpoint_ref: Some("checkpoint-replan".to_string()),
+            last_stable_step_id: Some("collect-evidence".to_string()),
+            failure_context_ref: Some("draft-outline/replan".to_string()),
+            outcome_summary: "accepted_after_replan_from_checkpoint".to_string(),
+        }
+    );
+}
+
+#[test]
+fn enrich_result_preview_uses_execution_plan_order_over_step_result_position() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    let workflow_id = view.graph.workflow_id;
+    let task_result = sample_task_result_payload_with_details(
+        workflow_id,
+        "completed",
+        vec![
+            serde_json::json!({ "id": "collect-evidence" }),
+            serde_json::json!({ "id": "draft-outline" }),
+            serde_json::json!({ "id": "publish" }),
+        ],
+        vec![
+            sample_step_result_with_evaluation(
+                "publish",
+                sample_step_evaluation_record(
+                    workflow_id,
+                    "publish",
+                    VerifierVerdict::Accepted,
+                    None,
+                    0,
+                    None,
+                    None,
+                    None,
+                ),
+            ),
+            sample_step_result_with_evaluation(
+                "draft-outline",
+                sample_step_evaluation_record(
+                    workflow_id,
+                    "draft-outline",
+                    VerifierVerdict::Accepted,
+                    None,
+                    3,
+                    Some("checkpoint-clarify"),
+                    Some("collect-evidence"),
+                    Some("draft-outline/clarify"),
+                ),
+            ),
+        ],
+        Some(ProofOutcomeClassification::GraphFormedAndCompleted),
+    );
+
+    autonomy::enrich_result_preview(&mut view, &serde_json::json!({}), Some(&task_result));
+
+    let summary = view
+        .result_preview
+        .expect("preview should be retained")
+        .orchestration_quality
+        .expect("terminal evaluation should be projected");
+    assert_eq!(summary.step_id, "publish");
+    assert_eq!(summary.verdict, VerifierVerdict::Accepted);
+    assert_eq!(summary.repair_action, None);
+    assert_eq!(summary.outcome_summary, "accepted_without_repair");
+}
+
+#[test]
 fn render_status_surfaces_result_preview_block() {
     let (mut view, _, _) = sample_view();
     view.result_preview = Some(mister_smith_core::OperatorResultPreview {
@@ -669,6 +1094,7 @@ fn render_status_surfaces_result_preview_block() {
         proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
         preview_text: Some("bounded answer preview".to_string()),
         payload_location: "task.result".to_string(),
+        orchestration_quality: None,
         provenance_lines: vec![
             "graph formed and completed before final result publication".to_string(),
             "provider=openai_chatgpt model=gpt-5.4".to_string(),
@@ -699,6 +1125,7 @@ fn enrich_result_preview_merges_existing_structural_provenance() {
         proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
         preview_text: Some("structural preview only".to_string()),
         payload_location: "task.result".to_string(),
+        orchestration_quality: None,
         provenance_lines: vec![
             "projection observed graph state Completed with topology Sequential (1 branch(es), 3 node(s))".to_string(),
             "routing history retained 1 decision(s)".to_string(),

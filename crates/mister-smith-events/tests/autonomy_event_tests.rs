@@ -3,11 +3,14 @@ use mister_smith_core::{
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
     GuardEvidence, HealthState, InterventionRecordId, InterventionType, OperatorResultPreview,
-    ProfileSnapshot, ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification, ProvenanceChain,
-    ProvenanceLink, ResultProvenanceSummary, RevocationState, TaskId, TaskShapeClassification,
-    TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
+    OrchestrationQualityView, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
+    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirectiveAction,
+    ResultProvenanceSummary, RevocationState, TaskId, TaskShapeClassification, TaskShapeKind,
+    TeamSizingDecision, TopologyKind, TopologyRationale, VerifierVerdict,
 };
-use mister_smith_events::autonomy::infer_proof_outcome_from_projection;
+use mister_smith_events::autonomy::{
+    infer_proof_outcome_from_projection, merge_operator_result_preview,
+};
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyEventType, AutonomyStatusView, BranchSummary,
     CapabilitySummary, CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, EventBus,
@@ -168,12 +171,56 @@ fn sample_result_preview(
         proof_outcome,
         preview_text: Some("bounded answer preview".to_string()),
         payload_location: "task.result".to_string(),
+        orchestration_quality: None,
         provenance_lines: vec![
             "canonical result stored in metadata.final_result".to_string(),
             "aggregated payload nested under metadata.aggregated_result".to_string(),
             "session assistant_result derives from the canonical result object".to_string(),
         ],
     }
+}
+
+#[test]
+fn merge_operator_result_preview_preserves_orchestration_quality_from_fallback() {
+    let workflow_id = TaskId::new();
+    let preferred = OperatorResultPreview {
+        workflow_id,
+        proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+        preview_text: Some("preferred preview".to_string()),
+        payload_location: "task.result".to_string(),
+        orchestration_quality: None,
+        provenance_lines: vec!["preferred provenance".to_string()],
+    };
+    let fallback = OperatorResultPreview {
+        workflow_id,
+        proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+        preview_text: Some("fallback preview".to_string()),
+        payload_location: "task.result".to_string(),
+        orchestration_quality: Some(OrchestrationQualityView {
+            step_id: "draft-outline".to_string(),
+            verdict: VerifierVerdict::Accepted,
+            repair_action: Some(RepairDirectiveAction::ClarifyHandoff),
+            clarification_attempt_count: 2,
+            checkpoint_ref: Some("checkpoint-clarify".to_string()),
+            last_stable_step_id: Some("collect-evidence".to_string()),
+            failure_context_ref: Some("draft-outline/clarify".to_string()),
+            outcome_summary: "accepted_after_clarify_handoff".to_string(),
+        }),
+        provenance_lines: vec!["fallback provenance".to_string()],
+    };
+
+    let merged = merge_operator_result_preview(&preferred, &fallback);
+
+    assert_eq!(
+        merged.orchestration_quality,
+        fallback.orchestration_quality.clone()
+    );
+    assert!(merged
+        .provenance_lines
+        .contains(&"preferred provenance".to_string()));
+    assert!(merged
+        .provenance_lines
+        .contains(&"fallback provenance".to_string()));
 }
 
 fn sample_graph_summary(
@@ -1059,6 +1106,7 @@ async fn event_bus_aggregates_the_frozen_proof_outcome_matrix() {
             proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
             preview_text: Some("workflow completed with 2 branch(es) across 4 node(s)".to_string()),
             payload_location: "task.result".to_string(),
+            orchestration_quality: None,
             provenance_lines: vec![
                 "graph formed and completed before final result publication".to_string(),
                 format!(
