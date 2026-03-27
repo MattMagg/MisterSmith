@@ -20,6 +20,7 @@ Use this file when you need one honest answer to:
 | ---- | ---------------- | ---- |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
 | Latest frontier packet | `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` | Packet-020 scope and closure note for the landed verifier-gated orchestration slice |
+| Next frozen frontier packet | `specs/021-profile-aware-predictive-runtime-supervision/` | Frozen post-packet-020 packet for profile-aware predictive supervision on the supported runtime path |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for the completed packet-019 runtime-routing slice |
 | Previous frontier closure | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Packet-019 scope freeze and closure router |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final-validation artifact for the completed packet-016 epic |
@@ -103,8 +104,9 @@ external workflow services such as Linear or Symphony.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
 - The packet-016 family remains terminal, packet `019` is closed, packet `020` is now closed on
-  `main`, packet `018` remains an out-of-main review lane, and no newer post-packet-020 bounded
-  phase is frozen yet.
+  `main`, packet `018` remains an out-of-main review lane, and packet `021` is now frozen on
+  `main` as the next bounded phase under
+  `specs/021-profile-aware-predictive-runtime-supervision/`.
 
 ## Important Distinction
 
@@ -194,10 +196,12 @@ The completed frontier epics are:
   parent `MS-96`)
 
 Packet `019` is complete on `main`. Packet `020` is now landed on `main` through `MS-104`
-through `MS-107`. No newer post-packet-020 bounded phase is frozen yet.
+through `MS-107`. Packet `021` is now the frozen next bounded phase:
+`specs/021-profile-aware-predictive-runtime-supervision/`.
 
-The remaining March 27 follow-up is not a frozen packet. It is a backlog planning item for
-further adaptive-topology refinement beyond the current smallest-workflow baseline.
+The remaining March 27 adaptive-topology follow-up is still not a frozen implementation packet.
+It remains a backlog planning item for future evidence-backed work beyond the current
+smallest-workflow baseline.
 
 This current posture is tracked in:
 
@@ -205,6 +209,7 @@ This current posture is tracked in:
 - `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
 - `docs/plans/2026-03-27-runtime-planning-simplification.md`
 - `specs/020-verifier-gated-adaptive-orchestration/`
+- `specs/021-profile-aware-predictive-runtime-supervision/`
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
 - `specs/019-budget-backed-runtime-routing-control-loop/`
@@ -232,6 +237,7 @@ If you need to understand the repo quickly:
 - Use this file for the repo's current broad state.
 - Use `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the landed
   packet-020 scope and closure context,
+  `specs/021-profile-aware-predictive-runtime-supervision/` for the frozen next bounded phase,
   `docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27 follow-up that
   simplified live runtime planning and surfaced runtime-owned repair telemetry, and
   `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` for the completed
