@@ -3961,6 +3961,20 @@ fn verifier_policy_from_task_input(
         return Ok(None);
     };
 
+    let enabled = policy
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| {
+            format!(
+                "workflow step '{}' has invalid verifier_policy.enabled",
+                step_identifier(task)
+            )
+        })?;
+
+    if !enabled {
+        return Ok(None);
+    }
+
     let parsed =
         serde_json::from_value::<InjectedVerifierPolicy>(policy.clone()).map_err(|error| {
             format!(
@@ -3969,11 +3983,7 @@ fn verifier_policy_from_task_input(
             )
         })?;
 
-    if parsed.enabled {
-        Ok(Some(parsed))
-    } else {
-        Ok(None)
-    }
+    Ok(Some(parsed))
 }
 
 fn build_step_evaluation_record(
@@ -4646,7 +4656,9 @@ mod runtime_plan_tests {
                 "branch_id": "branch-a",
                 "description": "draft the outline",
                 "verifier_policy": {
-                    "enabled": false
+                    "enabled": false,
+                    "verdict": "invalid",
+                    "repair_directive": "ignore me"
                 }
             }),
         );
