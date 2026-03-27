@@ -144,10 +144,17 @@ Read the current state in three layers:
   `latest step routing tier=primary action=downgrade checkpoints=budget_policy` proof surface,
   recorded in `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - harder-workload graph proof on the default path when the planner supports it
+- smallest-workflow live planning as the default runtime posture:
+  - stay sequential unless the task clearly benefits from parallel work
+  - create a coordinator merge step only when multiple branches actually exist
+  - preserve the requested output shape instead of forcing a canned memo pattern
 - one shared result contract across task, session, and operator-facing result views
 - bounded operator preview and provenance for proof-relevant inspection
 - one persisted proof-outcome taxonomy across task, session, and operator surfaces:
   `graph_formed_and_completed`, `collapsed_to_sequential`, and `failed_before_graph`
+- packet-020-style repair provenance on the supported description-only ingress through an explicit
+  runtime-owned repair record projected onto task and autonomy result surfaces, with the current
+  proof captured in `docs/plans/2026-03-27-runtime-planning-simplification.md`
 
 This is the current OS path that has real end-to-end proof.
 
@@ -189,10 +196,14 @@ The completed frontier epics are:
 Packet `019` is complete on `main`. Packet `020` is now landed on `main` through `MS-104`
 through `MS-107`. No newer post-packet-020 bounded phase is frozen yet.
 
+The remaining March 27 follow-up is not a frozen packet. It is a backlog planning item for
+further adaptive-topology refinement beyond the current smallest-workflow baseline.
+
 This current posture is tracked in:
 
 - `docs/current-state.md`
 - `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
+- `docs/plans/2026-03-27-runtime-planning-simplification.md`
 - `specs/020-verifier-gated-adaptive-orchestration/`
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
@@ -220,7 +231,9 @@ If you need to understand the repo quickly:
 
 - Use this file for the repo's current broad state.
 - Use `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the landed
-  packet-020 scope and closure context and
+  packet-020 scope and closure context,
+  `docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27 follow-up that
+  simplified live runtime planning and surfaced runtime-owned repair telemetry, and
   `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` for the completed
   packet-019 scope-freeze and closure router.
 - Use `WORKFLOW.md` and `docs/linear/LINEAR.md` for development workflow rules.
