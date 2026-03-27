@@ -22,8 +22,10 @@ Treat `WORKFLOW.md` and `docs/linear/LINEAR.md` as the live control-plane contra
 Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the current runtime-proof
 direction when the task is about proving real end-to-end execution rather than adding another
 implementation phase.
-Treat `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` as the current
-forward-development authority when the task is about what should happen next.
+Treat `docs/current-state.md` as the current forward-direction router. Use
+`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` and
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` as the latest landed frontier
+closure notes. No newer post-packet-020 bounded phase is frozen yet.
 
 ## Product Boundary
 
@@ -62,9 +64,10 @@ runtime.
   - `prepare_speckit_context`, `translate_speckit_tasks`
 - When a task explicitly calls for Ralph, use `./scripts/ralph` instead of bare `ralph`; rerun
   `./scripts/ralph prompt --packet <packet.json>` before each `./scripts/ralph run`.
-- Treat `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` as the
-  forward-development authority, `docs/plans/2026-03-16-smith-first-development-system.md` as
-  historical control-plane background, and
+- Treat `docs/current-state.md` as the current repo-wide router,
+  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` as the most recent landed
+  frontier closure note, `docs/plans/2026-03-16-smith-first-development-system.md` as historical
+  control-plane background, and
   `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current implemented
   workflow-family surface.
 - For repo development workflow only, keep Linear as the durable source of truth, Symphony as the

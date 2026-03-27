@@ -30,10 +30,12 @@ router.
 Document roles in brief:
 
 - `docs/current-state.md`: current repo and OS state
-- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`:
-  current forward-development checkpoint
+- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`:
+  latest landed frontier packet and packet-020 closure note
+- `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`:
+  bounded packet-019 live-proof and closure note
 - `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`:
-  packet-016 closure evidence
+  historical packet-016 closure evidence
 - `WORKFLOW.md` and `docs/linear/LINEAR.md`: development control-plane contract
 - `ROADMAP.md`: architectural build map
 - `spec/` and `specs/`: architecture and implementation packet truth
@@ -50,9 +52,10 @@ the Mister Smith OS runtime.
 - Live queue contract:
   [`WORKFLOW.md`](WORKFLOW.md) and
   [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md)
-- Current forward-development direction and packet-016 closure posture:
-  [`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`](docs/plans/2026-03-21-post-packet-016-development-checkpoint.md),
-  [`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`](docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md)
+- Current repo-wide router and latest landed frontier closure notes:
+  [`docs/current-state.md`](docs/current-state.md),
+  [`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`](docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md),
+  [`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`](docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md)
 - Phase 10 design and gate artifacts:
   [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
   [`docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`](docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md),
@@ -105,8 +108,9 @@ Phase 10 gate evidence on 2026-03-15:
 
 These are OS runtime surfaces, not Symphony or Linear development workflow surfaces.
 
-The repo now has real runtime-backed operator paths plus the packet-015 result-surface closure
-validated against `openai_chatgpt` / `gpt-5.4` through March 20, 2026:
+The repo now has real runtime-backed operator paths plus the packet-019 and packet-020
+routing/provenance extensions landed on `main`; the provider-backed proof baseline remains
+`openai_chatgpt` / `gpt-5.4`:
 
 - one-shot task execution:
   - `mister-smith run`
@@ -141,9 +145,10 @@ Primary notes for the current operator and result-surface baseline:
   [`docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`](docs/plans/2026-03-16-multi-turn-same-agent-conversations.md)
 - local macOS operator cockpit:
   [`apps/operator-console/README.md`](apps/operator-console/README.md)
-- forward checkpoint and packet-016 closure evidence:
-  [`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`](docs/plans/2026-03-21-post-packet-016-development-checkpoint.md),
-  [`docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`](docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md)
+- current repo-wide router and latest landed frontier closure notes:
+  [`docs/current-state.md`](docs/current-state.md),
+  [`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`](docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md),
+  [`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`](docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md)
 
 ## Architecture
 

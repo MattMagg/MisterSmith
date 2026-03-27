@@ -69,8 +69,8 @@ supporting history rather than the primary direction router:
   the completed packet-019 proof lane
 - `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` is the packet-019 scope
   freeze and closure router
-- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` remains the checkpoint that
-  required this fresh bounded packet
+- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` is now historical support
+  context that led into packets `019` and `020`; it is no longer the active router
 - `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
   records the completed packet-016 closure
 
@@ -83,8 +83,11 @@ Closed frontier packet and recovery issues now include:
 - `MS-44` multi-turn same-agent conversations
 - `MS-78` packet-015 parent epic
 - `MS-96` packet-016 parent epic
+- packet `019` bounded runtime routing control loop
+- `MS-103` packet-020 parent epic
 - `MS-89` through `MS-94` packet-015 execution slices
 - `MS-97` through `MS-100` packet-016 execution slices
+- `MS-104` through `MS-107` packet-020 execution slices
 - packet `017` bounded runtime provider selection
 
 ## Queue Posture

@@ -189,14 +189,17 @@ The completed frontier epics are:
 Packet `019` is complete on `main`. Packet `020` is now landed on `main` through `MS-104`
 through `MS-107`. No newer post-packet-020 bounded phase is frozen yet.
 
-This direction is tracked in:
+This current posture is tracked in:
 
+- `docs/current-state.md`
 - `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
 - `specs/020-verifier-gated-adaptive-orchestration/`
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md`
 - `specs/019-budget-backed-runtime-routing-control-loop/`
-- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`
+- `docs/plans/2026-03-27-repo-state-router-sync.md`
+- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` (historical checkpoint that
+  led into packets `019` and `020`)
 - `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
 - `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
 - `docs/plans/2026-03-20-ms-95-post-merge-re-evaluation.md`

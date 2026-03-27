@@ -4,10 +4,10 @@ Date: March 16, 2026
 Status: Historical
 
 This note remains useful background for the Smith-first control-plane build-out, but it is no
-longer the forward-development authority. Use
-`docs/plans/2026-03-21-post-packet-016-development-checkpoint.md` for current repo-wide
-direction and `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
-for the latest completed frontier-packet closure evidence.
+longer the forward-development authority. Use `docs/current-state.md` for the current repo-wide
+router, `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the latest landed
+frontier packet note, and `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for
+the latest bounded live-proof and closure note.
 
 ## Objective
 
@@ -33,11 +33,14 @@ to build the repo-backed workflow system itself.
 
 - `WORKFLOW.md`: Symphony runtime contract and issue lifecycle
 - `docs/linear/LINEAR.md`: Linear taxonomy, queue boundary, and project roles
-- `docs/plans/2026-03-21-post-packet-016-development-checkpoint.md`: current forward-development
-  checkpoint
+- `docs/current-state.md`: current repo-wide router
+- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`: latest landed frontier packet
+  note
+- `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`: latest bounded live-proof and
+  closure note
 - `docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md`: recovered Smith workflow design
 - `docs/plans/2026-03-15-smith-mcp-workflow-forensics.md`: evidence for the workflow model
-- `docs/plans/2026-03-16-frontier-direction.md`: current mainline direction note, useful as
+- `docs/plans/2026-03-16-frontier-direction.md`: historical frontier-direction note, useful as
   repo history but not the defining objective for this effort
 
 ### Live control-plane facts verified on March 16, 2026
