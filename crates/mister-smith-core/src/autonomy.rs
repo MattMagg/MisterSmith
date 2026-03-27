@@ -12,11 +12,13 @@ use serde_json::Value;
 use crate::enums::{
     BudgetPolicy, BudgetScope, CoordinationPolicy, DelegationScope, FailureClass, HealthState,
     InterventionType, ProfileTarget, RevocationState, SemanticSignalKind, TopologyKind,
+    VerifierVerdict,
 };
 use crate::ids::{
     AgentId, CapabilityId, CheckpointId, ContextBudgetId, ExecutionBranchId, ExecutionGraphId,
     ExecutionNodeId, GuardDecisionId, InterventionRecordId, ProfileSnapshotId, TaskId,
 };
+use crate::supervision::RepairDirective;
 
 /// Coarse task-structure class derived from dependency analysis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -181,6 +183,31 @@ pub struct UnifiedResultEnvelope {
     pub aggregated_result: Value,
     /// Proof outcome classification for the run.
     pub proof_outcome: ProofOutcomeClassification,
+}
+
+/// Verifier-owned evaluation of one workflow step.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StepEvaluationRecord {
+    /// Workflow that owns the evaluated step.
+    pub workflow_id: TaskId,
+    /// Stable identifier for the evaluated step or handoff.
+    pub step_id: String,
+    /// Verifier verdict for the step.
+    pub verdict: VerifierVerdict,
+    /// Optional bounded confidence score from the verifier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
+    /// Human-readable explanation for the verdict.
+    pub reason: String,
+    /// Optional structured failure or deficiency code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<String>,
+    /// Optional reference to the last stable checkpoint used for repair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint_ref: Option<String>,
+    /// Optional bounded repair directive when the step is rejected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repair_directive: Option<RepairDirective>,
 }
 
 /// Task-facing result envelope exposed through `task.result`.
@@ -517,4 +544,33 @@ pub struct ProvenanceChain {
     pub links: Vec<ProvenanceLink>,
     /// Capability used at execution time.
     pub terminal_capability: CapabilityId,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{RepairDirectiveAction, TaskId};
+
+    #[test]
+    fn step_evaluation_record_serde_roundtrip() {
+        let record = StepEvaluationRecord {
+            workflow_id: TaskId::new(),
+            step_id: "draft-outline".to_string(),
+            verdict: VerifierVerdict::Rejected,
+            confidence: Some(0.42),
+            reason: "missing cost constraint in handoff".to_string(),
+            failure_code: Some("missing_constraint".to_string()),
+            checkpoint_ref: Some("checkpoint-1".to_string()),
+            repair_directive: Some(RepairDirective {
+                action: RepairDirectiveAction::ClarifyHandoff,
+                issued_by: "verifier.runtime".to_string(),
+                failure_context_ref: "draft-outline/missing-cost".to_string(),
+                retry_budget_remaining: 1,
+            }),
+        };
+
+        let json = serde_json::to_string(&record).unwrap();
+        let deserialized: StepEvaluationRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, record);
+    }
 }

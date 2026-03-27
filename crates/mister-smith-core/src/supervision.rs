@@ -2,6 +2,7 @@
 //!
 //! Implements an OTP-inspired supervision model for managing agent lifecycles.
 
+use crate::enums::RepairDirectiveAction;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -66,6 +67,19 @@ pub enum BackoffStrategy {
         /// Amount added to delay per retry.
         increment: Duration,
     },
+}
+
+/// Bounded repair action emitted after verifier rejection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepairDirective {
+    /// Repair action selected for the rejected step.
+    pub action: RepairDirectiveAction,
+    /// Runtime surface that issued the directive.
+    pub issued_by: String,
+    /// Stable reference to preserved rejection diagnostics.
+    pub failure_context_ref: String,
+    /// Remaining local retry budget for the directive.
+    pub retry_budget_remaining: u32,
 }
 
 /// Complete supervision configuration for a supervisor node.
@@ -149,5 +163,19 @@ mod tests {
             let deserialized: EscalationPolicy = serde_json::from_str(&json).unwrap();
             assert_eq!(*policy, deserialized);
         }
+    }
+
+    #[test]
+    fn repair_directive_serde_roundtrip() {
+        let directive = RepairDirective {
+            action: RepairDirectiveAction::RetryStep,
+            issued_by: "verifier.runtime".to_string(),
+            failure_context_ref: "step-1/missing-context".to_string(),
+            retry_budget_remaining: 2,
+        };
+
+        let json = serde_json::to_string(&directive).unwrap();
+        let deserialized: RepairDirective = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, directive);
     }
 }

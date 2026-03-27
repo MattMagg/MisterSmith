@@ -22,9 +22,9 @@ pub use autonomy::{
     DelegatedActionPolicy, DelegationCapability, ExternalDelegationEnvelope, GuardDecision,
     GuardEvidence, GuardTarget, InterventionRecord, MetricWindow, OperatorResultPreview,
     ProfileSnapshot, ProofOutcomeClassification, ProvenanceChain, ProvenanceLink,
-    ResultProvenanceSummary, SemanticSignal, SessionRetainedResultView, TaskResultView,
-    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyPlan, TopologyRationale,
-    UnifiedResultEnvelope,
+    ResultProvenanceSummary, SemanticSignal, SessionRetainedResultView, StepEvaluationRecord,
+    TaskResultView, TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyPlan,
+    TopologyRationale, UnifiedResultEnvelope,
 };
 
 // Core enums
@@ -32,13 +32,14 @@ pub use enums::{
     AgentAvailability, AgentState, AgentType, BranchRecoveryStrategy, BranchState, BudgetPolicy,
     BudgetScope, CheckpointPolicy, CoordinationPolicy, DelegationScope, DependencyType,
     FailureClass, GraphState, HealthState, InterventionType, MessagePriority, NodeState,
-    ProcessLifecycle, ProfileTarget, RevocationState, SemanticSignalKind, SessionStatus,
-    ShutdownReason, TopologyKind,
+    ProcessLifecycle, ProfileTarget, RepairDirectiveAction, RevocationState, SemanticSignalKind,
+    SessionStatus, ShutdownReason, TopologyKind, VerifierVerdict,
 };
 
 // Supervision types
 pub use supervision::{
-    BackoffStrategy, EscalationPolicy, RestartPolicy, RestartScope, SupervisionStrategy,
+    BackoffStrategy, EscalationPolicy, RepairDirective, RestartPolicy, RestartScope,
+    SupervisionStrategy,
 };
 
 // Error hierarchy
