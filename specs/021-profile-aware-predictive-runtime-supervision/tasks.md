@@ -1,7 +1,8 @@
 # Tasks: Profile-Aware Predictive Runtime Supervision
 
 **Input**: Design documents from `/specs/021-profile-aware-predictive-runtime-supervision/`
-**Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `quickstart.md`
+**Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `quickstart.md`,
+`contracts/`
 
 **Tests**: Included. This packet requires targeted supervision tests in `mister-smith-core`,
 `mister-smith-agents`, `mister-smith-events`, and `mister-smith-app`, plus bounded
@@ -45,6 +46,8 @@ ownership.
 
 **CRITICAL**: No `[P]` lane may begin until this checkpoint is complete.
 
+- [ ] T003A Freeze the shared supervision contract in
+      `specs/021-profile-aware-predictive-runtime-supervision/contracts/supervision-evidence-contract.md`
 - [ ] T003 Add `ProfileFingerprint` and any shared supervision evidence value objects in
       `crates/mister-smith-core/src/autonomy.rs` and re-export them from
       `crates/mister-smith-core/src/lib.rs`
@@ -55,8 +58,8 @@ ownership.
 - [ ] T006 Add shared contract coverage in `crates/mister-smith-core/tests/trait_compilation_tests.rs`
       and `crates/mister-smith-events/tests/autonomy_event_tests.rs`
 
-**Checkpoint**: predictive-supervision fields are frozen once in `core`, `events`, and
-`orchestrator`.
+**Checkpoint**: predictive-supervision fields and the contract artifact are frozen once in
+`contracts/`, `core`, `events`, and `orchestrator`.
 
 ---
 

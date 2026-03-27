@@ -1,7 +1,7 @@
 # Specification Analysis Report
 
-This report reflects the post-clarify pass across `spec.md`, `plan.md`, and `tasks.md` for packet
-`021`.
+This report reflects the post-clarify and contract-freeze pass across `spec.md`, `plan.md`,
+`contracts/`, and `tasks.md` for packet `021`.
 
 ## Findings
 
@@ -9,7 +9,8 @@ This report reflects the post-clarify pass across `spec.md`, `plan.md`, and `tas
 | -- | -------- | -------- | ----------- | ------- | -------------- |
 | A1 | Ambiguity | LOW | `plan.md`, `tasks.md` | Fingerprint refresh cadence is deferred to Milestone 1. | Pick a refresh or invalidation rule in Milestone 1 if implementation needs it. |
 
-No critical or high-severity cross-artifact conflicts were detected.
+No critical or high-severity cross-artifact conflicts were detected. The missing shared-contract
+artifact gap has been closed by `contracts/supervision-evidence-contract.md`.
 
 ## Coverage Summary
 
@@ -28,6 +29,14 @@ No critical or high-severity cross-artifact conflicts were detected.
 | explicit-invalid-state-failure | Yes | T006, T013, T014 | Shared contract and KV validation tasks cover structural invalidity. |
 | replayable-evidence-fingerprint-seeding | Yes | T013, T014, T015, T017 | Fingerprint seeding is grounded in deterministic fixtures and replayable evidence. |
 | structured-summary-only-fingerprint-storage | Yes | T003, T014, T015 | Clarify pass converted this into an explicit contract and storage rule. |
+
+## Contract Alignment
+
+- `contracts/supervision-evidence-contract.md` now freezes the canonical mapping between target
+  scope, fingerprint references, live profile snapshots, guard decisions, interventions, and
+  linked packet `020` repair lineage.
+- `plan.md` and `tasks.md` now explicitly require the contract artifact as part of Milestone 1
+  rather than implying a contract freeze without publishing it.
 
 ## Constitution Alignment Issues
 

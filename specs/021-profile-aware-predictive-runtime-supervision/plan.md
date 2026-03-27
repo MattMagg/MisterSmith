@@ -39,7 +39,7 @@ operator-facing evidence
 | Principle | Status | Evidence |
 | --------- | ------ | -------- |
 | I. Canonical Single Source | PASS | Grounded in `docs/current-state.md`, packet `020` closure, March 27 runtime proof notes, and current code surfaces. |
-| II. Spec-First Design | PASS | Packet `021` freezes the next bounded phase before any implementation slice is staged. |
+| II. Spec-First Design | PASS | `spec.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`, `tasks.md`, and `analyze.md` are written before implementation. |
 | III. Phase-And-Packet-Gated Delivery | PASS | Chooses one frontier seam after packet `020` rather than mixing routing, topology, and coordination futures. |
 | IV. Model-Agnostic Architecture | PASS | Targets runtime supervision semantics, not provider-specific behavior or model lock-in. |
 | V. Erlang/OTP-Style Fault Tolerance | PASS | Extends local intervention and profile-aware guidance above the existing restart substrate. |
@@ -56,6 +56,8 @@ specs/021-profile-aware-predictive-runtime-supervision/
 ├── research.md
 ├── data-model.md
 ├── quickstart.md
+├── contracts/
+│   └── supervision-evidence-contract.md
 ├── tasks.md
 └── analyze.md
 
@@ -131,12 +133,12 @@ Adding a new surface would widen scope without adding new runtime truth.
 
 ### Milestone 1: Freeze the shared supervision contract
 
-**Scope**: define packet `021` entities, update the repo router, and freeze the operator-visible
-evidence shape.
+**Scope**: define packet `021` entities, publish the shared supervision contract, update the repo
+router, and freeze the operator-visible evidence shape.
 
 **Validation**:
 
-- packet `021` artifacts are complete
+- packet `021` artifacts, including `contracts/supervision-evidence-contract.md`, are complete
 - `docs/current-state.md` no longer claims that no post-packet-020 packet is frozen
 
 ### Milestone 2: Wire predictive supervision onto the supported ingress
