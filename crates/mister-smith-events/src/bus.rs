@@ -14,10 +14,11 @@ use tokio::sync::{broadcast, RwLock};
 use tracing;
 
 use mister_smith_core::{
-    CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, GuardDecision,
-    GuardDecisionId, GuardTarget, InterventionRecord, InterventionRecordId, OperatorResultPreview,
-    ProfileSnapshot, ProfileSnapshotId, ProfileTarget, SupervisionEvidenceView,
-    SupervisionTargetKind, SupervisionTargetScope, SystemEvent, TaskId, TeamSizingDecision,
+    CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, ExecutionGraphId,
+    GuardDecision, GuardDecisionId, GuardTarget, InterventionRecord, InterventionRecordId,
+    OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
+    SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, SystemEvent, TaskId,
+    TeamSizingDecision,
 };
 
 use crate::autonomy::{
@@ -57,6 +58,7 @@ struct AutonomyStatusAccumulator {
     external_capability_decisions: Vec<ExternalCapabilityDecisionSummary>,
     profiles: HashMap<ProfileSnapshotId, ProfileSnapshot>,
     guard_decisions: HashMap<GuardDecisionId, GuardDecision>,
+    supervision_evidence: Option<SupervisionEvidenceView>,
     conservative_reasons: Vec<String>,
     latest_profile_id: Option<ProfileSnapshotId>,
     latest_guard_decision_id: Option<GuardDecisionId>,
@@ -214,6 +216,17 @@ impl AutonomyStatusAccumulator {
             (None, None) => None,
         };
 
+        let supervision_evidence = self
+            .synthesize_supervision_evidence()
+            .map(|evidence| {
+                if let Some(preserved) = self.supervision_evidence.as_ref() {
+                    merge_supervision_evidence(evidence, preserved)
+                } else {
+                    evidence
+                }
+            })
+            .or_else(|| self.supervision_evidence.clone());
+
         Some(AutonomyStatusView {
             session_id: self.session_id,
             turn_index: self.turn_index,
@@ -234,12 +247,13 @@ impl AutonomyStatusAccumulator {
             external_capability_decisions,
             profiles,
             guard_decisions,
-            supervision_evidence: self.synthesize_supervision_evidence(),
+            supervision_evidence,
             conservative_reasons: self.conservative_reasons.clone(),
         })
     }
 
     fn from_view(view: AutonomyStatusView) -> Self {
+        let supervision_evidence = view.supervision_evidence.clone();
         let mut accumulator = Self {
             session_id: view.session_id,
             turn_index: view.turn_index,
@@ -249,6 +263,7 @@ impl AutonomyStatusAccumulator {
             graph: Some(view.graph),
             topology: Some(view.topology),
             team_sizing: view.team_sizing,
+            supervision_evidence,
             ..Self::default()
         };
 
@@ -289,7 +304,28 @@ impl AutonomyStatusAccumulator {
                 .guard_decisions
                 .insert(decision.decision_id, decision);
         }
-        if let Some(evidence) = view.supervision_evidence {
+        if let Some(evidence) = accumulator.supervision_evidence.clone() {
+            if let Some(profile) = evidence.profile_snapshot.clone() {
+                accumulator.latest_profile_id = Some(profile.profile_id);
+                accumulator
+                    .profiles
+                    .entry(profile.profile_id)
+                    .or_insert(profile);
+            }
+            if let Some(decision) = evidence.guard_decision.clone() {
+                accumulator.latest_guard_decision_id = Some(decision.decision_id);
+                accumulator
+                    .guard_decisions
+                    .entry(decision.decision_id)
+                    .or_insert(decision);
+            }
+            if let Some(record) = evidence.intervention_record.clone() {
+                accumulator.latest_intervention_id = Some(record.record_id);
+                accumulator
+                    .interventions
+                    .entry(record.record_id)
+                    .or_insert(record);
+            }
             accumulator.latest_profile_id = evidence
                 .profile_snapshot
                 .as_ref()
@@ -309,16 +345,6 @@ impl AutonomyStatusAccumulator {
     }
 
     fn synthesize_supervision_evidence(&self) -> Option<SupervisionEvidenceView> {
-        let profile_snapshot = self
-            .latest_profile_id
-            .and_then(|profile_id| self.profiles.get(&profile_id))
-            .cloned()
-            .or_else(|| {
-                self.profiles
-                    .values()
-                    .max_by_key(|profile| profile.updated_at)
-                    .cloned()
-            });
         let intervention_record = self
             .latest_intervention_id
             .and_then(|record_id| self.interventions.get(&record_id))
@@ -339,10 +365,31 @@ impl AutonomyStatusAccumulator {
                     .cloned()
             })
             .or_else(|| self.guard_decisions.values().next().cloned());
+        let profile_snapshot = guard_decision
+            .as_ref()
+            .and_then(|decision| decision.evidence.profile_id)
+            .and_then(|profile_id| self.profiles.get(&profile_id))
+            .cloned()
+            .or_else(|| {
+                self.latest_profile_id
+                    .and_then(|profile_id| self.profiles.get(&profile_id))
+                    .cloned()
+            })
+            .or_else(|| {
+                self.profiles
+                    .values()
+                    .max_by_key(|profile| profile.updated_at)
+                    .cloned()
+            });
 
         let target_scope = guard_decision
             .as_ref()
-            .map(|decision| supervision_target_scope_from_guard_target(&decision.target_scope))
+            .map(|decision| {
+                supervision_target_scope_from_guard_target(
+                    self.graph.as_ref().map(|graph| graph.graph_id),
+                    &decision.target_scope,
+                )
+            })
             .or_else(|| {
                 profile_snapshot
                     .as_ref()
@@ -397,7 +444,61 @@ impl AutonomyStatusAccumulator {
     }
 }
 
-fn supervision_target_scope_from_guard_target(target: &GuardTarget) -> SupervisionTargetScope {
+fn merge_supervision_evidence(
+    mut synthesized: SupervisionEvidenceView,
+    preserved: &SupervisionEvidenceView,
+) -> SupervisionEvidenceView {
+    synthesized.target_scope =
+        merge_supervision_target_scope(synthesized.target_scope, &preserved.target_scope);
+    if synthesized.fingerprint_ref.is_none() {
+        synthesized.fingerprint_ref = preserved.fingerprint_ref.clone();
+    }
+    if synthesized.profile_snapshot.is_none() {
+        synthesized.profile_snapshot = preserved.profile_snapshot.clone();
+    }
+    if synthesized.guard_decision.is_none() {
+        synthesized.guard_decision = preserved.guard_decision.clone();
+    }
+    if synthesized.intervention_record.is_none() {
+        synthesized.intervention_record = preserved.intervention_record.clone();
+    }
+    if synthesized.decision_basis.is_none() {
+        synthesized.decision_basis = preserved.decision_basis.clone();
+    }
+    if synthesized.repair_lineage_ref.is_none() {
+        synthesized.repair_lineage_ref = preserved.repair_lineage_ref.clone();
+    }
+    if synthesized.proof_boundary.is_none() {
+        synthesized.proof_boundary = preserved.proof_boundary.clone();
+    }
+    synthesized
+}
+
+fn merge_supervision_target_scope(
+    mut synthesized: SupervisionTargetScope,
+    preserved: &SupervisionTargetScope,
+) -> SupervisionTargetScope {
+    if synthesized.kind == preserved.kind {
+        if synthesized.provider.is_none() {
+            synthesized.provider = preserved.provider.clone();
+        }
+        if synthesized.graph_id.is_none() {
+            synthesized.graph_id = preserved.graph_id;
+        }
+        if synthesized.branch_id.is_none() {
+            synthesized.branch_id = preserved.branch_id;
+        }
+        if synthesized.node_id.is_none() {
+            synthesized.node_id = preserved.node_id;
+        }
+    }
+    synthesized
+}
+
+fn supervision_target_scope_from_guard_target(
+    graph_id: Option<ExecutionGraphId>,
+    target: &GuardTarget,
+) -> SupervisionTargetScope {
     match target {
         GuardTarget::Provider(provider) => SupervisionTargetScope {
             kind: SupervisionTargetKind::Provider,
@@ -416,14 +517,14 @@ fn supervision_target_scope_from_guard_target(target: &GuardTarget) -> Supervisi
         GuardTarget::Branch(branch_id) => SupervisionTargetScope {
             kind: SupervisionTargetKind::Branch,
             provider: None,
-            graph_id: None,
+            graph_id,
             branch_id: Some(*branch_id),
             node_id: None,
         },
         GuardTarget::Node(node_id) => SupervisionTargetScope {
             kind: SupervisionTargetKind::Node,
             provider: None,
-            graph_id: None,
+            graph_id,
             branch_id: None,
             node_id: Some(*node_id),
         },

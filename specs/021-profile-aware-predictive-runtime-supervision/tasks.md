@@ -24,7 +24,8 @@ ownership.
 - packet `020` is already landed on `main`
 - the March 27 runtime-planning simplification pass is already landed on `main`
 - packet `021` is now frozen on `main` as the next bounded post-packet-020 phase
-- the implementation tasks below remain unchecked
+- the shared-supervision contract freeze tasks (`T003A` through `T006`) are now completed;
+  later packet-021 implementation lanes remain open below
 
 ---
 

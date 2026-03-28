@@ -2,11 +2,11 @@ use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
     ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
-    GuardEvidence, HealthState, InterventionRecordId, InterventionType, OperatorResultPreview,
-    OrchestrationQualityView, ProfileFingerprintId, ProfileFingerprintRef, ProfileSnapshot,
-    ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification, ProvenanceChain, ProvenanceLink,
-    RepairDirectiveAction, RepairLineageRef, ResultProvenanceSummary, RevocationState,
-    SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
+    GuardEvidence, HealthState, InterventionRecord, InterventionRecordId, InterventionType,
+    OperatorResultPreview, OrchestrationQualityView, ProfileFingerprintId, ProfileFingerprintRef,
+    ProfileSnapshot, ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification, ProvenanceChain,
+    ProvenanceLink, RepairDirectiveAction, RepairLineageRef, ResultProvenanceSummary,
+    RevocationState, SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
     SupervisionTargetScope, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
     TopologyKind, TopologyRationale, VerifierVerdict,
 };
@@ -657,7 +657,9 @@ async fn event_bus_synthesizes_supervision_evidence_from_runtime_events() {
     let workflow_id = TaskId::new();
     let graph_id = ExecutionGraphId::new();
     let branch_id = ExecutionBranchId::new();
+    let other_branch_id = ExecutionBranchId::new();
     let profile_id = ProfileSnapshotId::new();
+    let other_profile_id = ProfileSnapshotId::new();
     let decision_id = GuardDecisionId::new();
     let fingerprint_ref = ProfileFingerprintRef {
         fingerprint_id: ProfileFingerprintId::new(),
@@ -800,6 +802,53 @@ async fn event_bus_synthesizes_supervision_evidence_from_runtime_events() {
         )
         .await
         .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(other_branch_id),
+                payload: BranchSummary {
+                    branch_id: other_branch_id,
+                    graph_id,
+                    state: BranchState::Running,
+                    assigned_agents: vec![AgentId::new()],
+                    checkpoint_id: None,
+                    recovery_strategy: BranchRecoveryStrategy::Resume,
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::ProfileSnapshotRecorded(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(other_branch_id),
+                payload: ProfileSnapshot {
+                    profile_id: other_profile_id,
+                    target: ProfileTarget::Branch,
+                    health_state: HealthState::Healthy,
+                    latency_window: None,
+                    error_window: None,
+                    semantic_signals: vec![],
+                    fingerprint_ref: Some(ProfileFingerprintRef {
+                        fingerprint_id: ProfileFingerprintId::new(),
+                        fingerprint_key: "executor:other-branch".to_string(),
+                        confidence: 0.31,
+                        expires_at: chrono::Utc::now(),
+                    }),
+                    updated_at: chrono::Utc::now(),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
 
     let status = event_bus
         .autonomy_status(&workflow_id)
@@ -813,7 +862,15 @@ async fn event_bus_synthesizes_supervision_evidence_from_runtime_events() {
         supervision_evidence.target_scope.kind,
         SupervisionTargetKind::Branch
     );
+    assert_eq!(supervision_evidence.target_scope.graph_id, Some(graph_id));
     assert_eq!(supervision_evidence.target_scope.branch_id, Some(branch_id));
+    assert_eq!(
+        supervision_evidence
+            .profile_snapshot
+            .as_ref()
+            .map(|profile| profile.profile_id),
+        Some(profile_id)
+    );
     assert_eq!(
         supervision_evidence
             .fingerprint_ref
@@ -924,6 +981,138 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
     let roundtrip: AutonomyEvent = serde_json::from_str(&json).unwrap();
 
     assert_eq!(roundtrip, event);
+}
+
+#[tokio::test]
+async fn event_bus_preserves_supervision_evidence_from_status_updated() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch_id = ExecutionBranchId::new();
+    let profile_id = ProfileSnapshotId::new();
+    let decision_id = GuardDecisionId::new();
+    let record_id = InterventionRecordId::new();
+    let fingerprint_ref = ProfileFingerprintRef {
+        fingerprint_id: ProfileFingerprintId::new(),
+        fingerprint_key: "executor:branch".to_string(),
+        confidence: 0.67,
+        expires_at: chrono::Utc::now(),
+    };
+    let supervision_evidence = SupervisionEvidenceView {
+        target_scope: SupervisionTargetScope {
+            kind: SupervisionTargetKind::Branch,
+            provider: None,
+            graph_id: Some(graph_id),
+            branch_id: Some(branch_id),
+            node_id: None,
+        },
+        fingerprint_ref: Some(fingerprint_ref.clone()),
+        profile_snapshot: Some(ProfileSnapshot {
+            profile_id,
+            target: ProfileTarget::Branch,
+            health_state: HealthState::Degraded,
+            latency_window: None,
+            error_window: None,
+            semantic_signals: vec![],
+            fingerprint_ref: Some(fingerprint_ref.clone()),
+            updated_at: chrono::Utc::now(),
+        }),
+        guard_decision: Some(GuardDecision {
+            decision_id,
+            failure_class: FailureClass::Semantic,
+            intervention: InterventionType::ContextRefresh,
+            evidence: GuardEvidence {
+                profile_id: Some(profile_id),
+                decision_basis: SupervisionDecisionBasis::FingerprintReinforced,
+                signal_descriptions: vec!["loop detected".to_string()],
+                checkpoint_ids: vec![],
+                notes: vec!["fingerprint reinforced local recovery".to_string()],
+            },
+            target_scope: mister_smith_core::GuardTarget::Branch(branch_id),
+            operator_visibility: true,
+        }),
+        intervention_record: Some(InterventionRecord {
+            record_id,
+            decision_id,
+            before_state: serde_json::json!({"state": "running"}),
+            after_state: Some(serde_json::json!({"state": "refreshed"})),
+            rationale: "context refresh".to_string(),
+            emitted_at: chrono::Utc::now(),
+        }),
+        decision_basis: Some(
+            SupervisionDecisionBasis::FingerprintReinforced
+                .as_str()
+                .to_string(),
+        ),
+        repair_lineage_ref: Some(RepairLineageRef {
+            source: "packet-020".to_string(),
+            checkpoint_ref: Some("last-stable-checkpoint".to_string()),
+        }),
+        proof_boundary: Some("deterministic-only".to_string()),
+    };
+    let view = AutonomyStatusView {
+        session_id: None,
+        turn_index: None,
+        coordinator_agent_id: None,
+        resume_provenance: None,
+        graph: sample_graph_summary(
+            workflow_id,
+            graph_id,
+            GraphState::Running,
+            1,
+            3,
+            Some(TopologyKind::Sequential),
+        ),
+        topology: sample_topology_summary(
+            graph_id,
+            TopologyKind::Sequential,
+            1,
+            TaskShapeKind::StrictChain,
+        ),
+        team_sizing: None,
+        branches: vec![BranchSummary {
+            branch_id,
+            graph_id,
+            state: BranchState::Running,
+            assigned_agents: vec![AgentId::new()],
+            checkpoint_id: None,
+            recovery_strategy: BranchRecoveryStrategy::Resume,
+        }],
+        checkpoint_lineage: vec![],
+        memory_pressure: vec![],
+        routing_history: vec![],
+        step_routing_history: vec![],
+        result_preview: None,
+        interventions: vec![],
+        delegation_capabilities: vec![],
+        delegation_alerts: vec![],
+        external_capability_decisions: vec![],
+        profiles: vec![],
+        guard_decisions: vec![],
+        supervision_evidence: Some(supervision_evidence.clone()),
+        conservative_reasons: vec![],
+    };
+
+    event_bus
+        .publish(
+            AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: view,
+                operator_visible: true,
+            }))
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+
+    let status = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .expect("status should be available");
+
+    assert_eq!(status.supervision_evidence, Some(supervision_evidence));
 }
 
 #[test]
