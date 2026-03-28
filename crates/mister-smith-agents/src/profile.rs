@@ -1,10 +1,13 @@
 //! Supervisory profile helpers for Guard / Advisor decisions.
 
 use chrono::Utc;
+use mister_smith_core::ExecutionBranchId;
 use mister_smith_core::ProfileSnapshot;
 use mister_smith_core::{
     GuardTarget, HealthState, ProfileSnapshotId, ProfileTarget, SemanticSignal,
 };
+
+use crate::execution_graph::ExecutionGraph;
 
 /// Profile data plus operator-facing notes gathered before a Guard decision.
 #[derive(Debug, Clone, PartialEq)]
@@ -32,6 +35,19 @@ impl ProfileAssessment {
     /// Borrow the runtime target associated with this profile, when known.
     pub fn target(&self) -> Option<&GuardTarget> {
         self.target.as_ref()
+    }
+
+    /// Resolve the owning branch for the current target when graph context exists.
+    pub fn target_branch_id(&self, graph: &ExecutionGraph) -> Option<ExecutionBranchId> {
+        match self.target.as_ref() {
+            Some(GuardTarget::Branch(branch_id)) => Some(*branch_id),
+            Some(GuardTarget::Node(node_id)) => graph
+                .nodes
+                .iter()
+                .find(|node| node.node_id == *node_id)
+                .map(|node| node.branch_id),
+            _ => None,
+        }
     }
 
     /// Borrow operator-facing notes captured during profile assessment.

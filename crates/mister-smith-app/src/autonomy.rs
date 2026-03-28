@@ -14,9 +14,9 @@ use mister_smith_core::{
     AgentId, CapabilityId, CoordinationPolicy, DelegationScope, ExecutionGraphId, GraphState,
     OperatorResultPreview, OrchestrationQualityView, ProofOutcomeClassification,
     RepairDirectiveAction, ResultProvenanceSummary, RevocationState, SessionId,
-    SessionRetainedResultView, StepEvaluationRecord, TaskId, TaskResultView,
-    TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale, UnifiedResultEnvelope,
-    VerifierVerdict,
+    SessionRetainedResultView, StepEvaluationRecord, SupervisionEvidenceView,
+    SupervisionTargetKind, TaskId, TaskResultView, TaskShapeClassification, TaskShapeKind,
+    TopologyKind, TopologyRationale, UnifiedResultEnvelope, VerifierVerdict,
 };
 use mister_smith_events::autonomy::merge_operator_result_preview;
 use mister_smith_events::{
@@ -397,6 +397,11 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         .as_ref()
         .map(render_result_preview)
         .unwrap_or_else(|| "none".to_string());
+    let supervision_summary = view
+        .supervision_evidence
+        .as_ref()
+        .map(render_supervision_evidence)
+        .unwrap_or_else(|| "none".to_string());
     let intervention_summary = view
         .interventions
         .iter()
@@ -459,7 +464,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nresult preview: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nresult preview: {}\nsupervision: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -479,6 +484,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         if routing_summary.is_empty() { "none".to_string() } else { routing_summary },
         if step_routing_summary.is_empty() { "none".to_string() } else { step_routing_summary },
         result_preview_summary,
+        supervision_summary,
         if intervention_summary.is_empty() {
             "none".to_string()
         } else {
@@ -1977,6 +1983,112 @@ fn render_result_preview(summary: &OperatorResultPreview) -> String {
         rendered.push_str(" outcome=");
         rendered.push_str(&orchestration_quality.outcome_summary);
     }
+    rendered
+}
+
+fn render_supervision_evidence(summary: &SupervisionEvidenceView) -> String {
+    let target_kind = match summary.target_scope.kind {
+        SupervisionTargetKind::Provider => "provider",
+        SupervisionTargetKind::Graph => "graph",
+        SupervisionTargetKind::Branch => "branch",
+        SupervisionTargetKind::Node => "node",
+    };
+    let fingerprint = summary
+        .fingerprint_ref
+        .as_ref()
+        .map(|reference| {
+            format!(
+                "{} confidence={:.2}",
+                reference.fingerprint_key, reference.confidence
+            )
+        })
+        .unwrap_or_else(|| "none".to_string());
+    let repair_lineage = summary
+        .repair_lineage_ref
+        .as_ref()
+        .map(|lineage| {
+            format!(
+                "{} checkpoint={}",
+                lineage.source,
+                lineage.checkpoint_ref.as_deref().unwrap_or("none")
+            )
+        })
+        .unwrap_or_else(|| "none".to_string());
+    let mut rendered = format!(
+        "target={} provider={} graph={} branch={} node={} basis={} fingerprint={} repair_lineage={} proof_boundary={}",
+        target_kind,
+        summary.target_scope.provider.as_deref().unwrap_or("none"),
+        summary
+            .target_scope
+            .graph_id
+            .map(|graph_id| graph_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        summary
+            .target_scope
+            .branch_id
+            .map(|branch_id| branch_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        summary
+            .target_scope
+            .node_id
+            .map(|node_id| node_id.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        summary.decision_basis.as_deref().unwrap_or("none"),
+        fingerprint,
+        repair_lineage,
+        summary.proof_boundary.as_deref().unwrap_or("none"),
+    );
+
+    if let Some(profile) = summary.profile_snapshot.as_ref() {
+        let signals = if profile.semantic_signals.is_empty() {
+            "none".to_string()
+        } else {
+            profile
+                .semantic_signals
+                .iter()
+                .map(|signal| {
+                    let kind = match signal.signal_kind {
+                        mister_smith_core::SemanticSignalKind::Stalled => "stalled",
+                        mister_smith_core::SemanticSignalKind::Repetitive => "repetitive",
+                        mister_smith_core::SemanticSignalKind::LowConfidence => "low_confidence",
+                        mister_smith_core::SemanticSignalKind::MissingContext => "missing_context",
+                        mister_smith_core::SemanticSignalKind::PolicyConflict => "policy_conflict",
+                    };
+                    format!("{kind}:{}:{}", signal.severity, signal.detail)
+                })
+                .collect::<Vec<_>>()
+                .join(" | ")
+        };
+        rendered.push_str("\n  profile:");
+        rendered.push_str("\n  - health=");
+        rendered.push_str(&format!("{:?}", profile.health_state));
+        rendered.push_str(" signals=");
+        rendered.push_str(&signals);
+    }
+
+    if let Some(decision) = summary.guard_decision.as_ref() {
+        let notes = if decision.evidence.notes.is_empty() {
+            "none".to_string()
+        } else {
+            decision.evidence.notes.join(" | ")
+        };
+        rendered.push_str("\n  decision:");
+        rendered.push_str("\n  - failure=");
+        rendered.push_str(&format!("{:?}", decision.failure_class));
+        rendered.push_str(" intervention=");
+        rendered.push_str(&format!("{:?}", decision.intervention));
+        rendered.push_str(" basis=");
+        rendered.push_str(decision.evidence.decision_basis.as_str());
+        rendered.push_str(" notes=");
+        rendered.push_str(&notes);
+    }
+
+    if let Some(record) = summary.intervention_record.as_ref() {
+        rendered.push_str("\n  intervention:");
+        rendered.push_str("\n  - rationale=");
+        rendered.push_str(&record.rationale);
+    }
+
     rendered
 }
 

@@ -430,14 +430,9 @@ impl Orchestrator {
     pub fn record_profile_assessment(&self, workflow_id: &TaskId, assessment: ProfileAssessment) {
         let graph = self.execution_graph(workflow_id);
         let graph_id = graph.as_ref().map(|graph| graph.graph_id);
-        let branch_id = match assessment.target() {
-            Some(GuardTarget::Branch(branch_id)) => Some(*branch_id),
-            Some(GuardTarget::Node(node_id)) => graph
-                .as_ref()
-                .and_then(|graph| graph.nodes.iter().find(|node| node.node_id == *node_id))
-                .map(|node| node.branch_id),
-            _ => None,
-        };
+        let branch_id = graph
+            .as_ref()
+            .and_then(|graph| assessment.target_branch_id(graph));
 
         if let Some(snapshot) = assessment.snapshot().cloned() {
             self.record_autonomy_event(
@@ -980,7 +975,7 @@ impl Orchestrator {
                     return None;
                 }
 
-                let profile = latest_branch_profile(&profiles, branch.branch_id);
+                let profile = latest_branch_profile(&graph, &profiles, branch.branch_id);
                 let health_state = profile
                     .and_then(|assessment| {
                         assessment.snapshot().map(|snapshot| snapshot.health_state)
@@ -1658,16 +1653,15 @@ fn dependency_depth(
     depth
 }
 
-fn latest_branch_profile(
-    profiles: &[ProfileAssessment],
+fn latest_branch_profile<'a>(
+    graph: &ExecutionGraph,
+    profiles: &'a [ProfileAssessment],
     branch_id: ExecutionBranchId,
-) -> Option<&ProfileAssessment> {
-    profiles.iter().rev().find(|assessment| {
-        matches!(
-            assessment.target(),
-            Some(GuardTarget::Branch(target_branch_id)) if *target_branch_id == branch_id
-        )
-    })
+) -> Option<&'a ProfileAssessment> {
+    profiles
+        .iter()
+        .rev()
+        .find(|assessment| assessment.target_branch_id(graph) == Some(branch_id))
 }
 
 fn budget_pressure_score(graph: &ExecutionGraph, node_ids: &[ExecutionNodeId]) -> u8 {
@@ -1951,7 +1945,7 @@ fn recovery_routing_event(
     profiles: &[ProfileAssessment],
     recovery: &BranchRecoveryPlan,
 ) -> AutonomyEvent {
-    let profile = latest_branch_profile(profiles, branch_id);
+    let profile = latest_branch_profile(graph, profiles, branch_id);
     let budget_pressure = budget_pressure_score(graph, &recovery.recovery_node_ids);
     let dependency_depths = dependency_depths(graph);
     let dependency_depth = recovery
