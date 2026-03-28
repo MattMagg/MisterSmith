@@ -86,6 +86,11 @@ Instructions:
 - Use `prepare_ralph_packet` and `record_ralph_outcome` for Ralph-assisted flows.
 - Use `prepare_speckit_context` and `translate_speckit_tasks` for SpecKit routing and task-pack
   translation.
+- For Mister Smith packet implementation, keep the flow hybrid:
+  - use Smith-first routing and state reconciliation to confirm the issue or slice is runnable
+  - then explicitly execute the repo-local implement flow backed by
+    `.codex/commands/implement.md` and `.codex/prompts/speckit.implement.md`
+  - do not skip directly from packet discovery or backlog context into ad hoc code edits
 - For frontier-autonomy work, treat
   `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md` as the
   canonical frontier mandate. If a workspace-local
@@ -199,6 +204,9 @@ Instructions:
    - if the workspace is already dirty, review those changes immediately before new edits:
      either land them honestly on a branch/PR, attach them to the current issue if they truly
      belong, or drop them only after verifying they are already landed or stale
+   - if the task is implementing a frozen packet or child slice from `specs/`, explicitly execute
+     the repo-local implement flow so `speckit.implement` runs after Smith-first preflight and
+     before code changes
    - sync with latest `origin/main` using the `pull` skill if needed
    - capture a concrete reproduction signal for bugs and regressions
 

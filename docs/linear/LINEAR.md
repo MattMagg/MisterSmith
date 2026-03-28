@@ -109,6 +109,10 @@ Use Smith as the default workflow layer over this Linear model.
   `prepare_ralph_packet`, `record_ralph_outcome`, `prepare_speckit_context`,
   `translate_speckit_tasks`
 
+For frozen packet execution, keep the workflow hybrid: use Smith MCP to route, reconcile state,
+and prepare the active slice, then run the repo-local `speckit.implement` surface before
+implementation against `specs/`.
+
 Use raw Linear fallback only for workspace administration or metadata operations that Smith does not
 yet model.
 
@@ -436,6 +440,9 @@ Issues reference specs from the repository:
 | `ROADMAP.md` | Phase descriptions and gate criteria |
 
 When creating issues from spec violations or new features, always include the governing spec path in the issue description.
+When executing a frozen packet from `specs/`, do not treat the spec files alone as the full
+workflow. Reconcile Smith control-plane state first, then execute the repo-local `speckit.implement`
+path before code changes.
 
 ## Adding New Phases
 

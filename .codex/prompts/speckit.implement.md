@@ -57,26 +57,35 @@ You **MUST** consider the user input before proceeding (if not empty).
    - the active packet files under `FEATURE_DIR`
    - `.specify/memory/constitution.md`
 
-3. Inspect local repo state before edits:
+3. For Mister Smith packet work, perform the Smith-first preflight before task execution:
+   - route the request with `route_workflow_request`
+   - pull current repo or issue state with `get_control_plane_snapshot` or
+     `get_issue_execution_snapshot`
+   - reconcile the single `## Codex Workpad`
+   - if lifecycle or queue posture matters, use `resolve_issue_lifecycle`, `plan_queue_stage`,
+     `apply_queue_stage`, or the other Smith workflow-family tools before edits
+   - only proceed once the active slice is confirmed honest and runnable
+
+4. Inspect local repo state before edits:
    - `git status --short --branch`
    - `git rev-parse --short HEAD`
    - If the repo is already dirty, review that state before continuing
    - Do not create or rely on git worktrees; this repo forbids them
 
-4. Check checklist status if `FEATURE_DIR/checklists/` exists:
+5. Check checklist status if `FEATURE_DIR/checklists/` exists:
    - Summarize total/completed/incomplete items
    - Treat incomplete checklists as risk input, not silent noise
    - If the user has not explicitly authorized proceeding past incomplete critical checklists,
      stop and surface the risk
 
-5. Execute the task pack:
+6. Execute the task pack:
    - Follow the blocking freeze before any `[P]` lane begins
    - Respect task ordering and single-owner choke points
    - Mark completed tasks as `[x]` in `tasks.md`
    - Keep deterministic checks and live-proof steps explicitly separate
    - Update packet docs or proof notes when the task pack requires them
 
-6. Validation and closure:
+7. Validation and closure:
    - Run the narrowest meaningful validation for the changed behavior
    - Escalate to broader validation only when shared contracts or CI-critical surfaces moved
    - Run `git diff --check`
@@ -84,13 +93,13 @@ You **MUST** consider the user input before proceeding (if not empty).
      `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`
    - Do not stop with task-owned dirty repo state
 
-7. Report:
+8. Report:
    - completed tasks
    - validation run
    - proof boundaries
    - remaining blockers or deferred work
 
-8. **Check for extension hooks**: After completion validation, check if
+9. **Check for extension hooks**: After completion validation, check if
    `.specify/extensions.yml` exists in the project root.
    - If it exists, read it and look for entries under the `hooks.after_implement` key
    - If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
@@ -126,6 +135,8 @@ You **MUST** consider the user input before proceeding (if not empty).
 ## Key Rules
 
 - Work from the packet and current repo truth, not from stale assumptions
+- For Mister Smith packet work, the execution path is hybrid: Smith-first control-plane preflight,
+  then this `speckit.implement` task-pack execution
 - Keep diffs bounded to the packet scope
 - No fake completion: validation and closure are part of implementation
 - No task-owned leftovers

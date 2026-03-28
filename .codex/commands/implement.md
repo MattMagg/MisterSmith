@@ -16,6 +16,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 ## Pre-Execution Checks
 
 **Check for extension hooks (before implementation)**:
+
 - Check if `.specify/extensions.yml` exists in the project root.
 - If it exists, read it and look for entries under the `hooks.before_implement` key
 - If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
@@ -25,7 +26,7 @@ You **MUST** consider the user input before proceeding (if not empty).
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
 - For each executable hook, output the following based on its `optional` flag:
   - **Optional hook** (`optional: true`):
-    ```
+    ```text
     ## Extension Hooks
 
     **Optional Pre-Hook**: {extension}
@@ -36,7 +37,7 @@ You **MUST** consider the user input before proceeding (if not empty).
     To execute: `/{command}`
     ```
   - **Mandatory hook** (`optional: false`):
-    ```
+    ```text
     ## Extension Hooks
 
     **Automatic Pre-Hook**: {extension}
@@ -49,7 +50,9 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
 
-1. Run `{SCRIPT}` from repo root and parse FEATURE_DIR and AVAILABLE_DOCS list. All paths must be absolute. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+1. Run `{SCRIPT}` from repo root and parse `FEATURE_DIR` and `AVAILABLE_DOCS` list.
+   All paths must be absolute. For single quotes in args like "I'm Groot", use escape syntax:
+   e.g. `'I'\''m Groot'` or double-quote if possible: `"I'm Groot"`.
 
 2. **Check checklists status** (if FEATURE_DIR/checklists/ exists):
    - Scan all checklist files in the checklists/ directory
@@ -83,6 +86,16 @@ You **MUST** consider the user input before proceeding (if not empty).
      - Automatically proceed to step 3
 
 3. Load and analyze the implementation context:
+   - **REQUIRED for Mister Smith packet work**: before reading `tasks.md`, run the Smith-first
+     preflight that applies in this repo:
+     - route the request with `route_workflow_request`
+     - pull live repo or issue state with `get_control_plane_snapshot` or
+       `get_issue_execution_snapshot`
+     - reconcile the single `## Codex Workpad`
+     - if lifecycle or queue posture matters, use `resolve_issue_lifecycle`, `plan_queue_stage`,
+       or other Smith workflow-family tools before edits
+     - only continue into task execution once that preflight confirms the slice is honest and
+       runnable
    - **REQUIRED**: Read tasks.md for the complete task list and execution plan
    - **REQUIRED**: Read plan.md for tech stack, architecture, and file structure
    - **IF EXISTS**: Read data-model.md for entities and relationships
@@ -182,7 +195,8 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 Note: This command assumes a complete task breakdown exists in tasks.md. If tasks are incomplete or missing, suggest running `/speckit.tasks` first to regenerate the task list.
 
-10. **Check for extension hooks**: After completion validation, check if `.specify/extensions.yml` exists in the project root.
+1. **Check for extension hooks**: After completion validation, check if `.specify/extensions.yml`
+   exists in the project root.
     - If it exists, read it and look for entries under the `hooks.after_implement` key
     - If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
     - Filter to only hooks where `enabled: true`
@@ -191,7 +205,7 @@ Note: This command assumes a complete task breakdown exists in tasks.md. If task
       - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
     - For each executable hook, output the following based on its `optional` flag:
       - **Optional hook** (`optional: true`):
-        ```
+        ```text
         ## Extension Hooks
 
         **Optional Hook**: {extension}
@@ -202,7 +216,7 @@ Note: This command assumes a complete task breakdown exists in tasks.md. If task
         To execute: `/{command}`
         ```
       - **Mandatory hook** (`optional: false`):
-        ```
+        ```text
         ## Extension Hooks
 
         **Automatic Hook**: {extension}

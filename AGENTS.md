@@ -64,6 +64,13 @@ runtime.
   - `resolve_issue_lifecycle`
   - `prepare_ralph_packet`, `record_ralph_outcome`
   - `prepare_speckit_context`, `translate_speckit_tasks`
+- For frozen packet implementation work, use a hybrid flow:
+  - Smith-first routing and state reconciliation decide whether the slice is runnable and what
+    control-plane state must be refreshed first.
+  - After that preflight, explicitly execute the repo-local `speckit.implement` surface through
+    `.codex/commands/implement.md` and `.codex/prompts/speckit.implement.md` before code changes.
+  - Do not jump from packet discovery straight into ad hoc implementation against `specs/` without
+    running the repo-local implement flow.
 - When a task explicitly calls for Ralph, use `./scripts/ralph` instead of bare `ralph`; rerun
   `./scripts/ralph prompt --packet <packet.json>` before each `./scripts/ralph run`.
 - Treat `docs/current-state.md` as the current repo-wide router,

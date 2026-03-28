@@ -18,6 +18,9 @@ Use the `smith` MCP tools first for any Mister Smith workflow request.
    - `issue_lifecycle` -> `resolve_issue_lifecycle`, `get_issue_execution_snapshot`, `plan_queue_stage`
    - `development_workflow` -> `get_control_plane_snapshot`, `sync_linear_with_runtime`, `evaluate_issue_legitimacy`
    - `review_dispatch` -> `review_merge_dispatch_cycle`
+5. For frozen packet implementation in Mister Smith, stop after Smith-first routing only long
+   enough to reconcile runnable state, then explicitly execute the repo-local `speckit.implement`
+   flow before code changes.
 
 ## Fallback
 
