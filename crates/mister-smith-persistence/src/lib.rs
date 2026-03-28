@@ -30,6 +30,7 @@ pub use error::from_sqlx_error;
 // Core types
 pub use hybrid::manager::HybridStateManager;
 pub use hybrid::router::{DataRouter, DataType, StorageLayer};
+pub use kv::fingerprints::{profile_fingerprint_key, ProfileFingerprintStore};
 pub use kv::state::{
     branch_checkpoint_state_key, branch_resume_state_key, ConflictStrategy, Operation, StateChange,
     StateManager,

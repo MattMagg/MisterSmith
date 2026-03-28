@@ -10,8 +10,8 @@ use mister_smith_agents::{
 };
 use mister_smith_core::{
     BranchState, ExecutionBranchId, ExecutionNodeId, FailureClass, GraphState, GuardTarget,
-    HealthState, InterventionType, SemanticSignal, SemanticSignalKind, SupervisionDecisionBasis,
-    TaskId,
+    HealthState, InterventionType, ProfileFingerprint, ProfileFingerprintId, ProfileTarget,
+    SemanticSignal, SemanticSignalKind, SupervisionDecisionBasis, TaskId,
 };
 use serde_json::json;
 
@@ -77,13 +77,38 @@ fn semantic_profile_context(branch_id: ExecutionBranchId) -> GuardContext {
     GuardContext::new(GuardTarget::Branch(branch_id)).with_profile(assessment)
 }
 
+fn profile_fingerprint(
+    branch_id: ExecutionBranchId,
+    dominant_failure_modes: Vec<&str>,
+    preferred_interventions: Vec<InterventionType>,
+) -> ProfileFingerprint {
+    ProfileFingerprint {
+        fingerprint_id: ProfileFingerprintId::new(),
+        target_kind: "branch".to_string(),
+        target_selector: branch_id.to_string(),
+        source_refs: vec!["workflow:test".to_string()],
+        summary_payload: json!({
+            "health_state": "degraded",
+            "signal_count": 1,
+        }),
+        dominant_failure_modes: dominant_failure_modes
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+        preferred_interventions,
+        confidence: 0.84,
+        updated_at: Utc::now(),
+        expires_at: Utc::now() + chrono::Duration::hours(6),
+    }
+}
+
 fn branch_graph() -> (
     ExecutionGraph,
     Vec<TaskId>,
     ExecutionBranchId,
     ExecutionNodeId,
 ) {
-    let compiler = TopologyCompiler::default();
+    let compiler = TopologyCompiler;
     let workflow_id = TaskId::new();
     let graph = compiler
         .compile(
@@ -149,7 +174,7 @@ fn checkpointed_branch_graph() -> (
     ExecutionNodeId,
     ExecutionNodeId,
 ) {
-    let compiler = TopologyCompiler::default();
+    let compiler = TopologyCompiler;
     let workflow_id = TaskId::new();
     let mut graph = compiler
         .compile(
@@ -307,6 +332,91 @@ fn guard_classifies_semantic_drift_as_context_refresh() {
 }
 
 #[test]
+fn guard_marks_decision_as_fingerprint_reinforced_when_advisory_context_matches() {
+    let (_, _, branch_id, _) = branch_graph();
+    let guard = Guard::new(GuardPolicy::default());
+    let decision = guard
+        .evaluate(
+            &GuardContext::new(GuardTarget::Branch(branch_id)).with_profile(
+                ProfileAssessment::new(
+                    Some(mister_smith_core::ProfileSnapshot {
+                        profile_id: mister_smith_core::ProfileSnapshotId::new(),
+                        target: ProfileTarget::Branch,
+                        health_state: HealthState::Degraded,
+                        latency_window: None,
+                        error_window: None,
+                        semantic_signals: vec![semantic_signal(
+                            SemanticSignalKind::MissingContext,
+                            75,
+                            "missing branch-local repair context",
+                        )],
+                        fingerprint_ref: None,
+                        updated_at: Utc::now(),
+                    }),
+                    Vec::new(),
+                )
+                .with_fingerprint(profile_fingerprint(
+                    branch_id,
+                    vec!["missing_context"],
+                    vec![InterventionType::ContextRefresh],
+                )),
+            ),
+        )
+        .expect("guard decision should succeed");
+
+    assert_eq!(decision.intervention, InterventionType::ContextRefresh);
+    assert_eq!(
+        decision.evidence.decision_basis,
+        SupervisionDecisionBasis::FingerprintReinforced
+    );
+    assert!(decision
+        .evidence
+        .notes
+        .iter()
+        .any(|note| note.contains("fingerprint reinforced")));
+}
+
+#[test]
+fn guard_ignores_non_matching_fingerprint_context() {
+    let (_, _, branch_id, _) = branch_graph();
+    let guard = Guard::new(GuardPolicy::default());
+    let decision = guard
+        .evaluate(
+            &GuardContext::new(GuardTarget::Branch(branch_id)).with_profile(
+                ProfileAssessment::new(
+                    Some(mister_smith_core::ProfileSnapshot {
+                        profile_id: mister_smith_core::ProfileSnapshotId::new(),
+                        target: ProfileTarget::Branch,
+                        health_state: HealthState::Degraded,
+                        latency_window: None,
+                        error_window: None,
+                        semantic_signals: vec![semantic_signal(
+                            SemanticSignalKind::MissingContext,
+                            75,
+                            "missing branch-local repair context",
+                        )],
+                        fingerprint_ref: None,
+                        updated_at: Utc::now(),
+                    }),
+                    Vec::new(),
+                )
+                .with_fingerprint(profile_fingerprint(
+                    branch_id,
+                    vec!["policy_conflict"],
+                    vec![InterventionType::Retry],
+                )),
+            ),
+        )
+        .expect("guard decision should succeed");
+
+    assert_eq!(decision.intervention, InterventionType::ContextRefresh);
+    assert_eq!(
+        decision.evidence.decision_basis,
+        SupervisionDecisionBasis::LiveSignalsOnly
+    );
+}
+
+#[test]
 fn guard_falls_back_conservatively_when_profile_or_control_plane_is_missing() {
     let (_, _, branch_id, _) = branch_graph();
     let guard = Guard::new(GuardPolicy::default());
@@ -366,7 +476,7 @@ fn intervention_engine_isolates_branch_without_restarting_other_branches() {
 
     assert_eq!(decision.intervention, InterventionType::BranchIsolation);
 
-    let record = InterventionEngine::default()
+    let record = InterventionEngine
         .apply(&decision, &scheduler, &mut graph)
         .expect("intervention should apply");
 
@@ -530,7 +640,7 @@ fn intervention_engine_retries_only_pending_nodes_from_latest_checkpoint() {
     scheduler.start(&branch_a_task_2).unwrap();
     scheduler.fail(&branch_a_task_2, "stalled").unwrap();
 
-    let record = InterventionEngine::default()
+    let record = InterventionEngine
         .apply(
             &branch_decision(branch_id, InterventionType::Retry),
             &scheduler,
@@ -558,7 +668,7 @@ fn intervention_engine_propagates_branch_scheduler_failures() {
     let (mut graph, _task_ids, branch_id, ..) = checkpointed_branch_graph();
     let scheduler = Arc::new(TaskScheduler::new());
 
-    let error = InterventionEngine::default()
+    let error = InterventionEngine
         .apply(
             &branch_decision(branch_id, InterventionType::Retry),
             &scheduler,
@@ -600,7 +710,7 @@ fn intervention_engine_escalation_cancels_branch_recovery_scope() {
         .unwrap();
     scheduler.start(&branch_a_task_2).unwrap();
 
-    InterventionEngine::default()
+    InterventionEngine
         .apply(
             &branch_decision(branch_id, InterventionType::Escalation),
             &scheduler,
@@ -620,7 +730,7 @@ fn intervention_engine_escalation_cancels_branch_recovery_scope() {
 
 #[test]
 fn intervention_engine_graph_abort_fails_all_scheduled_work() {
-    let (mut graph, task_ids, _, ..) = checkpointed_branch_graph();
+    let (mut graph, task_ids, ..) = checkpointed_branch_graph();
     let scheduler = scheduler_for_graph(&task_ids);
     let running_task_id = task_ids[0];
 
@@ -644,7 +754,7 @@ fn intervention_engine_graph_abort_fails_all_scheduled_work() {
         operator_visibility: true,
     };
 
-    InterventionEngine::default()
+    InterventionEngine
         .apply(&decision, &scheduler, &mut graph)
         .expect("graph abort should apply");
 

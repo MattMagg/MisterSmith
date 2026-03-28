@@ -5,11 +5,13 @@
 
 use std::time::Duration;
 
-use mister_smith_core::HealthStatus;
+use chrono::{Duration as ChronoDuration, Utc};
+use mister_smith_core::{HealthStatus, InterventionType, ProfileFingerprint, ProfileFingerprintId};
 use mister_smith_persistence::config::KvConfig;
 use mister_smith_persistence::kv::buckets::{
     KvBucketManager, AGENT_STATE, QUERY_CACHE, SESSION_DATA,
 };
+use mister_smith_persistence::kv::fingerprints::ProfileFingerprintStore;
 use mister_smith_persistence::kv::state::{ConflictStrategy, StateManager};
 
 fn nats_url() -> Option<String> {
@@ -250,6 +252,78 @@ async fn state_get_nonexistent_returns_none() {
     assert!(result.is_none());
 }
 
+#[tokio::test]
+#[ignore] // Requires NATS: NATS_URL=nats://localhost:4222
+async fn profile_fingerprint_round_trips_through_agent_state_bucket() {
+    let context = setup_jetstream().await;
+    let config = test_kv_config();
+
+    let mut manager = KvBucketManager::new(context, config);
+    manager.initialize_buckets().await.unwrap();
+
+    let store = ProfileFingerprintStore::new(manager.bucket(AGENT_STATE).unwrap().clone());
+    let fingerprint = ProfileFingerprint {
+        fingerprint_id: ProfileFingerprintId::new(),
+        target_kind: "branch".to_string(),
+        target_selector: "branch-a".to_string(),
+        source_refs: vec!["workflow:test".to_string()],
+        summary_payload: serde_json::json!({
+            "health_state": "degraded",
+            "signal_kinds": ["missing_context"],
+        }),
+        dominant_failure_modes: vec!["missing_context".to_string()],
+        preferred_interventions: vec![InterventionType::ContextRefresh],
+        confidence: 0.83,
+        updated_at: Utc::now(),
+        expires_at: Utc::now() + ChronoDuration::hours(6),
+    };
+
+    store.save(&fingerprint).await.unwrap();
+    let loaded = store.current("branch", "branch-a").await.unwrap().unwrap();
+
+    assert_eq!(loaded.fingerprint_id, fingerprint.fingerprint_id);
+    assert_eq!(loaded.target_kind, "branch");
+    assert_eq!(loaded.target_selector, "branch-a");
+    assert_eq!(loaded.dominant_failure_modes, vec!["missing_context"]);
+    assert_eq!(
+        loaded.preferred_interventions,
+        vec![InterventionType::ContextRefresh]
+    );
+}
+
+#[tokio::test]
+#[ignore] // Requires NATS: NATS_URL=nats://localhost:4222
+async fn profile_fingerprint_store_rejects_raw_transcript_summary_payloads() {
+    let context = setup_jetstream().await;
+    let config = test_kv_config();
+
+    let mut manager = KvBucketManager::new(context, config);
+    manager.initialize_buckets().await.unwrap();
+
+    let store = ProfileFingerprintStore::new(manager.bucket(AGENT_STATE).unwrap().clone());
+    let fingerprint = ProfileFingerprint {
+        fingerprint_id: ProfileFingerprintId::new(),
+        target_kind: "branch".to_string(),
+        target_selector: "branch-b".to_string(),
+        source_refs: vec!["workflow:test".to_string()],
+        summary_payload: serde_json::json!({
+            "health_state": "degraded",
+            "raw_transcript": "verbatim transcript should not be persisted",
+        }),
+        dominant_failure_modes: vec!["missing_context".to_string()],
+        preferred_interventions: vec![InterventionType::ContextRefresh],
+        confidence: 0.83,
+        updated_at: Utc::now(),
+        expires_at: Utc::now() + ChronoDuration::hours(6),
+    };
+
+    let error = store.save(&fingerprint).await.expect_err("should reject");
+    assert!(matches!(
+        error,
+        mister_smith_core::PersistenceError::SerializationFailed(_)
+    ));
+}
+
 // ---------------------------------------------------------------------------
 // TTL expiration test
 // ---------------------------------------------------------------------------
@@ -273,7 +347,7 @@ async fn state_ttl_expiration() {
 
     let key = "ttl_test_key";
     state_mgr
-        .save(&key, &serde_json::json!({"ephemeral": true}))
+        .save(key, &serde_json::json!({"ephemeral": true}))
         .await
         .unwrap();
 

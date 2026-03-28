@@ -2,10 +2,11 @@
 
 use chrono::Utc;
 use mister_smith_core::ExecutionBranchId;
-use mister_smith_core::ProfileSnapshot;
 use mister_smith_core::{
-    GuardTarget, HealthState, ProfileSnapshotId, ProfileTarget, SemanticSignal,
+    GuardTarget, HealthState, ProfileFingerprint, ProfileSnapshot, ProfileSnapshotId,
+    ProfileTarget, SemanticSignal,
 };
+use mister_smith_persistence::ProfileFingerprintStore;
 
 use crate::execution_graph::ExecutionGraph;
 
@@ -13,6 +14,7 @@ use crate::execution_graph::ExecutionGraph;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProfileAssessment {
     snapshot: Option<ProfileSnapshot>,
+    fingerprint: Option<ProfileFingerprint>,
     target: Option<GuardTarget>,
     notes: Vec<String>,
 }
@@ -22,6 +24,7 @@ impl ProfileAssessment {
     pub fn new(snapshot: Option<ProfileSnapshot>, notes: Vec<String>) -> Self {
         Self {
             snapshot,
+            fingerprint: None,
             target: None,
             notes,
         }
@@ -35,6 +38,11 @@ impl ProfileAssessment {
     /// Borrow the runtime target associated with this profile, when known.
     pub fn target(&self) -> Option<&GuardTarget> {
         self.target.as_ref()
+    }
+
+    /// Borrow the advisory fingerprint that reinforced this assessment, when any.
+    pub fn fingerprint(&self) -> Option<&ProfileFingerprint> {
+        self.fingerprint.as_ref()
     }
 
     /// Resolve the owning branch for the current target when graph context exists.
@@ -58,6 +66,15 @@ impl ProfileAssessment {
     /// Attach a concrete runtime target to this assessment.
     pub fn with_target(mut self, target: GuardTarget) -> Self {
         self.target = Some(target);
+        self
+    }
+
+    /// Attach a current advisory fingerprint to this assessment.
+    pub fn with_fingerprint(mut self, fingerprint: ProfileFingerprint) -> Self {
+        if let Some(snapshot) = self.snapshot.as_mut() {
+            snapshot.fingerprint_ref = Some(ProfileFingerprintStore::reference(&fingerprint));
+        }
+        self.fingerprint = Some(fingerprint);
         self
     }
 

@@ -28,9 +28,10 @@ use mister_smith_config::{
 use mister_smith_core::{
     AgentId, AgentType, BranchState, EscalationPolicy, ExecutionNodeId, ExternalDelegationEnvelope,
     FailureContextCheckpoint, GraphState, GuardTarget, HandoffClarificationRequest, LlmError,
-    NodeState, RepairDirective, RepairDirectiveAction, SemanticSignal, SemanticSignalKind,
-    StepEvaluationRecord, SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId,
-    ToolSchema, VerifierVerdict,
+    NodeState, ProfileFingerprint, RepairDirective, RepairDirectiveAction,
+    SemanticSignal, SemanticSignalKind, StepEvaluationRecord, SupervisionStrategy, TaskId, Tool,
+    ToolCapabilities, ToolError, ToolId, ToolSchema,
+    VerifierVerdict,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -47,7 +48,10 @@ use mister_smith_nats::{JetStreamConfig, JetStreamManager, NatsTransport};
 use mister_smith_persistence::postgres::migrations::MigrationRunner;
 use mister_smith_persistence::postgres::queries::{self, TaskRecord};
 use mister_smith_persistence::repository::task::TaskRepository;
-use mister_smith_persistence::{PostgresConnection, Repository};
+use mister_smith_persistence::{
+    kv::buckets::{KvBucketManager, AGENT_STATE},
+    KvConfig, PostgresConnection, ProfileFingerprintStore, Repository,
+};
 use mister_smith_supervision::SupervisedSystem;
 use mister_smith_transport::{MessageEnvelope, MessagePriority};
 use serde::Deserialize;
@@ -570,6 +574,21 @@ async fn ensure_runtime_budget_kv_store(
         .map_err(|error| {
             format!("JetStream budget bucket '{bucket}' initialization failed: {error}")
         })
+}
+
+async fn runtime_profile_fingerprint_store(
+    jetstream: &JetStreamManager,
+) -> Result<ProfileFingerprintStore, String> {
+    let mut manager = KvBucketManager::new(jetstream.context().clone(), KvConfig::default());
+    manager
+        .initialize_buckets()
+        .await
+        .map_err(|error| format!("JetStream fingerprint bucket initialization failed: {error}"))?;
+    let store = manager
+        .bucket(AGENT_STATE)
+        .map_err(|error| format!("JetStream fingerprint bucket lookup failed: {error}"))?
+        .clone();
+    Ok(ProfileFingerprintStore::new(store))
 }
 
 async fn build_runtime_budget_enforcer_with_bucket(
@@ -2098,19 +2117,42 @@ impl RuntimeTaskService {
         let Some(plan) = plan else {
             return Ok(());
         };
+        let RuntimeSupervisionPlan {
+            target,
+            assessment,
+            checkpoints,
+        } = plan;
+        let current_fingerprint = self.load_current_runtime_fingerprint(&target).await?;
+        let assessment = match current_fingerprint.as_ref() {
+            Some(fingerprint) => assessment.with_fingerprint(fingerprint.clone()),
+            None => assessment,
+        };
+        let snapshot = assessment.snapshot().cloned();
 
-        self.orchestrator
+        let (decision, _record) = self
+            .orchestrator
             .supervise(
                 &workflow_id,
-                GuardContext::new(plan.target)
-                    .with_profile(plan.assessment)
-                    .with_checkpoints(plan.checkpoints),
+                GuardContext::new(target.clone())
+                    .with_profile(assessment)
+                    .with_checkpoints(checkpoints),
             )
             .await
-            .map(|_| ())
             .map_err(|error| {
                 format!("runtime supervision failed for workflow {workflow_id}: {error}")
-            })
+            })?;
+        if let Some(snapshot) = snapshot.as_ref() {
+            let fingerprint = build_runtime_profile_fingerprint(
+                workflow_id,
+                &target,
+                snapshot,
+                &decision,
+                current_fingerprint.as_ref(),
+            );
+            self.persist_runtime_profile_fingerprint(&fingerprint).await?;
+        }
+
+        Ok(())
     }
 
     async fn supervise_runtime_transition(
@@ -2140,6 +2182,40 @@ impl RuntimeTaskService {
             .ok_or_else(|| format!("execution graph missing for workflow {workflow_id}"))?;
         let plan = runtime_supervision_plan_for_failed_step(&graph, task, failed_step)?;
         self.record_runtime_supervision(workflow_id, plan).await
+    }
+
+    async fn load_current_runtime_fingerprint(
+        &self,
+        target: &GuardTarget,
+    ) -> Result<Option<ProfileFingerprint>, String> {
+        let target_kind = runtime_fingerprint_target_kind(target);
+        let target_selector = runtime_fingerprint_target_selector(target);
+        runtime_profile_fingerprint_store(self.jetstream.as_ref())
+            .await?
+            .current(target_kind, &target_selector)
+            .await
+            .map_err(|error| {
+                format!(
+                    "runtime fingerprint lookup failed for workflow target {target_kind}:{target_selector}: {error}"
+                )
+            })
+    }
+
+    async fn persist_runtime_profile_fingerprint(
+        &self,
+        fingerprint: &ProfileFingerprint,
+    ) -> Result<(), String> {
+        runtime_profile_fingerprint_store(self.jetstream.as_ref())
+            .await?
+            .save(fingerprint)
+            .await
+            .map(|_| ())
+            .map_err(|error| {
+                format!(
+                    "runtime fingerprint persistence failed for {}:{}: {error}",
+                    fingerprint.target_kind, fingerprint.target_selector
+                )
+            })
     }
 
     fn spawn_workflow_runner(
@@ -4220,6 +4296,118 @@ fn runtime_checkpoints_for_target(
         .and_then(|branch_id| graph.latest_checkpoint(&branch_id).cloned())
         .into_iter()
         .collect()
+}
+
+fn runtime_fingerprint_target_kind(target: &GuardTarget) -> &'static str {
+    match target {
+        GuardTarget::Node(_) => "agent",
+        GuardTarget::Branch(_) => "branch",
+        GuardTarget::Graph(_) => "topology",
+        GuardTarget::Provider(_) => "provider",
+    }
+}
+
+fn runtime_fingerprint_target_selector(target: &GuardTarget) -> String {
+    match target {
+        GuardTarget::Node(node_id) => node_id.to_string(),
+        GuardTarget::Branch(branch_id) => branch_id.to_string(),
+        GuardTarget::Graph(graph_id) => graph_id.to_string(),
+        GuardTarget::Provider(provider) => provider.clone(),
+    }
+}
+
+fn runtime_health_label(health_state: mister_smith_core::HealthState) -> &'static str {
+    match health_state {
+        mister_smith_core::HealthState::Healthy => "healthy",
+        mister_smith_core::HealthState::Degraded => "degraded",
+        mister_smith_core::HealthState::Unhealthy => "unhealthy",
+        mister_smith_core::HealthState::Unknown => "unknown",
+    }
+}
+
+fn runtime_signal_kind_label(signal_kind: SemanticSignalKind) -> &'static str {
+    match signal_kind {
+        SemanticSignalKind::Stalled => "stalled",
+        SemanticSignalKind::Repetitive => "repetitive",
+        SemanticSignalKind::LowConfidence => "low_confidence",
+        SemanticSignalKind::MissingContext => "missing_context",
+        SemanticSignalKind::PolicyConflict => "policy_conflict",
+    }
+}
+
+fn runtime_intervention_label(intervention: mister_smith_core::InterventionType) -> &'static str {
+    match intervention {
+        mister_smith_core::InterventionType::Retry => "retry",
+        mister_smith_core::InterventionType::Failover => "failover",
+        mister_smith_core::InterventionType::ContextRefresh => "context_refresh",
+        mister_smith_core::InterventionType::BranchIsolation => "branch_isolation",
+        mister_smith_core::InterventionType::Reassignment => "reassignment",
+        mister_smith_core::InterventionType::Escalation => "escalation",
+        mister_smith_core::InterventionType::Abort => "abort",
+    }
+}
+
+fn runtime_fingerprint_confidence(
+    snapshot: &mister_smith_core::ProfileSnapshot,
+    existing: Option<&ProfileFingerprint>,
+) -> f32 {
+    let live = snapshot
+        .semantic_signals
+        .iter()
+        .map(|signal| f32::from(signal.severity) / 100.0)
+        .fold(0.55, f32::max)
+        .min(0.95);
+    existing.map(|fingerprint| fingerprint.confidence.max(live)).unwrap_or(live)
+}
+
+fn build_runtime_profile_fingerprint(
+    workflow_id: TaskId,
+    target: &GuardTarget,
+    snapshot: &mister_smith_core::ProfileSnapshot,
+    decision: &mister_smith_core::GuardDecision,
+    existing: Option<&ProfileFingerprint>,
+) -> ProfileFingerprint {
+    let target_kind = runtime_fingerprint_target_kind(target).to_string();
+    let target_selector = runtime_fingerprint_target_selector(target);
+    let updated_at = Utc::now();
+    let dominant_failure_modes = snapshot
+        .semantic_signals
+        .iter()
+        .map(|signal| runtime_signal_kind_label(signal.signal_kind).to_string())
+        .collect::<Vec<_>>();
+    let source_refs = std::iter::once(format!("workflow:{workflow_id}"))
+        .chain(
+            decision
+                .evidence
+                .checkpoint_ids
+                .iter()
+                .map(|checkpoint_id| format!("checkpoint:{checkpoint_id}")),
+        )
+        .collect::<Vec<_>>();
+
+    ProfileFingerprint {
+        fingerprint_id: existing
+            .map(|fingerprint| fingerprint.fingerprint_id)
+            .unwrap_or_default(),
+        target_kind,
+        target_selector,
+        source_refs,
+        summary_payload: json!({
+            "health_state": runtime_health_label(snapshot.health_state),
+            "signal_kinds": snapshot
+                .semantic_signals
+                .iter()
+                .map(|signal| runtime_signal_kind_label(signal.signal_kind))
+                .collect::<Vec<_>>(),
+            "decision_basis": decision.evidence.decision_basis.as_str(),
+            "intervention": runtime_intervention_label(decision.intervention),
+        }),
+        dominant_failure_modes,
+        preferred_interventions: vec![decision.intervention],
+        confidence: runtime_fingerprint_confidence(snapshot, existing),
+        expires_at: updated_at + chrono::Duration::hours(6),
+        updated_at,
+    }
 }
 
 fn runtime_supervision_plan(
