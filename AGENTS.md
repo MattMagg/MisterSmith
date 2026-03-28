@@ -25,7 +25,9 @@ implementation phase.
 Treat `docs/current-state.md` as the current forward-direction router. Use
 `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` and
 `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` as the latest landed frontier
-closure notes. No newer post-packet-020 bounded phase is frozen yet.
+closure notes. Use `docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27
+live-runtime follow-up that documents the current smallest-workflow baseline and repair-provenance
+proof surface. No newer post-packet-020 bounded phase is frozen yet.
 
 ## Product Boundary
 
@@ -104,6 +106,10 @@ cargo build --workspace                    # Build all crates
 cargo test --workspace                     # Run all tests (1115+)
 cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 cargo test -p <crate-name>                 # Test a single crate
+python3 -m unittest scripts.tests.test_live_runtime_proof_smoke
+                                          # Validate the repo-owned smoke harness tests
+python3 -m py_compile scripts/live_runtime_proof_smoke.py
+                                          # Fast syntax check for smoke-harness edits
 ./scripts/ralph --version                  # Check the repo-managed Ralph wrapper
 scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync
                                            # Verify clean synced closure state
@@ -128,6 +134,12 @@ For markdown linting:
 - Run `cargo test -p <crate>` for the affected crate during development
 - Full workspace tests only when touching `mister-smith-core` types or when explicitly asked
 - `cargo build --workspace` is a fast (~8s) check for cross-crate compatibility
+- When touching `scripts/live_runtime_proof_smoke.py` or its proof-contract behavior, run
+  `python3 -m unittest scripts.tests.test_live_runtime_proof_smoke` and
+  `python3 -m py_compile scripts/live_runtime_proof_smoke.py`
+- Use `python3 scripts/live_runtime_proof_smoke.py --profile budget_softcap_openai_mock` only for
+  honest packet-019 bounded live-proof work when the documented Docker/auth prerequisites are
+  already satisfied
 - Env-gated integration tests: `#[ignore]` by default, require `DATABASE_URL` / `NATS_URL`
 
 ## Commit & Pull Request Guidelines
