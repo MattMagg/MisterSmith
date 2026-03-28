@@ -121,7 +121,10 @@ model_id = "claude-sonnet"
     assert_eq!(profile.budget_root, "runtime.task_path");
     assert_eq!(profile.tiers.len(), 2);
     assert_eq!(profile.tiers[0].provider_kind, ProviderKind::OpenAiChatGpt);
-    assert_eq!(profile.tiers[1].provider_kind, ProviderKind::ClaudeSubscription);
+    assert_eq!(
+        profile.tiers[1].provider_kind,
+        ProviderKind::ClaudeSubscription
+    );
     assert_eq!(
         profile.tiers[0].metadata["preferred_tier"],
         serde_json::json!("primary")

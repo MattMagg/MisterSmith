@@ -24,7 +24,8 @@ ownership.
 - packet `020` is already landed on `main`
 - the March 27 runtime-planning simplification pass is already landed on `main`
 - packet `021` is now frozen on `main` as the next bounded post-packet-020 phase
-- the implementation tasks below remain unchecked
+- the shared-supervision contract freeze tasks (`T003A` through `T006`) are now completed;
+  later packet-021 implementation lanes remain open below
 
 ---
 
@@ -46,16 +47,16 @@ ownership.
 
 **CRITICAL**: No `[P]` lane may begin until this checkpoint is complete.
 
-- [ ] T003A Freeze the shared supervision contract in
+- [x] T003A Freeze the shared supervision contract in
       `specs/021-profile-aware-predictive-runtime-supervision/contracts/supervision-evidence-contract.md`
-- [ ] T003 Add `ProfileFingerprint` and any shared supervision evidence value objects in
+- [x] T003 Add `ProfileFingerprint` and any shared supervision evidence value objects in
       `crates/mister-smith-core/src/autonomy.rs` and re-export them from
       `crates/mister-smith-core/src/lib.rs`
-- [ ] T004 Extend typed autonomy summaries with the frozen supervision-evidence contract in
+- [x] T004 Extend typed autonomy summaries with the frozen supervision-evidence contract in
       `crates/mister-smith-events/src/autonomy.rs` and `crates/mister-smith-events/src/bus.rs`
-- [ ] T005 Extend status assembly to emit the frozen supervision contract in
+- [x] T005 Extend status assembly to emit the frozen supervision contract in
       `crates/mister-smith-agents/src/orchestrator.rs`
-- [ ] T006 Add shared contract coverage in `crates/mister-smith-core/tests/trait_compilation_tests.rs`
+- [x] T006 Add shared contract coverage in `crates/mister-smith-core/tests/trait_compilation_tests.rs`
       and `crates/mister-smith-events/tests/autonomy_event_tests.rs`
 
 **Checkpoint**: predictive-supervision fields and the contract artifact are frozen once in

@@ -16,7 +16,8 @@ use crate::enums::{
 };
 use crate::ids::{
     AgentId, CapabilityId, CheckpointId, ContextBudgetId, ExecutionBranchId, ExecutionGraphId,
-    ExecutionNodeId, GuardDecisionId, InterventionRecordId, ProfileSnapshotId, TaskId,
+    ExecutionNodeId, GuardDecisionId, InterventionRecordId, ProfileFingerprintId,
+    ProfileSnapshotId, TaskId,
 };
 use crate::supervision::{FailureContextCheckpoint, RepairDirective};
 
@@ -369,8 +370,113 @@ pub struct SemanticSignal {
     pub detail: String,
 }
 
-/// Telemetry and performance state used by routing and supervision decisions.
+/// Stable runtime scope encoded on the frozen packet-021 supervision surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SupervisionTargetKind {
+    /// Pre-graph provider-local supervision.
+    Provider,
+    /// Graph-wide supervision posture.
+    Graph,
+    /// Branch-local supervision posture.
+    Branch,
+    /// Node-local supervision posture.
+    Node,
+}
+
+/// Canonical packet-021 target scope shared across core, events, and orchestrator surfaces.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SupervisionTargetScope {
+    /// Coarse supervision target kind.
+    pub kind: SupervisionTargetKind,
+    /// Provider label when supervision is still pre-graph and provider-scoped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Graph identifier when graph context exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<ExecutionGraphId>,
+    /// Branch identifier when branch scope exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_id: Option<ExecutionBranchId>,
+    /// Node identifier when node scope exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_id: Option<ExecutionNodeId>,
+}
+
+/// Persisted advisory fingerprint keyed to a supported runtime role or target class.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProfileFingerprint {
+    /// Stable identifier for the persisted fingerprint.
+    pub fingerprint_id: ProfileFingerprintId,
+    /// Supported runtime role or target class, e.g. `planner` or `provider`.
+    pub target_kind: String,
+    /// Stable selector for the profiled runtime target.
+    pub target_selector: String,
+    /// Replayable run, checkpoint, or fixture references used to build the fingerprint.
+    pub source_refs: Vec<String>,
+    /// Structured supervisory summary only; no duplicated raw transcript bodies.
+    pub summary_payload: Value,
+    /// Ordered recurring failure tendencies.
+    pub dominant_failure_modes: Vec<String>,
+    /// Ordered preferred interventions suggested by the fingerprint.
+    pub preferred_interventions: Vec<InterventionType>,
+    /// Bounded confidence score for advisory use.
+    pub confidence: f32,
+    /// Timestamp after which the fingerprint is no longer trusted automatically.
+    pub expires_at: DateTime<Utc>,
+    /// Last refresh timestamp.
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Lightweight reference to a current fingerprint used during supervision.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProfileFingerprintRef {
+    /// Stable identifier for the referenced fingerprint.
+    pub fingerprint_id: ProfileFingerprintId,
+    /// Operator-visible fingerprint key or selector label.
+    pub fingerprint_key: String,
+    /// Advisory confidence score.
+    pub confidence: f32,
+    /// Timestamp when the fingerprint reference expires.
+    pub expires_at: DateTime<Utc>,
+}
+
+/// How the latest supervision decision was formed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SupervisionDecisionBasis {
+    /// Live signals alone were sufficient for the decision.
+    LiveSignalsOnly,
+    /// A current fingerprint reinforced the live evidence.
+    FingerprintReinforced,
+    /// Conservative fallback was used because higher-fidelity evidence was unavailable.
+    ConservativeFallback,
+}
+
+impl SupervisionDecisionBasis {
+    /// Return the stable packet-021 label for this basis.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LiveSignalsOnly => "live_signals_only",
+            Self::FingerprintReinforced => "fingerprint_reinforced",
+            Self::ConservativeFallback => "conservative_fallback",
+        }
+    }
+}
+
+/// Lightweight pointer back to packet-020 verifier and repair lineage when present.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepairLineageRef {
+    /// Stable source packet label for the linked lineage.
+    pub source: String,
+    /// Packet-020 checkpoint reference when the runtime already knows it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint_ref: Option<String>,
+}
+
+/// Telemetry and performance state used by routing and supervision decisions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProfileSnapshot {
     /// Stable identifier for this profile sample.
     pub profile_id: ProfileSnapshotId,
@@ -384,6 +490,9 @@ pub struct ProfileSnapshot {
     pub error_window: Option<MetricWindow>,
     /// Step-level semantic or stream degradation signals.
     pub semantic_signals: Vec<SemanticSignal>,
+    /// Current fingerprint reference that reinforced this live snapshot, when any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint_ref: Option<ProfileFingerprintRef>,
     /// Timestamp when the profile snapshot was captured.
     pub updated_at: DateTime<Utc>,
 }
@@ -393,6 +502,8 @@ pub struct ProfileSnapshot {
 pub struct GuardEvidence {
     /// Optional profile snapshot that informed the decision.
     pub profile_id: Option<ProfileSnapshotId>,
+    /// Frozen packet-021 explanation of whether live or fingerprint evidence drove the decision.
+    pub decision_basis: SupervisionDecisionBasis,
     /// Human-readable descriptions of the triggering signals.
     pub signal_descriptions: Vec<String>,
     /// Related checkpoints that informed a recovery choice.
@@ -446,6 +557,34 @@ pub struct InterventionRecord {
     pub rationale: String,
     /// Timestamp when the record was emitted.
     pub emitted_at: DateTime<Utc>,
+}
+
+/// Canonical packet-021 supervision projection shared across task, autonomy, and run-detail surfaces.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SupervisionEvidenceView {
+    /// Frozen target scope for the latest supervision state.
+    pub target_scope: SupervisionTargetScope,
+    /// Current advisory fingerprint reference when one reinforced the decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint_ref: Option<ProfileFingerprintRef>,
+    /// Latest live profile snapshot when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_snapshot: Option<ProfileSnapshot>,
+    /// Latest typed Guard decision when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guard_decision: Option<GuardDecision>,
+    /// Latest applied intervention record when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intervention_record: Option<InterventionRecord>,
+    /// Human-readable summary of how the decision was formed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_basis: Option<String>,
+    /// Linked packet-020 repair lineage when the runtime already has it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repair_lineage_ref: Option<RepairLineageRef>,
+    /// Explicit proof-boundary note when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof_boundary: Option<String>,
 }
 
 /// Authority principal that can issue delegation capabilities.

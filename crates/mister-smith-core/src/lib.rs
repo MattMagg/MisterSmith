@@ -13,7 +13,7 @@ mod traits;
 pub use ids::{
     AgentId, CapabilityId, CheckpointId, ContextBudgetId, ExecutionBranchId, ExecutionGraphId,
     ExecutionNodeId, GuardDecisionId, InterventionRecordId, MemoryFragmentId, MemorySnapshotId,
-    MessageId, ProfileSnapshotId, ResourceId, SessionId, TaskId, ToolId,
+    MessageId, ProfileFingerprintId, ProfileSnapshotId, ResourceId, SessionId, TaskId, ToolId,
 };
 
 // Shared autonomy value objects
@@ -21,10 +21,12 @@ pub use autonomy::{
     AuthorityPrincipal, CapabilityActionKind, ContextBudget, DelegatedAction,
     DelegatedActionPolicy, DelegationCapability, ExternalDelegationEnvelope, GuardDecision,
     GuardEvidence, GuardTarget, HandoffClarificationRequest, InterventionRecord, MetricWindow,
-    OperatorResultPreview, OrchestrationQualityView, ProfileSnapshot, ProofOutcomeClassification,
-    ProvenanceChain, ProvenanceLink, ResultProvenanceSummary, SemanticSignal,
-    SessionRetainedResultView, StepEvaluationRecord, TaskResultView, TaskShapeClassification,
-    TaskShapeKind, TeamSizingDecision, TopologyPlan, TopologyRationale, UnifiedResultEnvelope,
+    OperatorResultPreview, OrchestrationQualityView, ProfileFingerprint, ProfileFingerprintRef,
+    ProfileSnapshot, ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairLineageRef,
+    ResultProvenanceSummary, SemanticSignal, SessionRetainedResultView, StepEvaluationRecord,
+    SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
+    SupervisionTargetScope, TaskResultView, TaskShapeClassification, TaskShapeKind,
+    TeamSizingDecision, TopologyPlan, TopologyRationale, UnifiedResultEnvelope,
 };
 
 // Core enums

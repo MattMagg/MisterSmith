@@ -421,6 +421,7 @@ fn assessed_profile(
             latency_window: None,
             error_window: None,
             semantic_signals,
+            fingerprint_ref: None,
             updated_at: Utc::now(),
         }),
         notes.into_iter().map(str::to_string).collect(),

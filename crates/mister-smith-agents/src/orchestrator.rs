@@ -7,7 +7,8 @@ use dashmap::DashMap;
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, ExecutionBranchId, ExecutionNodeId,
     GraphState, GuardDecision, GuardTarget, HealthState, InterventionRecord, ProfileSnapshot,
-    TaskId, TeamSizingDecision,
+    SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, TaskId,
+    TeamSizingDecision,
 };
 use tracing::{instrument, warn};
 
@@ -659,17 +660,16 @@ impl Orchestrator {
     /// Build the operator-visible autonomy status for a workflow.
     pub fn autonomy_status(&self, workflow_id: &TaskId) -> Option<AutonomyStatusView> {
         let graph = self.execution_graph(workflow_id)?;
-        let profiles = self
+        let profile_assessments = self
             .profiles
             .get(workflow_id)
-            .map(|profiles| {
-                profiles
-                    .iter()
-                    .filter_map(ProfileAssessment::snapshot)
-                    .cloned()
-                    .collect::<Vec<ProfileSnapshot>>()
-            })
+            .map(|profiles| profiles.value().clone())
             .unwrap_or_default();
+        let profiles = profile_assessments
+            .iter()
+            .filter_map(ProfileAssessment::snapshot)
+            .cloned()
+            .collect::<Vec<ProfileSnapshot>>();
         let guard_decisions = self
             .monitor_state(workflow_id)
             .map(|state| state.guard_decisions)
@@ -810,6 +810,12 @@ impl Orchestrator {
             &branches,
             &routing_history,
         );
+        let supervision_evidence = build_supervision_evidence_view(
+            &graph,
+            &profile_assessments,
+            &guard_decisions,
+            &interventions,
+        );
 
         Some(AutonomyStatusView {
             session_id: None,
@@ -849,6 +855,7 @@ impl Orchestrator {
             external_capability_decisions,
             profiles,
             guard_decisions,
+            supervision_evidence,
             conservative_reasons,
         })
     }
@@ -1786,6 +1793,148 @@ fn branch_id_for_target(
     }
 }
 
+fn build_supervision_evidence_view(
+    graph: &ExecutionGraph,
+    profiles: &[ProfileAssessment],
+    guard_decisions: &[GuardDecision],
+    interventions: &[InterventionRecord],
+) -> Option<SupervisionEvidenceView> {
+    let intervention_record = interventions.last().cloned();
+    let guard_decision = intervention_record
+        .as_ref()
+        .and_then(|record| {
+            guard_decisions
+                .iter()
+                .rev()
+                .find(|decision| decision.decision_id == record.decision_id)
+        })
+        .cloned()
+        .or_else(|| guard_decisions.last().cloned());
+    let profile = guard_decision
+        .as_ref()
+        .and_then(|decision| decision.evidence.profile_id)
+        .and_then(|profile_id| {
+            profiles.iter().rev().find(|assessment| {
+                assessment
+                    .snapshot()
+                    .map(|snapshot| snapshot.profile_id == profile_id)
+                    .unwrap_or(false)
+            })
+        })
+        .or_else(|| {
+            profiles
+                .iter()
+                .rev()
+                .find(|assessment| assessment.snapshot().is_some())
+        });
+    let profile_snapshot = profile.and_then(ProfileAssessment::snapshot).cloned();
+
+    let target_scope = guard_decision
+        .as_ref()
+        .map(|decision| {
+            supervision_target_scope_from_guard_target(Some(graph), &decision.target_scope)
+        })
+        .or_else(|| {
+            profile
+                .and_then(ProfileAssessment::target)
+                .map(|target| supervision_target_scope_from_guard_target(Some(graph), target))
+        })
+        .or_else(|| {
+            profile_snapshot
+                .as_ref()
+                .map(supervision_target_scope_from_profile_snapshot)
+        })?;
+    let fingerprint_ref = profile_snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.fingerprint_ref.clone());
+    let decision_basis = guard_decision
+        .as_ref()
+        .map(|decision| decision.evidence.decision_basis.as_str().to_string());
+
+    Some(SupervisionEvidenceView {
+        target_scope,
+        fingerprint_ref,
+        profile_snapshot,
+        guard_decision,
+        intervention_record,
+        decision_basis,
+        repair_lineage_ref: None,
+        proof_boundary: None,
+    })
+}
+
+fn supervision_target_scope_from_guard_target(
+    graph: Option<&ExecutionGraph>,
+    target: &GuardTarget,
+) -> SupervisionTargetScope {
+    let branch_id = branch_id_for_target(graph, target);
+    match target {
+        GuardTarget::Provider(provider) => SupervisionTargetScope {
+            kind: SupervisionTargetKind::Provider,
+            provider: Some(provider.clone()),
+            graph_id: None,
+            branch_id: None,
+            node_id: None,
+        },
+        GuardTarget::Graph(graph_id) => SupervisionTargetScope {
+            kind: SupervisionTargetKind::Graph,
+            provider: None,
+            graph_id: Some(*graph_id),
+            branch_id,
+            node_id: None,
+        },
+        GuardTarget::Branch(branch_id) => SupervisionTargetScope {
+            kind: SupervisionTargetKind::Branch,
+            provider: None,
+            graph_id: graph.map(|graph| graph.graph_id),
+            branch_id: Some(*branch_id),
+            node_id: None,
+        },
+        GuardTarget::Node(node_id) => SupervisionTargetScope {
+            kind: SupervisionTargetKind::Node,
+            provider: None,
+            graph_id: graph.map(|graph| graph.graph_id),
+            branch_id,
+            node_id: Some(*node_id),
+        },
+    }
+}
+
+fn supervision_target_scope_from_profile_snapshot(
+    profile: &ProfileSnapshot,
+) -> SupervisionTargetScope {
+    match profile.target {
+        mister_smith_core::ProfileTarget::Provider => SupervisionTargetScope {
+            kind: SupervisionTargetKind::Provider,
+            provider: None,
+            graph_id: None,
+            branch_id: None,
+            node_id: None,
+        },
+        mister_smith_core::ProfileTarget::Topology => SupervisionTargetScope {
+            kind: SupervisionTargetKind::Graph,
+            provider: None,
+            graph_id: None,
+            branch_id: None,
+            node_id: None,
+        },
+        mister_smith_core::ProfileTarget::Branch => SupervisionTargetScope {
+            kind: SupervisionTargetKind::Branch,
+            provider: None,
+            graph_id: None,
+            branch_id: None,
+            node_id: None,
+        },
+        mister_smith_core::ProfileTarget::Agent => SupervisionTargetScope {
+            kind: SupervisionTargetKind::Node,
+            provider: None,
+            graph_id: None,
+            branch_id: None,
+            node_id: None,
+        },
+    }
+}
+
 fn select_worker(worker_ids: &[AgentId], worker_loads: &HashMap<AgentId, usize>) -> AgentId {
     worker_ids
         .iter()
@@ -2268,6 +2417,10 @@ fn model_event_for_error(error: &mister_smith_core::LlmError) -> ModelEvent {
 mod tests {
     use super::*;
     use crate::scheduler::{ArrayAggregator, IdentityDecomposer};
+    use mister_smith_core::{
+        FailureClass, GuardDecisionId, GuardEvidence, InterventionRecordId, InterventionType,
+        SupervisionDecisionBasis,
+    };
     use serde_json::json;
 
     #[tokio::test]
@@ -2463,5 +2616,129 @@ mod tests {
                 .iter()
                 .any(|line| line.contains("terminal graph")));
         }
+    }
+
+    #[test]
+    fn build_supervision_evidence_prefers_guard_linked_profile_snapshot() {
+        let graph = TopologyCompiler::default()
+            .compile(
+                TaskId::new(),
+                &json!({
+                    "goal": "profile-join",
+                    "steps": [
+                        {
+                            "id": "root",
+                            "step": 1,
+                            "action": "root",
+                            "description": "root"
+                        },
+                        {
+                            "id": "alpha",
+                            "step": 2,
+                            "action": "alpha",
+                            "description": "alpha",
+                            "depends_on": ["root"],
+                            "branch": "alpha"
+                        },
+                        {
+                            "id": "beta",
+                            "step": 3,
+                            "action": "beta",
+                            "description": "beta",
+                            "depends_on": ["root"],
+                            "branch": "beta"
+                        }
+                    ]
+                }),
+                &TopologySignals::default(),
+            )
+            .expect("multi-branch graph should compile");
+        let branch_a = graph.branches[0].branch_id;
+
+        let primary_profile_id = mister_smith_core::ProfileSnapshotId::new();
+        let other_profile_id = mister_smith_core::ProfileSnapshotId::new();
+        let primary_assessment = ProfileAssessment::new(
+            Some(ProfileSnapshot {
+                profile_id: primary_profile_id,
+                target: mister_smith_core::ProfileTarget::Branch,
+                health_state: HealthState::Degraded,
+                latency_window: None,
+                error_window: None,
+                semantic_signals: vec![],
+                fingerprint_ref: Some(mister_smith_core::ProfileFingerprintRef {
+                    fingerprint_id: mister_smith_core::ProfileFingerprintId::new(),
+                    fingerprint_key: "branch-a".to_string(),
+                    confidence: 0.8,
+                    expires_at: chrono::Utc::now(),
+                }),
+                updated_at: chrono::Utc::now(),
+            }),
+            Vec::new(),
+        );
+        let other_assessment = ProfileAssessment::new(
+            Some(ProfileSnapshot {
+                profile_id: other_profile_id,
+                target: mister_smith_core::ProfileTarget::Branch,
+                health_state: HealthState::Healthy,
+                latency_window: None,
+                error_window: None,
+                semantic_signals: vec![],
+                fingerprint_ref: Some(mister_smith_core::ProfileFingerprintRef {
+                    fingerprint_id: mister_smith_core::ProfileFingerprintId::new(),
+                    fingerprint_key: "branch-b".to_string(),
+                    confidence: 0.4,
+                    expires_at: chrono::Utc::now(),
+                }),
+                updated_at: chrono::Utc::now(),
+            }),
+            Vec::new(),
+        );
+        let decision = GuardDecision {
+            decision_id: GuardDecisionId::new(),
+            failure_class: FailureClass::Semantic,
+            intervention: InterventionType::ContextRefresh,
+            evidence: GuardEvidence {
+                profile_id: Some(primary_profile_id),
+                decision_basis: SupervisionDecisionBasis::FingerprintReinforced,
+                signal_descriptions: vec!["loop detected".to_string()],
+                checkpoint_ids: vec![],
+                notes: vec!["join against the linked profile".to_string()],
+            },
+            target_scope: GuardTarget::Branch(branch_a),
+            operator_visibility: true,
+        };
+        let intervention = InterventionRecord {
+            record_id: InterventionRecordId::new(),
+            decision_id: decision.decision_id,
+            before_state: serde_json::json!({"state": "running"}),
+            after_state: Some(serde_json::json!({"state": "refreshed"})),
+            rationale: "context refresh".to_string(),
+            emitted_at: chrono::Utc::now(),
+        };
+
+        let evidence = build_supervision_evidence_view(
+            &graph,
+            &[primary_assessment, other_assessment],
+            std::slice::from_ref(&decision),
+            std::slice::from_ref(&intervention),
+        )
+        .expect("supervision evidence should be assembled");
+
+        assert_eq!(
+            evidence
+                .profile_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.profile_id),
+            Some(primary_profile_id)
+        );
+        assert_eq!(
+            evidence
+                .fingerprint_ref
+                .as_ref()
+                .map(|reference| reference.fingerprint_key.as_str()),
+            Some("branch-a")
+        );
+        assert_eq!(evidence.target_scope.graph_id, Some(graph.graph_id));
+        assert_eq!(evidence.target_scope.branch_id, Some(branch_a));
     }
 }

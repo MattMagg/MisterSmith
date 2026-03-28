@@ -14,8 +14,8 @@ use mister_smith_core::{
     ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
     InterventionRecord, MemorySnapshotId, OperatorResultPreview, ProfileSnapshot,
     ProfileSnapshotId, ProofOutcomeClassification, ProvenanceChain, RevocationState, SessionId,
-    TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind,
-    TopologyRationale,
+    SupervisionEvidenceView, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
+    TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -388,6 +388,9 @@ pub struct AutonomyStatusView {
     pub profiles: Vec<ProfileSnapshot>,
     /// Guard decisions that informed the current supervision posture.
     pub guard_decisions: Vec<GuardDecision>,
+    /// Frozen combined packet-021 supervision evidence projection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervision_evidence: Option<SupervisionEvidenceView>,
     /// Reasons the system narrowed autonomy conservatively.
     pub conservative_reasons: Vec<String>,
 }

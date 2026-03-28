@@ -356,13 +356,11 @@ fn topology_compiler_honors_compatible_hierarchical_hint() {
         CoordinationPolicy::HierarchicalReduce
     );
     assert!(!graph.topology_plan.task_shape.structural_signals.is_empty());
-    assert!(
-        graph
-            .topology_plan
-            .rationale
-            .selected_for
-            .contains("hierarchical")
-    );
+    assert!(graph
+        .topology_plan
+        .rationale
+        .selected_for
+        .contains("hierarchical"));
 }
 
 #[tokio::test]
@@ -472,28 +470,20 @@ async fn orchestrator_routes_ready_branches_with_health_budget_depth_and_profile
     assert_eq!(decisions.len(), 2);
     assert_eq!(decisions[0].branch_id, left_branch);
     assert_eq!(decisions[0].health_state, HealthState::Healthy);
-    assert!(
-        decisions[0]
-            .rationale
-            .iter()
-            .any(|line| line.contains("budget pressure"))
-    );
-    assert!(
-        decisions[0]
-            .rationale
-            .iter()
-            .any(|line| line.contains("dependency depth"))
-    );
-    assert!(
-        decisions[0]
-            .rationale
-            .iter()
-            .any(|line| line.contains("profile"))
-    );
-    assert!(
-        orchestrator
-            .autonomy_events(&workflow_id)
-            .iter()
-            .any(|event| matches!(event, AutonomyEvent::RoutingDecisionRecorded(_)))
-    );
+    assert!(decisions[0]
+        .rationale
+        .iter()
+        .any(|line| line.contains("budget pressure")));
+    assert!(decisions[0]
+        .rationale
+        .iter()
+        .any(|line| line.contains("dependency depth")));
+    assert!(decisions[0]
+        .rationale
+        .iter()
+        .any(|line| line.contains("profile")));
+    assert!(orchestrator
+        .autonomy_events(&workflow_id)
+        .iter()
+        .any(|event| matches!(event, AutonomyEvent::RoutingDecisionRecorded(_))));
 }

@@ -12,8 +12,9 @@ use mister_smith_core::{
     HandoffClarificationRequest, HealthState, InterventionRecord, InterventionRecordId,
     InterventionType, MemorySnapshotId, OrchestrationQualityView, ProfileSnapshotId, ProfileTarget,
     ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirective,
-    RepairDirectiveAction, RevocationState, StepEvaluationRecord, TaskId, TaskShapeClassification,
-    TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale, VerifierVerdict,
+    RepairDirectiveAction, RevocationState, StepEvaluationRecord, SupervisionDecisionBasis, TaskId,
+    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
+    VerifierVerdict,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
@@ -229,6 +230,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             latency_window: None,
             error_window: None,
             semantic_signals: vec![],
+            fingerprint_ref: None,
             updated_at: chrono::Utc::now(),
         }],
         guard_decisions: vec![GuardDecision {
@@ -237,6 +239,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             intervention: InterventionType::Retry,
             evidence: GuardEvidence {
                 profile_id: None,
+                decision_basis: SupervisionDecisionBasis::ConservativeFallback,
                 signal_descriptions: vec!["stream stalled before completion".to_string()],
                 checkpoint_ids: vec![checkpoint_id],
                 notes: vec!["conservative fallback: control-plane state unavailable".to_string()],
@@ -244,6 +247,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             target_scope: mister_smith_core::GuardTarget::Branch(branch_id),
             operator_visibility: true,
         }],
+        supervision_evidence: None,
         conservative_reasons: vec![
             "conservative fallback: control-plane state unavailable".to_string()
         ],
