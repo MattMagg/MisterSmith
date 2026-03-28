@@ -3,14 +3,11 @@ use std::sync::Arc;
 use chrono::Utc;
 #[cfg(feature = "llm")]
 use mister_smith_agents::orchestrator::{LlmSupervision, LlmSupervisionConfig};
-use mister_smith_agents::scheduler::{ArrayAggregator, IdentityDecomposer};
 use mister_smith_agents::scheduler::{TaskAssignment, TaskScheduler};
-use mister_smith_agents::Orchestrator;
 use mister_smith_agents::{
     BranchCheckpoint, ExecutionGraph, Guard, GuardContext, GuardPolicy, InterventionEngine,
     ProfileAssessment, TopologyCompiler, TopologySignals,
 };
-use mister_smith_core::AgentId;
 use mister_smith_core::{
     BranchState, ExecutionBranchId, ExecutionNodeId, FailureClass, GraphState, GuardTarget,
     HealthState, InterventionType, SemanticSignal, SemanticSignalKind, SupervisionDecisionBasis,
@@ -492,72 +489,6 @@ async fn orchestrator_supervises_stream_degradation_and_forwards_messages() {
         .notes
         .iter()
         .any(|note| note.contains("step boundary")));
-}
-
-#[tokio::test]
-async fn orchestrator_projects_node_scoped_supervision_with_branch_context() {
-    let (graph, task_ids, branch_id, node_id) = branch_graph();
-    let workflow_id = graph.workflow_id;
-    let task_id = TaskId::from_uuid(*node_id.as_ref());
-    let scheduler = scheduler_for_graph(&task_ids);
-    let agent = AgentId::new();
-
-    scheduler.assign(&task_id, agent).unwrap();
-    scheduler.start(&task_id).unwrap();
-
-    let orchestrator = Arc::new(Orchestrator::new(
-        Arc::new(IdentityDecomposer),
-        Arc::new(ArrayAggregator),
-        scheduler.clone(),
-    ));
-    orchestrator.register_execution_graph(graph);
-
-    let assessment = ProfileAssessment::from_supervisory_signals(
-        &GuardTarget::Node(node_id),
-        vec![semantic_signal(
-            SemanticSignalKind::MissingContext,
-            74,
-            "missing node-scoped repair context",
-        )],
-        vec!["step boundary node evidence".to_string()],
-    );
-
-    let (decision, _record) = orchestrator
-        .supervise(
-            &workflow_id,
-            GuardContext::new(GuardTarget::Node(node_id)).with_profile(assessment),
-        )
-        .await
-        .expect("node-scoped supervision should succeed");
-
-    assert_eq!(decision.target_scope, GuardTarget::Node(node_id));
-    assert_eq!(decision.intervention, InterventionType::ContextRefresh);
-    assert_eq!(
-        scheduler.get(&task_id).expect("task should exist").state,
-        mister_smith_agents::config::TaskState::Pending
-    );
-
-    let status = orchestrator
-        .autonomy_status(&workflow_id)
-        .expect("status should be available");
-    let supervision_evidence = status
-        .supervision_evidence
-        .expect("supervision evidence should be projected");
-    assert_eq!(
-        supervision_evidence.target_scope.kind,
-        mister_smith_core::SupervisionTargetKind::Node
-    );
-    assert_eq!(supervision_evidence.target_scope.branch_id, Some(branch_id));
-    assert_eq!(supervision_evidence.target_scope.node_id, Some(node_id));
-    assert_eq!(
-        supervision_evidence.decision_basis.as_deref(),
-        Some(SupervisionDecisionBasis::LiveSignalsOnly.as_str())
-    );
-    assert!(status.guard_decisions[0]
-        .evidence
-        .notes
-        .iter()
-        .any(|note| note.contains("node evidence")));
 }
 
 #[test]

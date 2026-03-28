@@ -565,6 +565,11 @@ impl Orchestrator {
             .or_default()
             .push(record.clone());
         if let Some(profile) = context.profile().cloned() {
+            let profile = if profile.target().is_some() {
+                profile
+            } else {
+                profile.with_target(context.target().clone())
+            };
             self.record_profile_assessment(workflow_id, profile);
         }
         let conservative = decision
@@ -2413,9 +2418,89 @@ mod tests {
     use crate::scheduler::{ArrayAggregator, IdentityDecomposer};
     use mister_smith_core::{
         FailureClass, GuardDecisionId, GuardEvidence, InterventionRecordId, InterventionType,
-        SupervisionDecisionBasis,
+        ProfileSnapshotId, ProfileTarget, SemanticSignal, SemanticSignalKind,
+        SupervisionDecisionBasis, SupervisionTargetKind,
     };
     use serde_json::json;
+
+    fn semantic_signal(kind: SemanticSignalKind, severity: u8, detail: &str) -> SemanticSignal {
+        SemanticSignal {
+            signal_kind: kind,
+            severity,
+            detail: detail.to_string(),
+        }
+    }
+
+    fn node_scoped_supervision_graph() -> (
+        ExecutionGraph,
+        Vec<TaskId>,
+        ExecutionBranchId,
+        ExecutionNodeId,
+    ) {
+        let graph = TopologyCompiler::default()
+            .compile(
+                TaskId::new(),
+                &json!({
+                    "goal": "guard-branch",
+                    "steps": [
+                        {
+                            "id": "collect",
+                            "step": 1,
+                            "action": "collect",
+                            "description": "Collect context"
+                        },
+                        {
+                            "id": "branch-a",
+                            "step": 2,
+                            "action": "branch-a",
+                            "description": "Branch A",
+                            "depends_on": ["collect"],
+                            "branch": "branch-a"
+                        },
+                        {
+                            "id": "branch-b",
+                            "step": 3,
+                            "action": "branch-b",
+                            "description": "Branch B",
+                            "depends_on": ["collect"],
+                            "branch": "branch-b"
+                        }
+                    ]
+                }),
+                &TopologySignals::default(),
+            )
+            .expect("graph should compile");
+
+        let node_id = graph
+            .nodes
+            .iter()
+            .find(|node| node.step_key == "branch-a")
+            .map(|node| node.node_id)
+            .expect("branch-a node should exist");
+        let branch_id = graph
+            .nodes
+            .iter()
+            .find(|node| node.node_id == node_id)
+            .map(|node| node.branch_id)
+            .expect("branch-a branch should exist");
+        let task_ids = graph
+            .nodes
+            .iter()
+            .map(|node| TaskId::from_uuid(*node.node_id.as_ref()))
+            .collect::<Vec<_>>();
+
+        (graph, task_ids, branch_id, node_id)
+    }
+
+    fn scheduler_for_graph(task_ids: &[TaskId]) -> Arc<TaskScheduler> {
+        let scheduler = Arc::new(TaskScheduler::new());
+        for task_id in task_ids {
+            let mut task = TaskAssignment::new("analysis", json!({"branch": "guard"}));
+            task.task_id = *task_id;
+            scheduler.submit(task);
+        }
+        scheduler
+    }
 
     #[tokio::test]
     async fn test_orchestrator_decompose_and_aggregate() {
@@ -2734,5 +2819,91 @@ mod tests {
         );
         assert_eq!(evidence.target_scope.graph_id, Some(graph.graph_id));
         assert_eq!(evidence.target_scope.branch_id, Some(branch_a));
+    }
+
+    #[tokio::test]
+    async fn supervise_records_node_profile_events_with_branch_context() {
+        let (graph, task_ids, branch_id, node_id) = node_scoped_supervision_graph();
+        let workflow_id = graph.workflow_id;
+        let task_id = TaskId::from_uuid(*node_id.as_ref());
+        let scheduler = scheduler_for_graph(&task_ids);
+        let agent = AgentId::new();
+
+        scheduler.assign(&task_id, agent).unwrap();
+        scheduler.start(&task_id).unwrap();
+
+        let orchestrator = Arc::new(Orchestrator::new(
+            Arc::new(IdentityDecomposer),
+            Arc::new(ArrayAggregator),
+            scheduler.clone(),
+        ));
+        orchestrator.register_execution_graph(graph);
+
+        let profile_id = ProfileSnapshotId::new();
+        let assessment = ProfileAssessment::new(
+            Some(ProfileSnapshot {
+                profile_id,
+                target: ProfileTarget::Agent,
+                health_state: HealthState::Degraded,
+                latency_window: None,
+                error_window: None,
+                semantic_signals: vec![semantic_signal(
+                    SemanticSignalKind::MissingContext,
+                    74,
+                    "missing node-scoped repair context",
+                )],
+                fingerprint_ref: None,
+                updated_at: chrono::Utc::now(),
+            }),
+            vec!["step boundary node evidence".to_string()],
+        );
+
+        let (decision, _record) = orchestrator
+            .supervise(
+                &workflow_id,
+                GuardContext::new(GuardTarget::Node(node_id)).with_profile(assessment),
+            )
+            .await
+            .expect("node-scoped supervision should succeed");
+
+        assert_eq!(decision.target_scope, GuardTarget::Node(node_id));
+        assert_eq!(decision.intervention, InterventionType::ContextRefresh);
+        assert_eq!(
+            scheduler.get(&task_id).expect("task should exist").state,
+            TaskState::Pending
+        );
+
+        let profile_event = orchestrator
+            .autonomy_events(&workflow_id)
+            .into_iter()
+            .find_map(|event| match event {
+                AutonomyEvent::ProfileSnapshotRecorded(envelope) => Some(envelope),
+                _ => None,
+            })
+            .expect("profile snapshot event should be recorded");
+        assert_eq!(profile_event.branch_id, Some(branch_id));
+        assert_eq!(profile_event.payload.profile_id, profile_id);
+
+        let status = orchestrator
+            .autonomy_status(&workflow_id)
+            .expect("status should be available");
+        let supervision_evidence = status
+            .supervision_evidence
+            .expect("supervision evidence should be projected");
+        assert_eq!(
+            supervision_evidence.target_scope.kind,
+            SupervisionTargetKind::Node
+        );
+        assert_eq!(supervision_evidence.target_scope.branch_id, Some(branch_id));
+        assert_eq!(supervision_evidence.target_scope.node_id, Some(node_id));
+        assert_eq!(
+            supervision_evidence.decision_basis.as_deref(),
+            Some(SupervisionDecisionBasis::LiveSignalsOnly.as_str())
+        );
+        assert!(status.guard_decisions[0]
+            .evidence
+            .notes
+            .iter()
+            .any(|note| note.contains("node evidence")));
     }
 }

@@ -1560,6 +1560,14 @@ impl RuntimeTaskService {
                     }
                     StepExecutionDisposition::Continue(transition) => {
                         if verifier_policies.get(active_policy_index + 1).is_none() {
+                            let supervision_error = self
+                                .supervise_runtime_transition(
+                                    workflow_id,
+                                    &prepared_task.task,
+                                    &transition,
+                                )
+                                .await
+                                .err();
                             let mut failed_step = repair_failure(
                                 &prepared_task.task,
                                 worker_id,
@@ -1569,6 +1577,14 @@ impl RuntimeTaskService {
                                 transition.step_evaluation,
                                 Some("no follow-up verifier policy available for local repair"),
                             );
+                            if let Some(error) = supervision_error {
+                                if failed_step.message.is_empty() {
+                                    failed_step.message = error;
+                                } else {
+                                    failed_step.message =
+                                        format!("{} ({error})", failed_step.message);
+                                }
+                            }
                             failed_step.completed_steps = completed_steps;
                             let _ = runtime.stop().await;
                             return Err(failed_step);
