@@ -3,17 +3,11 @@ use std::sync::Arc;
 use chrono::Utc;
 #[cfg(feature = "llm")]
 use mister_smith_agents::orchestrator::{LlmSupervision, LlmSupervisionConfig};
-#[cfg(feature = "llm")]
-use mister_smith_agents::scheduler::{ArrayAggregator, IdentityDecomposer};
 use mister_smith_agents::scheduler::{TaskAssignment, TaskScheduler};
-#[cfg(feature = "llm")]
-use mister_smith_agents::Orchestrator;
 use mister_smith_agents::{
     BranchCheckpoint, ExecutionGraph, Guard, GuardContext, GuardPolicy, InterventionEngine,
     ProfileAssessment, TopologyCompiler, TopologySignals,
 };
-#[cfg(feature = "llm")]
-use mister_smith_core::AgentId;
 use mister_smith_core::{
     BranchState, ExecutionBranchId, ExecutionNodeId, FailureClass, GraphState, GuardTarget,
     HealthState, InterventionType, SemanticSignal, SemanticSignalKind, SupervisionDecisionBasis,

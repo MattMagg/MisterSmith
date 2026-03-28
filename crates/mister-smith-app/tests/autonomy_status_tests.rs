@@ -10,11 +10,13 @@ use mister_smith_core::{
     CoordinationPolicy, ExecutionBranchId, ExecutionGraphId, FailureClass,
     FailureContextCheckpoint, GraphState, GuardDecision, GuardDecisionId, GuardEvidence,
     HandoffClarificationRequest, HealthState, InterventionRecord, InterventionRecordId,
-    InterventionType, MemorySnapshotId, OrchestrationQualityView, ProfileSnapshotId, ProfileTarget,
-    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirective,
-    RepairDirectiveAction, RevocationState, StepEvaluationRecord, SupervisionDecisionBasis, TaskId,
-    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
-    VerifierVerdict,
+    InterventionType, MemorySnapshotId, OrchestrationQualityView, ProfileFingerprintId,
+    ProfileFingerprintRef, ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification,
+    ProvenanceChain, ProvenanceLink, RepairDirective, RepairDirectiveAction, RepairLineageRef,
+    RevocationState, SemanticSignal, SemanticSignalKind, StepEvaluationRecord,
+    SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
+    SupervisionTargetScope, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
+    TopologyKind, TopologyRationale, VerifierVerdict,
 };
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
@@ -543,6 +545,60 @@ fn render_status_surfaces_operator_rationale_and_history() {
     assert!(rendered.contains("tool:agent.echo#execute"));
     assert!(rendered.contains("required scope InvokeTool matched capability scope InvokeTool"));
     assert!(rendered.contains("control-plane state unavailable"));
+}
+
+#[test]
+fn render_status_surfaces_supervision_evidence_block() {
+    let (mut view, _, branch_id) = sample_view();
+    let node_id = mister_smith_core::ExecutionNodeId::new();
+    let fingerprint_ref = ProfileFingerprintRef {
+        fingerprint_id: ProfileFingerprintId::new(),
+        fingerprint_key: "branch-a".to_string(),
+        confidence: 0.82,
+        expires_at: chrono::Utc::now(),
+    };
+    let mut profile_snapshot = view.profiles[0].clone();
+    profile_snapshot.fingerprint_ref = Some(fingerprint_ref.clone());
+    profile_snapshot.semantic_signals = vec![SemanticSignal {
+        signal_kind: SemanticSignalKind::MissingContext,
+        severity: 74,
+        detail: "missing branch-local repair context".to_string(),
+    }];
+
+    view.supervision_evidence = Some(SupervisionEvidenceView {
+        target_scope: SupervisionTargetScope {
+            kind: SupervisionTargetKind::Node,
+            provider: None,
+            graph_id: Some(view.graph.graph_id),
+            branch_id: Some(branch_id),
+            node_id: Some(node_id),
+        },
+        fingerprint_ref: Some(fingerprint_ref),
+        profile_snapshot: Some(profile_snapshot),
+        guard_decision: Some(view.guard_decisions[0].clone()),
+        intervention_record: Some(view.interventions[0].clone()),
+        decision_basis: Some("live_signals_only".to_string()),
+        repair_lineage_ref: Some(RepairLineageRef {
+            source: "packet-020".to_string(),
+            checkpoint_ref: Some("checkpoint-clarify".to_string()),
+        }),
+        proof_boundary: Some("supported task path".to_string()),
+    });
+
+    let rendered = autonomy::render_status(&view);
+
+    assert!(rendered.contains("supervision:"));
+    assert!(rendered.contains("target=node"));
+    assert!(rendered.contains(&format!("branch={branch_id}")));
+    assert!(rendered.contains(&format!("node={node_id}")));
+    assert!(rendered.contains("basis=live_signals_only"));
+    assert!(rendered.contains("fingerprint=branch-a confidence=0.82"));
+    assert!(rendered.contains("repair_lineage=packet-020 checkpoint=checkpoint-clarify"));
+    assert!(rendered.contains("proof_boundary=supported task path"));
+    assert!(rendered.contains("profile:"));
+    assert!(rendered.contains("missing_context:74:missing branch-local repair context"));
+    assert!(rendered.contains("decision:"));
+    assert!(rendered.contains("intervention:"));
 }
 
 #[test]

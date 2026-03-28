@@ -18,15 +18,19 @@ use mister_smith_agents::roles::planner::{normalize_planner_output, PlannerMessa
 use mister_smith_agents::scheduler::{
     ArrayAggregator, IdentityDecomposer, TaskAssignment, TaskScheduler,
 };
-use mister_smith_agents::{AgentConfig, Orchestrator, ToolBus, TopologyCompiler, TopologySignals};
+use mister_smith_agents::{
+    AgentConfig, BranchCheckpoint, ExecutionGraph, GuardContext, Orchestrator, ProfileAssessment,
+    ToolBus, TopologyCompiler, TopologySignals,
+};
 use mister_smith_config::{
     FrameworkConfig, RuntimeProviderTier, RuntimeRoutingPolicy, RuntimeRoutingProfile,
 };
 use mister_smith_core::{
-    AgentId, AgentType, BranchState, EscalationPolicy, ExternalDelegationEnvelope,
+    AgentId, AgentType, BranchState, EscalationPolicy, ExecutionNodeId, ExternalDelegationEnvelope,
     FailureContextCheckpoint, GraphState, GuardTarget, HandoffClarificationRequest, LlmError,
-    NodeState, RepairDirective, RepairDirectiveAction, StepEvaluationRecord, SupervisionStrategy,
-    TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema, VerifierVerdict,
+    NodeState, RepairDirective, RepairDirectiveAction, SemanticSignal, SemanticSignalKind,
+    StepEvaluationRecord, SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId,
+    ToolSchema, VerifierVerdict,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -89,6 +93,13 @@ struct RuntimeBootstrapPlan {
     registered_providers: Vec<RuntimeLlmSelection>,
     routing_policy: RoutingPolicy,
     budget_root: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeSupervisionPlan {
+    target: GuardTarget,
+    assessment: ProfileAssessment,
+    checkpoints: Vec<BranchCheckpoint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1529,12 +1540,34 @@ impl RuntimeTaskService {
                         break;
                     }
                     StepExecutionDisposition::Failed(mut failed_step) => {
+                        if let Err(error) = self
+                            .supervise_failed_runtime_step(
+                                workflow_id,
+                                &prepared_task.task,
+                                &failed_step,
+                            )
+                            .await
+                        {
+                            if failed_step.message.is_empty() {
+                                failed_step.message = error;
+                            } else {
+                                failed_step.message = format!("{} ({error})", failed_step.message);
+                            }
+                        }
                         failed_step.completed_steps = completed_steps;
                         let _ = runtime.stop().await;
                         return Err(failed_step);
                     }
                     StepExecutionDisposition::Continue(transition) => {
                         if verifier_policies.get(active_policy_index + 1).is_none() {
+                            let supervision_error = self
+                                .supervise_runtime_transition(
+                                    workflow_id,
+                                    &prepared_task.task,
+                                    &transition,
+                                )
+                                .await
+                                .err();
                             let mut failed_step = repair_failure(
                                 &prepared_task.task,
                                 worker_id,
@@ -1543,6 +1576,37 @@ impl RuntimeTaskService {
                                 transition.result,
                                 transition.step_evaluation,
                                 Some("no follow-up verifier policy available for local repair"),
+                            );
+                            if let Some(error) = supervision_error {
+                                if failed_step.message.is_empty() {
+                                    failed_step.message = error;
+                                } else {
+                                    failed_step.message =
+                                        format!("{} ({error})", failed_step.message);
+                                }
+                            }
+                            failed_step.completed_steps = completed_steps;
+                            let _ = runtime.stop().await;
+                            return Err(failed_step);
+                        }
+
+                        if let Err(error) = self
+                            .supervise_runtime_transition(
+                                workflow_id,
+                                &prepared_task.task,
+                                &transition,
+                            )
+                            .await
+                        {
+                            let suffix = format!("runtime supervision failed: {error}");
+                            let mut failed_step = repair_failure(
+                                &prepared_task.task,
+                                worker_id,
+                                branch_id.clone(),
+                                action.clone(),
+                                transition.result,
+                                transition.step_evaluation,
+                                Some(&suffix),
                             );
                             failed_step.completed_steps = completed_steps;
                             let _ = runtime.stop().await;
@@ -2024,6 +2088,58 @@ impl RuntimeTaskService {
         crate::autonomy::enrich_step_routing_history(&mut view, metadata);
         crate::autonomy::enrich_result_preview(&mut view, metadata, task_result);
         persist_autonomy_status(metadata, &view);
+    }
+
+    async fn record_runtime_supervision(
+        &self,
+        workflow_id: TaskId,
+        plan: Option<RuntimeSupervisionPlan>,
+    ) -> Result<(), String> {
+        let Some(plan) = plan else {
+            return Ok(());
+        };
+
+        self.orchestrator
+            .supervise(
+                &workflow_id,
+                GuardContext::new(plan.target)
+                    .with_profile(plan.assessment)
+                    .with_checkpoints(plan.checkpoints),
+            )
+            .await
+            .map(|_| ())
+            .map_err(|error| {
+                format!("runtime supervision failed for workflow {workflow_id}: {error}")
+            })
+    }
+
+    async fn supervise_runtime_transition(
+        &self,
+        workflow_id: TaskId,
+        task: &TaskAssignment,
+        transition: &LocalRepairTransition,
+    ) -> Result<(), String> {
+        let graph = self
+            .orchestrator
+            .execution_graph(&workflow_id)
+            .ok_or_else(|| format!("execution graph missing for workflow {workflow_id}"))?;
+        let plan =
+            runtime_supervision_plan_for_transition(&graph, task, &transition.step_evaluation)?;
+        self.record_runtime_supervision(workflow_id, plan).await
+    }
+
+    async fn supervise_failed_runtime_step(
+        &self,
+        workflow_id: TaskId,
+        task: &TaskAssignment,
+        failed_step: &FailedTaskExecution,
+    ) -> Result<(), String> {
+        let graph = self
+            .orchestrator
+            .execution_graph(&workflow_id)
+            .ok_or_else(|| format!("execution graph missing for workflow {workflow_id}"))?;
+        let plan = runtime_supervision_plan_for_failed_step(&graph, task, failed_step)?;
+        self.record_runtime_supervision(workflow_id, plan).await
     }
 
     fn spawn_workflow_runner(
@@ -3025,6 +3141,109 @@ mod tests {
     }
 
     #[test]
+    fn recover_persisted_autonomy_status_preserves_supervision_evidence_snapshot() {
+        let mut view = sample_autonomy_view();
+        let branch_id = view.branches[0].branch_id;
+        let node_id = mister_smith_core::ExecutionNodeId::new();
+        let fingerprint_ref = mister_smith_core::ProfileFingerprintRef {
+            fingerprint_id: mister_smith_core::ProfileFingerprintId::new(),
+            fingerprint_key: "branch-a".to_string(),
+            confidence: 0.82,
+            expires_at: Utc::now(),
+        };
+        let profile_snapshot = mister_smith_core::ProfileSnapshot {
+            profile_id: mister_smith_core::ProfileSnapshotId::new(),
+            target: mister_smith_core::ProfileTarget::Branch,
+            health_state: mister_smith_core::HealthState::Degraded,
+            latency_window: None,
+            error_window: None,
+            semantic_signals: vec![mister_smith_core::SemanticSignal {
+                signal_kind: mister_smith_core::SemanticSignalKind::MissingContext,
+                severity: 74,
+                detail: "missing branch-local repair context".to_string(),
+            }],
+            fingerprint_ref: Some(fingerprint_ref.clone()),
+            updated_at: Utc::now(),
+        };
+        let guard_decision = mister_smith_core::GuardDecision {
+            decision_id: mister_smith_core::GuardDecisionId::new(),
+            failure_class: mister_smith_core::FailureClass::Semantic,
+            intervention: mister_smith_core::InterventionType::ContextRefresh,
+            evidence: mister_smith_core::GuardEvidence {
+                profile_id: Some(profile_snapshot.profile_id),
+                decision_basis: mister_smith_core::SupervisionDecisionBasis::LiveSignalsOnly,
+                signal_descriptions: vec!["missing branch-local repair context".to_string()],
+                checkpoint_ids: vec![],
+                notes: vec!["step boundary node evidence".to_string()],
+            },
+            target_scope: GuardTarget::Node(node_id),
+            operator_visibility: true,
+        };
+        let intervention_record = mister_smith_core::InterventionRecord {
+            record_id: mister_smith_core::InterventionRecordId::new(),
+            decision_id: guard_decision.decision_id,
+            before_state: json!({"state": "running"}),
+            after_state: Some(json!({"state": "pending"})),
+            rationale: "applied context refresh for semantic degradation".to_string(),
+            emitted_at: Utc::now(),
+        };
+        view.supervision_evidence = Some(mister_smith_core::SupervisionEvidenceView {
+            target_scope: mister_smith_core::SupervisionTargetScope {
+                kind: mister_smith_core::SupervisionTargetKind::Node,
+                provider: None,
+                graph_id: Some(view.graph.graph_id),
+                branch_id: Some(branch_id),
+                node_id: Some(node_id),
+            },
+            fingerprint_ref: Some(fingerprint_ref),
+            profile_snapshot: Some(profile_snapshot),
+            guard_decision: Some(guard_decision),
+            intervention_record: Some(intervention_record),
+            decision_basis: Some("live_signals_only".to_string()),
+            repair_lineage_ref: Some(mister_smith_core::RepairLineageRef {
+                source: "packet-020".to_string(),
+                checkpoint_ref: Some("checkpoint-clarify".to_string()),
+            }),
+            proof_boundary: Some("supported task path".to_string()),
+        });
+
+        let mut metadata = json!({});
+        persist_autonomy_status(&mut metadata, &view);
+        let record = sample_task_with_metadata(metadata);
+
+        let recovered = recover_persisted_autonomy_status(&record)
+            .expect("persisted autonomy status should round-trip");
+        let supervision = recovered
+            .supervision_evidence
+            .expect("supervision evidence should round-trip");
+
+        assert_eq!(
+            supervision.target_scope.kind,
+            mister_smith_core::SupervisionTargetKind::Node
+        );
+        assert_eq!(supervision.target_scope.branch_id, Some(branch_id));
+        assert_eq!(supervision.target_scope.node_id, Some(node_id));
+        assert_eq!(
+            supervision.decision_basis.as_deref(),
+            Some("live_signals_only")
+        );
+        assert_eq!(
+            supervision
+                .fingerprint_ref
+                .as_ref()
+                .map(|reference| reference.fingerprint_key.as_str()),
+            Some("branch-a")
+        );
+        assert_eq!(
+            supervision
+                .repair_lineage_ref
+                .as_ref()
+                .map(|lineage| lineage.source.as_str()),
+            Some("packet-020")
+        );
+    }
+
+    #[test]
     fn initial_metadata_persists_external_delegation_context() {
         let delegation = sample_external_delegation();
         let request = TaskSubmissionRequest {
@@ -3958,15 +4177,192 @@ fn task_assignment_for_node(
     }
 }
 
+fn runtime_supervision_target(
+    graph: &ExecutionGraph,
+    task: &TaskAssignment,
+    prefer_branch: bool,
+) -> Result<GuardTarget, String> {
+    let node_id = ExecutionNodeId::from_uuid(*task.task_id.as_ref());
+    let node = graph
+        .nodes
+        .iter()
+        .find(|node| node.node_id == node_id)
+        .ok_or_else(|| {
+            format!(
+                "workflow step '{}' is missing from execution graph {}",
+                step_identifier(task),
+                graph.graph_id
+            )
+        })?;
+
+    Ok(if prefer_branch {
+        GuardTarget::Branch(node.branch_id)
+    } else {
+        GuardTarget::Node(node.node_id)
+    })
+}
+
+fn runtime_checkpoints_for_target(
+    graph: &ExecutionGraph,
+    target: &GuardTarget,
+) -> Vec<BranchCheckpoint> {
+    let branch_id = match target {
+        GuardTarget::Branch(branch_id) => Some(*branch_id),
+        GuardTarget::Node(node_id) => graph
+            .nodes
+            .iter()
+            .find(|node| node.node_id == *node_id)
+            .map(|node| node.branch_id),
+        GuardTarget::Graph(_) | GuardTarget::Provider(_) => None,
+    };
+
+    branch_id
+        .and_then(|branch_id| graph.latest_checkpoint(&branch_id).cloned())
+        .into_iter()
+        .collect()
+}
+
+fn runtime_supervision_plan(
+    graph: &ExecutionGraph,
+    task: &TaskAssignment,
+    signal: SemanticSignal,
+    notes: Vec<String>,
+    prefer_branch: bool,
+) -> Result<RuntimeSupervisionPlan, String> {
+    let target = runtime_supervision_target(graph, task, prefer_branch)?;
+    let checkpoints = runtime_checkpoints_for_target(graph, &target);
+    let assessment = ProfileAssessment::from_supervisory_signals(&target, vec![signal], notes);
+
+    Ok(RuntimeSupervisionPlan {
+        target,
+        assessment,
+        checkpoints,
+    })
+}
+
+fn runtime_supervision_plan_for_transition(
+    graph: &ExecutionGraph,
+    task: &TaskAssignment,
+    step_evaluation: &StepEvaluationRecord,
+) -> Result<Option<RuntimeSupervisionPlan>, String> {
+    let Some(repair_directive) = step_evaluation.repair_directive.as_ref() else {
+        return Ok(None);
+    };
+
+    let step_id = step_identifier(task);
+    let mut notes = vec![format!(
+        "supported task-path local repair triggered for step '{step_id}': {}",
+        step_evaluation.reason
+    )];
+    if let Some(checkpoint_ref) = step_evaluation.checkpoint_ref.as_ref() {
+        notes.push(format!("repair checkpoint hint: {checkpoint_ref}"));
+    }
+
+    let (signal_kind, severity, detail, prefer_branch) = match repair_directive.action {
+        RepairDirectiveAction::ClarifyHandoff => {
+            let missing = step_evaluation
+                .clarification_request
+                .as_ref()
+                .map(|request| request.missing_constraints.join(", "))
+                .filter(|constraints| !constraints.is_empty())
+                .unwrap_or_else(|| step_evaluation.reason.clone());
+            notes.push("preferred node-scoped clarification before wider escalation".to_string());
+            (SemanticSignalKind::MissingContext, 72, missing, false)
+        }
+        RepairDirectiveAction::RetryStep => {
+            notes.push("preferred node-scoped retry before widening repair scope".to_string());
+            (
+                SemanticSignalKind::Stalled,
+                78,
+                step_evaluation.reason.clone(),
+                false,
+            )
+        }
+        RepairDirectiveAction::ReplanFromCheckpoint => {
+            notes.push(
+                "preferred node-scoped checkpoint replan before widening repair scope".to_string(),
+            );
+            (
+                SemanticSignalKind::Stalled,
+                82,
+                step_evaluation.reason.clone(),
+                false,
+            )
+        }
+        RepairDirectiveAction::Stop => {
+            notes.push("repair loop stopped and requires branch-scoped escalation".to_string());
+            (
+                SemanticSignalKind::PolicyConflict,
+                95,
+                step_evaluation.reason.clone(),
+                true,
+            )
+        }
+    };
+
+    runtime_supervision_plan(
+        graph,
+        task,
+        SemanticSignal {
+            signal_kind,
+            severity,
+            detail,
+        },
+        notes,
+        prefer_branch,
+    )
+    .map(Some)
+}
+
+fn runtime_supervision_plan_for_failed_step(
+    graph: &ExecutionGraph,
+    task: &TaskAssignment,
+    failed_step: &FailedTaskExecution,
+) -> Result<Option<RuntimeSupervisionPlan>, String> {
+    let Some(step_evaluation) = failed_step.step_evaluation.as_ref() else {
+        return Ok(None);
+    };
+
+    let step_id = step_identifier(task);
+    let detail = if failed_step.message.trim().is_empty() {
+        step_evaluation.reason.clone()
+    } else {
+        failed_step.message.clone()
+    };
+    let mut notes = vec![format!(
+        "supported task-path failure requires branch-scoped intervention for step '{step_id}'"
+    )];
+    notes.push(format!("failure detail: {detail}"));
+    if let Some(failure_code) = step_evaluation.failure_code.as_ref() {
+        notes.push(format!("failure code: {failure_code}"));
+    }
+    if let Some(checkpoint_ref) = step_evaluation.checkpoint_ref.as_ref() {
+        notes.push(format!("latest checkpoint ref: {checkpoint_ref}"));
+    }
+
+    runtime_supervision_plan(
+        graph,
+        task,
+        SemanticSignal {
+            signal_kind: SemanticSignalKind::PolicyConflict,
+            severity: 95,
+            detail,
+        },
+        notes,
+        true,
+    )
+    .map(Some)
+}
+
 fn execution_input_for_task(
-    graph: &mister_smith_agents::ExecutionGraph,
+    graph: &ExecutionGraph,
     task: &TaskAssignment,
     goal: &str,
     worker_id: AgentId,
     step_results: &BTreeMap<String, Value>,
     runtime_llm: &RuntimeLlmSelection,
 ) -> Value {
-    let node_id = mister_smith_core::ExecutionNodeId::from_uuid(*task.task_id.as_ref());
+    let node_id = ExecutionNodeId::from_uuid(*task.task_id.as_ref());
     let dependency_results = graph
         .nodes
         .iter()
@@ -4718,6 +5114,49 @@ mod runtime_plan_tests {
                 }
             }
         }
+    }
+
+    fn runtime_supervision_graph() -> (ExecutionGraph, TaskAssignment, TaskId, GuardTarget) {
+        let workflow_id = TaskId::new();
+        let graph = TopologyCompiler::default()
+            .compile(
+                workflow_id,
+                &json!({
+                    "goal": "runtime-supervision",
+                    "steps": [
+                        {
+                            "id": "collect",
+                            "step": 1,
+                            "action": "collect",
+                            "description": "Collect context"
+                        },
+                        {
+                            "id": "branch-a",
+                            "step": 2,
+                            "action": "branch-a",
+                            "description": "Branch A",
+                            "depends_on": ["collect"],
+                            "branch": "branch-a"
+                        }
+                    ]
+                }),
+                &TopologySignals::default(),
+            )
+            .expect("graph should compile");
+        let node = graph
+            .nodes
+            .iter()
+            .find(|node| node.step_key == "branch-a")
+            .cloned()
+            .expect("branch node should exist");
+        let task = task_assignment_for_node(workflow_id, &node, "ship proof");
+
+        (
+            graph,
+            task,
+            workflow_id,
+            GuardTarget::Branch(node.branch_id),
+        )
     }
 
     #[test]
@@ -5619,6 +6058,153 @@ mod runtime_plan_tests {
             completed.step_evaluation,
         );
         assert!(payload.get("step_evaluation").is_none());
+    }
+
+    #[test]
+    fn runtime_supervision_plan_targets_node_for_local_clarification() {
+        let (graph, mut task, workflow_id, branch_target) = runtime_supervision_graph();
+        let worker_id = AgentId::new();
+        let node_target = GuardTarget::Node(ExecutionNodeId::from_uuid(*task.task_id.as_ref()));
+        let branch_id = match branch_target {
+            GuardTarget::Branch(branch_id) => branch_id,
+            _ => panic!("expected branch target"),
+        };
+        task.input
+            .as_object_mut()
+            .expect("task input should be mutable")
+            .insert(
+                "verifier_policy_sequence".to_string(),
+                json!([
+                    {
+                        "enabled": true,
+                        "verdict": "rejected",
+                        "reason": "missing branch-local repair context",
+                        "failure_code": "missing_context",
+                        "checkpoint_ref": "checkpoint-clarify",
+                        "repair_directive": {
+                            "action": "clarify_handoff",
+                            "issued_by": "verifier.runtime",
+                            "failure_context_ref": "branch-a/clarify",
+                            "retry_budget_remaining": 1
+                        },
+                        "clarification_request": {
+                            "source_step_id": "branch-a",
+                            "target_step_id": "branch-a",
+                            "missing_constraints": ["repair context"],
+                            "attempt_count": 0,
+                            "expires_at": "2026-03-27T12:00:00Z"
+                        }
+                    },
+                    {
+                        "enabled": true,
+                        "verdict": "accepted",
+                        "reason": "clarified"
+                    }
+                ]),
+            );
+
+        let verifier_policies =
+            verifier_policies_from_task_input(&task).expect("policies should parse");
+        let repair_state = LocalRepairState::default();
+        let context = StepExecutionContext {
+            workflow_id,
+            task: &task,
+            worker_id,
+            branch_id: json!(branch_id),
+            action: task.task_type.clone(),
+            repair_state: &repair_state,
+        };
+        let transition = match step_execution_disposition(
+            &context,
+            json!({"summary": "clarify"}),
+            verifier_policies.first().cloned(),
+        )
+        .expect("clarify policy should evaluate")
+        {
+            StepExecutionDisposition::Continue(transition) => transition,
+            _ => panic!("expected local repair transition"),
+        };
+
+        let plan =
+            runtime_supervision_plan_for_transition(&graph, &task, &transition.step_evaluation)
+                .expect("plan should build")
+                .expect("transition should produce supervision");
+
+        assert_eq!(plan.target, node_target);
+        assert!(plan.checkpoints.is_empty());
+        let snapshot = plan
+            .assessment
+            .snapshot()
+            .expect("profile snapshot should exist");
+        assert_eq!(snapshot.semantic_signals.len(), 1);
+        assert_eq!(
+            snapshot.semantic_signals[0].signal_kind,
+            SemanticSignalKind::MissingContext
+        );
+    }
+
+    #[test]
+    fn runtime_supervision_plan_targets_branch_for_failed_step() {
+        let (graph, mut task, workflow_id, branch_target) = runtime_supervision_graph();
+        let worker_id = AgentId::new();
+        let branch_id = match branch_target {
+            GuardTarget::Branch(branch_id) => branch_id,
+            _ => panic!("expected branch target"),
+        };
+        task.input
+            .as_object_mut()
+            .expect("task input should be mutable")
+            .insert(
+                "verifier_policy".to_string(),
+                json!({
+                    "enabled": true,
+                    "verdict": "rejected",
+                    "reason": "policy conflict requires escalation",
+                    "failure_code": "policy_conflict",
+                    "checkpoint_ref": "checkpoint-stop",
+                    "repair_directive": {
+                        "action": "stop",
+                        "issued_by": "verifier.runtime",
+                        "failure_context_ref": "branch-a/stop",
+                        "retry_budget_remaining": 0
+                    }
+                }),
+            );
+
+        let repair_state = LocalRepairState::default();
+        let context = StepExecutionContext {
+            workflow_id,
+            task: &task,
+            worker_id,
+            branch_id: json!(branch_id),
+            action: task.task_type.clone(),
+            repair_state: &repair_state,
+        };
+        let failed_step = match step_execution_disposition(
+            &context,
+            json!({"summary": "stop"}),
+            verifier_policy_from_task_input(&task).expect("policy should parse"),
+        )
+        .expect("stop policy should evaluate")
+        {
+            StepExecutionDisposition::Failed(failed) => failed,
+            _ => panic!("expected failed step"),
+        };
+
+        let plan = runtime_supervision_plan_for_failed_step(&graph, &task, &failed_step)
+            .expect("plan should build")
+            .expect("failed step should produce supervision");
+
+        assert_eq!(plan.target, GuardTarget::Branch(branch_id));
+        let snapshot = plan
+            .assessment
+            .snapshot()
+            .expect("profile snapshot should exist");
+        assert_eq!(snapshot.semantic_signals.len(), 1);
+        assert_eq!(
+            snapshot.semantic_signals[0].signal_kind,
+            SemanticSignalKind::PolicyConflict
+        );
     }
 }
 
