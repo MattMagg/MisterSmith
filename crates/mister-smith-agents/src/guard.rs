@@ -2,7 +2,8 @@
 
 use mister_smith_core::{
     FailureClass, GuardDecision, GuardDecisionId, GuardError, GuardEvidence, GuardTarget,
-    HealthState, InterventionType, SupervisionDecisionBasis,
+    HealthState, InterventionType, ProfileFingerprint, SemanticSignalKind,
+    SupervisionDecisionBasis,
 };
 
 use crate::execution_graph::BranchCheckpoint;
@@ -197,6 +198,17 @@ impl Guard {
                 "no supervisory evidence available for a non-trivial intervention".to_string(),
             ));
         };
+        let decision_basis = assessment
+            .and_then(ProfileAssessment::fingerprint)
+            .filter(|fingerprint| fingerprint_reinforces(profile, intervention, fingerprint))
+            .map(|fingerprint| {
+                evidence_notes.push(format!(
+                    "fingerprint reinforced live signal classification via {}",
+                    fingerprint.target_selector
+                ));
+                SupervisionDecisionBasis::FingerprintReinforced
+            })
+            .unwrap_or(SupervisionDecisionBasis::LiveSignalsOnly);
 
         Ok(GuardDecision {
             decision_id: GuardDecisionId::new(),
@@ -204,7 +216,7 @@ impl Guard {
             intervention,
             evidence: GuardEvidence {
                 profile_id: Some(profile.profile_id),
-                decision_basis: SupervisionDecisionBasis::LiveSignalsOnly,
+                decision_basis,
                 signal_descriptions,
                 checkpoint_ids: context
                     .checkpoints
@@ -216,5 +228,35 @@ impl Guard {
             target_scope: context.target.clone(),
             operator_visibility: true,
         })
+    }
+}
+
+fn fingerprint_reinforces(
+    profile: &mister_smith_core::ProfileSnapshot,
+    intervention: InterventionType,
+    fingerprint: &ProfileFingerprint,
+) -> bool {
+    let prefers_intervention = fingerprint.preferred_interventions.contains(&intervention);
+    let live_modes = profile
+        .semantic_signals
+        .iter()
+        .map(|signal| failure_mode_label(signal.signal_kind))
+        .collect::<Vec<_>>();
+    let matches_failure_mode = live_modes.iter().any(|mode| {
+        fingerprint
+            .dominant_failure_modes
+            .iter()
+            .any(|candidate| candidate == mode)
+    });
+    prefers_intervention || matches_failure_mode
+}
+
+fn failure_mode_label(signal_kind: SemanticSignalKind) -> &'static str {
+    match signal_kind {
+        SemanticSignalKind::Stalled => "stalled",
+        SemanticSignalKind::Repetitive => "repetitive",
+        SemanticSignalKind::LowConfidence => "low_confidence",
+        SemanticSignalKind::MissingContext => "missing_context",
+        SemanticSignalKind::PolicyConflict => "policy_conflict",
     }
 }

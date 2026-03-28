@@ -579,6 +579,38 @@ fn autonomy_ids_enums_and_errors_are_available() {
 }
 
 #[test]
+fn profile_fingerprint_serializes_as_structured_summary_without_transcript_payload() {
+    let fingerprint = ProfileFingerprint {
+        fingerprint_id: ProfileFingerprintId::new(),
+        target_kind: "branch".to_string(),
+        target_selector: "branch-a".to_string(),
+        source_refs: vec![
+            "workflow:packet-021".to_string(),
+            "checkpoint:checkpoint-1".to_string(),
+        ],
+        summary_payload: serde_json::json!({
+            "health_state": "degraded",
+            "signal_kinds": ["missing_context"],
+            "decision_basis": "live_signals_only",
+        }),
+        dominant_failure_modes: vec!["missing_context".to_string()],
+        preferred_interventions: vec![InterventionType::ContextRefresh],
+        confidence: 0.82,
+        updated_at: chrono::Utc::now(),
+        expires_at: chrono::Utc::now() + chrono::Duration::hours(6),
+    };
+
+    let encoded = serde_json::to_value(&fingerprint).expect("fingerprint should serialize");
+    assert_eq!(encoded["target_kind"], "branch");
+    assert!(encoded["summary_payload"].is_object());
+    assert_eq!(
+        encoded["summary_payload"]["signal_kinds"][0],
+        serde_json::json!("missing_context")
+    );
+    assert!(encoded["summary_payload"]["raw_transcript"].is_null());
+}
+
+#[test]
 fn autonomy_error_types_compile_as_standard_errors() {
     assert_error_traits::<TopologyError>();
     assert_error_traits::<MemoryError>();
