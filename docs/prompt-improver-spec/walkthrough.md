@@ -1,71 +1,66 @@
-# Walkthrough — Mister Smith R9 Deep-Research Prompt Suite
+# Walkthrough — Mister Smith Post-Research Analysis Brief Prompt
 
 ## Original Prompt Summary
 
-The source request asked for a fresh deep-research refresh in this repository, aimed at recent
-advancements in workflow, orchestration, coordination, and real-time inter-agent communication
-that are not already covered by the prior research corpus. The user explicitly wanted a series of
-markdown prompt documents, produced through the prompt-improver workflow and filtered through the
-Mister Smith frontier mandate.
+The user wanted a reusable prompt-improver deliverable for a very specific follow-on workflow:
+after an external research report has already been produced, bring that report into the Mister
+Smith repo and have a local agent analyze it deeply against Mister Smith's existing or proposed
+architecture.
 
-The key design challenge was not whether to make more prompts. The repo already had substantial
-`R8` deep-research prompts. The real problem was to turn the documented corpus gaps into a new
-`R9` suite without duplicating the existing prompt batch or drifting into generic market scanning.
+The report path `/Users/macmain/Downloads/deep-research-report.md` was only an example of the kind
+of artifact that will be received. The prompt was not supposed to execute against that file during
+this run.
+
+## Final Prompt Location
+
+`docs/prompt-improver-spec/final-prompts/mister-smith-post-research-analysis-brief.md`
 
 ## Key Improvements Made
 
-- converted a broad "catch me up" request into a concrete `R9` suite with five prompt owners and
-  one suite README
-- grounded every prompt in repo authority:
-  - `docs/current-state.md`
-  - `docs/research-output/ROUTING_MANIFEST.md`
-  - prompt-specific consolidated research docs
-- rebuilt the "already known" sections from `docs/research-output/*` instead of copying `R8`
-  baseline text
-- separated transport-level real-time communication from collaborative communication policy so
-  the suite does not collapse transport, protocol safety, and cognitive alignment into one prompt
-- added shared output requirements across the suite:
-  - frontier classification
-  - Mister Smith implementation vector
-  - production-validated vs research-only separation
-  - thin-results reporting
-  - contradictions to current assumptions
-- kept the frontier-first, anti-market-copying stance visible in each production prompt
+- shifted the task from vague "analyze deeply" language to an explicit **post-research local
+  analysis** workflow
+- made imported research reports the **primary evidence** and repo-local context a **baseline for
+  transfer analysis**, not a reason to re-run research or audit repo state
+- added support for **one or more reports** so the prompt can consolidate overlapping findings
+- strengthened the prompt from summary-oriented to **decision-brief-oriented**
+- added explicit handling for:
+  - novelty versus existing or proposed architecture
+  - implement now / prototype / monitor / not worth pursuing posture
+  - further-research needs before implementation
+  - separation of imported evidence from repo-local inference
+- added anti-patterns and a final verification checklist so the receiving agent does not drift into
+  generic summarization
 
-## Before / After Comparison
+## Before / After Highlights
 
-### Scope shape
+### Before
 
-- Before: one broad request that could have turned into a loose set of overlapping prompts
-- After: five production prompts with explicit overlap boundaries plus a README that explains the
-  run order
+- the draft said to "compare those findings to Mister Smith's architecture and research baseline"
+  but did not define how repo-local context should be used
+- the output shape was short and risked producing a linear summary
+- the draft did not explicitly block accidental new web research
 
-### Baseline authority
+### After
 
-- Before: existing `R8` prompts could have been reused too literally
-- After: the suite treats `docs/research-output/*` as the hard "already discovered" boundary and
-  uses `R8` only as structural reference
+- the final prompt explicitly says this is **not a new research run**
+- repo-local context is explicitly limited to judging novelty, fit, leverage, and transferability
+- the output is framed as a **decision-grade brief**
+- evaluation lenses, anti-patterns, and a verification checklist make the prompt more reliable in
+  real use
 
-### Output rigor
+## How To Use The Final Prompt
 
-- Before: a research agent could return a generic update or a market-comparison memo
-- After: every prompt requires frontier taxonomy, implementation vectors, thin-results honesty,
-  and contradiction reporting
+1. Open a new local Codex session in `/Users/macmain/MisterSmith`.
+2. Provide one or more completed research reports inside `<research_reports>`.
+3. Optionally provide:
+   - `<analysis_goal>` for a narrower question
+   - `<architecture_context>` for specific local design docs
+   - `<existing_research_context>` for prior repo-local synthesis
+   - `<decision_horizon>` if near-term versus later-stage separation matters
+4. Let the receiving agent produce the brief without starting a new research pass.
 
-## How To Use The Improved Prompt Suite
+## Cleanup Performed
 
-1. Start with `docs/research-prompts/R9/README.md` to choose a run order.
-2. Run one prompt at a time with a deep-research agent that has live web access.
-3. Treat the prompt text as production-ready; the temporary drafts under
-   `docs/prompt-improver-spec/final-prompts/` are intentionally removed after finalization.
-4. Feed any resulting findings back into `docs/research-output/` rather than modifying the prompt
-   suite unless the baseline itself changes.
-
-## Final Prompt Locations
-
-- `docs/research-prompts/R9/README.md`
-- `docs/research-prompts/R9/01-workflow-engines-compensation-and-resume.md`
-- `docs/research-prompts/R9/02-dynamic-orchestration-and-topology-control.md`
-- `docs/research-prompts/R9/03-coordination-protocols-shared-state-and-dynamic-verification.md`
-- `docs/research-prompts/R9/04-real-time-inter-agent-communication-and-transport.md`
-- `docs/research-prompts/R9/05-collaborative-communication-handoffs-and-cognitive-alignment.md`
+- created the draft prompt under `docs/prompt-improver-spec/final-prompts/`
+- created the production prompt in the same directory
+- removed the draft file after finalization
