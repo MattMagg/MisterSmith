@@ -1,58 +1,71 @@
-# Walkthrough — Mister Smith MS-114 Packet-021 Contract-Freeze Handoff Prompt
+# Walkthrough — Mister Smith R9 Deep-Research Prompt Suite
 
 ## Original Prompt Summary
 
-The source request asked for two things:
+The source request asked for a fresh deep-research refresh in this repository, aimed at recent
+advancements in workflow, orchestration, coordination, and real-time inter-agent communication
+that are not already covered by the prior research corpus. The user explicitly wanted a series of
+markdown prompt documents, produced through the prompt-improver workflow and filtered through the
+Mister Smith frontier mandate.
 
-1. mirror packet `021` into Linear as issues/tasks/spec context
-2. create a new-session prompt, using the prompt-improver workflow, that initializes
-   implementation of the new packet
-
-The main prompt-design challenge was deciding what the receiving session should actually start on.
-Once the Linear packet structure existed, the honest answer was not the packet parent. It was the
-first runnable child issue: `MS-114`.
+The key design challenge was not whether to make more prompts. The repo already had substantial
+`R8` deep-research prompts. The real problem was to turn the documented corpus gaps into a new
+`R9` suite without duplicating the existing prompt batch or drifting into generic market scanning.
 
 ## Key Improvements Made
 
-- converted a broad "initialize this spec implementation" ask into a direct fresh-session handoff
-  for `MS-114`
-- grounded the prompt on the new tracker structure:
-  - parent packet `MS-113`
-  - first runnable slice `MS-114`
-  - attached Linear doc `Packet 021 spec packet`
-- made the contract artifact a first-class read instead of assuming the receiving agent would
-  infer it from `plan.md` or `tasks.md`
-- added explicit boundaries that keep the session out of `MS-115`, `MS-116`, `MS-117`, and
-  `MS-118`
-- kept the repo's Smith-first lifecycle, validation, and clean-closure requirements intact
+- converted a broad "catch me up" request into a concrete `R9` suite with five prompt owners and
+  one suite README
+- grounded every prompt in repo authority:
+  - `docs/current-state.md`
+  - `docs/research-output/ROUTING_MANIFEST.md`
+  - prompt-specific consolidated research docs
+- rebuilt the "already known" sections from `docs/research-output/*` instead of copying `R8`
+  baseline text
+- separated transport-level real-time communication from collaborative communication policy so
+  the suite does not collapse transport, protocol safety, and cognitive alignment into one prompt
+- added shared output requirements across the suite:
+  - frontier classification
+  - Mister Smith implementation vector
+  - production-validated vs research-only separation
+  - thin-results reporting
+  - contradictions to current assumptions
+- kept the frontier-first, anti-market-copying stance visible in each production prompt
 
 ## Before / After Comparison
 
-### Session target
+### Scope shape
 
-- Before: ambiguous between packet-parent initialization and first-slice implementation
-- After: explicitly targets `MS-114`, the first runnable contract-freeze slice
+- Before: one broad request that could have turned into a loose set of overlapping prompts
+- After: five production prompts with explicit overlap boundaries plus a README that explains the
+  run order
 
-### Contract grounding
+### Baseline authority
 
-- Before: could have treated the contract artifact as just one more packet file
-- After: the prompt requires the receiving agent to read and honor the published supervision
-  contract before editing code
+- Before: existing `R8` prompts could have been reused too literally
+- After: the suite treats `docs/research-output/*` as the hard "already discovered" boundary and
+  uses `R8` only as structural reference
 
-### Tracker integration
+### Output rigor
 
-- Before: "put it in Linear" did not yet give the next session actionable issue context
-- After: the prompt is anchored on the concrete Linear parent, child issue, attached packet doc,
-  and suggested branch name
+- Before: a research agent could return a generic update or a market-comparison memo
+- After: every prompt requires frontier taxonomy, implementation vectors, thin-results honesty,
+  and contradiction reporting
 
-## How To Use The Improved Prompt
+## How To Use The Improved Prompt Suite
 
-1. Start a fresh Codex session in `/Users/macmain/MisterSmith`.
-2. Paste the final prompt from the file below.
-3. Let the receiving agent execute `MS-114` end to end before moving to later packet-021 slices.
-4. Expect the receiving agent to keep repo and Linear state aligned and to stop at the contract
-   freeze boundary rather than widening into later packet work.
+1. Start with `docs/research-prompts/R9/README.md` to choose a run order.
+2. Run one prompt at a time with a deep-research agent that has live web access.
+3. Treat the prompt text as production-ready; the temporary drafts under
+   `docs/prompt-improver-spec/final-prompts/` are intentionally removed after finalization.
+4. Feed any resulting findings back into `docs/research-output/` rather than modifying the prompt
+   suite unless the baseline itself changes.
 
-## Final Prompt Location
+## Final Prompt Locations
 
-- `docs/prompt-improver-spec/final-prompts/mister-smith-ms-114-packet-021-contract-freeze-handoff.md`
+- `docs/research-prompts/R9/README.md`
+- `docs/research-prompts/R9/01-workflow-engines-compensation-and-resume.md`
+- `docs/research-prompts/R9/02-dynamic-orchestration-and-topology-control.md`
+- `docs/research-prompts/R9/03-coordination-protocols-shared-state-and-dynamic-verification.md`
+- `docs/research-prompts/R9/04-real-time-inter-agent-communication-and-transport.md`
+- `docs/research-prompts/R9/05-collaborative-communication-handoffs-and-cognitive-alignment.md`

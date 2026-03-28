@@ -1,17 +1,24 @@
-# Task Checklist — Mister Smith MS-114 Packet-021 Contract-Freeze Handoff Prompt
+# Task Checklist — Mister Smith R9 Deep-Research Prompt Suite
 
 ## Steps 1-3: Planning and Initial Draft
 
-- [x] Step 1: normalized the user request into a first-runnable-slice handoff objective
-- [x] Step 2: identified the new Linear parent/child structure and the packet-021 contract-freeze
-  boundary
-- [x] Step 2a: added the contract artifact, issue IDs, and repo SHA as prompt anchors
-- [x] Step 3: drafted a fresh-session handoff prompt for `MS-114`
+- [x] Step 1: normalized the user request into an additive `R9` deep-research prompt suite
+- [x] Step 1a: identified existing prompt families and the relevant repo baseline under
+  `docs/research-output/`
+- [x] Step 2: mapped the five production prompts, README, baseline docs, and overlap boundaries
+- [x] Step 2a: locked the final production home to `docs/research-prompts/R9/`
+- [x] Step 3: created one temporary draft prompt per production prompt under
+  `docs/prompt-improver-spec/final-prompts/`
 
 ## Steps 4-6: Critique and Finalization
 
-- [x] Step 4: critiqued the draft for packet-parent drift, stale tracker context, and missing
-  contract-first framing
-- [x] Step 5: strengthened the prompt with explicit `MS-114` scope, Linear anchors, boundaries,
-  and validation rules
-- [x] Step 6: finalized the prompt and updated the prompt-improver artifacts for this session
+- [x] Step 4: critiqued the draft suite for overlap, stale baseline reuse, and weak frontier
+  gating
+- [x] Step 5: strengthened the prompts with explicit baseline-doc lists, frontier classification,
+  implementation vectors, and production-vs-research separation
+- [x] Step 6: finalized the production prompt set under `docs/research-prompts/R9/`
+- [x] Step 6a: removed all temporary `r9-*-draft.md` files from
+  `docs/prompt-improver-spec/final-prompts/`
+- [x] Validation: run targeted markdownlint on touched files
+- [x] Validation: run `git diff --check`
+- [x] Validation: verify no `r9-*-draft.md` files remain
