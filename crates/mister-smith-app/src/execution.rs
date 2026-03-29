@@ -28,10 +28,9 @@ use mister_smith_config::{
 use mister_smith_core::{
     AgentId, AgentType, BranchState, EscalationPolicy, ExecutionNodeId, ExternalDelegationEnvelope,
     FailureContextCheckpoint, GraphState, GuardTarget, HandoffClarificationRequest, LlmError,
-    NodeState, ProfileFingerprint, RepairDirective, RepairDirectiveAction,
-    SemanticSignal, SemanticSignalKind, StepEvaluationRecord, SupervisionStrategy, TaskId, Tool,
-    ToolCapabilities, ToolError, ToolId, ToolSchema,
-    VerifierVerdict,
+    NodeState, ProfileFingerprint, RepairDirective, RepairDirectiveAction, SemanticSignal,
+    SemanticSignalKind, StepEvaluationRecord, SupervisionEvidenceView, SupervisionStrategy, TaskId,
+    Tool, ToolCapabilities, ToolError, ToolId, ToolSchema, VerifierVerdict,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -661,11 +660,13 @@ struct TerminalResultViews {
 fn terminal_result_views(
     status: &str,
     canonical_result: mister_smith_core::UnifiedResultEnvelope,
+    supervision_evidence: Option<SupervisionEvidenceView>,
 ) -> Result<TerminalResultViews, String> {
     let aggregated_result = canonical_result.aggregated_result.clone();
     let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
         status,
         canonical_result.clone(),
+        supervision_evidence,
     ))
     .map_err(|error| format!("failed to serialize task result view: {error}"))?;
     let final_result = serde_json::to_value(canonical_result)
@@ -928,12 +929,16 @@ impl RuntimeTaskService {
                 status: "failed",
             },
         );
-        let result_views =
-            terminal_result_views("failed", final_result.clone()).unwrap_or(TerminalResultViews {
-                aggregated_result: aggregated_result.clone(),
-                final_result: Value::Null,
-                task_result: Value::Null,
-            });
+        let result_views = terminal_result_views(
+            "failed",
+            final_result.clone(),
+            self.current_supervision_evidence(workflow_id, &metadata, None),
+        )
+        .unwrap_or(TerminalResultViews {
+            aggregated_result: aggregated_result.clone(),
+            final_result: Value::Null,
+            task_result: Value::Null,
+        });
         put_metadata(
             &mut metadata,
             "aggregated_result",
@@ -1318,7 +1323,11 @@ impl RuntimeTaskService {
                 status: "completed",
             },
         );
-        let result_views = terminal_result_views("completed", final_result)?;
+        let result_views = terminal_result_views(
+            "completed",
+            final_result,
+            self.current_supervision_evidence(workflow_id, &metadata, None),
+        )?;
 
         put_metadata(
             &mut metadata,
@@ -1820,12 +1829,16 @@ impl RuntimeTaskService {
             },
         );
         let aggregated_result = final_result.aggregated_result.clone();
-        let result_views =
-            terminal_result_views("failed", final_result).unwrap_or(TerminalResultViews {
-                aggregated_result: aggregated_result.clone(),
-                final_result: Value::Null,
-                task_result: Value::Null,
-            });
+        let result_views = terminal_result_views(
+            "failed",
+            final_result,
+            self.current_supervision_evidence(workflow_id, &metadata, None),
+        )
+        .unwrap_or(TerminalResultViews {
+            aggregated_result: aggregated_result.clone(),
+            final_result: Value::Null,
+            task_result: Value::Null,
+        });
         put_metadata(
             &mut metadata,
             "aggregated_result",
@@ -2093,13 +2106,9 @@ impl RuntimeTaskService {
         metadata: &mut Value,
         task_result: Option<&Value>,
     ) {
-        let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id).or_else(|| {
-            crate::autonomy::synthesize_failed_before_graph_status(
-                workflow_id,
-                metadata,
-                task_result,
-            )
-        }) else {
+        let Some(mut view) =
+            persisted_or_synthesized_autonomy_status(workflow_id, metadata, task_result)
+        else {
             return;
         };
         crate::autonomy::enrich_session_linkage(&mut view, metadata);
@@ -2149,7 +2158,8 @@ impl RuntimeTaskService {
                 &decision,
                 current_fingerprint.as_ref(),
             );
-            self.persist_runtime_profile_fingerprint(&fingerprint).await?;
+            self.persist_runtime_profile_fingerprint(&fingerprint)
+                .await?;
         }
 
         Ok(())
@@ -2216,6 +2226,20 @@ impl RuntimeTaskService {
                     fingerprint.target_kind, fingerprint.target_selector
                 )
             })
+    }
+
+    fn current_supervision_evidence(
+        &self,
+        workflow_id: TaskId,
+        metadata: &Value,
+        task_result: Option<&Value>,
+    ) -> Option<SupervisionEvidenceView> {
+        self.orchestrator
+            .autonomy_status(&workflow_id)
+            .or_else(|| {
+                persisted_or_synthesized_autonomy_status(workflow_id, metadata, task_result)
+            })
+            .and_then(|view| view.supervision_evidence)
     }
 
     fn spawn_workflow_runner(
@@ -2421,16 +2445,30 @@ fn persist_autonomy_status(metadata: &mut Value, view: &AutonomyStatusView) {
     put_metadata(metadata, AUTONOMY_STATUS_METADATA_KEY, value);
 }
 
+fn persisted_or_synthesized_autonomy_status(
+    workflow_id: TaskId,
+    metadata: &Value,
+    task_result: Option<&Value>,
+) -> Option<AutonomyStatusView> {
+    metadata
+        .get(AUTONOMY_STATUS_METADATA_KEY)
+        .cloned()
+        .and_then(|raw| serde_json::from_value::<AutonomyStatusView>(raw).ok())
+        .or_else(|| {
+            crate::autonomy::synthesize_failed_before_graph_status(
+                workflow_id,
+                metadata,
+                task_result,
+            )
+        })
+}
+
 fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStatusView> {
-    let mut view = if let Some(raw) = record.metadata.get(AUTONOMY_STATUS_METADATA_KEY) {
-        serde_json::from_value::<AutonomyStatusView>(raw.clone()).ok()?
-    } else {
-        crate::autonomy::synthesize_failed_before_graph_status(
-            TaskId::from_uuid(record.task_id),
-            &record.metadata,
-            record.result.as_ref(),
-        )?
-    };
+    let mut view = persisted_or_synthesized_autonomy_status(
+        TaskId::from_uuid(record.task_id),
+        &record.metadata,
+        record.result.as_ref(),
+    )?;
     crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
     crate::autonomy::enrich_accepted_task_ingress_continuity(&mut view, &record.metadata);
     crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
@@ -2870,7 +2908,7 @@ mod tests {
                 },
             );
 
-            let result_views = terminal_result_views(status, canonical_result)
+            let result_views = terminal_result_views(status, canonical_result, None)
                 .expect("canonical task and final result envelopes should serialize");
 
             assert_eq!(
@@ -3954,6 +3992,7 @@ mod tests {
         let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
             "failed",
             canonical_result.clone(),
+            None,
         ))
         .expect("task result should serialize");
         let mut record = sample_task_with_result(
@@ -4061,6 +4100,7 @@ mod tests {
                     status: "failed",
                 },
             ),
+            None,
         ))
         .expect("task result should serialize");
         let mut record = sample_task_with_result(
@@ -4357,7 +4397,9 @@ fn runtime_fingerprint_confidence(
         .map(|signal| f32::from(signal.severity) / 100.0)
         .fold(0.55, f32::max)
         .min(0.95);
-    existing.map(|fingerprint| fingerprint.confidence.max(live)).unwrap_or(live)
+    existing
+        .map(|fingerprint| fingerprint.confidence.max(live))
+        .unwrap_or(live)
 }
 
 fn build_runtime_profile_fingerprint(

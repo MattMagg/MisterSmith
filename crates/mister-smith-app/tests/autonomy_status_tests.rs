@@ -893,7 +893,7 @@ fn build_task_result_view_surfaces_accepted_without_repair_orchestration_quality
         )],
     );
 
-    let summary = autonomy::build_task_result_view("completed", canonical_result)
+    let summary = autonomy::build_task_result_view("completed", canonical_result, None)
         .orchestration_quality
         .expect("accepted evaluation should surface orchestration quality");
 
@@ -934,7 +934,7 @@ fn build_task_result_view_surfaces_rejected_retry_orchestration_quality() {
         )],
     );
 
-    let summary = autonomy::build_task_result_view("failed", canonical_result)
+    let summary = autonomy::build_task_result_view("failed", canonical_result, None)
         .orchestration_quality
         .expect("rejected evaluation should surface orchestration quality");
 
@@ -986,7 +986,7 @@ fn build_task_result_view_infers_planner_repair_orchestration_quality_without_ve
         ],
     );
 
-    let summary = autonomy::build_task_result_view("completed", canonical_result)
+    let summary = autonomy::build_task_result_view("completed", canonical_result, None)
         .orchestration_quality
         .expect("planner repair step should surface orchestration quality");
 
@@ -1003,6 +1003,49 @@ fn build_task_result_view_infers_planner_repair_orchestration_quality_without_ve
             outcome_summary: "accepted_after_clarify_handoff".to_string(),
         }
     );
+}
+
+#[test]
+fn build_task_result_view_preserves_supervision_evidence_projection() {
+    let workflow_id = TaskId::new();
+    let canonical_result = sample_canonical_result(
+        workflow_id,
+        "completed",
+        vec![serde_json::json!({ "id": "draft-outline" })],
+        vec![],
+    );
+    let supervision_evidence = SupervisionEvidenceView {
+        target_scope: SupervisionTargetScope {
+            kind: SupervisionTargetKind::Branch,
+            provider: None,
+            graph_id: Some(ExecutionGraphId::new()),
+            branch_id: Some(ExecutionBranchId::new()),
+            node_id: None,
+        },
+        fingerprint_ref: Some(ProfileFingerprintRef {
+            fingerprint_id: ProfileFingerprintId::new(),
+            fingerprint_key: "executor:branch".to_string(),
+            confidence: 0.83,
+            expires_at: chrono::Utc::now(),
+        }),
+        profile_snapshot: None,
+        guard_decision: None,
+        intervention_record: None,
+        decision_basis: Some("fingerprint_reinforced".to_string()),
+        repair_lineage_ref: Some(RepairLineageRef {
+            source: "packet-020".to_string(),
+            checkpoint_ref: Some("checkpoint-retry".to_string()),
+        }),
+        proof_boundary: Some("deterministic-only".to_string()),
+    };
+
+    let summary = autonomy::build_task_result_view(
+        "completed",
+        canonical_result,
+        Some(supervision_evidence.clone()),
+    );
+
+    assert_eq!(summary.supervision_evidence, Some(supervision_evidence));
 }
 
 #[test]
