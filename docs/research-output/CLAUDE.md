@@ -1,15 +1,16 @@
 ---
-version: R3
+version: R4
 created: 2026-03-07
-updated: 2026-03-07
+updated: 2026-03-28
 ---
 
-# Phase 9+ Research Corpus — Navigation & Context
+# Mister Smith Research Corpus — Navigation & Context
 
-> **Status: SYNTHESIS COMPLETE**
-> Checkpoint: 2026-03-07
+> **Status: corpus active, research rounds complete**
+> Checkpoint: 2026-03-28
 > Research rounds completed: 7
-> Consolidated synthesis: 9 documents in `consolidated/` (1 master + 8 topic syntheses)
+> Active authority layer: `consolidated/`
+> Canonical merged direction source: `docs/direction.md`
 
 ## Governing Directive: Frontier-First
 
@@ -20,6 +21,26 @@ This corpus exists to inform Mister Smith's architecture — not to survey the f
 - "No Rust implementation exists" is never a valid dismissal — the team builds Rust implementations (19 crates in 2 days). Dismiss only when the approach is mathematically inferior or strategically wrong
 - We benchmark against OpenAI Agents SDK, Google ADK, LangChain/LangGraph, CrewAI, AutoGen, Claude SDK, distributed systems, actor systems, operating systems, telecom, and trading infrastructure — but we do not copy them
 - Cross-domain theoretical grounding (computational neuroscience, category theory, process calculus) provides design patterns from mature fields
+
+## Reading Order Now
+
+Treat the corpus in layers:
+
+1. **Authority**: `consolidated/`
+   - This is the research authority layer for Mister Smith's whole-system future direction.
+   - Start with `00`, `02`, `03`, `05`, `06`, and `08`.
+   - Use `01` for routing follow-ons and historical routing direction.
+   - Use `04` for zero-trust, delegation, and security surfaces.
+2. **Transfer / judgment**: `analysis/`
+   - Imported research is not part of the active planning corpus until it has a repo-grounded transfer brief here.
+3. **Evidence backing**: `research/`
+   - Use this layer only when a spec, plan, or design note needs narrower evidence than the consolidated docs provide.
+4. **Source-only archive**: `raw/`, `synthesis/`
+   - Keep for provenance and auditability; do not use as the default reading path.
+5. **Intake-only**: `inbox/`
+   - Imported reports here should not shape active direction until they have an `analysis/` judgment.
+   - `deep-research-report.md` and `deep-research-report (2).md` remain intake-only.
+   - `recursive_llm_frameworks.md` is explicitly low-priority intake because it has no active repo mapping today.
 
 ## Research Rounds
 
@@ -48,15 +69,10 @@ This corpus exists to inform Mister Smith's architecture — not to survey the f
 ```
 docs/research-output/
 +-- CLAUDE.md                       <- You are here
-+-- ROUTING_MANIFEST.md             <- Maps discovery findings to topics + strategic classification
-+-- synthesis/                      <- Round 3: merged industry reports (STALE — only covers R1-R2 raw sources)
-|   +-- intelligent-model-routing-R3.md
-|   +-- agentic-loop-architectures-R3.md
-|   +-- streaming-architecture-R3.md
-|   +-- supervision-llm-fault-tolerance-R3.md
-|   +-- nats-native-agent-patterns-R3.md
-|   +-- frontier-agent-architecture-R3.md
-+-- research/                       <- Rounds 4-7: external research
++-- ROUTING_MANIFEST.md             <- Historical discovery-classification support
++-- analysis/                       <- Repo-grounded transfer briefs for imported research
++-- consolidated/                   <- Authoritative whole-system synthesis and use map
++-- research/                       <- Evidence backing for narrower design claims
 |   +-- targeted-model-routing-cascades-R4.md         (Round 4 — Consensus academic)
 |   +-- targeted-streaming-backpressure-reactive-R4.md
 |   +-- targeted-supervision-fault-tolerance-R4.md
@@ -74,24 +90,26 @@ docs/research-output/
 |   +-- discovery-sweep-R7b.md
 |   +-- discovery-sweep-R7c.md
 |   +-- discovery-sweep-R7d.md
-+-- raw/                            <- Rounds 1-2: original source reports (archived, consumed in R3)
-    +-- 01-intelligent-model-routing/     (3 files)
-    +-- 02-agentic-loop-architectures/    (3 files)
-    +-- 03-streaming-architecture/        (3 files)
-    +-- 04-supervision-llm-fault-tolerance/ (3 files)
-    +-- 05-nats-native-agent-patterns/    (3 files)
-    +-- 06-frontier-agent-architecture/   (3 files)
++-- inbox/                          <- Intake-only imported reports and notes
++-- raw/                            <- Rounds 1-2 source reports (archived, consumed in later layers)
++-- synthesis/                      <- Round 3 legacy synthesis (stale vs consolidated)
 ```
 
 ## How to Read This Corpus
 
-**For a domain's full state of knowledge:** Start with the synthesis file (R3), then read its paired targeted research (R4/R6), then check discovery sweeps for lateral findings.
+**For whole-system future direction:** Start with `consolidated/`, then read the relevant `analysis/` briefs.
+Use `docs/direction.md` when you need the single merged direction source rather than the research corpus itself.
 
-**For what we might be missing:** Read discovery sweeps R4, R5, R7a-d and the ROUTING_MANIFEST.md.
+**For bounded implementation work:** Read the current spec or plan, then the relevant consolidated doc(s), then drop into `research/` only if you need narrower evidence.
 
-**For confidence levels and pending work:** Read `docs/RESEARCH_CHECKPOINT.md`.
+**For imported-report adjudication:** Read `analysis/` first, not the raw `inbox/` file.
 
-## Topic Map
+**For confidence levels and corpus status:** Read `docs/RESEARCH_CHECKPOINT.md`.
+
+## Historical Research Provenance Map
+
+This map explains where findings originally entered the corpus. It is provenance support, not the
+default reading order.
 
 ### Original 6 Topics (Synthesis R3 + Targeted Research R4)
 
@@ -135,17 +153,22 @@ docs/research-output/
 
 | Metric | Count |
 |--------|-------|
-| Total files | 42 (6 synthesis + 17 research + 18 raw + 1 manifest) |
-| Synthesis files | 6 (Round 3 — stale, only covers R1-R2) |
+| Total files | 62 (root docs + 9 consolidated + 3 analysis + 17 research + 18 raw + 6 synthesis + 7 inbox) |
+| Consolidated authority docs | 9 |
+| Analysis transfer briefs | 3 |
 | Research files | 17 (11 targeted + 6 discovery) |
-| Raw source files | 18 (archived, consumed in R3) |
+| Raw source files | 18 (source-only archive) |
+| Legacy synthesis files | 6 (Round 3 — stale, only covers R1-R2) |
+| Inbox intake files | 7 (not part of the normal planning path) |
 | Peer-reviewed papers cataloged | 2,000+ |
 | Industry/technical references | 500+ |
 | Research rounds completed | 7 |
 
-## Consolidated Synthesis (START HERE)
+## Consolidated Authority Layer (START HERE)
 
-The `consolidated/` directory contains the authoritative synthesis of ALL research rounds. These are the documents to read.
+The `consolidated/` directory contains the authoritative synthesis of all research rounds for
+Mister Smith's whole-system future direction. This is the research authority layer and the first
+place to read inside the corpus. The merged overall direction source lives at `docs/direction.md`.
 
 ```
 consolidated/
@@ -159,6 +182,14 @@ consolidated/
 +-- 07-memory-and-context.md                       <- Tiered memory, neural paging, KV cache persistence, PICASO
 +-- 08-competitive-landscape-and-ecosystem.md      <- GraphBit, Akka, Google scaling laws, Vercel, A2A, Rust ecosystem
 ```
+
+## Active Use Map
+
+- **Whole-system future direction:** start with `00`, `02`, `03`, `05`, `06`, and `08`, then read the relevant `analysis/` brief if imported research is involved.
+- **Routing follow-ons and history:** use `01` to preserve routing lessons and cost-structure history without treating it as the sole direction setter.
+- **Security and zero-trust surfaces:** use `04` when the question is delegation, trust boundaries, inter-agent security, or operator-visible enforcement.
+- **Bounded implementation work:** read the current spec or plan first, then the relevant consolidated doc(s), then `research/` only if narrower evidence is needed.
+- **Imported research activation rule:** no inbox report becomes active planning input until it has a repo-grounded judgment in `analysis/`.
 
 ## Research Tooling
 

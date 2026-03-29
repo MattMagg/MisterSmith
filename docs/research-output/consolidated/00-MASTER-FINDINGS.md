@@ -2,7 +2,8 @@
 
 > **Date**: 2026-03-07
 > **Scope**: All 7 research rounds, 2,000+ papers, 500+ industry references
-> **Purpose**: The single document to read for "what did we learn and what do we build?"
+> **Purpose**: The top research synthesis for "what did we learn and what direction does that support?"
+> Use `docs/direction.md` for the merged current-truth plus future-direction source. Use this file as the research authority input feeding that direction.
 
 ---
 

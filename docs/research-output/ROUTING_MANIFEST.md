@@ -1,15 +1,27 @@
 ---
-version: R2
+version: R3
 created: 2026-03-07
-updated: 2026-03-07
+updated: 2026-03-28
 ---
 
-# Discovery Routing Manifest
+# Historical Discovery Routing Manifest
 
 Maps every finding from discovery sweeps to existing topics, flags new dimensions, and classifies each finding's strategic value under the frontier-first mandate.
 
-> **Coverage**: Discovery sweeps R4 and R5 are fully routed below. R7 (a-d) findings are being integrated into consolidated synthesis documents — see `consolidated/` directory.
+> **Current role**: historical discovery-classification support, not the default corpus entrypoint.
+> Canonical merged direction source: `docs/direction.md`
+> Read `consolidated/` first for active direction and `analysis/` first for imported-report adjudication.
+> Use this file to preserve classification language, discovery-round routing history, and future intake framing.
+> **Coverage**: Discovery sweeps R4 and R5 are fully routed below. R7 (a-d) findings have already informed the consolidated authority layer.
 > **File naming note**: Discovery sweeps are named by research round (R4 = Round 4, R5 = Round 5, R7 = Round 7).
+
+## How To Use This File Now
+
+- Use `docs/direction.md` when you need the single merged direction source.
+- Use `docs/research-output/consolidated/` for Mister Smith's whole-system future direction.
+- Use `docs/research-output/analysis/` when deciding whether imported research should enter active planning.
+- Use this manifest only when you need discovery classification detail, historical routing context, or a vocabulary for a new research round.
+- Do not use this file as the front door for normal planning, specs, or architecture handoffs.
 
 **Classification key:**
 

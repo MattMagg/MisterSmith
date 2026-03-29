@@ -1,27 +1,31 @@
 ---
-version: R3
+version: R4
 created: 2026-03-07
-updated: 2026-03-27
+updated: 2026-03-28
 ---
 
-# Research Checkpoint — Phase 9+ Architecture Research
+# Research Checkpoint — Mister Smith Architecture Research
 
-> **Checkpoint Date**: 2026-03-07
-> **Status**: 7 rounds complete, synthesis DONE. No new research being launched.
+> **Checkpoint Date**: 2026-03-28
+> **Status**: 7 rounds complete. Consolidated authority layer active. No new research round is being launched.
 > **Governing directive**: Frontier-first — optimize for strategic advantage, not comprehensiveness
-> **Current Action**: Research phase complete. Use
-> `docs/current-state.md` for the current repo-wide overview,
-> `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the
-> latest landed frontier packet note,
-> `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for the
-> latest bounded live-proof and closure note, and
-> `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` for
-> historical packet-016 closure proof.
+> **Current Action**: Use the corpus in layers:
+> canonical merged direction -> `docs/direction.md`
+> current repo truth -> `docs/current-state.md`
+> authority -> `docs/research-output/consolidated/`
+> transfer/judgment -> `docs/research-output/analysis/`
+> backing evidence -> `docs/research-output/research/`
+> source-only archive -> `docs/research-output/raw/`, `docs/research-output/synthesis/`
+> intake-only -> `docs/research-output/inbox/`
 
 ## Historical March 16 Direction
 
-Research is no longer the limiting factor. The current operating-system direction is to convert the
-research corpus into bounded backlog epics that preserve the frontier mandate:
+Research is no longer the limiting factor. The corpus now exists primarily to guide Mister Smith's
+whole-system future direction and secondarily to support bounded implementation packets when a
+current plan needs narrower evidence.
+
+The March 16 direction converted research into bounded backlog epics that preserve the frontier
+mandate:
 
 - task-shape-aware orchestration and dynamic team sizing
 - session restart-resume and distributed operating state
@@ -30,10 +34,42 @@ research corpus into bounded backlog epics that preserve the frontier mandate:
 
 Those directions were consolidated in
 `docs/plans/2026-03-16-frontier-direction.md`, which now serves as historical context only. The
-current planning authority moved forward to `docs/current-state.md` plus the March 26 packet-019
-and packet-020 closure notes.
+current merged direction authority now lives in `docs/direction.md`, with `docs/current-state.md`
+as the repo-truth router and `docs/research-output/consolidated/` as the research authority layer.
 
 ---
+
+## Corpus Layers
+
+### 1. Authority
+
+`docs/research-output/consolidated/` is the default reading path for Mister Smith's whole-system
+future direction inside the research corpus. Start there unless you are doing evidence lookup or
+intake adjudication. Use `docs/direction.md` for the single merged direction source above the
+corpus.
+
+### 2. Transfer / Judgment
+
+`docs/research-output/analysis/` is where imported reports are judged against current repo truth
+and long-range direction. Imported research should not become active planning input until it has a
+brief here.
+
+### 3. Backing Evidence
+
+`docs/research-output/research/` is the evidence layer. Use it only when a spec, plan, or design
+note needs narrower proof than the consolidated docs provide.
+
+### 4. Source-Only Archive
+
+`docs/research-output/raw/` and `docs/research-output/synthesis/` remain for provenance and audit,
+but they are not part of the normal reading path.
+
+### 5. Intake-Only
+
+`docs/research-output/inbox/` is intake material. It is not part of the normal planning path.
+`deep-research-report.md` and `deep-research-report (2).md` remain intake-only until they receive
+repo-grounded transfer briefs. `recursive_llm_frameworks.md` is explicitly low-priority intake
+because it has no active repo mapping today.
 
 ## What Was Searched
 
@@ -212,8 +248,9 @@ The dismissal of "neuromorphic computing" conflated specialized hardware (Intel 
 
 ## What Remains Open
 
-### Research Complete — Needs Synthesis Only
-All deep dives are done. No more research rounds planned. The following need consolidation into actionable architecture:
+### Research Complete — Remaining Work Is Transfer, Design, and Experimentation
+All deep dives are done and the consolidated authority layer is complete. No more research rounds
+are planned. The following remain active as design and implementation directions:
 
 - [x] Dynamic self-organization & meta-orchestration (R6)
 - [x] CRDT-based coordination over JetStream (R6)
@@ -233,30 +270,38 @@ All deep dives are done. No more research rounds planned. The following need con
 - Capability-based security (Macaroons/ZCAP-LD) for AI agents → **build in Rust** (macaroons crate exists for primitives; agent-specific delegation logic is ~1-2 weeks)
 - RouteLLM's 85% cost savings not independently replicated → **benchmark with Mister Smith router**
 - Stigmergic coordination at scale (>100 LLM agents) → **simulate with mock agents first**
-- Neural paging with JetStream as backing store → **entirely novel, prototype in Phase 10**
+- Neural paging with JetStream as backing store → **entirely novel, prototype when the relevant bounded work is active**
 - CRDT coordination at agent scale → **benchmark with Diamond-types crate + JetStream KV**
 - PRM accuracy on non-mathematical reasoning tasks → **evaluate with Mister Smith's agent roles**
-- Step-level routing latency overhead in production → **measure after Phase 10 impl**
+- Step-level routing latency overhead in production → **measure when the relevant bounded work is active**
 
 **Note on "no implementation exists" gaps**: The absence of an existing implementation is a build task, not a research gap. With demonstrated velocity (19 crates, 983 tests, 8 phases in 2 days with agent assistance), any of these can be prototyped in days to weeks.
 
 ---
 
-## Consolidated Synthesis Documents
+## Consolidated Authority Documents
 
-Being produced now at `docs/research-output/consolidated/`:
+Current authority documents at `docs/research-output/consolidated/`:
 
-| # | Topic | Source Rounds | Status |
+| # | Topic | Source Rounds | Current Use |
 |---|-------|--------------|--------|
-| 00 | **Master Findings** (top 20 ranked + roadmap) | All | COMPLETE |
-| 01 | Model Routing & Cost Optimization | R3, R4, R5, R6, R7 | COMPLETE |
-| 02 | Orchestration & Self-Organization | R3, R4, R5, R6, R7 | COMPLETE |
-| 03 | Supervision & Resilience | R3, R4, R5, R6, R7 | COMPLETE |
-| 04 | Security & Trust | R4, R5, R6, R7 | COMPLETE |
-| 05 | Coordination & State | R3, R4, R5, R6, R7 | COMPLETE |
-| 06 | Streaming Architecture | R3, R4, R6, R7 | COMPLETE |
-| 07 | Memory & Context | R3, R4, R5, R7 | COMPLETE |
-| 08 | Competitive Landscape & Ecosystem | R3, R4, R5, R7 | COMPLETE |
+| 00 | **Master Findings** (top 20 ranked + roadmap) | All | first-stop ranking doc for future direction |
+| 01 | Model Routing & Cost Optimization | R3, R4, R5, R6, R7 | routing follow-ons and history |
+| 02 | Orchestration & Self-Organization | R3, R4, R5, R6, R7 | future orchestration direction |
+| 03 | Supervision & Resilience | R3, R4, R5, R6, R7 | future orchestration direction |
+| 04 | Security & Trust | R4, R5, R6, R7 | zero-trust and delegation surfaces |
+| 05 | Coordination & State | R3, R4, R5, R6, R7 | future orchestration direction |
+| 06 | Streaming Architecture | R3, R4, R6, R7 | future orchestration direction |
+| 07 | Memory & Context | R3, R4, R5, R7 | supporting direction, not the main front door |
+| 08 | Competitive Landscape & Ecosystem | R3, R4, R5, R7 | benchmark and anti-copying context |
+
+## Whole-System Use Map
+
+- **Future orchestration direction:** `00`, `02`, `03`, `05`, `06`, and `08`
+- **Routing follow-ons and history:** `01`
+- **Security and zero-trust surfaces:** `04`
+- **Imported research activation rule:** imported reports become active only after an `analysis/` judgment exists
+- **Bounded implementation work:** current spec/plan first, then relevant consolidated docs, then `research/` only if needed
 
 ---
 
@@ -264,7 +309,14 @@ Being produced now at `docs/research-output/consolidated/`:
 
 | Document | Purpose |
 |----------|---------|
+| `docs/direction.md` | Single authoritative direction source that merges repo truth and research-backed priorities |
+| `docs/current-state.md` | Current repo-truth router and live-vs-not-live status |
 | `docs/research-output/CLAUDE.md` | Directory structure, topic map, reading order |
-| `docs/research-output/ROUTING_MANIFEST.md` | Discovery finding routing, strategic classification |
+| `docs/research-output/ROUTING_MANIFEST.md` | Historical discovery routing and classification support |
 | `docs/RESEARCH_CHECKPOINT.md` | This file — confidence tiers, pending queue, state of knowledge |
-| `docs/research-output/consolidated/` | Authoritative per-topic synthesis (in progress) |
+| `docs/research-output/consolidated/` | Research authority layer for whole-system future direction |
+| `docs/research-output/analysis/` | Transfer/judgment layer for imported reports |
+| `docs/research-output/research/` | Backing evidence when narrower proof is needed |
+| `docs/research-output/raw/` | Source-only archive of early raw reports |
+| `docs/research-output/synthesis/` | Legacy synthesis archive, stale relative to consolidated docs |
+| `docs/research-output/inbox/` | Intake-only imported material, not part of normal planning |

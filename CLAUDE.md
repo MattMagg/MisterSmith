@@ -15,8 +15,10 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 
 ## Start Here
 
-Use `docs/current-state.md` as the stable repo-wide state summary and document router.
+Use `docs/direction.md` for Mister Smith's overall direction and `docs/current-state.md` for the
+stable repo-wide state summary and document router.
 
+- `docs/direction.md`: single authoritative direction source for where Mister Smith is going and what should be built next
 - `docs/current-state.md`: current repo and OS state
 - `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`: latest landed frontier packet
   and packet-020 closure note
@@ -52,7 +54,7 @@ runtime.
   `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md`
 - Runtime contract: `WORKFLOW.md`
 - Linear operating model: `docs/linear/LINEAR.md`
-- Current repo-wide overview and document router: `docs/current-state.md`
+- Current overall direction and repo-wide router: `docs/direction.md`, `docs/current-state.md`
 - Latest landed frontier closure notes:
   `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`,
   `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
@@ -92,8 +94,9 @@ subsequent run attempt.
 
 Phase completion in this repo means the relevant substrate and validation artifacts are landed. It
 does not automatically mean every advanced seam is already wired into the default live runtime
-path. Use `docs/current-state.md` when you need the honest distinction between "landed in repo",
-"live default runtime path", and "planned next".
+path. Use `docs/current-state.md` when you need the honest distinction between "landed in repo"
+and "live default runtime path". Use `docs/direction.md` when you need the strategic answer to
+"what matters next and why".
 
 ## Workspace Crate Dependencies
 

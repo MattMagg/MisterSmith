@@ -24,11 +24,12 @@ CI-validated state, not a static README guarantee.
 
 ## Start Here
 
-Use [`docs/current-state.md`](docs/current-state.md) as the stable repo-wide overview and document
-router.
+Use [`docs/direction.md`](docs/direction.md) for Mister Smith's overall direction and
+[`docs/current-state.md`](docs/current-state.md) for current repo truth and document routing.
 
 Document roles in brief:
 
+- `docs/direction.md`: single authoritative direction source for where Mister Smith is going and what should be built next
 - `docs/current-state.md`: current repo and OS state
 - `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`:
   latest landed frontier packet and packet-020 closure note
@@ -52,7 +53,8 @@ the Mister Smith OS runtime.
 - Live queue contract:
   [`WORKFLOW.md`](WORKFLOW.md) and
   [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md)
-- Current repo-wide router and latest landed frontier closure notes:
+- Current overall direction, repo-wide router, and latest landed frontier closure notes:
+  [`docs/direction.md`](docs/direction.md),
   [`docs/current-state.md`](docs/current-state.md),
   [`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`](docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md),
   [`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`](docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md)

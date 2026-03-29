@@ -5,7 +5,10 @@ Status: Current
 
 ## Purpose
 
-This is the stable repo-wide overview and document router for Mister Smith.
+This is the stable repo-wide overview, live-truth summary, and document router for Mister Smith.
+
+Use `docs/direction.md` when you need the merged strategic answer for where Mister Smith is going
+and what should be built next.
 
 Use this file when you need one honest answer to:
 
@@ -18,6 +21,7 @@ Use this file when you need one honest answer to:
 
 | Need | Primary document | Role |
 | ---- | ---------------- | ---- |
+| Overall direction | `docs/direction.md` | Single authoritative direction source that merges repo truth and research-backed priorities |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
 | Latest frontier packet | `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` | Packet-020 scope and closure note for the landed verifier-gated orchestration slice |
 | Next frozen frontier packet | `specs/021-profile-aware-predictive-runtime-supervision/` | Frozen post-packet-020 packet for profile-aware predictive supervision on the supported runtime path |
