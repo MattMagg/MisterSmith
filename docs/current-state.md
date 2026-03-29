@@ -91,10 +91,9 @@ external workflow services such as Linear or Symphony.
   path now supports verifier-gated step decisions, first-class handoff clarification, preserved
   failure-context plus last stable checkpoint repair lineage, and operator-visible
   orchestration-quality provenance.
-- Packet 021 is now landed on this branch through `MS-114` through `MS-118`: the task inspect
-  path, autonomy status, and operator-console selected-run detail now project bounded predictive
-  supervision evidence and explicit proof-boundary text while keeping packet-020 repair lineage
-  separate.
+- Packet 021 is not yet landed on `main`: PR `#250` carries the `MS-114` through `MS-118`
+  closure candidate for bounded predictive-supervision evidence plus explicit proof-boundary text
+  on the task inspect path, autonomy status, and operator-console selected-run detail.
 - Task and autonomy provenance now surface runtime routing policy, registered-provider count,
   budget root, the latest accepted step tier/checkpoint evidence, and verifier/repair lineage from
   the runtime task path.
@@ -112,8 +111,8 @@ external workflow services such as Linear or Symphony.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
 - The packet-016 family remains terminal, packet `019` is closed, packet `020` is now closed on
-  `main`, packet `018` remains an out-of-main review lane, and packet `021` is now the current
-  landed predictive-supervision closure slice on this branch.
+  `main`, packet `018` remains an out-of-main review lane, and packet `021` remains the active
+  predictive-supervision review lane until PR `#250` lands on `main`.
 
 ## Important Distinction
 
@@ -210,8 +209,8 @@ The completed frontier epics are:
   parent `MS-96`)
 
 Packet `019` is complete on `main`. Packet `020` is now landed on `main` through `MS-104`
-through `MS-107`. Packet `021` is now landed on this branch through `MS-114` through `MS-118`,
-and no newer post-packet-021 bounded phase is frozen yet.
+through `MS-107`. Packet `021` is under review on PR `#250` as the `MS-114` through `MS-118`
+closure candidate, and no newer post-packet-021 bounded phase is frozen yet.
 
 The remaining March 27 adaptive-topology follow-up is still not a frozen implementation packet.
 It remains a backlog planning item for future evidence-backed work beyond the current
