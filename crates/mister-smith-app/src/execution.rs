@@ -2106,8 +2106,12 @@ impl RuntimeTaskService {
         metadata: &mut Value,
         task_result: Option<&Value>,
     ) {
-        let Some(mut view) =
-            persisted_or_synthesized_autonomy_status(workflow_id, metadata, task_result)
+        let Some(mut view) = self
+            .orchestrator
+            .autonomy_status(&workflow_id)
+            .or_else(|| {
+                persisted_or_synthesized_autonomy_status(workflow_id, metadata, task_result)
+            })
         else {
             return;
         };

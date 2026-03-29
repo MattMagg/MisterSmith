@@ -251,12 +251,13 @@ If you need to understand the repo quickly:
 
 - Use this file for the repo's current broad state.
 - Use `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` for the landed
-  packet-021 closure and deterministic proof-boundary context,
-  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the landed packet-020
-  scope and closure context, `specs/021-profile-aware-predictive-runtime-supervision/` for the
-  packet-021 implementation packet, and `docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27 follow-up that
-  simplified live runtime planning and surfaced runtime-owned repair telemetry, and
-  `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` for the completed
+  packet-021 closure and deterministic proof-boundary context.
+- Use `specs/021-profile-aware-predictive-runtime-supervision/` for the packet-021 implementation
+  packet and `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the landed
+  packet-020 scope and closure context.
+- Use `docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27 follow-up that
+  simplified live runtime planning and surfaced runtime-owned repair telemetry.
+- Use `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` for the completed
   packet-019 scope-freeze and closure router.
 - Use `WORKFLOW.md` and `docs/linear/LINEAR.md` for development workflow rules.
 - Use `spec/` for architecture truth.

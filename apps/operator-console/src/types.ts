@@ -84,6 +84,7 @@ export interface TaskSupervisionEvidence {
   fingerprint_ref?: TaskFingerprintRef | null;
   repair_lineage_ref?: TaskRepairLineageRef | null;
   profile_snapshot?: TaskProfileSnapshot | null;
+  guard_decision?: Record<string, unknown> | null;
   intervention_record?: TaskInterventionRecord | null;
 }
 
