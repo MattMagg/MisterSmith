@@ -2,9 +2,10 @@
 
 ## Summary
 
-`MS-117` lands the bounded packet-021 projection work on the existing task inspect path. The
-runtime now persists one first-class `supervision_evidence` projection on `task.result` while
-keeping packet-020 `orchestration_quality` separate.
+Packet `021` is now closed on this branch through `MS-117` and `MS-118`. The runtime now persists
+one first-class `supervision_evidence` projection on `task.result`, keeps packet-020
+`orchestration_quality` separate, and carries the same bounded supervision summary onto autonomy
+status and the operator-console selected-run detail.
 
 Changed surfaces:
 
@@ -38,17 +39,27 @@ Changed surfaces:
 
 ## Deterministic Validation
 
-These deterministic checks passed for `MS-117`:
+These deterministic checks passed for the final packet-021 closure pass:
 
 ```bash
 cargo test -p mister-smith-core
+cargo test -p mister-smith-agents
+cargo test -p mister-smith-events
+cargo test -p mister-smith-app
 cargo test -p mister-smith-events --test autonomy_event_tests
 cargo test -p mister-smith-app --test autonomy_status_tests
+cargo clippy -p mister-smith-core -- -D warnings
+cargo clippy -p mister-smith-agents -- -D warnings
+cargo clippy -p mister-smith-events -- -D warnings
+cargo clippy -p mister-smith-app -- -D warnings
+npm --prefix apps/operator-console run build
 npm --prefix apps/operator-console test
+git diff --check
 ```
 
-These checks prove the bounded result-contract, event-projection, runtime-rendering, and
-operator-console wiring. They do not prove a fresh live runtime rerun.
+These checks prove the bounded result-contract, event-projection, runtime-rendering,
+operator-console wiring, and packet-closure doc sync. They do not prove a fresh live runtime
+rerun.
 
 ## Live-Proof Boundary
 

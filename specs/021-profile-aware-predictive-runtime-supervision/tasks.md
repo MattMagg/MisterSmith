@@ -164,16 +164,16 @@ that all show coherent supervisory evidence and proof-boundary text.
 
 ## Final Validation And Evidence
 
-- [ ] T024 Run `cargo test -p mister-smith-core`
-- [ ] T025 Run `cargo test -p mister-smith-agents`
-- [ ] T026 Run `cargo test -p mister-smith-events`
-- [ ] T027 Run `cargo test -p mister-smith-app`
-- [ ] T028 Run `cargo clippy -p mister-smith-core -- -D warnings`
-- [ ] T029 Run `cargo clippy -p mister-smith-agents -- -D warnings`
-- [ ] T030 Run `cargo clippy -p mister-smith-events -- -D warnings`
-- [ ] T031 Run `cargo clippy -p mister-smith-app -- -D warnings`
-- [ ] T032 Run `npm --prefix apps/operator-console run build`
-- [ ] T033 Run `git diff --check`
+- [x] T024 Run `cargo test -p mister-smith-core`
+- [x] T025 Run `cargo test -p mister-smith-agents`
+- [x] T026 Run `cargo test -p mister-smith-events`
+- [x] T027 Run `cargo test -p mister-smith-app`
+- [x] T028 Run `cargo clippy -p mister-smith-core -- -D warnings`
+- [x] T029 Run `cargo clippy -p mister-smith-agents -- -D warnings`
+- [x] T030 Run `cargo clippy -p mister-smith-events -- -D warnings`
+- [x] T031 Run `cargo clippy -p mister-smith-app -- -D warnings`
+- [x] T032 Run `npm --prefix apps/operator-console run build`
+- [x] T033 Run `git diff --check`
 
 ## Parallel Staging Directive
 

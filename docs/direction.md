@@ -1,6 +1,6 @@
 # Mister Smith Direction
 
-Date: March 28, 2026
+Date: March 29, 2026
 Status: Authoritative
 
 ## Purpose and Authority
@@ -45,7 +45,8 @@ Already landed and proven:
 - ToolBus-backed execution on the default runtime path
 - real local provider-backed runtime proof on the supported `openai_chatgpt` / `gpt-5.4` baseline
 - bounded same-agent sessions and operator-visible provenance
-- bounded runtime routing, budget, verifier-gated orchestration, and repair-lineage foundations on `main`
+- bounded runtime routing, budget, verifier-gated orchestration, repair-lineage foundations, and
+  deterministic packet-021 predictive-supervision evidence surfaces on `main`
 
 Exists but is still opt-in, partial, or not the default runtime path:
 
@@ -78,8 +79,8 @@ That means:
 
 The next work should extend the foundations already present on `main`, not restart them from
 scratch. Dynamic orchestration foundations, session continuity, bounded runtime routing, verifier
-gates, and provenance already exist in bounded form and should be treated as base layers to harden
-and generalize.
+gates, provenance, and bounded predictive-supervision evidence already exist in bounded form and
+should be treated as base layers to harden and generalize.
 
 ### Now
 
@@ -99,13 +100,13 @@ and generalize.
   comparative evidence, and AI-native observability instead of theory alone. This belongs now
   because Mister Smith should prove its advantages while the substrate is still becoming the stable
   baseline.
+- **Predictive supervision hardening and live proof.** This matters because the bounded
+  packet-021 supervision-evidence surface is now landed on the supported runtime path but still
+  lacks a fresh live rerun. This belongs now because the honest gap is proof and hardening, not
+  another greenfield supervision packet.
 
 ### Next
 
-- **Predictive supervision.** This matters because Mister Smith can extend its OTP-style
-  supervision advantage into profile-aware and intervention-aware supervision rather than staying
-  purely reactive. This belongs next because it builds directly on the existing supervision
-  substrate once durability and security are stronger.
 - **Stronger step-level intelligence.** This matters because step boundaries, verification,
   escalation, and token discipline can improve quality and economics at a finer granularity than
   task-level routing alone. This belongs next because bounded routing and verifier work already
