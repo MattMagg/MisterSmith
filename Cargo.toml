@@ -36,7 +36,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 
 # Identity
-uuid = { version = "1.22.0", features = ["v4", "serde"] }
+uuid = { version = "1.23.0", features = ["v4", "serde"] }
 
 # Async
 async-trait = "0.1.83"
@@ -48,7 +48,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "str
 semver = "1.0"
 
 # Config
-toml = "1.0"
+toml = "1.1"
 
 # Logging / Metrics
 tracing = "0.1.44"
@@ -94,7 +94,7 @@ rustls = "0.23.37"
 tokio-rustls = "0.26.4"
 rcgen = { version = "0.14.7", features = ["pem"] }
 rustls-pki-types = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 arc-swap = "1"
 hex = "0.4"
 base64 = "0.22.1"
