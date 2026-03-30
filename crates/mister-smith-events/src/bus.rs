@@ -58,6 +58,7 @@ struct AutonomyStatusAccumulator {
     external_capability_decisions: Vec<ExternalCapabilityDecisionSummary>,
     profiles: HashMap<ProfileSnapshotId, ProfileSnapshot>,
     guard_decisions: HashMap<GuardDecisionId, GuardDecision>,
+    guard_decision_branch_ids: HashMap<GuardDecisionId, Option<ExecutionBranchId>>,
     supervision_evidence: Option<SupervisionEvidenceView>,
     conservative_reasons: Vec<String>,
     latest_profile_id: Option<ProfileSnapshotId>,
@@ -91,7 +92,8 @@ impl AutonomyStatusAccumulator {
                     .insert(envelope.payload.profile_id, envelope.payload);
             }
             AutonomyEvent::GuardDecisionEvaluated(envelope) => {
-                self.latest_guard_decision_id = Some(envelope.payload.decision_id);
+                let decision_id = envelope.payload.decision_id;
+                self.latest_guard_decision_id = Some(decision_id);
                 self.push_conservative_reasons(
                     envelope
                         .payload
@@ -101,8 +103,9 @@ impl AutonomyStatusAccumulator {
                         .filter(|note| note.contains("conservative fallback"))
                         .cloned(),
                 );
-                self.guard_decisions
-                    .insert(envelope.payload.decision_id, envelope.payload);
+                self.guard_decision_branch_ids
+                    .insert(decision_id, envelope.branch_id);
+                self.guard_decisions.insert(decision_id, envelope.payload);
             }
             AutonomyEvent::InterventionRecorded(envelope) => {
                 self.latest_intervention_id = Some(envelope.payload.record_id);
@@ -385,9 +388,15 @@ impl AutonomyStatusAccumulator {
         let target_scope = guard_decision
             .as_ref()
             .map(|decision| {
+                let branch_hint = self
+                    .guard_decision_branch_ids
+                    .get(&decision.decision_id)
+                    .copied()
+                    .flatten();
                 supervision_target_scope_from_guard_target(
                     self.graph.as_ref().map(|graph| graph.graph_id),
                     &decision.target_scope,
+                    branch_hint,
                 )
             })
             .or_else(|| {
@@ -552,6 +561,7 @@ fn merge_supervision_target_scope(
 fn supervision_target_scope_from_guard_target(
     graph_id: Option<ExecutionGraphId>,
     target: &GuardTarget,
+    branch_hint: Option<ExecutionBranchId>,
 ) -> SupervisionTargetScope {
     match target {
         GuardTarget::Provider(provider) => SupervisionTargetScope {
@@ -579,7 +589,7 @@ fn supervision_target_scope_from_guard_target(
             kind: SupervisionTargetKind::Node,
             provider: None,
             graph_id,
-            branch_id: None,
+            branch_id: branch_hint,
             node_id: Some(*node_id),
         },
     }
@@ -1225,7 +1235,8 @@ mod tests {
     }
 
     #[test]
-    fn merge_supervision_evidence_keeps_synthesized_supported_task_boundary_when_preserved_absent() {
+    fn merge_supervision_evidence_keeps_synthesized_supported_task_boundary_when_preserved_absent()
+    {
         let synthesized = SupervisionEvidenceView {
             target_scope: SupervisionTargetScope {
                 kind: SupervisionTargetKind::Graph,
@@ -1255,7 +1266,10 @@ mod tests {
 
         let merged = merge_supervision_evidence(synthesized, &preserved);
 
-        assert_eq!(merged.proof_boundary.as_deref(), Some("supported task path"));
+        assert_eq!(
+            merged.proof_boundary.as_deref(),
+            Some("supported task path")
+        );
     }
 
     #[test]

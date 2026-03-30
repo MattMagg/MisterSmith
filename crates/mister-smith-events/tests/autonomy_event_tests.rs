@@ -1,14 +1,15 @@
 use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
-    ExecutionBranchId, ExecutionGraphId, FailureClass, GraphState, GuardDecision, GuardDecisionId,
-    GuardEvidence, HealthState, InterventionRecord, InterventionRecordId, InterventionType,
-    OperatorResultPreview, OrchestrationQualityView, ProfileFingerprintId, ProfileFingerprintRef,
-    ProfileSnapshot, ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification, ProvenanceChain,
-    ProvenanceLink, RepairDirectiveAction, RepairLineageRef, ResultProvenanceSummary,
-    RevocationState, SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
-    SupervisionTargetScope, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
-    TopologyKind, TopologyRationale, VerifierVerdict,
+    ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, FailureClass, GraphState, GuardDecision,
+    GuardDecisionId, GuardEvidence, HealthState, InterventionRecord, InterventionRecordId,
+    InterventionType, OperatorResultPreview, OrchestrationQualityView, ProfileFingerprintId,
+    ProfileFingerprintRef, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
+    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirectiveAction,
+    RepairLineageRef, ResultProvenanceSummary, RevocationState, SupervisionDecisionBasis,
+    SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, TaskId,
+    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
+    VerifierVerdict,
 };
 use mister_smith_events::autonomy::{
     infer_proof_outcome_from_projection, merge_operator_result_preview,
@@ -883,6 +884,161 @@ async fn event_bus_synthesizes_supervision_evidence_from_runtime_events() {
         Some(SupervisionDecisionBasis::FingerprintReinforced.as_str())
     );
     assert!(supervision_evidence.repair_lineage_ref.is_none());
+    assert_eq!(
+        supervision_evidence.proof_boundary.as_deref(),
+        Some("supported task path")
+    );
+}
+
+#[tokio::test]
+async fn event_bus_synthesizes_node_scoped_lineage_from_guard_branch_hint() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch_id = ExecutionBranchId::new();
+    let node_id = ExecutionNodeId::new();
+    let checkpoint_id = CheckpointId::new();
+    let decision_id = GuardDecisionId::new();
+
+    event_bus
+        .publish(
+            AutonomyEvent::GraphUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: ExecutionGraphSummary {
+                    graph_id,
+                    workflow_id,
+                    state: GraphState::Running,
+                    branch_count: 1,
+                    node_count: 1,
+                    active_topology: Some(TopologyKind::Sequential),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::TopologySelected(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: None,
+                payload: TopologyPlanSummary {
+                    graph_id,
+                    topology_kind: TopologyKind::Sequential,
+                    parallelism_width: 1,
+                    task_shape: sample_task_shape(TaskShapeKind::StrictChain),
+                    coordination_policy: CoordinationPolicy::Barrier,
+                    rationale: TopologyRationale {
+                        dependency_shape: "single node branch".to_string(),
+                        operational_signals: vec!["node-scoped recovery".to_string()],
+                        selected_for: "bounded checkpoint replay".to_string(),
+                        fallback_reason: None,
+                    },
+                    fallback_topology: Some(TopologyKind::Sequential),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::BranchUpdated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: BranchSummary {
+                    branch_id,
+                    graph_id,
+                    state: BranchState::Running,
+                    assigned_agents: vec![AgentId::new()],
+                    checkpoint_id: None,
+                    recovery_strategy: BranchRecoveryStrategy::Resume,
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::CheckpointRecorded(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: CheckpointRecordSummary {
+                    graph_id,
+                    branch_id,
+                    checkpoint_id,
+                    captured_at: chrono::Utc::now(),
+                    memory_snapshot_id: mister_smith_core::MemorySnapshotId::new(),
+                    completed_nodes: vec![],
+                    pending_nodes: vec![],
+                    recovery_strategy: BranchRecoveryStrategy::Resume,
+                    failure_context: Some(serde_json::json!({"reason": "node retry"})),
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+    event_bus
+        .publish(
+            AutonomyEvent::GuardDecisionEvaluated(AutonomyEventEnvelope {
+                workflow_id,
+                graph_id: Some(graph_id),
+                branch_id: Some(branch_id),
+                payload: GuardDecision {
+                    decision_id,
+                    failure_class: FailureClass::Structural,
+                    intervention: InterventionType::Retry,
+                    evidence: GuardEvidence {
+                        profile_id: None,
+                        decision_basis: SupervisionDecisionBasis::LiveSignalsOnly,
+                        signal_descriptions: vec!["node retry checkpoint".to_string()],
+                        checkpoint_ids: vec![],
+                        notes: vec!["node-scoped runtime supervision".to_string()],
+                    },
+                    target_scope: mister_smith_core::GuardTarget::Node(node_id),
+                    operator_visibility: true,
+                },
+                operator_visible: true,
+            })
+            .into_event("autonomy-test"),
+        )
+        .await
+        .unwrap();
+
+    let status = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .expect("status should be available");
+    let supervision_evidence = status
+        .supervision_evidence
+        .expect("supervision evidence should be synthesized");
+    let expected_checkpoint_ref = checkpoint_id.to_string();
+
+    assert_eq!(
+        supervision_evidence.target_scope.kind,
+        SupervisionTargetKind::Node
+    );
+    assert_eq!(supervision_evidence.target_scope.graph_id, Some(graph_id));
+    assert_eq!(supervision_evidence.target_scope.branch_id, Some(branch_id));
+    assert_eq!(supervision_evidence.target_scope.node_id, Some(node_id));
+    assert_eq!(
+        supervision_evidence
+            .repair_lineage_ref
+            .as_ref()
+            .and_then(|reference| reference.checkpoint_ref.as_deref()),
+        Some(expected_checkpoint_ref.as_str())
+    );
     assert_eq!(
         supervision_evidence.proof_boundary.as_deref(),
         Some("supported task path")

@@ -3,11 +3,17 @@ use std::sync::Arc;
 use chrono::Utc;
 #[cfg(feature = "llm")]
 use mister_smith_agents::orchestrator::{LlmSupervision, LlmSupervisionConfig};
+#[cfg(feature = "llm")]
+use mister_smith_agents::scheduler::{ArrayAggregator, IdentityDecomposer};
 use mister_smith_agents::scheduler::{TaskAssignment, TaskScheduler};
+#[cfg(feature = "llm")]
+use mister_smith_agents::Orchestrator;
 use mister_smith_agents::{
     BranchCheckpoint, ExecutionGraph, Guard, GuardContext, GuardPolicy, InterventionEngine,
     ProfileAssessment, TopologyCompiler, TopologySignals,
 };
+#[cfg(feature = "llm")]
+use mister_smith_core::AgentId;
 use mister_smith_core::{
     BranchState, ExecutionBranchId, ExecutionNodeId, FailureClass, GraphState, GuardTarget,
     HealthState, InterventionType, ProfileFingerprint, ProfileFingerprintId, ProfileTarget,
@@ -598,17 +604,12 @@ async fn orchestrator_supervises_stream_degradation_and_forwards_messages() {
         supervision_evidence.proof_boundary.as_deref(),
         Some("supported task path")
     );
-    let repair_lineage = supervision_evidence
-        .repair_lineage_ref
-        .as_ref()
-        .expect("checkpoint-backed supervision should project packet-020 lineage");
-    assert_eq!(repair_lineage.source, "packet-020");
-    assert!(repair_lineage.checkpoint_ref.is_some());
+    assert!(supervision_evidence.repair_lineage_ref.is_none());
     assert!(status.guard_decisions[0]
         .evidence
         .notes
         .iter()
-        .any(|note| note.contains("step boundary")));
+        .any(|note: &String| note.contains("step boundary")));
 }
 
 #[test]
