@@ -71,6 +71,14 @@ REPAIR_PROBE_TASK_DESCRIPTION = (
     "guessing. Use the smallest workflow that can finish the task, and only create parallel "
     "branches or a synthesis step when they are genuinely needed."
 )
+PACKET_021_SUPERVISION_PROBE_TASK_DESCRIPTION = (
+    "Inspect the live runtime and produce a concise operator summary grounded only in directly "
+    "observed runtime evidence. Use two bounded worker branches plus one final synthesis step. "
+    "If any branch becomes repetitive, low-confidence, or missing branch-local context, prefer a "
+    "bounded branch-local repair such as context refresh or isolation over a graph-wide restart. "
+    "Keep the final answer under 220 words and preserve any runtime repair lineage that is "
+    "actually observed."
+)
 REQUIRED_RUNTIME_LOG_MARKERS = (
     "JetStream stream created/updated",
     "Runtime task execution service ready",
@@ -115,6 +123,12 @@ class HarnessConfig:
     expected_topology_kind: str | None
     min_parallelism_width: int | None
     max_parallelism_width: int | None
+    require_supervision_evidence: bool
+    allowed_supervision_target_kinds: tuple[str, ...]
+    require_supervision_decision_basis: bool
+    require_supervision_proof_boundary: bool
+    require_detailed_supervision_payload: bool
+    require_supervision_consistency: bool
 
 
 @dataclass(frozen=True)
@@ -123,6 +137,12 @@ class ScenarioConfig:
     expected_topology_kind: str | None = None
     min_parallelism_width: int | None = None
     max_parallelism_width: int | None = None
+    require_supervision_evidence: bool = False
+    allowed_supervision_target_kinds: tuple[str, ...] = ()
+    require_supervision_decision_basis: bool = False
+    require_supervision_proof_boundary: bool = False
+    require_detailed_supervision_payload: bool = False
+    require_supervision_consistency: bool = False
 
 
 SCENARIOS: dict[str, ScenarioConfig] = {
@@ -138,6 +158,17 @@ SCENARIOS: dict[str, ScenarioConfig] = {
     ),
     "non_memo": ScenarioConfig(description=NON_MEMO_TASK_DESCRIPTION),
     "repair_probe": ScenarioConfig(description=REPAIR_PROBE_TASK_DESCRIPTION),
+    "packet021_supervision_probe": ScenarioConfig(
+        description=PACKET_021_SUPERVISION_PROBE_TASK_DESCRIPTION,
+        expected_topology_kind="Hybrid",
+        min_parallelism_width=2,
+        require_supervision_evidence=True,
+        allowed_supervision_target_kinds=("branch", "node", "graph"),
+        require_supervision_decision_basis=True,
+        require_supervision_proof_boundary=True,
+        require_detailed_supervision_payload=True,
+        require_supervision_consistency=True,
+    ),
 }
 
 
@@ -982,6 +1013,170 @@ def assert_autonomy_step_routing_expectations(
         )
 
 
+def extract_task_supervision_evidence(task_status_payload: dict[str, Any]) -> dict[str, Any] | None:
+    result = task_status_payload.get("result")
+    if result is None:
+        return None
+    if not isinstance(result, dict):
+        raise SmokeHarnessError("task result payload was not a JSON object")
+    supervision = result.get("supervision_evidence")
+    if supervision is None:
+        return None
+    if not isinstance(supervision, dict):
+        raise SmokeHarnessError("task result supervision_evidence was not a JSON object")
+    return supervision
+
+
+def extract_autonomy_supervision_evidence(
+    autonomy_status_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    supervision = autonomy_status_payload.get("supervision_evidence")
+    if supervision is None:
+        return None
+    if not isinstance(supervision, dict):
+        raise SmokeHarnessError("autonomy supervision_evidence was not a JSON object")
+    return supervision
+
+
+def supervision_consistency_projection(payload: dict[str, Any]) -> dict[str, Any]:
+    target_scope = payload.get("target_scope")
+    if not isinstance(target_scope, dict):
+        raise SmokeHarnessError("supervision_evidence.target_scope was not a JSON object")
+    fingerprint_ref = payload.get("fingerprint_ref")
+    if fingerprint_ref is not None and not isinstance(fingerprint_ref, dict):
+        raise SmokeHarnessError("supervision_evidence.fingerprint_ref was not a JSON object")
+    repair_lineage_ref = payload.get("repair_lineage_ref")
+    if repair_lineage_ref is not None and not isinstance(repair_lineage_ref, dict):
+        raise SmokeHarnessError(
+            "supervision_evidence.repair_lineage_ref was not a JSON object"
+        )
+    return {
+        "target_scope": target_scope,
+        "decision_basis": payload.get("decision_basis"),
+        "proof_boundary": payload.get("proof_boundary"),
+        "fingerprint_key": None
+        if fingerprint_ref is None
+        else fingerprint_ref.get("fingerprint_key"),
+        "repair_source": None
+        if repair_lineage_ref is None
+        else repair_lineage_ref.get("source"),
+        "repair_checkpoint": None
+        if repair_lineage_ref is None
+        else repair_lineage_ref.get("checkpoint_ref"),
+    }
+
+
+def summarize_supervision_evidence(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+    target_scope = payload.get("target_scope")
+    fingerprint_ref = payload.get("fingerprint_ref")
+    repair_lineage_ref = payload.get("repair_lineage_ref")
+    profile_snapshot = payload.get("profile_snapshot")
+    intervention_record = payload.get("intervention_record")
+    return {
+        "target_kind": target_scope.get("kind")
+        if isinstance(target_scope, dict)
+        else None,
+        "target_provider": target_scope.get("provider")
+        if isinstance(target_scope, dict)
+        else None,
+        "target_graph_id": target_scope.get("graph_id")
+        if isinstance(target_scope, dict)
+        else None,
+        "target_branch_id": target_scope.get("branch_id")
+        if isinstance(target_scope, dict)
+        else None,
+        "target_node_id": target_scope.get("node_id")
+        if isinstance(target_scope, dict)
+        else None,
+        "decision_basis": payload.get("decision_basis"),
+        "proof_boundary": payload.get("proof_boundary"),
+        "fingerprint_key": fingerprint_ref.get("fingerprint_key")
+        if isinstance(fingerprint_ref, dict)
+        else None,
+        "repair_source": repair_lineage_ref.get("source")
+        if isinstance(repair_lineage_ref, dict)
+        else None,
+        "repair_checkpoint": repair_lineage_ref.get("checkpoint_ref")
+        if isinstance(repair_lineage_ref, dict)
+        else None,
+        "profile_health_state": profile_snapshot.get("health_state")
+        if isinstance(profile_snapshot, dict)
+        else None,
+        "intervention_rationale": intervention_record.get("rationale")
+        if isinstance(intervention_record, dict)
+        else None,
+    }
+
+
+def assert_supervision_surfaces(
+    task_status_payload: dict[str, Any],
+    autonomy_status_payload: dict[str, Any],
+    *,
+    allowed_target_kinds: tuple[str, ...],
+    require_decision_basis: bool,
+    require_proof_boundary: bool,
+    require_detailed_payload: bool,
+    require_consistency: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    task_supervision = extract_task_supervision_evidence(task_status_payload)
+    autonomy_supervision = extract_autonomy_supervision_evidence(autonomy_status_payload)
+    if task_supervision is None or autonomy_supervision is None:
+        raise SmokeHarnessError(
+            "packet-021 supervision probe expected supervision_evidence on both task result and autonomy status"
+        )
+
+    for surface_name, payload in (
+        ("task result", task_supervision),
+        ("autonomy status", autonomy_supervision),
+    ):
+        projection = supervision_consistency_projection(payload)
+        target_kind = projection["target_scope"].get("kind")
+        if not isinstance(target_kind, str):
+            raise SmokeHarnessError(
+                f"{surface_name} supervision target scope kind was not a string"
+            )
+        if allowed_target_kinds and target_kind not in allowed_target_kinds:
+            raise SmokeHarnessError(
+                f"{surface_name} supervision target kind {target_kind!r} was outside the allowed packet-021 probe kinds {allowed_target_kinds!r}"
+            )
+        if require_decision_basis and not isinstance(
+            projection["decision_basis"], str
+        ):
+            raise SmokeHarnessError(
+                f"{surface_name} supervision was missing decision_basis"
+            )
+        if require_proof_boundary and not isinstance(
+            projection["proof_boundary"], str
+        ):
+            raise SmokeHarnessError(
+                f"{surface_name} supervision was missing proof_boundary"
+            )
+        if require_detailed_payload and not any(
+            payload.get(key) is not None
+            for key in (
+                "fingerprint_ref",
+                "profile_snapshot",
+                "guard_decision",
+                "intervention_record",
+            )
+        ):
+            raise SmokeHarnessError(
+                f"{surface_name} supervision did not include any detailed packet-021 evidence payload"
+            )
+
+    if require_consistency:
+        task_projection = supervision_consistency_projection(task_supervision)
+        autonomy_projection = supervision_consistency_projection(autonomy_supervision)
+        if task_projection != autonomy_projection:
+            raise SmokeHarnessError(
+                "task result and autonomy supervision surfaces did not agree on the packet-021 proof fields"
+            )
+
+    return task_supervision, autonomy_supervision
+
+
 def wait_for_terminal_task_status(
     config: HarnessConfig,
     task_id: str,
@@ -1039,6 +1234,7 @@ def shutdown_runtime(process: subprocess.Popen[str], runtime_log: Any) -> None:
 def build_smoke_summary(
     config: HarnessConfig,
     task_id: str,
+    task_status: dict[str, Any],
     task_summary: dict[str, Any],
     autonomy_status: dict[str, Any],
     budget_state_after: dict[str, Any] | None,
@@ -1051,6 +1247,12 @@ def build_smoke_summary(
         latest = step_history[-1]
         if isinstance(latest, dict):
             latest_step = latest
+    task_supervision = summarize_supervision_evidence(
+        extract_task_supervision_evidence(task_status)
+    )
+    autonomy_supervision = summarize_supervision_evidence(
+        extract_autonomy_supervision_evidence(autonomy_status)
+    )
     return {
         "run_id": config.run_id,
         "profile": config.profile,
@@ -1076,6 +1278,8 @@ def build_smoke_summary(
         "node_count": graph.get("node_count"),
         "topology_kind": topology.get("topology_kind"),
         "parallelism_width": topology.get("parallelism_width"),
+        "task_supervision": task_supervision,
+        "autonomy_supervision": autonomy_supervision,
     }
 
 
@@ -1115,6 +1319,12 @@ def build_config(args: argparse.Namespace) -> HarnessConfig:
         expected_topology_kind=scenario.expected_topology_kind,
         min_parallelism_width=scenario.min_parallelism_width,
         max_parallelism_width=scenario.max_parallelism_width,
+        require_supervision_evidence=scenario.require_supervision_evidence,
+        allowed_supervision_target_kinds=scenario.allowed_supervision_target_kinds,
+        require_supervision_decision_basis=scenario.require_supervision_decision_basis,
+        require_supervision_proof_boundary=scenario.require_supervision_proof_boundary,
+        require_detailed_supervision_payload=scenario.require_detailed_supervision_payload,
+        require_supervision_consistency=scenario.require_supervision_consistency,
     )
 
 
@@ -1321,6 +1531,16 @@ def main() -> int:
             expected_tier=config.expected_step_tier,
             required_checkpoints=config.required_step_checkpoints,
         )
+        if config.require_supervision_evidence:
+            assert_supervision_surfaces(
+                task_status,
+                autonomy_status,
+                allowed_target_kinds=config.allowed_supervision_target_kinds,
+                require_decision_basis=config.require_supervision_decision_basis,
+                require_proof_boundary=config.require_supervision_proof_boundary,
+                require_detailed_payload=config.require_detailed_supervision_payload,
+                require_consistency=config.require_supervision_consistency,
+            )
 
         if is_budget_aware_profile(config.profile):
             budget_state_after = run_budget_seed_helper(
@@ -1332,6 +1552,7 @@ def main() -> int:
         smoke_summary = build_smoke_summary(
             config,
             task_id,
+            task_status,
             task_summary,
             autonomy_status,
             budget_state_after,

@@ -216,6 +216,93 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 required_checkpoints=("budget_policy",),
             )
 
+    def test_assert_supervision_surfaces_requires_packet021_fields_and_consistency(self) -> None:
+        task_status = {
+            "result": {
+                "supervision_evidence": {
+                    "target_scope": {
+                        "kind": "branch",
+                        "graph_id": "graph-1",
+                        "branch_id": "branch-1",
+                    },
+                    "decision_basis": "fingerprint_reinforced",
+                    "proof_boundary": "supported task path only",
+                    "fingerprint_ref": {
+                        "fingerprint_key": "executor:branch-1",
+                    },
+                    "repair_lineage_ref": {
+                        "source": "packet-020",
+                        "checkpoint_ref": "checkpoint-retry",
+                    },
+                }
+            }
+        }
+        autonomy_status = {
+            "supervision_evidence": {
+                "target_scope": {
+                    "kind": "branch",
+                    "graph_id": "graph-1",
+                    "branch_id": "branch-1",
+                },
+                "decision_basis": "fingerprint_reinforced",
+                "proof_boundary": "supported task path only",
+                "fingerprint_ref": {
+                    "fingerprint_key": "executor:branch-1",
+                },
+                "repair_lineage_ref": {
+                    "source": "packet-020",
+                    "checkpoint_ref": "checkpoint-retry",
+                },
+            }
+        }
+
+        self.module.assert_supervision_surfaces(
+            task_status,
+            autonomy_status,
+            allowed_target_kinds=("branch", "node"),
+            require_decision_basis=True,
+            require_proof_boundary=True,
+            require_detailed_payload=True,
+            require_consistency=True,
+        )
+
+        autonomy_status["supervision_evidence"]["decision_basis"] = "live_signals_only"
+        with self.assertRaises(self.module.SmokeHarnessError):
+            self.module.assert_supervision_surfaces(
+                task_status,
+                autonomy_status,
+                allowed_target_kinds=("branch", "node"),
+                require_decision_basis=True,
+                require_proof_boundary=True,
+                require_detailed_payload=True,
+                require_consistency=True,
+            )
+
+    def test_build_config_sets_packet021_probe_expectations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            namespace = type(
+                "Args",
+                (),
+                {
+                    "compose_file": Path(temp_dir) / "docker-compose.yml",
+                    "artifact_root": Path(temp_dir),
+                    "database_name": None,
+                    "http_port": 8080,
+                    "timeout_seconds": 1.0,
+                    "poll_interval_seconds": 0.01,
+                    "profile": "baseline",
+                    "scenario": "packet021_supervision_probe",
+                    "task_description": None,
+                },
+            )()
+
+            config = self.module.build_config(namespace)
+
+        self.assertTrue(config.require_supervision_evidence)
+        self.assertEqual(config.expected_topology_kind, "Hybrid")
+        self.assertEqual(config.min_parallelism_width, 2)
+        self.assertEqual(config.allowed_supervision_target_kinds, ("branch", "node", "graph"))
+
     def test_assert_runtime_log_markers_requires_all_expected_markers(self) -> None:
         complete_log = "\n".join(self.module.REQUIRED_RUNTIME_LOG_MARKERS)
         self.module.assert_runtime_log_markers(complete_log)
@@ -250,6 +337,8 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 provider_kind="openai_chatgpt",
                 model_id="gpt-5.4",
                 profile="baseline",
+                scenario="baseline",
+                task_description=self.module.DEFAULT_TASK_DESCRIPTION,
                 runtime_config_path=None,
                 routing_policy="round_robin",
                 registered_provider_count=1,
@@ -258,6 +347,15 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 expected_step_action=None,
                 expected_step_tier=None,
                 required_step_checkpoints=(),
+                expected_topology_kind=None,
+                min_parallelism_width=None,
+                max_parallelism_width=None,
+                require_supervision_evidence=False,
+                allowed_supervision_target_kinds=(),
+                require_supervision_decision_basis=False,
+                require_supervision_proof_boundary=False,
+                require_detailed_supervision_payload=False,
+                require_supervision_consistency=False,
             )
 
             log_text = self.module.wait_for_runtime_log_markers(config, StubProcess())
@@ -294,6 +392,8 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 provider_kind="openai_chatgpt",
                 model_id="gpt-5.4",
                 profile="baseline",
+                scenario="baseline",
+                task_description=self.module.DEFAULT_TASK_DESCRIPTION,
                 runtime_config_path=None,
                 routing_policy="round_robin",
                 registered_provider_count=1,
@@ -302,6 +402,15 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 expected_step_action=None,
                 expected_step_tier=None,
                 required_step_checkpoints=(),
+                expected_topology_kind=None,
+                min_parallelism_width=None,
+                max_parallelism_width=None,
+                require_supervision_evidence=False,
+                allowed_supervision_target_kinds=(),
+                require_supervision_decision_basis=False,
+                require_supervision_proof_boundary=False,
+                require_detailed_supervision_payload=False,
+                require_supervision_consistency=False,
             )
 
             class StubResponse:
