@@ -16,7 +16,7 @@ use tracing;
 use mister_smith_core::{
     CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, ExecutionGraphId,
     GuardDecision, GuardDecisionId, GuardTarget, InterventionRecord, InterventionRecordId,
-    OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
+    OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProfileTarget, RepairLineageRef,
     SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, SystemEvent, TaskId,
     TeamSizingDecision,
 };
@@ -402,6 +402,22 @@ impl AutonomyStatusAccumulator {
         let decision_basis = guard_decision
             .as_ref()
             .map(|decision| decision.evidence.decision_basis.as_str().to_string());
+        let repair_lineage_ref = repair_lineage_ref_from_checkpoint_lineage(
+            self.checkpoint_lineage.values(),
+            &target_scope,
+        )
+        .or_else(|| {
+            guard_decision.as_ref().and_then(|decision| {
+                decision
+                    .evidence
+                    .checkpoint_ids
+                    .first()
+                    .map(|checkpoint_id| RepairLineageRef {
+                        source: "packet-020".to_string(),
+                        checkpoint_ref: Some(checkpoint_id.to_string()),
+                    })
+            })
+        });
 
         Some(SupervisionEvidenceView {
             target_scope,
@@ -410,8 +426,8 @@ impl AutonomyStatusAccumulator {
             guard_decision,
             intervention_record,
             decision_basis,
-            repair_lineage_ref: None,
-            proof_boundary: None,
+            repair_lineage_ref,
+            proof_boundary: Some(supported_task_path_proof_boundary()),
         })
     }
 
@@ -468,10 +484,46 @@ fn merge_supervision_evidence(
     if synthesized.repair_lineage_ref.is_none() {
         synthesized.repair_lineage_ref = preserved.repair_lineage_ref.clone();
     }
-    if synthesized.proof_boundary.is_none() {
+    if synthesized.proof_boundary.is_none()
+        || synthesized.proof_boundary.as_deref() == Some("supported task path")
+    {
         synthesized.proof_boundary = preserved.proof_boundary.clone();
     }
     synthesized
+}
+
+fn repair_lineage_ref_from_checkpoint_lineage<'a>(
+    checkpoint_lineage: impl IntoIterator<Item = &'a CheckpointRecordSummary>,
+    target_scope: &SupervisionTargetScope,
+) -> Option<RepairLineageRef> {
+    let checkpoint_ref = checkpoint_lineage
+        .into_iter()
+        .filter(|checkpoint| checkpoint_matches_target(checkpoint.branch_id, target_scope))
+        .max_by_key(|checkpoint| checkpoint.captured_at)
+        .map(|checkpoint| checkpoint.checkpoint_id.to_string())?;
+
+    Some(RepairLineageRef {
+        source: "packet-020".to_string(),
+        checkpoint_ref: Some(checkpoint_ref),
+    })
+}
+
+fn checkpoint_matches_target(
+    checkpoint_branch_id: ExecutionBranchId,
+    target_scope: &SupervisionTargetScope,
+) -> bool {
+    match target_scope.kind {
+        SupervisionTargetKind::Provider => false,
+        SupervisionTargetKind::Graph => true,
+        SupervisionTargetKind::Branch | SupervisionTargetKind::Node => target_scope
+            .branch_id
+            .map(|branch_id| branch_id == checkpoint_branch_id)
+            .unwrap_or(false),
+    }
+}
+
+fn supported_task_path_proof_boundary() -> String {
+    "supported task path".to_string()
 }
 
 fn merge_supervision_target_scope(

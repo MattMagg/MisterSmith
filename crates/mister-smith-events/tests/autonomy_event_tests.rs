@@ -883,6 +883,10 @@ async fn event_bus_synthesizes_supervision_evidence_from_runtime_events() {
         Some(SupervisionDecisionBasis::FingerprintReinforced.as_str())
     );
     assert!(supervision_evidence.repair_lineage_ref.is_none());
+    assert_eq!(
+        supervision_evidence.proof_boundary.as_deref(),
+        Some("supported task path")
+    );
 }
 
 #[test]
@@ -1401,6 +1405,22 @@ async fn event_bus_assembles_operator_visible_autonomy_projection() {
         .iter()
         .any(|line| line.contains("minimize restart blast radius")));
     assert_eq!(view.checkpoint_lineage.len(), 1);
+    let supervision_evidence = view
+        .supervision_evidence
+        .expect("checkpoint-backed projection should include supervision evidence");
+    let repair_lineage = supervision_evidence
+        .repair_lineage_ref
+        .as_ref()
+        .expect("checkpoint-backed supervision should project packet-020 lineage");
+    assert_eq!(repair_lineage.source, "packet-020");
+    assert_eq!(
+        repair_lineage.checkpoint_ref.as_ref(),
+        Some(&checkpoint_id.to_string())
+    );
+    assert_eq!(
+        supervision_evidence.proof_boundary.as_deref(),
+        Some("supported task path")
+    );
     assert_eq!(view.routing_history.len(), 1);
     assert_eq!(view.external_capability_decisions.len(), 2);
     assert_eq!(

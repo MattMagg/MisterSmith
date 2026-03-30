@@ -594,6 +594,16 @@ async fn orchestrator_supervises_stream_degradation_and_forwards_messages() {
         supervision_evidence.decision_basis.as_deref(),
         Some(SupervisionDecisionBasis::LiveSignalsOnly.as_str())
     );
+    assert_eq!(
+        supervision_evidence.proof_boundary.as_deref(),
+        Some("supported task path")
+    );
+    let repair_lineage = supervision_evidence
+        .repair_lineage_ref
+        .as_ref()
+        .expect("checkpoint-backed supervision should project packet-020 lineage");
+    assert_eq!(repair_lineage.source, "packet-020");
+    assert!(repair_lineage.checkpoint_ref.is_some());
     assert!(status.guard_decisions[0]
         .evidence
         .notes

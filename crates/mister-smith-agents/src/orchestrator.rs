@@ -7,8 +7,8 @@ use dashmap::DashMap;
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, ExecutionBranchId, ExecutionNodeId,
     GraphState, GuardDecision, GuardTarget, HealthState, InterventionRecord, ProfileSnapshot,
-    SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, TaskId,
-    TeamSizingDecision,
+    RepairLineageRef, SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope,
+    TaskId, TeamSizingDecision,
 };
 use tracing::{instrument, warn};
 
@@ -1849,6 +1849,8 @@ fn build_supervision_evidence_view(
     let decision_basis = guard_decision
         .as_ref()
         .map(|decision| decision.evidence.decision_basis.as_str().to_string());
+    let repair_lineage_ref =
+        supervision_repair_lineage_ref_from_graph(graph, &target_scope, guard_decision.as_ref());
 
     Some(SupervisionEvidenceView {
         target_scope,
@@ -1857,9 +1859,54 @@ fn build_supervision_evidence_view(
         guard_decision,
         intervention_record,
         decision_basis,
-        repair_lineage_ref: None,
-        proof_boundary: None,
+        repair_lineage_ref,
+        proof_boundary: Some(supported_task_path_proof_boundary()),
     })
+}
+
+fn supervision_repair_lineage_ref_from_graph(
+    graph: &ExecutionGraph,
+    target_scope: &SupervisionTargetScope,
+    guard_decision: Option<&GuardDecision>,
+) -> Option<RepairLineageRef> {
+    let checkpoint_ref = graph
+        .checkpoint_lineage
+        .iter()
+        .filter(|checkpoint| checkpoint_matches_target(checkpoint.branch_id, target_scope))
+        .max_by_key(|checkpoint| checkpoint.created_at)
+        .map(|checkpoint| checkpoint.checkpoint_id.to_string())
+        .or_else(|| {
+            guard_decision.and_then(|decision| {
+                decision
+                    .evidence
+                    .checkpoint_ids
+                    .first()
+                    .map(ToString::to_string)
+            })
+        })?;
+
+    Some(RepairLineageRef {
+        source: "packet-020".to_string(),
+        checkpoint_ref: Some(checkpoint_ref),
+    })
+}
+
+fn checkpoint_matches_target(
+    checkpoint_branch_id: ExecutionBranchId,
+    target_scope: &SupervisionTargetScope,
+) -> bool {
+    match target_scope.kind {
+        SupervisionTargetKind::Provider => false,
+        SupervisionTargetKind::Graph => true,
+        SupervisionTargetKind::Branch | SupervisionTargetKind::Node => target_scope
+            .branch_id
+            .map(|branch_id| branch_id == checkpoint_branch_id)
+            .unwrap_or(false),
+    }
+}
+
+fn supported_task_path_proof_boundary() -> String {
+    "supported task path".to_string()
 }
 
 fn supervision_target_scope_from_guard_target(
