@@ -1,20 +1,19 @@
 <!--
 Sync Impact Report
 ====================
-Version change: 1.0.0 -> 1.1.0
+Version change: 1.1.0 -> 1.2.0
 Modified principles:
+  - I. Canonical Single Source of Truth
   - III. Phase-Gated Build Order -> III. Phase-And-Packet-Gated Delivery
-  - VI. Evidence-Based Validation (expanded to require honest deterministic/live-proof boundaries)
+  - VII. Explicit Dependency Management
+  - Governance
 Added sections:
-  - VIII. Clean Closure And Resumability
 Updated sections:
+  - Technology Stack Constraints
   - Specification-to-Implementation Workflow
 Templates requiring updates:
-  - .specify/templates/spec-template.md — updated for Mister Smith packet shape
-  - .specify/templates/plan-template.md — updated for bounded milestone and deferral structure
-  - .specify/templates/tasks-template.md — updated for blocking freeze, bounded lanes, and closure gates
 Follow-up TODOs:
-  - Keep prompt wrappers aligned with these packet rules
+  - None
 -->
 
 # Mister Smith Constitution
@@ -23,10 +22,12 @@ Follow-up TODOs:
 
 ### I. Canonical Single Source of Truth
 
-Every core type, enum, trait, and status-bearing repo claim MUST have exactly one canonical
-definition. That definition lives in the authoritative spec or router document for that surface.
-All other documents MUST import from or reference the canonical source and MUST NOT silently
-redefine it.
+Every core type, enum, trait, status-bearing repo claim, and dependency version MUST have exactly
+one canonical definition. That definition lives in the authoritative source for that surface:
+`spec/` for architecture and contracts, `docs/direction.md` for strategic sequencing,
+`docs/current-state.md` for live repo truth, and Cargo manifests for actual dependency versions.
+Derived reports and packet documents MUST reference those sources and MUST NOT silently redefine
+them.
 
 **Rationale**: Duplicate definitions drift. Canonical sourcing prevents contradictions between
 specs, packets, state docs, and runtime code.
@@ -42,11 +43,13 @@ and workflow changes reviewable before implementation cost is incurred.
 
 ### III. Phase-And-Packet-Gated Delivery
 
-Implementation MUST respect the landed phase order in `ROADMAP.md` and the current packet-based
-forward direction in repo authority docs such as `docs/current-state.md` and the active scope-freeze
-note. Once the substrate phases are landed, new work MUST enter as one bounded packet at a time
-instead of vague parallel epics. Gate criteria MUST be validated with concrete, reproducible
-checks rather than assertions.
+Implementation MUST respect the landed phase order in `ROADMAP.md`, the strategic sequencing in
+`docs/direction.md`, the live-truth routing in `docs/current-state.md`, and the active scope-freeze
+note. Once the substrate phases are landed, new work MUST enter as bounded packets with explicit
+scope, sequencing, and dependency rules instead of vague epics. Multiple packets MAY proceed in
+parallel only when scopes are disjoint, validation can close independently, and the work does not
+silently reopen a more foundational packet. Gate criteria MUST be validated with concrete,
+reproducible checks rather than assertions.
 
 **Rationale**: The repo no longer lives in the original eight-phase buildout alone. Future work is
 packet-driven, and disciplined scope freezing prevents benchmark or frontier goals from dissolving
@@ -84,8 +87,10 @@ evidence. Honest boundaries are necessary to avoid fake closure and misleading b
 ### VII. Explicit Dependency Management
 
 Every crate, packet, spec file, type, and workflow surface MUST have its dependency relationships
-documented explicitly. `VERSION_REFERENCE.md` remains the single authoritative source for crate
-versions. Breaking changes MUST include cascade analysis for all affected downstream consumers.
+documented explicitly. Cargo manifests remain the authoritative source for actual dependency
+versions. `VERSION_REFERENCE.md` is a derived audit matrix for spec and migration alignment and
+MUST be refreshed when version-bearing decisions materially change. Breaking changes MUST include
+cascade analysis for all affected downstream consumers.
 
 **Rationale**: The workspace spans many crates and multiple orchestration surfaces. Implicit
 dependencies create surprise breakage and invalid packet assumptions.
@@ -109,18 +114,21 @@ multi-session orchestration and honest benchmark iteration.
   `anyhow` in library crates
 - **HTTP**: Axum 0.8.x
 - **gRPC**: Tonic 0.14.x with prost 0.14.x
-- **Storage**: PostgreSQL via sqlx 0.8.x, Redis via redis 1.0.x
-- **Security**: TLS 1.3 via rustls; JWT via jsonwebtoken 10.x; mTLS for agent-to-agent
-  communication
+- **Storage**: PostgreSQL via sqlx 0.8.x; JetStream KV is the current distributed runtime state
+  substrate. Redis remains historical or spec-level only unless a future ratified packet
+  reintroduces it into the live workspace.
+- **Security**: TLS 1.3 via rustls; JWT via jsonwebtoken 10.x; mTLS where the transport security
+  contract requires it
 - **Observability**: tracing 0.1.x ecosystem with OpenTelemetry 0.31.x and OTLP export
 
-Stack changes MUST be proposed as amendments to this constitution and reflected in
-`VERSION_REFERENCE.md` before implementation.
+Stack changes MUST be proposed as amendments to this constitution and reflected in Cargo manifests
+as the implementation source of truth. `VERSION_REFERENCE.md` SHOULD be refreshed before closure so
+spec and migration notes stay aligned.
 
 ## Specification-to-Implementation Workflow
 
-1. **Repo authority pass**: Read `AGENTS.md`, `docs/current-state.md`, the active scope-freeze or
-   closure note, and any workflow contract docs relevant to the packet.
+1. **Repo authority pass**: Read `AGENTS.md`, `docs/direction.md`, `docs/current-state.md`, the
+   active scope-freeze or closure note, and any workflow contract docs relevant to the packet.
 2. **Spec or packet validation**: Confirm the packet scope matches current repo truth and does not
    silently reopen landed work.
 3. **Gate check (entry)**: Verify all upstream dependencies and bounded non-goals with evidence
@@ -139,8 +147,10 @@ Skipping steps in this workflow MUST be treated as a process failure, not a time
 
 ## Governance
 
-This constitution is the highest-authority SpecKit companion document for the Mister Smith repo.
-It supersedes conflicting guidance in packet templates, implementation plans, and ad hoc decisions.
+This constitution is the highest-authority SpecKit companion document for Mister Smith packet
+planning, scope discipline, validation posture, and closure expectations. It does not replace the
+repo-wide authority routers for strategic direction, live truth, architecture contracts, or
+compiler-enforced dependency versions.
 
 - **Amendments**: Any change to principles or stack constraints MUST be documented with rationale
   and reflected in a version increment.
@@ -148,7 +158,9 @@ It supersedes conflicting guidance in packet templates, implementation plans, an
   redefinition, MINOR for new principles or material expansion, PATCH for clarifications.
 - **Compliance review**: Every implementation PR or direct-to-main bounded slice SHOULD be
   reviewable against these principles.
-- **Conflict resolution**: When packet files conflict with current repo authority, the repo
-  authority docs win. When repo authority conflicts with this constitution, the constitution wins.
+- **Conflict resolution**: `docs/direction.md` wins for strategic sequencing, `docs/current-state.md`
+  wins for live repo truth, `spec/` wins for architecture and type contracts, and Cargo manifests
+  win for actual dependency versions. This constitution governs how SpecKit work is planned,
+  validated, and closed once those sources are known.
 
-**Version**: 1.1.0 | **Ratified**: 2026-03-04 | **Last Amended**: 2026-03-26
+**Version**: 1.2.0 | **Ratified**: 2026-03-04 | **Last Amended**: 2026-03-29
