@@ -16,7 +16,7 @@ use tracing;
 use mister_smith_core::{
     CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, ExecutionGraphId,
     GuardDecision, GuardDecisionId, GuardTarget, InterventionRecord, InterventionRecordId,
-    OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
+    OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProfileTarget, RepairLineageRef,
     SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, SystemEvent, TaskId,
     TeamSizingDecision,
 };
@@ -58,6 +58,7 @@ struct AutonomyStatusAccumulator {
     external_capability_decisions: Vec<ExternalCapabilityDecisionSummary>,
     profiles: HashMap<ProfileSnapshotId, ProfileSnapshot>,
     guard_decisions: HashMap<GuardDecisionId, GuardDecision>,
+    guard_decision_branch_ids: HashMap<GuardDecisionId, Option<ExecutionBranchId>>,
     supervision_evidence: Option<SupervisionEvidenceView>,
     conservative_reasons: Vec<String>,
     latest_profile_id: Option<ProfileSnapshotId>,
@@ -91,7 +92,8 @@ impl AutonomyStatusAccumulator {
                     .insert(envelope.payload.profile_id, envelope.payload);
             }
             AutonomyEvent::GuardDecisionEvaluated(envelope) => {
-                self.latest_guard_decision_id = Some(envelope.payload.decision_id);
+                let decision_id = envelope.payload.decision_id;
+                self.latest_guard_decision_id = Some(decision_id);
                 self.push_conservative_reasons(
                     envelope
                         .payload
@@ -101,8 +103,9 @@ impl AutonomyStatusAccumulator {
                         .filter(|note| note.contains("conservative fallback"))
                         .cloned(),
                 );
-                self.guard_decisions
-                    .insert(envelope.payload.decision_id, envelope.payload);
+                self.guard_decision_branch_ids
+                    .insert(decision_id, envelope.branch_id);
+                self.guard_decisions.insert(decision_id, envelope.payload);
             }
             AutonomyEvent::InterventionRecorded(envelope) => {
                 self.latest_intervention_id = Some(envelope.payload.record_id);
@@ -385,9 +388,15 @@ impl AutonomyStatusAccumulator {
         let target_scope = guard_decision
             .as_ref()
             .map(|decision| {
+                let branch_hint = self
+                    .guard_decision_branch_ids
+                    .get(&decision.decision_id)
+                    .copied()
+                    .flatten();
                 supervision_target_scope_from_guard_target(
                     self.graph.as_ref().map(|graph| graph.graph_id),
                     &decision.target_scope,
+                    branch_hint,
                 )
             })
             .or_else(|| {
@@ -402,6 +411,22 @@ impl AutonomyStatusAccumulator {
         let decision_basis = guard_decision
             .as_ref()
             .map(|decision| decision.evidence.decision_basis.as_str().to_string());
+        let repair_lineage_ref = repair_lineage_ref_from_checkpoint_lineage(
+            self.checkpoint_lineage.values(),
+            &target_scope,
+        )
+        .or_else(|| {
+            guard_decision.as_ref().and_then(|decision| {
+                decision
+                    .evidence
+                    .checkpoint_ids
+                    .first()
+                    .map(|checkpoint_id| RepairLineageRef {
+                        source: "packet-020".to_string(),
+                        checkpoint_ref: Some(checkpoint_id.to_string()),
+                    })
+            })
+        });
 
         Some(SupervisionEvidenceView {
             target_scope,
@@ -410,8 +435,8 @@ impl AutonomyStatusAccumulator {
             guard_decision,
             intervention_record,
             decision_basis,
-            repair_lineage_ref: None,
-            proof_boundary: None,
+            repair_lineage_ref,
+            proof_boundary: Some(supported_task_path_proof_boundary()),
         })
     }
 
@@ -470,8 +495,46 @@ fn merge_supervision_evidence(
     }
     if synthesized.proof_boundary.is_none() {
         synthesized.proof_boundary = preserved.proof_boundary.clone();
+    } else if synthesized.proof_boundary.as_deref() == Some("supported task path")
+        && preserved.proof_boundary.is_some()
+    {
+        synthesized.proof_boundary = preserved.proof_boundary.clone();
     }
     synthesized
+}
+
+fn repair_lineage_ref_from_checkpoint_lineage<'a>(
+    checkpoint_lineage: impl IntoIterator<Item = &'a CheckpointRecordSummary>,
+    target_scope: &SupervisionTargetScope,
+) -> Option<RepairLineageRef> {
+    let checkpoint_ref = checkpoint_lineage
+        .into_iter()
+        .filter(|checkpoint| checkpoint_matches_target(checkpoint.branch_id, target_scope))
+        .max_by_key(|checkpoint| checkpoint.captured_at)
+        .map(|checkpoint| checkpoint.checkpoint_id.to_string())?;
+
+    Some(RepairLineageRef {
+        source: "packet-020".to_string(),
+        checkpoint_ref: Some(checkpoint_ref),
+    })
+}
+
+fn checkpoint_matches_target(
+    checkpoint_branch_id: ExecutionBranchId,
+    target_scope: &SupervisionTargetScope,
+) -> bool {
+    match target_scope.kind {
+        SupervisionTargetKind::Provider => false,
+        SupervisionTargetKind::Graph => true,
+        SupervisionTargetKind::Branch | SupervisionTargetKind::Node => target_scope
+            .branch_id
+            .map(|branch_id| branch_id == checkpoint_branch_id)
+            .unwrap_or(false),
+    }
+}
+
+fn supported_task_path_proof_boundary() -> String {
+    "supported task path".to_string()
 }
 
 fn merge_supervision_target_scope(
@@ -498,6 +561,7 @@ fn merge_supervision_target_scope(
 fn supervision_target_scope_from_guard_target(
     graph_id: Option<ExecutionGraphId>,
     target: &GuardTarget,
+    branch_hint: Option<ExecutionBranchId>,
 ) -> SupervisionTargetScope {
     match target {
         GuardTarget::Provider(provider) => SupervisionTargetScope {
@@ -525,7 +589,7 @@ fn supervision_target_scope_from_guard_target(
             kind: SupervisionTargetKind::Node,
             provider: None,
             graph_id,
-            branch_id: None,
+            branch_id: branch_hint,
             node_id: Some(*node_id),
         },
     }
@@ -1168,5 +1232,80 @@ mod tests {
         publisher.publish(system_event).await.unwrap();
 
         assert_eq!(handler.count(), 1);
+    }
+
+    #[test]
+    fn merge_supervision_evidence_keeps_synthesized_supported_task_boundary_when_preserved_absent()
+    {
+        let synthesized = SupervisionEvidenceView {
+            target_scope: SupervisionTargetScope {
+                kind: SupervisionTargetKind::Graph,
+                provider: None,
+                graph_id: None,
+                branch_id: None,
+                node_id: None,
+            },
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: None,
+            repair_lineage_ref: None,
+            proof_boundary: Some("supported task path".to_string()),
+        };
+        let preserved = SupervisionEvidenceView {
+            target_scope: synthesized.target_scope.clone(),
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: None,
+            repair_lineage_ref: None,
+            proof_boundary: None,
+        };
+
+        let merged = merge_supervision_evidence(synthesized, &preserved);
+
+        assert_eq!(
+            merged.proof_boundary.as_deref(),
+            Some("supported task path")
+        );
+    }
+
+    #[test]
+    fn merge_supervision_evidence_prefers_preserved_boundary_over_supported_task_path() {
+        let synthesized = SupervisionEvidenceView {
+            target_scope: SupervisionTargetScope {
+                kind: SupervisionTargetKind::Graph,
+                provider: None,
+                graph_id: None,
+                branch_id: None,
+                node_id: None,
+            },
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: None,
+            repair_lineage_ref: None,
+            proof_boundary: Some("supported task path".to_string()),
+        };
+        let preserved = SupervisionEvidenceView {
+            target_scope: synthesized.target_scope.clone(),
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: None,
+            repair_lineage_ref: None,
+            proof_boundary: Some("explicit snapshot boundary".to_string()),
+        };
+
+        let merged = merge_supervision_evidence(synthesized, &preserved);
+
+        assert_eq!(
+            merged.proof_boundary.as_deref(),
+            Some("explicit snapshot boundary")
+        );
     }
 }
