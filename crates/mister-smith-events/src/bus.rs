@@ -484,8 +484,10 @@ fn merge_supervision_evidence(
     if synthesized.repair_lineage_ref.is_none() {
         synthesized.repair_lineage_ref = preserved.repair_lineage_ref.clone();
     }
-    if synthesized.proof_boundary.is_none()
-        || synthesized.proof_boundary.as_deref() == Some("supported task path")
+    if synthesized.proof_boundary.is_none() {
+        synthesized.proof_boundary = preserved.proof_boundary.clone();
+    } else if synthesized.proof_boundary.as_deref() == Some("supported task path")
+        && preserved.proof_boundary.is_some()
     {
         synthesized.proof_boundary = preserved.proof_boundary.clone();
     }
@@ -1220,5 +1222,76 @@ mod tests {
         publisher.publish(system_event).await.unwrap();
 
         assert_eq!(handler.count(), 1);
+    }
+
+    #[test]
+    fn merge_supervision_evidence_keeps_synthesized_supported_task_boundary_when_preserved_absent() {
+        let synthesized = SupervisionEvidenceView {
+            target_scope: SupervisionTargetScope {
+                kind: SupervisionTargetKind::Graph,
+                provider: None,
+                graph_id: None,
+                branch_id: None,
+                node_id: None,
+            },
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: None,
+            repair_lineage_ref: None,
+            proof_boundary: Some("supported task path".to_string()),
+        };
+        let preserved = SupervisionEvidenceView {
+            target_scope: synthesized.target_scope.clone(),
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: None,
+            repair_lineage_ref: None,
+            proof_boundary: None,
+        };
+
+        let merged = merge_supervision_evidence(synthesized, &preserved);
+
+        assert_eq!(merged.proof_boundary.as_deref(), Some("supported task path"));
+    }
+
+    #[test]
+    fn merge_supervision_evidence_prefers_preserved_boundary_over_supported_task_path() {
+        let synthesized = SupervisionEvidenceView {
+            target_scope: SupervisionTargetScope {
+                kind: SupervisionTargetKind::Graph,
+                provider: None,
+                graph_id: None,
+                branch_id: None,
+                node_id: None,
+            },
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: None,
+            repair_lineage_ref: None,
+            proof_boundary: Some("supported task path".to_string()),
+        };
+        let preserved = SupervisionEvidenceView {
+            target_scope: synthesized.target_scope.clone(),
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: None,
+            repair_lineage_ref: None,
+            proof_boundary: Some("explicit snapshot boundary".to_string()),
+        };
+
+        let merged = merge_supervision_evidence(synthesized, &preserved);
+
+        assert_eq!(
+            merged.proof_boundary.as_deref(),
+            Some("explicit snapshot boundary")
+        );
     }
 }
