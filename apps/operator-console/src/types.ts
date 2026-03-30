@@ -47,10 +47,60 @@ export interface RunSummary {
   result_preview?: ResultPreview | null;
 }
 
+export interface TaskSupervisionTargetScope {
+  kind: string;
+  provider?: string | null;
+  graph_id?: string | null;
+  branch_id?: string | null;
+  node_id?: string | null;
+}
+
+export interface TaskFingerprintRef {
+  fingerprint_id: string;
+  fingerprint_key: string;
+  confidence: number;
+  expires_at: string;
+}
+
+export interface TaskRepairLineageRef {
+  source: string;
+  checkpoint_ref?: string | null;
+}
+
+export interface TaskProfileSnapshot {
+  health_state?: string | null;
+  updated_at?: string | null;
+}
+
+export interface TaskInterventionRecord {
+  rationale?: string | null;
+  emitted_at?: string | null;
+}
+
+export interface TaskSupervisionEvidence {
+  target_scope: TaskSupervisionTargetScope;
+  decision_basis?: string | null;
+  proof_boundary?: string | null;
+  fingerprint_ref?: TaskFingerprintRef | null;
+  repair_lineage_ref?: TaskRepairLineageRef | null;
+  profile_snapshot?: TaskProfileSnapshot | null;
+  guard_decision?: Record<string, unknown> | null;
+  intervention_record?: TaskInterventionRecord | null;
+}
+
+export interface TaskResultDetail {
+  workflow_id: string;
+  status: string;
+  proof_outcome?: string | null;
+  orchestration_quality?: Record<string, unknown> | null;
+  supervision_evidence?: TaskSupervisionEvidence | null;
+  result: Record<string, unknown>;
+}
+
 export interface TaskInspectResponse {
   task_id: string;
   status: string;
-  result?: unknown;
+  result?: TaskResultDetail;
 }
 
 export interface CreateTaskResponse {

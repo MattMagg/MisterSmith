@@ -24,8 +24,13 @@ ownership.
 - packet `020` is already landed on `main`
 - the March 27 runtime-planning simplification pass is already landed on `main`
 - packet `021` is now frozen on `main` as the next bounded post-packet-020 phase
-- the shared-supervision contract freeze tasks (`T003A` through `T006`) are now completed;
-  later packet-021 implementation lanes remain open below
+- the shared-supervision contract freeze tasks (`T003A` through `T006`) are now completed
+- the supported-ingress predictive supervision lane (`T007` through `T012`, `MS-115`) is now
+  completed on `main`
+- the bounded profile fingerprint lane (`T013` through `T017`, `MS-116`) is now completed on
+  `main`
+- only the operator-evidence/proof-boundary lane (`T018` through `T023`, `MS-117`) and final
+  closure lane (`T024` through `T033`, `MS-118`) remain open below
 
 ---
 
@@ -75,20 +80,20 @@ current happy path.
 
 ### Tests For User Story 1
 
-- [ ] T007 [P] [US1] Add branch- and node-scoped supervision coverage in
+- [x] T007 [P] [US1] Add branch- and node-scoped supervision coverage in
       `crates/mister-smith-agents/tests/` and extend existing orchestrator tests as needed
-- [ ] T008 [P] [US1] Extend runtime task-path supervision coverage in
+- [x] T008 [P] [US1] Extend runtime task-path supervision coverage in
       `crates/mister-smith-app/src/execution.rs`
-- [ ] T009 [P] [US1] Extend autonomy rendering and result-contract coverage in
+- [x] T009 [P] [US1] Extend autonomy rendering and result-contract coverage in
       `crates/mister-smith-app/tests/autonomy_status_tests.rs`
 
 ### Implementation For User Story 1
 
-- [ ] T010 [P] [US1] Update runtime supervision target selection in
+- [x] T010 [P] [US1] Update runtime supervision target selection in
       `crates/mister-smith-app/src/execution.rs`
-- [ ] T011 [P] [US1] Extend profile capture and target mapping in
+- [x] T011 [P] [US1] Extend profile capture and target mapping in
       `crates/mister-smith-agents/src/profile.rs`
-- [ ] T012 [US1] Integrate branch- and node-scoped predictive supervision into
+- [x] T012 [US1] Integrate branch- and node-scoped predictive supervision into
       `crates/mister-smith-agents/src/orchestrator.rs`,
       `crates/mister-smith-agents/src/guard.rs`, and
       `crates/mister-smith-agents/src/intervention.rs`
@@ -107,20 +112,20 @@ least one intervention decision while stale fingerprints fall back cleanly.
 
 ### Tests For User Story 2
 
-- [ ] T013 [P] [US2] Add fingerprint serialization and guard-evidence tests in
+- [x] T013 [P] [US2] Add fingerprint serialization and guard-evidence tests in
       `crates/mister-smith-core/tests/trait_compilation_tests.rs` and
       `crates/mister-smith-agents/tests/`
-- [ ] T014 [P] [US2] Add JetStream KV fingerprint coverage, including structured-summary-only
+- [x] T014 [P] [US2] Add JetStream KV fingerprint coverage, including structured-summary-only
       storage rules, in `crates/mister-smith-persistence/tests/kv_tests.rs`
 
 ### Implementation For User Story 2
 
-- [ ] T015 [P] [US2] Add fingerprint storage helpers in
+- [x] T015 [P] [US2] Add fingerprint storage helpers in
       `crates/mister-smith-persistence/src/kv/`
-- [ ] T016 [P] [US2] Extend profile and Guard decision logic to consume fingerprints in
+- [x] T016 [P] [US2] Extend profile and Guard decision logic to consume fingerprints in
       `crates/mister-smith-agents/src/profile.rs` and
       `crates/mister-smith-agents/src/guard.rs`
-- [ ] T017 [US2] Wire fingerprint loading and save/update flow into
+- [x] T017 [US2] Wire fingerprint loading and save/update flow into
       `crates/mister-smith-app/src/execution.rs`
 
 **Checkpoint**: runtime supervision can use bounded advisory fingerprints grounded in replayable
@@ -137,20 +142,20 @@ that all show coherent supervisory evidence and proof-boundary text.
 
 ### Tests For User Story 3
 
-- [ ] T018 [P] [US3] Extend typed event/view coverage for supervision evidence in
+- [x] T018 [P] [US3] Extend typed event/view coverage for supervision evidence in
       `crates/mister-smith-events/tests/autonomy_event_tests.rs`
-- [ ] T019 [P] [US3] Extend app status-view rendering coverage in
+- [x] T019 [P] [US3] Extend app status-view rendering coverage in
       `crates/mister-smith-app/tests/autonomy_status_tests.rs`
-- [ ] T020 [P] [US3] Add operator-console view coverage in
+- [x] T020 [P] [US3] Add operator-console view coverage in
       `apps/operator-console/src/views/` test files or the existing UI test lane
 
 ### Implementation For User Story 3
 
-- [ ] T021 [P] [US3] Extend autonomy event aggregation in `crates/mister-smith-events/src/bus.rs`
+- [x] T021 [P] [US3] Extend autonomy event aggregation in `crates/mister-smith-events/src/bus.rs`
       and `crates/mister-smith-app/src/autonomy.rs`
-- [ ] T022 [P] [US3] Render supervisory evidence in
+- [x] T022 [P] [US3] Render supervisory evidence in
       `apps/operator-console/src/views/RunsView.tsx` and `apps/operator-console/src/types.ts`
-- [ ] T023 [US3] Capture one durable proof-boundary note under `docs/plans/` when implementation
+- [x] T023 [US3] Capture one durable proof-boundary note under `docs/plans/` when implementation
       lands
 
 **Checkpoint**: operators can inspect predictive-supervision evidence without raw payload digging.
@@ -159,16 +164,16 @@ that all show coherent supervisory evidence and proof-boundary text.
 
 ## Final Validation And Evidence
 
-- [ ] T024 Run `cargo test -p mister-smith-core`
-- [ ] T025 Run `cargo test -p mister-smith-agents`
-- [ ] T026 Run `cargo test -p mister-smith-events`
-- [ ] T027 Run `cargo test -p mister-smith-app`
-- [ ] T028 Run `cargo clippy -p mister-smith-core -- -D warnings`
-- [ ] T029 Run `cargo clippy -p mister-smith-agents -- -D warnings`
-- [ ] T030 Run `cargo clippy -p mister-smith-events -- -D warnings`
-- [ ] T031 Run `cargo clippy -p mister-smith-app -- -D warnings`
-- [ ] T032 Run `npm --prefix apps/operator-console run build`
-- [ ] T033 Run `git diff --check`
+- [x] T024 Run `cargo test -p mister-smith-core`
+- [x] T025 Run `cargo test -p mister-smith-agents`
+- [x] T026 Run `cargo test -p mister-smith-events`
+- [x] T027 Run `cargo test -p mister-smith-app`
+- [x] T028 Run `cargo clippy -p mister-smith-core -- -D warnings`
+- [x] T029 Run `cargo clippy -p mister-smith-agents -- -D warnings`
+- [x] T030 Run `cargo clippy -p mister-smith-events -- -D warnings`
+- [x] T031 Run `cargo clippy -p mister-smith-app -- -D warnings`
+- [x] T032 Run `npm --prefix apps/operator-console run build`
+- [x] T033 Run `git diff --check`
 
 ## Parallel Staging Directive
 

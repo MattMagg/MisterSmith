@@ -1,5 +1,5 @@
 import { type FormEvent } from 'react';
-import type { RunSummary } from '../types';
+import type { RunSummary, TaskInspectResponse, TaskSupervisionEvidence } from '../types';
 import { formatTimestamp, prettyJson } from '../utils/format';
 import { StatusPill } from '../components/StatusPill';
 import { EmptyState } from '../components/EmptyState';
@@ -18,7 +18,7 @@ export interface RunsViewProps {
   selectedRunId: string | null;
   onSelect: (runId: string) => void;
   selectedRunSummary?: RunSummary;
-  taskDetail: { task_id: string; status: string; result?: unknown } | null;
+  taskDetail: TaskInspectResponse | null;
 }
 
 export function RunsView(props: RunsViewProps) {
@@ -35,6 +35,7 @@ export function RunsView(props: RunsViewProps) {
     selectedRunSummary,
     taskDetail,
   } = props;
+  const supervision = taskDetail?.result?.supervision_evidence ?? null;
 
   return (
     <div className="tab-layout">
@@ -136,6 +137,33 @@ export function RunsView(props: RunsViewProps) {
 
             <PreviewCard preview={selectedRunSummary.result_preview} />
 
+            {supervision ? (
+              <section className="subpanel">
+                <h3>Predictive supervision</h3>
+                <KeyValueGrid
+                  rows={[
+                    ['Target scope', formatTargetScope(supervision)],
+                    ['Decision basis', supervision.decision_basis ?? 'not recorded'],
+                    ['Fingerprint', formatFingerprint(supervision)],
+                    ['Repair lineage', formatRepairLineage(supervision)],
+                    ['Proof boundary', supervision.proof_boundary ?? 'not recorded'],
+                  ]}
+                />
+                {supervision.profile_snapshot?.health_state ? (
+                  <p>
+                    Latest profile health: {supervision.profile_snapshot.health_state}
+                    {supervision.profile_snapshot.updated_at
+                      ? ` at ${formatTimestamp(supervision.profile_snapshot.updated_at)}`
+                      : ''}
+                    .
+                  </p>
+                ) : null}
+                {supervision.intervention_record?.rationale ? (
+                  <p>Latest intervention rationale: {supervision.intervention_record.rationale}</p>
+                ) : null}
+              </section>
+            ) : null}
+
             <section className="subpanel">
               <h3>Transcript and evidence</h3>
               <div className="terminal-shell">
@@ -220,4 +248,31 @@ function toneForRun(status: string): 'good' | 'warn' | 'bad' | 'neutral' {
   }
 
   return 'neutral';
+}
+
+function formatTargetScope(supervision: TaskSupervisionEvidence): string {
+  const scope = supervision.target_scope;
+  const detail =
+    scope.node_id ?? scope.branch_id ?? scope.graph_id ?? scope.provider ?? 'scope not recorded';
+  return `${scope.kind}: ${detail}`;
+}
+
+function formatFingerprint(supervision: TaskSupervisionEvidence): string {
+  const fingerprint = supervision.fingerprint_ref;
+  if (!fingerprint) {
+    return 'not recorded';
+  }
+
+  return `${fingerprint.fingerprint_key} (${Math.round(fingerprint.confidence * 100)}%)`;
+}
+
+function formatRepairLineage(supervision: TaskSupervisionEvidence): string {
+  const lineage = supervision.repair_lineage_ref;
+  if (!lineage) {
+    return 'not recorded';
+  }
+
+  return lineage.checkpoint_ref
+    ? `${lineage.source} via ${lineage.checkpoint_ref}`
+    : lineage.source;
 }

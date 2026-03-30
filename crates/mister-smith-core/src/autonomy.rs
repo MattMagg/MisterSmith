@@ -264,7 +264,7 @@ pub struct HandoffClarificationRequest {
 }
 
 /// Task-facing result envelope exposed through `task.result`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskResultView {
     /// Workflow identifier shown on the task surface.
     pub workflow_id: TaskId,
@@ -275,6 +275,9 @@ pub struct TaskResultView {
     /// Bounded verifier and repair provenance when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orchestration_quality: Option<OrchestrationQualityView>,
+    /// Bounded packet-021 predictive-supervision evidence when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervision_evidence: Option<SupervisionEvidenceView>,
     /// Canonical result envelope exposed by the task surface.
     pub result: UnifiedResultEnvelope,
 }
@@ -747,6 +750,7 @@ pub struct ProvenanceChain {
 mod tests {
     use super::*;
     use crate::{RepairDirectiveAction, TaskId};
+    use serde_json::json;
 
     #[test]
     fn step_evaluation_record_serde_roundtrip() {
@@ -803,5 +807,62 @@ mod tests {
         let json = serde_json::to_string(&summary).unwrap();
         let deserialized: OrchestrationQualityView = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, summary);
+    }
+
+    #[test]
+    fn task_result_view_serde_roundtrip_preserves_supervision_evidence() {
+        let workflow_id = TaskId::new();
+        let task_result = TaskResultView {
+            workflow_id,
+            status: "completed".to_string(),
+            proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+            orchestration_quality: Some(OrchestrationQualityView {
+                step_id: "finalize".to_string(),
+                verdict: VerifierVerdict::Accepted,
+                repair_action: Some(RepairDirectiveAction::ClarifyHandoff),
+                clarification_attempt_count: 1,
+                checkpoint_ref: Some("checkpoint-clarify".to_string()),
+                last_stable_step_id: Some("collect-evidence".to_string()),
+                failure_context_ref: Some("draft-outline/clarify".to_string()),
+                outcome_summary: "accepted_after_clarify_handoff".to_string(),
+            }),
+            supervision_evidence: Some(SupervisionEvidenceView {
+                target_scope: SupervisionTargetScope {
+                    kind: SupervisionTargetKind::Branch,
+                    provider: None,
+                    graph_id: Some(ExecutionGraphId::new()),
+                    branch_id: Some(ExecutionBranchId::new()),
+                    node_id: None,
+                },
+                fingerprint_ref: None,
+                profile_snapshot: None,
+                guard_decision: None,
+                intervention_record: None,
+                decision_basis: Some("live_signals_only".to_string()),
+                repair_lineage_ref: Some(RepairLineageRef {
+                    source: "packet-020".to_string(),
+                    checkpoint_ref: Some("checkpoint-clarify".to_string()),
+                }),
+                proof_boundary: Some("deterministic-only".to_string()),
+            }),
+            result: UnifiedResultEnvelope {
+                workflow_id,
+                provider_kind: "openai_chatgpt".to_string(),
+                model_id: "gpt-5.4".to_string(),
+                description: "task result roundtrip".to_string(),
+                runtime_execution_mode: json!({
+                    "execution_boundary": "tool_bus",
+                }),
+                planner_output: json!({"goal": "roundtrip"}),
+                execution_plan: json!({"steps": []}),
+                step_results: vec![],
+                aggregated_result: json!({"ok": true}),
+                proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+            },
+        };
+
+        let json = serde_json::to_string(&task_result).unwrap();
+        let deserialized: TaskResultView = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, task_result);
     }
 }

@@ -468,7 +468,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
         expires_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
-    let _supervision_evidence = SupervisionEvidenceView {
+    let supervision_evidence = SupervisionEvidenceView {
         target_scope: SupervisionTargetScope {
             kind: SupervisionTargetKind::Graph,
             provider: None,
@@ -526,6 +526,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
         status: "completed".to_string(),
         proof_outcome: canonical_result.proof_outcome,
         orchestration_quality: None,
+        supervision_evidence: Some(supervision_evidence.clone()),
         result: canonical_result.clone(),
     };
     let session_result = SessionRetainedResultView {

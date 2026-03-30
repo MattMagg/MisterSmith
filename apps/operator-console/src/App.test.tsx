@@ -116,7 +116,43 @@ function createSnapshot(
     },
     runs: [run],
     selectedRunId: run.task_id,
-    runDetail: { task_id: run.task_id, status: run.status, result: { ok: true } },
+    runDetail: {
+      task_id: run.task_id,
+      status: run.status,
+      result: {
+        workflow_id: run.task_id,
+        status: run.status,
+        proof_outcome: 'graph_formed_and_completed',
+        orchestration_quality: null,
+        supervision_evidence: {
+          target_scope: {
+            kind: 'branch',
+            branch_id: 'branch-7',
+          },
+          decision_basis: 'fingerprint_reinforced',
+          proof_boundary: 'deterministic-only until a real rerun is captured',
+          fingerprint_ref: {
+            fingerprint_id: 'fp-1',
+            fingerprint_key: 'executor:branch-7',
+            confidence: 0.83,
+            expires_at: '2026-03-21T11:00:00Z',
+          },
+          repair_lineage_ref: {
+            source: 'packet-020',
+            checkpoint_ref: 'checkpoint-retry',
+          },
+          profile_snapshot: {
+            health_state: 'degraded',
+            updated_at: '2026-03-21T10:00:45Z',
+          },
+          intervention_record: {
+            rationale: 'kept retry bounded to the preserved branch checkpoint',
+            emitted_at: '2026-03-21T10:00:50Z',
+          },
+        },
+        result: { ok: true },
+      },
+    },
     sessions: [sessionSummary],
     selectedSessionId: sessionSummary.session_id,
     sessionDetail,
@@ -294,6 +330,19 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Submit task' }));
 
     await waitFor(() => expect(onCreateTask).toHaveBeenCalledTimes(1));
+  });
+
+  it('renders bounded predictive supervision from the selected run detail payload', async () => {
+    render(<App services={createServices()} initialSettings={createSettings()} />);
+
+    await screen.findByText('Predictive supervision');
+    expect(screen.getByText('branch: branch-7')).toBeInTheDocument();
+    expect(screen.getByText('fingerprint_reinforced')).toBeInTheDocument();
+    expect(screen.getByText('executor:branch-7 (83%)')).toBeInTheDocument();
+    expect(screen.getByText('packet-020 via checkpoint-retry')).toBeInTheDocument();
+    expect(
+      screen.getByText('deterministic-only until a real rerun is captured'),
+    ).toBeInTheDocument();
   });
 
   it('creates, continues, and ends a session from the sessions view', async () => {

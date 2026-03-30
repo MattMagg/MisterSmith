@@ -1,6 +1,6 @@
 # Mister Smith Current State
 
-Date: March 27, 2026
+Date: March 29, 2026
 Status: Current
 
 ## Purpose
@@ -23,8 +23,8 @@ Use this file when you need one honest answer to:
 | ---- | ---------------- | ---- |
 | Overall direction | `docs/direction.md` | Single authoritative direction source that merges repo truth and research-backed priorities |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
-| Latest frontier packet | `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` | Packet-020 scope and closure note for the landed verifier-gated orchestration slice |
-| Next frozen frontier packet | `specs/021-profile-aware-predictive-runtime-supervision/` | Frozen post-packet-020 packet for profile-aware predictive supervision on the supported runtime path |
+| Latest frontier packet | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Packet-021 closure note and deterministic proof-boundary record for the landed predictive-supervision slice |
+| Next frozen frontier packet | None yet | No newer post-packet-021 bounded phase is frozen |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for the completed packet-019 runtime-routing slice |
 | Previous frontier closure | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Packet-019 scope freeze and closure router |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final-validation artifact for the completed packet-016 epic |
@@ -91,6 +91,9 @@ external workflow services such as Linear or Symphony.
   path now supports verifier-gated step decisions, first-class handoff clarification, preserved
   failure-context plus last stable checkpoint repair lineage, and operator-visible
   orchestration-quality provenance.
+- Packet 021 is not yet landed on `main`: PR `#250` carries the `MS-114` through `MS-118`
+  closure candidate for bounded predictive-supervision evidence plus explicit proof-boundary text
+  on the task inspect path, autonomy status, and operator-console selected-run detail.
 - Task and autonomy provenance now surface runtime routing policy, registered-provider count,
   budget root, the latest accepted step tier/checkpoint evidence, and verifier/repair lineage from
   the runtime task path.
@@ -108,9 +111,8 @@ external workflow services such as Linear or Symphony.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
 - The packet-016 family remains terminal, packet `019` is closed, packet `020` is now closed on
-  `main`, packet `018` remains an out-of-main review lane, and packet `021` is now frozen on
-  `main` as the next bounded phase under
-  `specs/021-profile-aware-predictive-runtime-supervision/`.
+  `main`, packet `018` remains an out-of-main review lane, and packet `021` remains the active
+  predictive-supervision review lane until PR `#250` lands on `main`.
 
 ## Important Distinction
 
@@ -161,6 +163,13 @@ Read the current state in three layers:
 - packet-020-style repair provenance on the supported description-only ingress through an explicit
   runtime-owned repair record projected onto task and autonomy result surfaces, with the current
   proof captured in `docs/plans/2026-03-27-runtime-planning-simplification.md`
+- packet-021 predictive-supervision evidence on task inspect, autonomy status, and operator run
+  detail surfaces, with deterministic closure evidence captured in
+  `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`
+
+The packet-021 projection surface is currently deterministically validated. The last fresh live
+runtime-proof baseline remains the earlier supported-path packet-019 and packet-020 evidence;
+packet-021 does not yet introduce a new live rerun claim.
 
 This is the current OS path that has real end-to-end proof.
 
@@ -200,8 +209,8 @@ The completed frontier epics are:
   parent `MS-96`)
 
 Packet `019` is complete on `main`. Packet `020` is now landed on `main` through `MS-104`
-through `MS-107`. Packet `021` is now the frozen next bounded phase:
-`specs/021-profile-aware-predictive-runtime-supervision/`.
+through `MS-107`. Packet `021` is under review on PR `#250` as the `MS-114` through `MS-118`
+closure candidate, and no newer post-packet-021 bounded phase is frozen yet.
 
 The remaining March 27 adaptive-topology follow-up is still not a frozen implementation packet.
 It remains a backlog planning item for future evidence-backed work beyond the current
@@ -210,6 +219,7 @@ smallest-workflow baseline.
 This current posture is tracked in:
 
 - `docs/current-state.md`
+- `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`
 - `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
 - `docs/plans/2026-03-27-runtime-planning-simplification.md`
 - `specs/020-verifier-gated-adaptive-orchestration/`
@@ -239,12 +249,14 @@ If you need to understand the repo quickly:
 ## Source Of Truth Rules
 
 - Use this file for the repo's current broad state.
-- Use `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the landed
-  packet-020 scope and closure context,
-  `specs/021-profile-aware-predictive-runtime-supervision/` for the frozen next bounded phase,
-  `docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27 follow-up that
-  simplified live runtime planning and surfaced runtime-owned repair telemetry, and
-  `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` for the completed
+- Use `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` for the landed
+  packet-021 closure and deterministic proof-boundary context.
+- Use `specs/021-profile-aware-predictive-runtime-supervision/` for the packet-021 implementation
+  packet and `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the landed
+  packet-020 scope and closure context.
+- Use `docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27 follow-up that
+  simplified live runtime planning and surfaced runtime-owned repair telemetry.
+- Use `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` for the completed
   packet-019 scope-freeze and closure router.
 - Use `WORKFLOW.md` and `docs/linear/LINEAR.md` for development workflow rules.
 - Use `spec/` for architecture truth.

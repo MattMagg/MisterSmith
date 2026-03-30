@@ -778,6 +778,7 @@ pub(crate) fn build_canonical_result_envelope(
 pub(crate) fn build_task_result_view(
     status: &str,
     canonical_result: UnifiedResultEnvelope,
+    supervision_evidence: Option<SupervisionEvidenceView>,
 ) -> TaskResultView {
     let orchestration_quality =
         orchestration_quality_projection(&canonical_result).map(|projection| projection.view);
@@ -786,6 +787,7 @@ pub(crate) fn build_task_result_view(
         status: status.to_string(),
         proof_outcome: canonical_result.proof_outcome,
         orchestration_quality,
+        supervision_evidence,
         result: canonical_result,
     }
 }
