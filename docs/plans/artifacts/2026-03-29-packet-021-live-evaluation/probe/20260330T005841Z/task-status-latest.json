@@ -1,0 +1,170 @@
+{
+  "result": {
+    "proof_outcome": "failed_before_graph",
+    "result": {
+      "aggregated_result": {
+        "error": "workflow planning produced an invalid execution graph during topology compilation: Unsupported topology contract: unsupported topology hint 'two parallel worker branches, then one coordinator synthesis step'"
+      },
+      "description": "Inspect the live runtime and produce a concise operator summary grounded only in directly observed runtime evidence. Use two bounded worker branches plus one final synthesis step. If any branch becomes repetitive, low-confidence, or missing branch-local context, prefer a bounded branch-local repair such as context refresh or isolation over a graph-wide restart. Keep the final answer under 220 words and preserve any runtime repair lineage that is actually observed.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Inspect the live runtime and produce a concise operator summary grounded only in directly observed runtime evidence. Use two bounded worker branches plus one final synthesis step. If any branch becomes repetitive, low-confidence, or missing branch-local context, prefer a bounded branch-local repair such as context refresh or isolation over a graph-wide restart. Keep the final answer under 220 words and preserve any runtime repair lineage that is actually observed.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "inspect_live_runtime_surface",
+            "branch": "runtime_surface",
+            "depends_on": [],
+            "description": "Check the live runtime from the operator-facing side and capture only directly observed behavior, state, and visible signals. Keep notes short and factual. If this branch gets repetitive, low-confidence, or loses context, do a small branch-local refresh or isolate the check instead of restarting the whole workflow.",
+            "id": "branch_a",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "inspect_runtime_health_and_repair_lineage",
+            "branch": "runtime_health",
+            "depends_on": [],
+            "description": "Check bounded runtime health evidence such as current status signals, recent errors, and any directly observed repair lineage. Record only what is actually seen. If confidence drops or context is thin, repair locally within this branch by refreshing context or narrowing scope, not by doing a graph-wide restart.",
+            "id": "branch_b",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "write_operator_summary",
+            "branch": "join",
+            "depends_on": [
+              "branch_a",
+              "branch_b"
+            ],
+            "description": "Combine both branch outputs into one concise operator summary under 220 words. Ground every statement in directly observed runtime evidence, keep any observed runtime repair lineage, remove duplication, and clearly mark unknowns instead of guessing.",
+            "id": "synthesis",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "two parallel worker branches, then one coordinator synthesis step"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Inspect the live runtime and produce a concise operator summary based only on directly observed runtime evidence, using two bounded worker branches and one final synthesis step.",
+        "steps": [
+          {
+            "action": "inspect_live_runtime_surface",
+            "branch": "runtime_surface",
+            "description": "Check the live runtime from the operator-facing side and capture only directly observed behavior, state, and visible signals. Keep notes short and factual. If this branch gets repetitive, low-confidence, or loses context, do a small branch-local refresh or isolate the check instead of restarting the whole workflow.",
+            "id": "branch_a",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "inspect_runtime_health_and_repair_lineage",
+            "branch": "runtime_health",
+            "description": "Check bounded runtime health evidence such as current status signals, recent errors, and any directly observed repair lineage. Record only what is actually seen. If confidence drops or context is thin, repair locally within this branch by refreshing context or narrowing scope, not by doing a graph-wide restart.",
+            "id": "branch_b",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "write_operator_summary",
+            "depends_on": [
+              "branch_a",
+              "branch_b"
+            ],
+            "description": "Combine both branch outputs into one concise operator summary under 220 words. Ground every statement in directly observed runtime evidence, keep any observed runtime repair lineage, remove duplication, and clearly mark unknowns instead of guessing.",
+            "id": "synthesis",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "two parallel worker branches, then one coordinator synthesis step"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "failed_before_graph",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [],
+      "workflow_id": "197ea0ba-3432-426f-818a-4d0d83ba7a07"
+    },
+    "status": "failed",
+    "workflow_id": "197ea0ba-3432-426f-818a-4d0d83ba7a07"
+  },
+  "status": "failed",
+  "task_id": "197ea0ba-3432-426f-818a-4d0d83ba7a07"
+}

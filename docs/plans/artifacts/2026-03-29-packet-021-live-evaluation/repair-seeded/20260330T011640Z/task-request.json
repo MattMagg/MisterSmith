@@ -1,0 +1,4 @@
+{
+  "description": "Use the smallest sequential workflow that can finish this task. Return a JSON plan with exactly two steps. Step 1 must have id repair_context, action resolve_missing_handoff_context, and description: Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context. Step 2 must have id summarize_runtime, depend on repair_context, and return the smallest grounded runtime summary from directly observed evidence only. Do not add a topology_hint. Keep the final answer under 120 words.",
+  "priority": "high"
+}

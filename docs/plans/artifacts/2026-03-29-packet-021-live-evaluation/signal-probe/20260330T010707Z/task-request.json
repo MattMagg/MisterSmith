@@ -1,0 +1,4 @@
+{
+  "description": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words.",
+  "priority": "high"
+}

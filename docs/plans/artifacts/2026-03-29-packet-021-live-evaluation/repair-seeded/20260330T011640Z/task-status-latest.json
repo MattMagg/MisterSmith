@@ -1,0 +1,179 @@
+{
+  "result": {
+    "orchestration_quality": {
+      "clarification_attempt_count": 1,
+      "failure_context_ref": "planner:repair_context/clarify_handoff",
+      "outcome_summary": "accepted_after_clarify_handoff",
+      "repair_action": "clarify_handoff",
+      "step_id": "repair_context",
+      "verdict": "accepted"
+    },
+    "proof_outcome": "failed_before_graph",
+    "result": {
+      "aggregated_result": {
+        "error": "runtime supervision failed for completed step f2b51ddb-1b21-4333-a9f9-5b110a8efa00: runtime fingerprint lookup failed for workflow target agent:f2b51ddb-1b21-4333-a9f9-5b110a8efa00: Database operation failed: key cannot be empty or start/end with `.`"
+      },
+      "description": "Use the smallest sequential workflow that can finish this task. Return a JSON plan with exactly two steps. Step 1 must have id repair_context, action resolve_missing_handoff_context, and description: Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context. Step 2 must have id summarize_runtime, depend on repair_context, and return the smallest grounded runtime summary from directly observed evidence only. Do not add a topology_hint. Keep the final answer under 120 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Use the smallest sequential workflow that can finish this task. Return a JSON plan with exactly two steps. Step 1 must have id repair_context, action resolve_missing_handoff_context, and description: Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context. Step 2 must have id summarize_runtime, depend on repair_context, and return the smallest grounded runtime summary from directly observed evidence only. Do not add a topology_hint. Keep the final answer under 120 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "resolve_missing_handoff_context",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context.",
+            "id": "repair_context",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "summarize_observed_runtime",
+            "branch": "branch-a",
+            "depends_on": [
+              "repair_context"
+            ],
+            "description": "Return the smallest grounded runtime summary from directly observed evidence only.",
+            "id": "summarize_runtime",
+            "role": "worker",
+            "step": 2
+          }
+        ]
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "source": "conversation transcript only"
+        },
+        "goal": "Repair any missing handoff context, then give a minimal runtime summary from observed evidence only.",
+        "steps": [
+          {
+            "action": "resolve_missing_handoff_context",
+            "description": "Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context.",
+            "id": "repair_context",
+            "step": 1
+          },
+          {
+            "action": "summarize_observed_runtime",
+            "depends_on": [
+              "repair_context"
+            ],
+            "description": "Return the smallest grounded runtime summary from directly observed evidence only.",
+            "id": "summarize_runtime",
+            "step": 2
+          }
+        ]
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "failed_before_graph",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "resolve_missing_handoff_context",
+          "branch_id": "8a9881a5-2a99-49d3-bac5-4d00b302ae6c",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "resolve_missing_handoff_context",
+              "branch_id": "8a9881a5-2a99-49d3-bac5-4d00b302ae6c",
+              "dependencies": [],
+              "description": "Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context.",
+              "goal": "Use the smallest sequential workflow that can finish this task. Return a JSON plan with exactly two steps. Step 1 must have id repair_context, action resolve_missing_handoff_context, and description: Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context. Step 2 must have id summarize_runtime, depend on repair_context, and return the smallest grounded runtime summary from directly observed evidence only. Do not add a topology_hint. Keep the final answer under 120 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "repair_context",
+              "workflow_id": "5035bebe-b10e-4b19-9fc7-be6a69b5b604"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "6084fee6-b5be-465d-aa85-48274e91355a",
+            "workflow_goal": "Use the smallest sequential workflow that can finish this task. Return a JSON plan with exactly two steps. Step 1 must have id repair_context, action resolve_missing_handoff_context, and description: Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context. Step 2 must have id summarize_runtime, depend on repair_context, and return the smallest grounded runtime summary from directly observed evidence only. Do not add a topology_hint. Keep the final answer under 120 words."
+          },
+          "step_evaluation": {
+            "clarification_request": {
+              "attempt_count": 1,
+              "missing_constraints": [
+                "required context"
+              ],
+              "source_step_id": "repair_context",
+              "target_step_id": "repair_context"
+            },
+            "failure_context_checkpoint": {
+              "attempt_count": 1,
+              "failed_step_id": "repair_context",
+              "failure_context_ref": "planner:repair_context/clarify_handoff",
+              "reason": "runtime executed planner-directed clarification step on description-only ingress"
+            },
+            "reason": "runtime executed planner-directed clarification step on description-only ingress",
+            "repair_directive": {
+              "action": "clarify_handoff",
+              "failure_context_ref": "planner:repair_context/clarify_handoff",
+              "issued_by": "runtime.planner_repair",
+              "retry_budget_remaining": 0
+            },
+            "step_id": "repair_context",
+            "verdict": "accepted",
+            "workflow_id": "5035bebe-b10e-4b19-9fc7-be6a69b5b604"
+          },
+          "task_id": "f2b51ddb-1b21-4333-a9f9-5b110a8efa00",
+          "worker_id": "6084fee6-b5be-465d-aa85-48274e91355a"
+        }
+      ],
+      "workflow_id": "5035bebe-b10e-4b19-9fc7-be6a69b5b604"
+    },
+    "status": "failed",
+    "workflow_id": "5035bebe-b10e-4b19-9fc7-be6a69b5b604"
+  },
+  "status": "failed",
+  "task_id": "5035bebe-b10e-4b19-9fc7-be6a69b5b604"
+}

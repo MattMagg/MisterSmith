@@ -1564,6 +1564,28 @@ impl RuntimeTaskService {
                 .map_err(|failed_step| *failed_step)?
                 {
                     StepExecutionDisposition::Completed(completed_step) => {
+                        if let Err(error) = self
+                            .supervise_completed_runtime_step(
+                                workflow_id,
+                                &prepared_task.task,
+                                &completed_step,
+                            )
+                            .await
+                        {
+                            let _ = runtime.stop().await;
+                            return Err(FailedTaskExecution {
+                                completed_steps,
+                                task_id,
+                                worker_id,
+                                branch_id: branch_id.clone(),
+                                action: action.clone(),
+                                message: format!(
+                                    "runtime supervision failed for completed step {task_id}: {error}"
+                                ),
+                                result: Some(completed_step.result.clone()),
+                                step_evaluation: completed_step.step_evaluation.clone(),
+                            });
+                        }
                         completed_steps.push(completed_step);
                         break;
                     }
@@ -2106,13 +2128,9 @@ impl RuntimeTaskService {
         metadata: &mut Value,
         task_result: Option<&Value>,
     ) {
-        let Some(mut view) = self
-            .orchestrator
-            .autonomy_status(&workflow_id)
-            .or_else(|| {
-                persisted_or_synthesized_autonomy_status(workflow_id, metadata, task_result)
-            })
-        else {
+        let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id).or_else(|| {
+            persisted_or_synthesized_autonomy_status(workflow_id, metadata, task_result)
+        }) else {
             return;
         };
         crate::autonomy::enrich_session_linkage(&mut view, metadata);
@@ -2179,8 +2197,28 @@ impl RuntimeTaskService {
             .orchestrator
             .execution_graph(&workflow_id)
             .ok_or_else(|| format!("execution graph missing for workflow {workflow_id}"))?;
-        let plan =
-            runtime_supervision_plan_for_transition(&graph, task, &transition.step_evaluation)?;
+        let plan = runtime_supervision_plan_for_repair_evaluation(
+            &graph,
+            task,
+            &transition.step_evaluation,
+        )?;
+        self.record_runtime_supervision(workflow_id, plan).await
+    }
+
+    async fn supervise_completed_runtime_step(
+        &self,
+        workflow_id: TaskId,
+        task: &TaskAssignment,
+        completed_step: &CompletedTaskExecution,
+    ) -> Result<(), String> {
+        let Some(step_evaluation) = completed_step.step_evaluation.as_ref() else {
+            return Ok(());
+        };
+        let graph = self
+            .orchestrator
+            .execution_graph(&workflow_id)
+            .ok_or_else(|| format!("execution graph missing for workflow {workflow_id}"))?;
+        let plan = runtime_supervision_plan_for_repair_evaluation(&graph, task, step_evaluation)?;
         self.record_runtime_supervision(workflow_id, plan).await
     }
 
@@ -4474,7 +4512,7 @@ fn runtime_supervision_plan(
     })
 }
 
-fn runtime_supervision_plan_for_transition(
+fn runtime_supervision_plan_for_repair_evaluation(
     graph: &ExecutionGraph,
     task: &TaskAssignment,
     step_evaluation: &StepEvaluationRecord,
@@ -6359,13 +6397,59 @@ mod runtime_plan_tests {
             _ => panic!("expected local repair transition"),
         };
 
-        let plan =
-            runtime_supervision_plan_for_transition(&graph, &task, &transition.step_evaluation)
-                .expect("plan should build")
-                .expect("transition should produce supervision");
+        let plan = runtime_supervision_plan_for_repair_evaluation(
+            &graph,
+            &task,
+            &transition.step_evaluation,
+        )
+        .expect("plan should build")
+        .expect("transition should produce supervision");
 
         assert_eq!(plan.target, node_target);
         assert!(plan.checkpoints.is_empty());
+        let snapshot = plan
+            .assessment
+            .snapshot()
+            .expect("profile snapshot should exist");
+        assert_eq!(snapshot.semantic_signals.len(), 1);
+        assert_eq!(
+            snapshot.semantic_signals[0].signal_kind,
+            SemanticSignalKind::MissingContext
+        );
+    }
+
+    #[test]
+    fn runtime_supervision_plan_targets_node_for_description_only_repair_step() {
+        let (graph, mut task, workflow_id, _) = runtime_supervision_graph();
+        task.input
+            .as_object_mut()
+            .expect("task input should be mutable")
+            .insert(
+                "action".to_string(),
+                json!("resolve_missing_handoff_context"),
+            );
+        task.input
+            .as_object_mut()
+            .expect("task input should be mutable")
+            .insert(
+                "description".to_string(),
+                json!(
+                    "Request the minimum clarification needed or perform bounded local repair if any worker handoff is missing required context."
+                ),
+            );
+        task.input
+            .as_object_mut()
+            .expect("task input should be mutable")
+            .insert("dependencies".to_string(), json!(["branch-a"]));
+        let step_evaluation =
+            runtime_repair_step_evaluation(workflow_id, &task, &LocalRepairState::default())
+                .expect("planner repair step should emit a runtime-generated evaluation");
+
+        let plan = runtime_supervision_plan_for_repair_evaluation(&graph, &task, &step_evaluation)
+            .expect("plan should build")
+            .expect("repair evaluation should produce supervision");
+
+        assert!(matches!(plan.target, GuardTarget::Node(_)));
         let snapshot = plan
             .assessment
             .snapshot()

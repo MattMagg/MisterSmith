@@ -1,0 +1,4 @@
+{
+  "description": "Inspect the live runtime and produce a concise operator summary grounded only in directly observed runtime evidence. Use two bounded worker branches plus one final synthesis step. If any branch becomes repetitive, low-confidence, or missing branch-local context, prefer a bounded branch-local repair such as context refresh or isolation over a graph-wide restart. Keep the final answer under 220 words and preserve any runtime repair lineage that is actually observed.",
+  "priority": "high"
+}

@@ -1,0 +1,480 @@
+{
+  "result": {
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "inspect_runtime",
+            "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+            "dependencies": [],
+            "description": "Open the live runtime surfaces and record only directly observable signals such as service status, active processes, logs, health endpoints, and current errors.",
+            "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "step-1",
+            "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+          "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "extract_evidence",
+              "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+              "result": {
+                "dependency_results": [
+                  {
+                    "action": "inspect_runtime",
+                    "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                    "result": {
+                      "dependency_results": [],
+                      "execution_boundary": "tool_bus",
+                      "model_id": "gpt-5.4",
+                      "provider_kind": "openai_chatgpt",
+                      "status": "completed",
+                      "task": {
+                        "action": "inspect_runtime",
+                        "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                        "dependencies": [],
+                        "description": "Open the live runtime surfaces and record only directly observable signals such as service status, active processes, logs, health endpoints, and current errors.",
+                        "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                        "planner_metadata": {
+                          "planner_index": 0
+                        },
+                        "step_id": "step-1",
+                        "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+                      },
+                      "tool_name": "workflow.execute_step",
+                      "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+                      "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+                    },
+                    "task_id": "45051bdc-5939-489b-a162-8741113bd3a5",
+                    "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f"
+                  }
+                ],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "extract_evidence",
+                  "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                  "dependencies": [
+                    "45051bdc-5939-489b-a162-8741113bd3a5"
+                  ],
+                  "description": "Filter the findings down to concrete runtime facts, separating confirmed observations from anything inferred or unknown.",
+                  "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "step-2",
+                  "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+                "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+              },
+              "task_id": "7a990978-c93d-4046-a2d8-5576538bed9c",
+              "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "write_operator_summary",
+            "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+            "dependencies": [
+              "7a990978-c93d-4046-a2d8-5576538bed9c"
+            ],
+            "description": "Return a brief operator summary with current state, notable failures or risks, and any unverified areas, staying grounded strictly in observed evidence and under 180 words.",
+            "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "step-3",
+            "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+          "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "inspect_runtime",
+              "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "inspect_runtime",
+                  "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                  "dependencies": [],
+                  "description": "Open the live runtime surfaces and record only directly observable signals such as service status, active processes, logs, health endpoints, and current errors.",
+                  "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "step-1",
+                  "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+                "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+              },
+              "task_id": "45051bdc-5939-489b-a162-8741113bd3a5",
+              "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "extract_evidence",
+            "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+            "dependencies": [
+              "45051bdc-5939-489b-a162-8741113bd3a5"
+            ],
+            "description": "Filter the findings down to concrete runtime facts, separating confirmed observations from anything inferred or unknown.",
+            "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "step-2",
+            "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+          "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+        }
+      ],
+      "description": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "inspect_runtime",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Open the live runtime surfaces and record only directly observable signals such as service status, active processes, logs, health endpoints, and current errors.",
+            "id": "step-1",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "extract_evidence",
+            "branch": "branch-a",
+            "depends_on": [
+              "step-1"
+            ],
+            "description": "Filter the findings down to concrete runtime facts, separating confirmed observations from anything inferred or unknown.",
+            "id": "step-2",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "write_operator_summary",
+            "branch": "branch-a",
+            "depends_on": [
+              "step-2"
+            ],
+            "description": "Return a brief operator summary with current state, notable failures or risks, and any unverified areas, staying grounded strictly in observed evidence and under 180 words.",
+            "id": "step-3",
+            "role": "worker",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "constraints": [
+            "Use only directly observed runtime evidence.",
+            "Keep the workflow as small and sequential as possible.",
+            "Do not add synthesis steps unless multiple branches exist.",
+            "Final operator summary must be concise and under 180 words."
+          ],
+          "deliverable": "A short operator-facing runtime summary."
+        },
+        "goal": "Inspect the live runtime and produce a concise operator summary using only directly observed runtime evidence.",
+        "steps": [
+          {
+            "action": "inspect_runtime",
+            "description": "Open the live runtime surfaces and record only directly observable signals such as service status, active processes, logs, health endpoints, and current errors.",
+            "id": "step-1",
+            "step": 1
+          },
+          {
+            "action": "extract_evidence",
+            "depends_on": [
+              "step-1"
+            ],
+            "description": "Filter the findings down to concrete runtime facts, separating confirmed observations from anything inferred or unknown.",
+            "id": "step-2",
+            "step": 2
+          },
+          {
+            "action": "write_operator_summary",
+            "depends_on": [
+              "step-2"
+            ],
+            "description": "Return a brief operator summary with current state, notable failures or risks, and any unverified areas, staying grounded strictly in observed evidence and under 180 words.",
+            "id": "step-3",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "inspect_runtime",
+          "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "inspect_runtime",
+              "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+              "dependencies": [],
+              "description": "Open the live runtime surfaces and record only directly observable signals such as service status, active processes, logs, health endpoints, and current errors.",
+              "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "step-1",
+              "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+            "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+          },
+          "task_id": "45051bdc-5939-489b-a162-8741113bd3a5",
+          "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f"
+        },
+        {
+          "action": "extract_evidence",
+          "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "inspect_runtime",
+                "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "inspect_runtime",
+                    "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                    "dependencies": [],
+                    "description": "Open the live runtime surfaces and record only directly observable signals such as service status, active processes, logs, health endpoints, and current errors.",
+                    "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "step-1",
+                    "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+                  "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+                },
+                "task_id": "45051bdc-5939-489b-a162-8741113bd3a5",
+                "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "extract_evidence",
+              "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+              "dependencies": [
+                "45051bdc-5939-489b-a162-8741113bd3a5"
+              ],
+              "description": "Filter the findings down to concrete runtime facts, separating confirmed observations from anything inferred or unknown.",
+              "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "step-2",
+              "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+            "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+          },
+          "task_id": "7a990978-c93d-4046-a2d8-5576538bed9c",
+          "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f"
+        },
+        {
+          "action": "write_operator_summary",
+          "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "extract_evidence",
+                "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                "result": {
+                  "dependency_results": [
+                    {
+                      "action": "inspect_runtime",
+                      "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                      "result": {
+                        "dependency_results": [],
+                        "execution_boundary": "tool_bus",
+                        "model_id": "gpt-5.4",
+                        "provider_kind": "openai_chatgpt",
+                        "status": "completed",
+                        "task": {
+                          "action": "inspect_runtime",
+                          "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                          "dependencies": [],
+                          "description": "Open the live runtime surfaces and record only directly observable signals such as service status, active processes, logs, health endpoints, and current errors.",
+                          "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                          "planner_metadata": {
+                            "planner_index": 0
+                          },
+                          "step_id": "step-1",
+                          "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+                        },
+                        "tool_name": "workflow.execute_step",
+                        "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+                        "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+                      },
+                      "task_id": "45051bdc-5939-489b-a162-8741113bd3a5",
+                      "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f"
+                    }
+                  ],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "extract_evidence",
+                    "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+                    "dependencies": [
+                      "45051bdc-5939-489b-a162-8741113bd3a5"
+                    ],
+                    "description": "Filter the findings down to concrete runtime facts, separating confirmed observations from anything inferred or unknown.",
+                    "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "step-2",
+                    "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+                  "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+                },
+                "task_id": "7a990978-c93d-4046-a2d8-5576538bed9c",
+                "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "write_operator_summary",
+              "branch_id": "6925b704-400c-4e0f-854c-0252e02efd76",
+              "dependencies": [
+                "7a990978-c93d-4046-a2d8-5576538bed9c"
+              ],
+              "description": "Return a brief operator summary with current state, notable failures or risks, and any unverified areas, staying grounded strictly in observed evidence and under 180 words.",
+              "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "step-3",
+              "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f",
+            "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+          },
+          "task_id": "cd501251-f397-423c-b83e-9fa63eb7d37e",
+          "worker_id": "69194d79-5ff4-4e36-b1df-aa632683733f"
+        }
+      ],
+      "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+    },
+    "status": "completed",
+    "workflow_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+  },
+  "status": "completed",
+  "task_id": "a7e4e7fd-3d15-4efa-b2db-16c8d8fcae80"
+}

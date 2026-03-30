@@ -1,0 +1,417 @@
+{
+  "result": {
+    "orchestration_quality": {
+      "failure_context_ref": "planner:result_track/retry_step",
+      "outcome_summary": "accepted_after_retry_step",
+      "repair_action": "retry_step",
+      "step_id": "result_track",
+      "verdict": "accepted"
+    },
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [
+            {
+              "action": "trace_bootstrap_readiness_and_routing",
+              "branch_id": "0d3db653-947b-483b-bc59-21a8531372a9",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "trace_bootstrap_readiness_and_routing",
+                  "branch_id": "0d3db653-947b-483b-bc59-21a8531372a9",
+                  "dependencies": [],
+                  "description": "Trace bootstrap, readiness, provider/model selection, and routing markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+                  "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "bootstrap_track",
+                  "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2",
+                "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+              },
+              "task_id": "886070c1-cb6a-49e1-8a7b-c43633bca802",
+              "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2"
+            },
+            {
+              "action": "trace_results_autonomy_and_terminal_proof",
+              "branch_id": "632bb8d1-3dec-4e95-bdd0-7dba0d342a4f",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "trace_results_autonomy_and_terminal_proof",
+                  "branch_id": "632bb8d1-3dec-4e95-bdd0-7dba0d342a4f",
+                  "dependencies": [],
+                  "description": "Trace task result, autonomy result, and terminal proof markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+                  "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "result_track",
+                  "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "77b708fa-d6af-48d5-902e-7f1d97cc5771",
+                "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+              },
+              "task_id": "7b4f1840-410e-4edb-a08c-9780604720f1",
+              "worker_id": "77b708fa-d6af-48d5-902e-7f1d97cc5771"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "merge_branch_findings",
+            "branch_id": "51c40f41-ec99-49b1-a61d-92b3b8eb0641",
+            "dependencies": [
+              "886070c1-cb6a-49e1-8a7b-c43633bca802",
+              "7b4f1840-410e-4edb-a08c-9780604720f1"
+            ],
+            "description": "Combine both branch outputs into one concise final answer grounded only in directly observed runtime evidence, clearly separating confirmed markers from any remaining uncertainty.",
+            "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "combine",
+            "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2",
+          "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "trace_results_autonomy_and_terminal_proof",
+            "branch_id": "632bb8d1-3dec-4e95-bdd0-7dba0d342a4f",
+            "dependencies": [],
+            "description": "Trace task result, autonomy result, and terminal proof markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+            "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "result_track",
+            "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "77b708fa-d6af-48d5-902e-7f1d97cc5771",
+          "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "trace_bootstrap_readiness_and_routing",
+            "branch_id": "0d3db653-947b-483b-bc59-21a8531372a9",
+            "dependencies": [],
+            "description": "Trace bootstrap, readiness, provider/model selection, and routing markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+            "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "bootstrap_track",
+            "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2",
+          "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+        }
+      ],
+      "description": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "trace_bootstrap_readiness_and_routing",
+            "branch": "bootstrap",
+            "depends_on": [],
+            "description": "Trace bootstrap, readiness, provider/model selection, and routing markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+            "id": "bootstrap_track",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "trace_results_autonomy_and_terminal_proof",
+            "branch": "results",
+            "depends_on": [],
+            "description": "Trace task result, autonomy result, and terminal proof markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+            "id": "result_track",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "merge_branch_findings",
+            "branch": "join",
+            "depends_on": [
+              "bootstrap_track",
+              "result_track"
+            ],
+            "description": "Combine both branch outputs into one concise final answer grounded only in directly observed runtime evidence, clearly separating confirmed markers from any remaining uncertainty.",
+            "id": "combine",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "parallel"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "evidence_rule": "directly observed runtime evidence only",
+          "output_limit": "under 220 words",
+          "repair_rule": "prefer bounded local repair over graph-wide restart"
+        },
+        "goal": "Inspect runtime evidence in two independent parallel tracks, then combine them into one concise evidence-only answer.",
+        "steps": [
+          {
+            "action": "trace_bootstrap_readiness_and_routing",
+            "branch": "bootstrap",
+            "description": "Trace bootstrap, readiness, provider/model selection, and routing markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+            "id": "bootstrap_track",
+            "step": 1
+          },
+          {
+            "action": "trace_results_autonomy_and_terminal_proof",
+            "branch": "results",
+            "description": "Trace task result, autonomy result, and terminal proof markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+            "id": "result_track",
+            "step": 2
+          },
+          {
+            "action": "merge_branch_findings",
+            "depends_on": [
+              "bootstrap_track",
+              "result_track"
+            ],
+            "description": "Combine both branch outputs into one concise final answer grounded only in directly observed runtime evidence, clearly separating confirmed markers from any remaining uncertainty.",
+            "id": "combine",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "parallel_then_merge"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "trace_results_autonomy_and_terminal_proof",
+          "branch_id": "632bb8d1-3dec-4e95-bdd0-7dba0d342a4f",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "trace_results_autonomy_and_terminal_proof",
+              "branch_id": "632bb8d1-3dec-4e95-bdd0-7dba0d342a4f",
+              "dependencies": [],
+              "description": "Trace task result, autonomy result, and terminal proof markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+              "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "result_track",
+              "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "77b708fa-d6af-48d5-902e-7f1d97cc5771",
+            "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+          },
+          "task_id": "7b4f1840-410e-4edb-a08c-9780604720f1",
+          "worker_id": "77b708fa-d6af-48d5-902e-7f1d97cc5771"
+        },
+        {
+          "action": "trace_bootstrap_readiness_and_routing",
+          "branch_id": "0d3db653-947b-483b-bc59-21a8531372a9",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "trace_bootstrap_readiness_and_routing",
+              "branch_id": "0d3db653-947b-483b-bc59-21a8531372a9",
+              "dependencies": [],
+              "description": "Trace bootstrap, readiness, provider/model selection, and routing markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+              "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "bootstrap_track",
+              "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2",
+            "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+          },
+          "task_id": "886070c1-cb6a-49e1-8a7b-c43633bca802",
+          "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2"
+        },
+        {
+          "action": "merge_branch_findings",
+          "branch_id": "51c40f41-ec99-49b1-a61d-92b3b8eb0641",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "trace_bootstrap_readiness_and_routing",
+                "branch_id": "0d3db653-947b-483b-bc59-21a8531372a9",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "trace_bootstrap_readiness_and_routing",
+                    "branch_id": "0d3db653-947b-483b-bc59-21a8531372a9",
+                    "dependencies": [],
+                    "description": "Trace bootstrap, readiness, provider/model selection, and routing markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+                    "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "bootstrap_track",
+                    "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2",
+                  "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+                },
+                "task_id": "886070c1-cb6a-49e1-8a7b-c43633bca802",
+                "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2"
+              },
+              {
+                "action": "trace_results_autonomy_and_terminal_proof",
+                "branch_id": "632bb8d1-3dec-4e95-bdd0-7dba0d342a4f",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "trace_results_autonomy_and_terminal_proof",
+                    "branch_id": "632bb8d1-3dec-4e95-bdd0-7dba0d342a4f",
+                    "dependencies": [],
+                    "description": "Trace task result, autonomy result, and terminal proof markers from directly observed runtime evidence only. If confidence drops or context is thin, do a bounded local repair like context refresh or branch isolation, not a full restart.",
+                    "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "result_track",
+                    "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "77b708fa-d6af-48d5-902e-7f1d97cc5771",
+                  "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+                },
+                "task_id": "7b4f1840-410e-4edb-a08c-9780604720f1",
+                "worker_id": "77b708fa-d6af-48d5-902e-7f1d97cc5771"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "merge_branch_findings",
+              "branch_id": "51c40f41-ec99-49b1-a61d-92b3b8eb0641",
+              "dependencies": [
+                "886070c1-cb6a-49e1-8a7b-c43633bca802",
+                "7b4f1840-410e-4edb-a08c-9780604720f1"
+              ],
+              "description": "Combine both branch outputs into one concise final answer grounded only in directly observed runtime evidence, clearly separating confirmed markers from any remaining uncertainty.",
+              "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "combine",
+              "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2",
+            "workflow_goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words."
+          },
+          "task_id": "ad9a812a-4aaa-4147-9c28-27637c3fb244",
+          "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2"
+        }
+      ],
+      "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+    },
+    "status": "completed",
+    "workflow_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+  },
+  "status": "completed",
+  "task_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+}

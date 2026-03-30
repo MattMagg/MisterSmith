@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "disabled",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "routing_policy": "round_robin",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "trace_results_autonomy_and_terminal_proof",
+      "execution_boundary": "tool_bus",
+      "task_id": "7b4f1840-410e-4edb-a08c-9780604720f1",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "77b708fa-d6af-48d5-902e-7f1d97cc5771"
+    },
+    {
+      "action": "trace_bootstrap_readiness_and_routing",
+      "execution_boundary": "tool_bus",
+      "task_id": "886070c1-cb6a-49e1-8a7b-c43633bca802",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2"
+    },
+    {
+      "action": "merge_branch_findings",
+      "execution_boundary": "tool_bus",
+      "task_id": "ad9a812a-4aaa-4147-9c28-27637c3fb244",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "6cc2d33c-9aa5-469c-a753-b3d492f431e2"
+    }
+  ],
+  "task_id": "9894e444-c608-48be-8228-95fa1ab1a6d1"
+}

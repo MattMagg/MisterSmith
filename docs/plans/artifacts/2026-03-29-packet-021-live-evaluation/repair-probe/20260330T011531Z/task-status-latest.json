@@ -1,0 +1,484 @@
+{
+  "result": {
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "state_observation_gap",
+            "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+            "dependencies": [],
+            "description": "State plainly that no live runtime evidence is present in the provided transcript, so a grounded runtime answer cannot be produced yet without guessing.",
+            "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "step-1",
+            "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+          "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "state_observation_gap",
+              "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "state_observation_gap",
+                  "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                  "dependencies": [],
+                  "description": "State plainly that no live runtime evidence is present in the provided transcript, so a grounded runtime answer cannot be produced yet without guessing.",
+                  "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "step-1",
+                  "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+                "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+              },
+              "task_id": "a8ddc613-c55b-43e4-9c36-453ad10558a7",
+              "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "request_runtime_evidence",
+            "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+            "dependencies": [
+              "a8ddc613-c55b-43e4-9c36-453ad10558a7"
+            ],
+            "description": "Ask for the smallest decisive runtime artifact from the last stable step, such as logs, command output, screenshots, health-check output, or the exact worker handoff that should be evaluated.",
+            "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "step-2",
+            "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+          "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "request_runtime_evidence",
+              "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+              "result": {
+                "dependency_results": [
+                  {
+                    "action": "state_observation_gap",
+                    "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                    "result": {
+                      "dependency_results": [],
+                      "execution_boundary": "tool_bus",
+                      "model_id": "gpt-5.4",
+                      "provider_kind": "openai_chatgpt",
+                      "status": "completed",
+                      "task": {
+                        "action": "state_observation_gap",
+                        "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                        "dependencies": [],
+                        "description": "State plainly that no live runtime evidence is present in the provided transcript, so a grounded runtime answer cannot be produced yet without guessing.",
+                        "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+                        "planner_metadata": {
+                          "planner_index": 0
+                        },
+                        "step_id": "step-1",
+                        "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+                      },
+                      "tool_name": "workflow.execute_step",
+                      "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+                      "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+                    },
+                    "task_id": "a8ddc613-c55b-43e4-9c36-453ad10558a7",
+                    "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795"
+                  }
+                ],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "request_runtime_evidence",
+                  "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                  "dependencies": [
+                    "a8ddc613-c55b-43e4-9c36-453ad10558a7"
+                  ],
+                  "description": "Ask for the smallest decisive runtime artifact from the last stable step, such as logs, command output, screenshots, health-check output, or the exact worker handoff that should be evaluated.",
+                  "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "step-2",
+                  "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+                "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+              },
+              "task_id": "c54756be-d6c6-491f-b400-38b3b960d022",
+              "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "evaluate_observed_evidence",
+            "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+            "dependencies": [
+              "c54756be-d6c6-491f-b400-38b3b960d022"
+            ],
+            "description": "Once evidence is provided, answer only from that directly observed material; if the handoff is incomplete, request the missing piece or propose a bounded repair starting from the last stable observed step.",
+            "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "step-3",
+            "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+          "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+        }
+      ],
+      "description": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "state_observation_gap",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "State plainly that no live runtime evidence is present in the provided transcript, so a grounded runtime answer cannot be produced yet without guessing.",
+            "id": "step-1",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "request_runtime_evidence",
+            "branch": "branch-a",
+            "depends_on": [
+              "step-1"
+            ],
+            "description": "Ask for the smallest decisive runtime artifact from the last stable step, such as logs, command output, screenshots, health-check output, or the exact worker handoff that should be evaluated.",
+            "id": "step-2",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "evaluate_observed_evidence",
+            "branch": "branch-a",
+            "depends_on": [
+              "step-2"
+            ],
+            "description": "Once evidence is provided, answer only from that directly observed material; if the handoff is incomplete, request the missing piece or propose a bounded repair starting from the last stable observed step.",
+            "id": "step-3",
+            "role": "worker",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "constraints": [
+            "Do not guess.",
+            "Use only directly observed evidence.",
+            "Use the smallest workflow.",
+            "Only branch if clearly necessary."
+          ],
+          "known_inputs": [
+            "The goal requires a live-runtime-grounded answer.",
+            "The transcript contains no direct runtime observations, logs, screenshots, or handoff artifacts."
+          ],
+          "stop_condition": "Pause after requesting the missing runtime evidence if it is not provided."
+        },
+        "goal": "Get directly observed live runtime evidence before making any grounded runtime answer, because the current transcript does not include any actual runtime observations to inspect.",
+        "steps": [
+          {
+            "action": "state_observation_gap",
+            "description": "State plainly that no live runtime evidence is present in the provided transcript, so a grounded runtime answer cannot be produced yet without guessing.",
+            "id": "step-1",
+            "step": 1
+          },
+          {
+            "action": "request_runtime_evidence",
+            "depends_on": [
+              "step-1"
+            ],
+            "description": "Ask for the smallest decisive runtime artifact from the last stable step, such as logs, command output, screenshots, health-check output, or the exact worker handoff that should be evaluated.",
+            "id": "step-2",
+            "step": 2
+          },
+          {
+            "action": "evaluate_observed_evidence",
+            "depends_on": [
+              "step-2"
+            ],
+            "description": "Once evidence is provided, answer only from that directly observed material; if the handoff is incomplete, request the missing piece or propose a bounded repair starting from the last stable observed step.",
+            "id": "step-3",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "state_observation_gap",
+          "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "state_observation_gap",
+              "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+              "dependencies": [],
+              "description": "State plainly that no live runtime evidence is present in the provided transcript, so a grounded runtime answer cannot be produced yet without guessing.",
+              "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "step-1",
+              "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+            "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+          },
+          "task_id": "a8ddc613-c55b-43e4-9c36-453ad10558a7",
+          "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795"
+        },
+        {
+          "action": "request_runtime_evidence",
+          "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "state_observation_gap",
+                "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "state_observation_gap",
+                    "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                    "dependencies": [],
+                    "description": "State plainly that no live runtime evidence is present in the provided transcript, so a grounded runtime answer cannot be produced yet without guessing.",
+                    "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "step-1",
+                    "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+                  "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+                },
+                "task_id": "a8ddc613-c55b-43e4-9c36-453ad10558a7",
+                "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "request_runtime_evidence",
+              "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+              "dependencies": [
+                "a8ddc613-c55b-43e4-9c36-453ad10558a7"
+              ],
+              "description": "Ask for the smallest decisive runtime artifact from the last stable step, such as logs, command output, screenshots, health-check output, or the exact worker handoff that should be evaluated.",
+              "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "step-2",
+              "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+            "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+          },
+          "task_id": "c54756be-d6c6-491f-b400-38b3b960d022",
+          "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795"
+        },
+        {
+          "action": "evaluate_observed_evidence",
+          "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "request_runtime_evidence",
+                "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                "result": {
+                  "dependency_results": [
+                    {
+                      "action": "state_observation_gap",
+                      "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                      "result": {
+                        "dependency_results": [],
+                        "execution_boundary": "tool_bus",
+                        "model_id": "gpt-5.4",
+                        "provider_kind": "openai_chatgpt",
+                        "status": "completed",
+                        "task": {
+                          "action": "state_observation_gap",
+                          "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                          "dependencies": [],
+                          "description": "State plainly that no live runtime evidence is present in the provided transcript, so a grounded runtime answer cannot be produced yet without guessing.",
+                          "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+                          "planner_metadata": {
+                            "planner_index": 0
+                          },
+                          "step_id": "step-1",
+                          "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+                        },
+                        "tool_name": "workflow.execute_step",
+                        "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+                        "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+                      },
+                      "task_id": "a8ddc613-c55b-43e4-9c36-453ad10558a7",
+                      "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795"
+                    }
+                  ],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "request_runtime_evidence",
+                    "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+                    "dependencies": [
+                      "a8ddc613-c55b-43e4-9c36-453ad10558a7"
+                    ],
+                    "description": "Ask for the smallest decisive runtime artifact from the last stable step, such as logs, command output, screenshots, health-check output, or the exact worker handoff that should be evaluated.",
+                    "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "step-2",
+                    "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+                  "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+                },
+                "task_id": "c54756be-d6c6-491f-b400-38b3b960d022",
+                "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "evaluate_observed_evidence",
+              "branch_id": "13a68fd0-c52b-435b-8bf5-62bd0bb36bdc",
+              "dependencies": [
+                "c54756be-d6c6-491f-b400-38b3b960d022"
+              ],
+              "description": "Once evidence is provided, answer only from that directly observed material; if the handoff is incomplete, request the missing piece or propose a bounded repair starting from the last stable observed step.",
+              "goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "step-3",
+              "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795",
+            "workflow_goal": "Inspect the live runtime and produce an answer grounded only in directly observed evidence. If any worker handoff or intermediate result is missing required context, request clarification or perform bounded local repair from the last stable step instead of guessing. Use the smallest workflow that can finish the task, and only create parallel branches or a synthesis step when they are genuinely needed."
+          },
+          "task_id": "d91ab226-cea1-40d9-a0d3-a2b52cc7e1fb",
+          "worker_id": "dca168f1-7942-4ac9-9f79-a4dba94a5795"
+        }
+      ],
+      "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+    },
+    "status": "completed",
+    "workflow_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+  },
+  "status": "completed",
+  "task_id": "9a61c82f-8a02-466e-9f3c-b60cabb49d74"
+}

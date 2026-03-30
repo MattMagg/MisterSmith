@@ -1,0 +1,4 @@
+{
+  "description": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+  "priority": "high"
+}

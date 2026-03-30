@@ -1,0 +1,287 @@
+{
+  "result": {
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [
+            {
+              "action": "assess_available_evidence",
+              "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "assess_available_evidence",
+                  "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+                  "dependencies": [],
+                  "description": "Read the supplied transcript and check whether it contains any directly observed live runtime evidence. It does not.",
+                  "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "step1",
+                  "workflow_id": "753552e6-ccea-4006-b207-2c6661ba602e"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e",
+                "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words."
+              },
+              "task_id": "9d88d05e-3d6c-4b6b-bb67-46a4b41aaa07",
+              "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "return_blocked_summary",
+            "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+            "dependencies": [
+              "9d88d05e-3d6c-4b6b-bb67-46a4b41aaa07"
+            ],
+            "description": "Return a short reply that starts with the exact token BLOCKED on four separate lines, then plainly state that no live runtime was observed in the provided context, so no evidence-grounded operator summary can be given. Keep it under 120 words and do not guess.",
+            "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "step2",
+            "workflow_id": "753552e6-ccea-4006-b207-2c6661ba602e"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e",
+          "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "assess_available_evidence",
+            "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+            "dependencies": [],
+            "description": "Read the supplied transcript and check whether it contains any directly observed live runtime evidence. It does not.",
+            "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "step1",
+            "workflow_id": "753552e6-ccea-4006-b207-2c6661ba602e"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e",
+          "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words."
+        }
+      ],
+      "description": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "assess_available_evidence",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Read the supplied transcript and check whether it contains any directly observed live runtime evidence. It does not.",
+            "id": "step1",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "return_blocked_summary",
+            "branch": "branch-a",
+            "depends_on": [
+              "step1"
+            ],
+            "description": "Return a short reply that starts with the exact token BLOCKED on four separate lines, then plainly state that no live runtime was observed in the provided context, so no evidence-grounded operator summary can be given. Keep it under 120 words and do not guess.",
+            "id": "step2",
+            "role": "worker",
+            "step": 2
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "available_input": "Only the supplied conversation transcript",
+          "evidence_limit": "There is no live runtime evidence in the transcript to inspect",
+          "key_constraints": [
+            "Do not invent missing evidence",
+            "State the gap plainly if context is thin",
+            "The final worker reply must begin with BLOCKED on four separate lines",
+            "The final worker reply must stay under 120 words"
+          ]
+        },
+        "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence.",
+        "steps": [
+          {
+            "action": "assess_available_evidence",
+            "description": "Read the supplied transcript and check whether it contains any directly observed live runtime evidence. It does not.",
+            "id": "step1",
+            "step": 1
+          },
+          {
+            "action": "return_blocked_summary",
+            "depends_on": [
+              "step1"
+            ],
+            "description": "Return a short reply that starts with the exact token BLOCKED on four separate lines, then plainly state that no live runtime was observed in the provided context, so no evidence-grounded operator summary can be given. Keep it under 120 words and do not guess.",
+            "id": "step2",
+            "step": 2
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "return_blocked_summary",
+          "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "assess_available_evidence",
+                "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "assess_available_evidence",
+                    "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+                    "dependencies": [],
+                    "description": "Read the supplied transcript and check whether it contains any directly observed live runtime evidence. It does not.",
+                    "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "step1",
+                    "workflow_id": "753552e6-ccea-4006-b207-2c6661ba602e"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e",
+                  "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words."
+                },
+                "task_id": "9d88d05e-3d6c-4b6b-bb67-46a4b41aaa07",
+                "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "return_blocked_summary",
+              "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+              "dependencies": [
+                "9d88d05e-3d6c-4b6b-bb67-46a4b41aaa07"
+              ],
+              "description": "Return a short reply that starts with the exact token BLOCKED on four separate lines, then plainly state that no live runtime was observed in the provided context, so no evidence-grounded operator summary can be given. Keep it under 120 words and do not guess.",
+              "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "step2",
+              "workflow_id": "753552e6-ccea-4006-b207-2c6661ba602e"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e",
+            "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words."
+          },
+          "task_id": "9d1da284-621d-4a99-b1fa-10749e0275d7",
+          "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e"
+        },
+        {
+          "action": "assess_available_evidence",
+          "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "assess_available_evidence",
+              "branch_id": "bdb01e14-4bfb-491f-9f30-935d49c5821a",
+              "dependencies": [],
+              "description": "Read the supplied transcript and check whether it contains any directly observed live runtime evidence. It does not.",
+              "goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "step1",
+              "workflow_id": "753552e6-ccea-4006-b207-2c6661ba602e"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e",
+            "workflow_goal": "Inspect the live runtime and return a concise operator summary grounded only in directly observed runtime evidence. Use the smallest workflow that can finish the task. The worker must begin its answer with the exact token BLOCKED on four separate lines before any other text, then continue with the summary. Do not invent missing evidence; if context is thin, state the gap plainly instead of guessing. Keep the final answer under 120 words."
+          },
+          "task_id": "9d88d05e-3d6c-4b6b-bb67-46a4b41aaa07",
+          "worker_id": "391a7874-586b-41f1-84c1-8f7609bd570e"
+        }
+      ],
+      "workflow_id": "753552e6-ccea-4006-b207-2c6661ba602e"
+    },
+    "status": "completed",
+    "workflow_id": "753552e6-ccea-4006-b207-2c6661ba602e"
+  },
+  "status": "completed",
+  "task_id": "753552e6-ccea-4006-b207-2c6661ba602e"
+}

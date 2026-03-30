@@ -21,7 +21,16 @@ const DISALLOWED_SUMMARY_KEYS: &[&str] = &[
 /// Build the stable KV key for a persisted profile fingerprint.
 pub fn profile_fingerprint_key(target_kind: &str, target_selector: &str) -> String {
     format!(
-        "{PROFILE_FINGERPRINT_PREFIX}:{}:{}",
+        "{PROFILE_FINGERPRINT_PREFIX}/{}/{}",
+        normalize_key_segment(target_kind),
+        normalize_key_segment(target_selector),
+    )
+}
+
+/// Build the operator-visible label for a fingerprint reference.
+pub fn profile_fingerprint_reference_key(target_kind: &str, target_selector: &str) -> String {
+    format!(
+        "{}:{}",
         normalize_key_segment(target_kind),
         normalize_key_segment(target_selector),
     )
@@ -41,10 +50,7 @@ impl ProfileFingerprintStore {
     }
 
     /// Save or replace a fingerprint keyed by target kind and selector.
-    pub async fn save(
-        &self,
-        fingerprint: &ProfileFingerprint,
-    ) -> Result<u64, PersistenceError> {
+    pub async fn save(&self, fingerprint: &ProfileFingerprint) -> Result<u64, PersistenceError> {
         validate_profile_fingerprint(fingerprint)?;
         self.state
             .save(
@@ -86,7 +92,7 @@ impl ProfileFingerprintStore {
     pub fn reference(fingerprint: &ProfileFingerprint) -> ProfileFingerprintRef {
         ProfileFingerprintRef {
             fingerprint_id: fingerprint.fingerprint_id,
-            fingerprint_key: profile_fingerprint_key(
+            fingerprint_key: profile_fingerprint_reference_key(
                 &fingerprint.target_kind,
                 &fingerprint.target_selector,
             ),
@@ -96,9 +102,7 @@ impl ProfileFingerprintStore {
     }
 }
 
-fn validate_profile_fingerprint(
-    fingerprint: &ProfileFingerprint,
-) -> Result<(), PersistenceError> {
+fn validate_profile_fingerprint(fingerprint: &ProfileFingerprint) -> Result<(), PersistenceError> {
     if fingerprint.target_kind.trim().is_empty() {
         return Err(PersistenceError::SerializationFailed(
             "profile fingerprint target_kind must not be empty".to_string(),
@@ -173,7 +177,15 @@ mod tests {
     fn profile_fingerprint_key_normalizes_segments() {
         assert_eq!(
             profile_fingerprint_key("Executor", "branch/A"),
-            "profile-fingerprint:executor:branch_a"
+            "profile-fingerprint/executor/branch_a"
+        );
+    }
+
+    #[test]
+    fn profile_fingerprint_reference_key_matches_operator_contract() {
+        assert_eq!(
+            profile_fingerprint_reference_key("Executor", "branch/A"),
+            "executor:branch_a"
         );
     }
 

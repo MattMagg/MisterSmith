@@ -1,0 +1,4 @@
+{
+  "description": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+  "priority": "high"
+}

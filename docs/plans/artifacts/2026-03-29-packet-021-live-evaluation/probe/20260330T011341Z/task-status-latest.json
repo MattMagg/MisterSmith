@@ -1,0 +1,168 @@
+{
+  "result": {
+    "proof_outcome": "failed_before_graph",
+    "result": {
+      "aggregated_result": {
+        "error": "workflow planning produced an invalid execution graph during topology compilation: Unsupported topology contract: unsupported topology hint 'two parallel branches followed by one coordinator merge'"
+      },
+      "description": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Split this runtime inspection into two clearly independent parallel tracks: one track traces bootstrap, readiness, provider/model selection, and routing markers; one track traces task result, autonomy result, and terminal proof markers. Then add one final coordinator step to combine both branch outputs into a concise final answer grounded only in directly observed runtime evidence. If one track becomes low-confidence, repetitive, or missing context, prefer a bounded local repair such as context refresh or branch isolation instead of a graph-wide restart. Keep the answer under 220 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "trace bootstrap, readiness, provider/model selection, and routing markers",
+            "branch": "bootstrap_readiness",
+            "depends_on": [],
+            "description": "Inspect only directly observed runtime evidence for bootstrap flow, readiness state, chosen provider/model, and routing markers. If confidence drops or context is thin, do a bounded local repair such as refreshing nearby context or isolating this branch, not a graph-wide restart.",
+            "id": "track_bootstrap",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "trace task result, autonomy result, and terminal proof markers",
+            "branch": "result_proof",
+            "depends_on": [],
+            "description": "Inspect only directly observed runtime evidence for task result markers, autonomy result markers, and terminal proof markers. If this branch becomes repetitive, low-confidence, or under-contexted, repair locally with branch isolation or a small context refresh.",
+            "id": "track_terminal",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "combine both branch outputs into one concise final answer",
+            "branch": "join",
+            "depends_on": [
+              "track_bootstrap",
+              "track_terminal"
+            ],
+            "description": "Merge only the directly observed evidence from both branches into a short final answer under 220 words. Call out any low-confidence gaps plainly and avoid inference beyond what the runtime evidence shows.",
+            "id": "merge_answer",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "two parallel branches followed by one coordinator merge"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Split the runtime inspection into two independent parallel tracks, then merge them into one concise evidence-only answer without restarting the whole graph unless a bounded local repair is needed.",
+        "steps": [
+          {
+            "action": "trace bootstrap, readiness, provider/model selection, and routing markers",
+            "branch": "bootstrap_readiness",
+            "description": "Inspect only directly observed runtime evidence for bootstrap flow, readiness state, chosen provider/model, and routing markers. If confidence drops or context is thin, do a bounded local repair such as refreshing nearby context or isolating this branch, not a graph-wide restart.",
+            "id": "track_bootstrap",
+            "step": 1
+          },
+          {
+            "action": "trace task result, autonomy result, and terminal proof markers",
+            "branch": "result_proof",
+            "description": "Inspect only directly observed runtime evidence for task result markers, autonomy result markers, and terminal proof markers. If this branch becomes repetitive, low-confidence, or under-contexted, repair locally with branch isolation or a small context refresh.",
+            "id": "track_terminal",
+            "step": 2
+          },
+          {
+            "action": "combine both branch outputs into one concise final answer",
+            "depends_on": [
+              "track_bootstrap",
+              "track_terminal"
+            ],
+            "description": "Merge only the directly observed evidence from both branches into a short final answer under 220 words. Call out any low-confidence gaps plainly and avoid inference beyond what the runtime evidence shows.",
+            "id": "merge_answer",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "two parallel branches followed by one coordinator merge"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "failed_before_graph",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [],
+      "workflow_id": "9a37783f-2749-48fa-a563-287bf8d28a53"
+    },
+    "status": "failed",
+    "workflow_id": "9a37783f-2749-48fa-a563-287bf8d28a53"
+  },
+  "status": "failed",
+  "task_id": "9a37783f-2749-48fa-a563-287bf8d28a53"
+}
