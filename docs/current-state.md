@@ -23,7 +23,7 @@ Use this file when you need one honest answer to:
 | ---- | ---------------- | ---- |
 | Overall direction | `docs/direction.md` | Single authoritative direction source that merges repo truth and research-backed priorities |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
-| Latest frontier packet | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Packet-021 closure note and deterministic proof-boundary record for the landed predictive-supervision slice |
+| Latest frontier packet | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Packet-021 closure note and deterministic proof-boundary record for the landed packet-021 slice |
 | Next frozen frontier packet | None yet | No newer post-packet-021 bounded phase is frozen |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for the completed packet-019 runtime-routing slice |
 | Previous frontier closure | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Packet-019 scope freeze and closure router |
@@ -35,6 +35,7 @@ Use this file when you need one honest answer to:
 | Operator-oriented repo orientation | `CLAUDE.md` | Concise working overview for contributors and agents |
 | Runtime proof details | `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` | Historical proof packet and repeatable live-run context |
 | Session slice details | `docs/plans/2026-03-16-multi-turn-same-agent-conversations.md` | Bounded session packet and handoff |
+| Future packet pre-spec prep | `docs/packet-prep/README.md` | Working pre-spec dossier set for proposed packets `022` through `028` |
 | Canonical system contract | `spec/` | Architecture truth |
 | Phase implementation packets | `specs/` | Build instructions and task packs |
 
@@ -91,9 +92,9 @@ external workflow services such as Linear or Symphony.
   path now supports verifier-gated step decisions, first-class handoff clarification, preserved
   failure-context plus last stable checkpoint repair lineage, and operator-visible
   orchestration-quality provenance.
-- Packet 021 is not yet landed on `main`: PR `#250` carries the `MS-114` through `MS-118`
-  closure candidate for bounded predictive-supervision evidence plus explicit proof-boundary text
-  on the task inspect path, autonomy status, and operator-console selected-run detail.
+- Packet 021 is now landed on `main` through `MS-114` through `MS-118`: the runtime-backed task
+  path now carries bounded predictive-supervision evidence plus explicit proof-boundary text on
+  the task inspect path, autonomy status, and operator-console selected-run detail.
 - Task and autonomy provenance now surface runtime routing policy, registered-provider count,
   budget root, the latest accepted step tier/checkpoint evidence, and verifier/repair lineage from
   the runtime task path.
@@ -110,9 +111,9 @@ external workflow services such as Linear or Symphony.
 - Packet 018 is the in-review smoke-harness lane and is not yet part of landed `main` truth.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
-- The packet-016 family remains terminal, packet `019` is closed, packet `020` is now closed on
-  `main`, packet `018` remains an out-of-main review lane, and packet `021` remains the active
-  predictive-supervision review lane until PR `#250` lands on `main`.
+- The packet-016 family remains terminal, packet `019` is closed, packet `020` is closed on
+  `main`, packet `018` remains an out-of-main review lane, and packet `021` is now closed on
+  `main`.
 
 ## Important Distinction
 
@@ -209,8 +210,8 @@ The completed frontier epics are:
   parent `MS-96`)
 
 Packet `019` is complete on `main`. Packet `020` is now landed on `main` through `MS-104`
-through `MS-107`. Packet `021` is under review on PR `#250` as the `MS-114` through `MS-118`
-closure candidate, and no newer post-packet-021 bounded phase is frozen yet.
+through `MS-107`. Packet `021` is now landed on `main` through `MS-114` through `MS-118`, and
+no newer post-packet-021 bounded phase is frozen yet.
 
 The remaining March 27 adaptive-topology follow-up is still not a frozen implementation packet.
 It remains a backlog planning item for future evidence-backed work beyond the current
@@ -234,6 +235,7 @@ This current posture is tracked in:
 - `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md`
 - `docs/plans/2026-03-20-ms-95-post-merge-re-evaluation.md`
 - `docs/plans/2026-03-20-ms-96-external-agent-pre-spec-decision.md`
+- `docs/packet-prep/README.md`
 
 ## Practical Reading Order
 
@@ -244,7 +246,8 @@ If you need to understand the repo quickly:
 3. read `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
 4. read `WORKFLOW.md` and `docs/linear/LINEAR.md` only if you are working on the development
    control plane
-5. read `ROADMAP.md`, `spec/`, and `specs/` when you need the architectural or phase-level detail
+5. read `docs/packet-prep/README.md` if you are preparing future packets rather than implementing one
+6. read `ROADMAP.md`, `spec/`, and `specs/` when you need the architectural or phase-level detail
 
 ## Source Of Truth Rules
 

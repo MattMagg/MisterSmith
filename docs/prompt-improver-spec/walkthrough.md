@@ -1,63 +1,72 @@
-# Walkthrough — Mister Smith Post-Research Analysis Brief Prompt
+# Walkthrough — Mister Smith Pre-Packet Rube Tavily Research Handoff
 
 ## Original Prompt Summary
 
-The user wanted a reusable prompt-improver deliverable for a very specific follow-on workflow:
-after an external research report has already been produced, bring that report into the Mister
-Smith repo and have a local agent analyze it deeply against Mister Smith's existing or proposed
-architecture.
+The user wanted a fresh-session handoff prompt for a **research-only** pass on the pre-spec
+packet-prep docs under `docs/packet-prep/`.
 
-The report path `/Users/macmain/Downloads/deep-research-report.md` was only an example of the kind
-of artifact that will be received. The prompt was not supposed to execute against that file during
-this run.
+The receiving session must:
+
+- use **Rube MCP with the Tavily app** for the external research path
+- thoroughly audit the packet-prep docs against official documentation and primary sources
+- determine the most current stable versions or revisions of anything mentioned
+- distinguish real protocols from vendor APIs, comparator docs, and product-specific feature pages
+- refresh the packet-prep docs only if the evidence justifies it
+
+This is explicitly **not** a spec-writing session, implementation session, or generic brainstorm.
 
 ## Final Prompt Location
 
-`docs/prompt-improver-spec/final-prompts/mister-smith-post-research-analysis-brief.md`
+`docs/prompt-improver-spec/final-prompts/mister-smith-pre-packet-rube-tavily-research-handoff.md`
 
 ## Key Improvements Made
 
-- shifted the task from vague "analyze deeply" language to an explicit **post-research local
-  analysis** workflow
-- made imported research reports the **primary evidence** and repo-local context a **baseline for
-  transfer analysis**, not a reason to re-run research or audit repo state
-- added support for **one or more reports** so the prompt can consolidate overlapping findings
-- strengthened the prompt from summary-oriented to **decision-brief-oriented**
-- added explicit handling for:
-  - novelty versus existing or proposed architecture
-  - implement now / prototype / monitor / not worth pursuing posture
-  - further-research needs before implementation
-  - separation of imported evidence from repo-local inference
-- added anti-patterns and a final verification checklist so the receiving agent does not drift into
-  generic summarization
+- turned a broad "research everything" ask into a bounded **packet-prep external-doc audit**
+- made the **Rube plus Tavily workflow explicit** instead of leaving research routing ambiguous
+- required a **source inventory** of every external family the packet-prep docs rely on
+- required **official-source version and revision verification** instead of hand-wavy "latest"
+  claims
+- added a mandatory **classification layer** so the receiving agent distinguishes:
+  - open protocol
+  - official vendor API or specification
+  - comparator framework doc
+  - product-specific feature or config model
+- preserved repo authority order so external findings sharpen the packet-prep docs without
+  overriding repo truth
+- added anti-patterns that specifically block low-signal one-word searches and fake protocol
+  categorization
 
 ## Before / After Highlights
 
 ### Before
 
-- the draft said to "compare those findings to Mister Smith's architecture and research baseline"
-  but did not define how repo-local context should be used
-- the output shape was short and risked producing a linear summary
-- the draft did not explicitly block accidental new web research
+- the user goal was clear, but the research method could still collapse into generic web search
+- "actual protocols" was broad enough to blur protocol truth with vendor/product features
+- "everything about the pre-packet docs" risked widening into architecture redesign or spec work
 
 ### After
 
-- the final prompt explicitly says this is **not a new research run**
-- repo-local context is explicitly limited to judging novelty, fit, leverage, and transferability
-- the output is framed as a **decision-grade brief**
-- evaluation lenses, anti-patterns, and a verification checklist make the prompt more reliable in
-  real use
+- the final prompt requires **Rube MCP plus Tavily** and explicit tool-path validation
+- the research loop is organized around **inventory, official extraction, version validation, and
+  protocol classification**
+- edit scope is tightly bound to `docs/packet-prep/README.md` plus dossiers `022-028`
+- the receiving session is required to keep packet-prep work separate from spec authoring and code
+  implementation
 
 ## How To Use The Final Prompt
 
-1. Open a new local Codex session in `/Users/macmain/MisterSmith`.
-2. Provide one or more completed research reports inside `<research_reports>`.
-3. Optionally provide:
-   - `<analysis_goal>` for a narrower question
-   - `<architecture_context>` for specific local design docs
-   - `<existing_research_context>` for prior repo-local synthesis
-   - `<decision_horizon>` if near-term versus later-stage separation matters
-4. Let the receiving agent produce the brief without starting a new research pass.
+1. Open a new Codex session in `/Users/macmain/MisterSmith`.
+2. Provide the prompt as the kickoff instruction.
+3. Fill or preserve these placeholders as needed:
+   - `<repo_root>`
+   - `<packet_prep_root>`
+   - `<direction_doc>`
+   - `<current_state_doc>`
+4. Let the receiving agent:
+   - read the local authority docs first
+   - inventory the external source families
+   - route external research through Rube MCP and Tavily
+   - update the packet-prep docs only where evidence justifies it
 
 ## Cleanup Performed
 

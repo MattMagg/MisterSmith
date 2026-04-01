@@ -13,21 +13,25 @@ validated through Phase 10 plus the March 16 runtime and session recovery slices
 - `docs/`: Research output, code reviews, session analysis
 - `archive/`: Historical validation/research artifacts; avoid editing unless explicitly needed
 - `deploy/`: Deployment artifacts — Dockerfile, K8s manifests, Grafana dashboards, Prometheus alerts
+- `apps/operator-console/`: Local macOS Tauri operator cockpit and its React/TypeScript frontend
 - `nats.rs/`: Vendored upstream Rust NATS workspace used as API reference
 - `scripts/`: Utility scripts for control-plane bootstrap, validation, and local runtime support
 
 Use `docs/current-state.md` as the repo-wide current-state overview and document router.
+Use `docs/direction.md` as the strategic direction source for what should be built next.
 Use `README.md`, `ROADMAP.md`, and `CLAUDE.md` as supporting orientation entry points.
 Treat `WORKFLOW.md` and `docs/linear/LINEAR.md` as the live control-plane contract.
 Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the current runtime-proof
 direction when the task is about proving real end-to-end execution rather than adding another
 implementation phase.
 Treat `docs/current-state.md` as the current forward-direction router. Use
-`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` and
-`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` as the latest landed frontier
-closure notes. Use `docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27
-live-runtime follow-up that documents the current smallest-workflow baseline and repair-provenance
-proof surface. No newer post-packet-020 bounded phase is frozen yet.
+`docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` as the latest landed
+frontier closure note,
+`docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27 live-runtime
+follow-up that documents the current smallest-workflow baseline and repair-provenance proof
+surface, and `docs/plans/2026-03-30-packet-021-live-supervision-gap-fix.md` when the task is
+about supported-path supervision projection fixes. No newer post-packet-021 bounded phase is
+frozen yet.
 
 ## Product Boundary
 
@@ -74,9 +78,9 @@ runtime.
 - When a task explicitly calls for Ralph, use `./scripts/ralph` instead of bare `ralph`; rerun
   `./scripts/ralph prompt --packet <packet.json>` before each `./scripts/ralph run`.
 - Treat `docs/current-state.md` as the current repo-wide router,
-  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` as the most recent landed
-  frontier closure note, `docs/plans/2026-03-16-smith-first-development-system.md` as historical
-  control-plane background, and
+  `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` as the most recent
+  landed frontier closure note, `docs/plans/2026-03-16-smith-first-development-system.md` as
+  historical control-plane background, and
   `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current implemented
   workflow-family surface.
 - For repo development workflow only, keep Linear as the durable source of truth, Symphony as the
@@ -115,8 +119,18 @@ cargo clippy --workspace -- -D warnings    # Lint (must pass clean)
 cargo test -p <crate-name>                 # Test a single crate
 python3 -m unittest scripts.tests.test_live_runtime_proof_smoke
                                           # Validate the repo-owned smoke harness tests
+python3 -m unittest scripts.tests.test_prepare_ralph_prompt
+                                          # Validate Ralph packet-to-prompt preparation
+python3 -m unittest scripts.tests.test_validate_ralph_prompt
+                                          # Validate Ralph prompt metadata enforcement
 python3 -m py_compile scripts/live_runtime_proof_smoke.py
                                           # Fast syntax check for smoke-harness edits
+python3 scripts/live_runtime_proof_smoke.py --scenario packet021_supervision_probe
+                                          # Bounded packet-021 supervision evidence smoke scenario
+npm --prefix apps/operator-console run build
+                                          # Build the local operator cockpit frontend
+npm --prefix apps/operator-console test
+                                          # Run the operator cockpit Vitest suite
 ./scripts/ralph --version                  # Check the repo-managed Ralph wrapper
 scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync
                                            # Verify clean synced closure state
@@ -144,6 +158,17 @@ For markdown linting:
 - When touching `scripts/live_runtime_proof_smoke.py` or its proof-contract behavior, run
   `python3 -m unittest scripts.tests.test_live_runtime_proof_smoke` and
   `python3 -m py_compile scripts/live_runtime_proof_smoke.py`
+- When touching Ralph prompt-prep or prompt-validation surfaces, run
+  `python3 -m unittest scripts.tests.test_prepare_ralph_prompt` and
+  `python3 -m unittest scripts.tests.test_validate_ralph_prompt`
+- When touching packet-021 supervision projection paths, run the targeted regressions from
+  `docs/plans/2026-03-30-packet-021-live-supervision-gap-fix.md`:
+  `cargo test -p mister-smith-agents`,
+  `cargo test -p mister-smith-agents --features llm --test guard_tests orchestrator_supervises_stream_degradation_and_forwards_messages -- --exact --nocapture`,
+  `cargo test -p mister-smith-events --test autonomy_event_tests`,
+  `cargo test -p mister-smith-app --test autonomy_status_tests`,
+  `npm --prefix apps/operator-console run build`, and
+  `npm --prefix apps/operator-console test`
 - Use `python3 scripts/live_runtime_proof_smoke.py --profile budget_softcap_openai_mock` only for
   honest packet-019 bounded live-proof work when the documented Docker/auth prerequisites are
   already satisfied
