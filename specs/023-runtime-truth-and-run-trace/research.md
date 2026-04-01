@@ -57,7 +57,8 @@ docs as proof that the repo already emits a complete span model.
 
 ### Decision: placeholder completion must remain a first-class non-grounded evidence class
 
-**Rationale**: The March 28 session report and current `WorkflowStepTool` implementation make the
+**Rationale**: The March 28 dynamic-orchestration transfer brief and current
+`WorkflowStepTool` implementation make the
 truth gap explicit. This packet must freeze language that can say a run completed at the workflow
 graph layer while still saying semantic completion is unproven.
 
@@ -70,14 +71,14 @@ graph layer while still saying semantic completion is unproven.
 
 ## Guidance from current proof notes
 
-- Use `docs/plans/2026-03-19-live-run-trace-evaluation.md` as the main live-gap anchor for why
-  graph success is not enough.
-- Use `docs/2026-03-28-session-context-report.md` for the conservative wording that packet `023`
-  should freeze.
+- Use `docs/plans/2026-03-19-session-restart-resume-live-proof.md` as the main current live-proof
+  anchor for how runtime continuity is already evidenced today.
+- Use `docs/research-output/analysis/2026-03-28-dynamic-orchestration-transfer-brief.md` for the
+  conservative wording that packet `023` should freeze.
 - Use `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` for deterministic
   proof-boundary language.
-- Use `docs/plans/2026-03-29-packet-021-live-evaluation.md` for the explicit “deterministic yes,
-  fresh live default-path proof no” split.
+- Use `docs/current-state.md` for the explicit “deterministic yes, fresh live default-path proof
+  no” split.
 
 ## External taxonomy guidance
 

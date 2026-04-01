@@ -3,7 +3,7 @@
 **Purpose**: Validate the quality, clarity, and completeness of the packet requirements for
 selective strong coordination
 **Created**: 2026-04-01
-**Feature**: `/Users/macmain/MisterSmith/specs/028-selective-strong-coordination/spec.md`
+**Feature**: `specs/028-selective-strong-coordination/spec.md`
 
 **Note**: This checklist tests the packet requirements, not the implementation.
 

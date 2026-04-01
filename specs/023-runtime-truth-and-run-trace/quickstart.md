@@ -13,9 +13,10 @@ This is a scaffold quickstart for later packet work.
 Before any later implementation starts:
 
 ```bash
-sed -n '1,220p' docs/direction.md
-sed -n '1,260p' docs/current-state.md
-sed -n '1,260p' docs/packet-prep/023-runtime-truth-and-run-trace.md
+cat docs/direction.md
+cat docs/current-state.md
+cat docs/research-output/analysis/2026-03-28-dynamic-orchestration-transfer-brief.md
+cat docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md
 ```
 
 Then confirm:

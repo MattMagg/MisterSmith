@@ -5,12 +5,12 @@
 Before any implementation starts, reread the current repo truth and upstream packet state:
 
 ```bash
-sed -n '1,260p' docs/direction.md
-sed -n '1,320p' docs/current-state.md
-sed -n '1,260p' docs/packet-prep/027-capability-discovery-and-interoperability.md
-sed -n '1,260p' docs/packet-prep/028-selective-strong-coordination.md
-sed -n '1,260p' specs/022-durable-workflow-core/spec.md
-sed -n '1,260p' specs/023-runtime-truth-and-run-trace/spec.md
+cat docs/direction.md
+cat docs/current-state.md
+cat docs/research-output/analysis/2026-03-28-coordination-state-protocol-transfer-brief.md
+cat docs/research-output/consolidated/05-coordination-and-state.md
+cat specs/023-runtime-truth-and-run-trace/spec.md
+cat specs/028-selective-strong-coordination/spec.md
 ```
 
 Then confirm the real state of packets `024` and `027` from the current repo before touching code.

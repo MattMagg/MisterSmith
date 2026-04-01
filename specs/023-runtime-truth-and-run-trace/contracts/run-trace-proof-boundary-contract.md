@@ -100,7 +100,7 @@ Before implementing this contract later:
 
 1. reread `docs/direction.md`
 2. reread `docs/current-state.md`
-3. reread `docs/packet-prep/023-runtime-truth-and-run-trace.md`
+3. reread `docs/research-output/analysis/2026-03-28-dynamic-orchestration-transfer-brief.md`
 4. confirm packet `022` is complete enough to anchor lifecycle and history ownership
 5. rerun `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, and `/speckit.analyze` if repo
    truth moved

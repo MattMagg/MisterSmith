@@ -3,9 +3,7 @@
 **Feature Branch**: `028-selective-strong-coordination`
 **Created**: 2026-04-01
 **Status**: Draft scaffold
-**Input**: `docs/direction.md`, `docs/current-state.md`, `docs/packet-prep/README.md`,
-`docs/packet-prep/028-selective-strong-coordination.md`,
-`docs/packet-prep/027-capability-discovery-and-interoperability.md`,
+**Input**: `docs/direction.md`, `docs/current-state.md`,
 `docs/research-output/analysis/2026-03-28-coordination-state-protocol-transfer-brief.md`,
 `docs/research-output/consolidated/05-coordination-and-state.md`, and the current coordination
 substrate in `crates/mister-smith-persistence/src/kv/state.rs`,
@@ -64,8 +62,8 @@ Before any future implementation starts, the next session must:
 
 1. reread `docs/direction.md`
 2. reread `docs/current-state.md`
-3. reread `docs/packet-prep/028-selective-strong-coordination.md`
-4. reread `docs/packet-prep/027-capability-discovery-and-interoperability.md`
+3. reread `docs/research-output/analysis/2026-03-28-coordination-state-protocol-transfer-brief.md`
+4. reread `docs/research-output/consolidated/05-coordination-and-state.md`
 5. confirm the current state of packets `022`, `023`, `024`, and `027`
 6. rerun `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, and `/speckit.analyze` if repo
    truth or upstream packet scope has moved

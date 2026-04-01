@@ -3,12 +3,10 @@
 **Feature Branch**: `023-runtime-truth-and-run-trace`
 **Created**: 2026-04-01
 **Status**: Draft
-**Input**: `docs/direction.md`, `docs/current-state.md`, `docs/packet-prep/README.md`,
-`docs/packet-prep/023-runtime-truth-and-run-trace.md`,
-`docs/2026-03-28-session-context-report.md`,
+**Input**: `docs/direction.md`, `docs/current-state.md`,
+`docs/research-output/analysis/2026-03-28-dynamic-orchestration-transfer-brief.md`,
 `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`,
-`docs/plans/2026-03-29-packet-021-live-evaluation.md`,
-`docs/plans/2026-03-19-live-run-trace-evaluation.md`, and the current runtime surfaces in
+`docs/plans/2026-03-19-session-restart-resume-live-proof.md`, and the current runtime surfaces in
 `crates/mister-smith-app/src/execution.rs`, `crates/mister-smith-core/src/autonomy.rs`,
 `crates/mister-smith-events/src/bus.rs`, and `crates/mister-smith-transport/src/envelope.rs`
 
@@ -66,7 +64,7 @@ Before any future implementation starts, the next session must:
 
 1. reread `docs/direction.md`
 2. reread `docs/current-state.md`
-3. reread `docs/packet-prep/023-runtime-truth-and-run-trace.md`
+3. reread `docs/research-output/analysis/2026-03-28-dynamic-orchestration-transfer-brief.md`
 4. confirm packet `022` and any reused upstream packet work are complete enough to depend on
 5. rerun `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, and `/speckit.analyze` if repo
    truth moved

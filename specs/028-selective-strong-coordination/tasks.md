@@ -26,9 +26,10 @@ starts.
 **⚠️ CRITICAL**: No later task may begin until this phase is complete.
 
 - [ ] T001 Re-read current truth and sequencing sources in `docs/direction.md` and `docs/current-state.md`
-- [ ] T002 Re-check packet dependency seams in `specs/022-durable-workflow-core/spec.md`,
-      `specs/023-runtime-truth-and-run-trace/spec.md`, `docs/packet-prep/024-agent-boundary-security-hardening.md`,
-      and `docs/packet-prep/027-capability-discovery-and-interoperability.md`
+- [ ] T002 Re-check packet dependency seams in `docs/current-state.md`,
+      `specs/023-runtime-truth-and-run-trace/spec.md`,
+      `docs/research-output/analysis/2026-03-28-coordination-state-protocol-transfer-brief.md`,
+      and `docs/research-output/consolidated/05-coordination-and-state.md`
 - [ ] T003 Refresh `specs/028-selective-strong-coordination/spec.md` if truth-status,
       dependency-gate, or non-goal wording drifted
 - [ ] T004 Refresh `specs/028-selective-strong-coordination/plan.md`,
