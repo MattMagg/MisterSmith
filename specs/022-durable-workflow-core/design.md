@@ -2,9 +2,8 @@
 
 ## Status
 
-This is a scaffold design note for packet `022`.
-It is useful now for planning speed, but it must be refreshed before implementation because
-earlier packet work is still in flight.
+This is the active design note for packet `022`.
+It is the implementation authority for the first packet-022 pass on current `main`.
 
 ## Purpose
 
@@ -15,7 +14,7 @@ This file captures the cross-crate design choices that are too important to leav
 - what remains derived projection state
 - where lifecycle commands and decisions cross crate boundaries
 - where effect intent and effect completion must stay separate
-- which seams need refresh before coding
+- which seams need first-slice narrowing while coding begins
 
 ## Design Invariants
 
@@ -49,7 +48,7 @@ This file captures the cross-crate design choices that are too important to leav
 ### Compaction
 
 - The first compaction slice should bound replay cost without erasing explainable lineage.
-- The exact first mechanism is still refresh-required.
+- The exact first mechanism is still an open first-slice decision.
 
 ## Candidate Write Seams
 
@@ -63,18 +62,18 @@ This file captures the cross-crate design choices that are too important to leav
 - `crates/mister-smith-events/src/autonomy.rs`
 - `crates/mister-smith-http/tests/lifecycle_handler_tests.rs`
 
-## Refresh-Required Decisions
+## First-Slice Narrowing Decisions
 
 - the exact durable event shape
 - the first compaction mechanism
 - the first placement of the intent/effect boundary across PostgreSQL and JetStream
 - the first replay-regression fixture model
 
-## Pre-Implementation Use
+## Kickoff Use
 
-Before any coding starts:
+At implementation kickoff:
 
 1. re-read the repo truth docs and transfer brief
 2. compare the current seams against this note
-3. update this file if upstream packet work changed the touched surfaces
-4. only then freeze the first implementation slice
+3. update this file only if current `main` materially contradicts packet `022`
+4. then freeze the first implementation slice

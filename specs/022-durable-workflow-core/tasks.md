@@ -7,9 +7,8 @@
 **Tests**: Included. This packet will need targeted Rust tests for replay, lifecycle projections,
 effect boundaries, and compaction posture once implementation begins.
 
-**Organization**: Tasks are grouped by user story so later implementation can stay bounded and
-independently testable. This file is provisional scaffolding only and must be refreshed before any
-implementation starts.
+**Organization**: Tasks are grouped by user story so implementation can stay bounded and
+independently testable. This file is executable now on current `main`.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -19,29 +18,35 @@ implementation starts.
 
 ## Status Reconciliation (2026-04-01)
 
-- packet `022` is scaffolded only
+- packet `022` is the active durable workflow implementation packet on current `main`
 - no packet `022` implementation work has started yet
-- earlier packet work is still in flight, so the refresh gate below is mandatory
-- these tasks are for planning speed and future execution, not for immediate `/speckit.implement`
+- the top phase freezes the remaining first-slice choices before code branches widen
+- these tasks are ready for immediate `/speckit.implement`
 
 ---
 
-## Phase 1: Pre-Implementation Refresh (Blocking)
+## Phase 1: Implementation Kickoff And First-Slice Decisions (Blocking)
 
-**Purpose**: Reconfirm repo truth and refresh the packet before any coding starts
+**Purpose**: Reconfirm repo truth and freeze the remaining first-slice decisions before code
+widens
 
-**⚠️ CRITICAL**: No implementation task may begin until this phase is complete
+**⚠️ CRITICAL**: No later implementation task may begin until this phase is complete
 
-- [ ] T001 Refresh `specs/022-durable-workflow-core/spec.md` and
-      `specs/022-durable-workflow-core/plan.md` against the latest repo truth
-- [ ] T002 [P] Refresh `specs/022-durable-workflow-core/research.md` and
-      `specs/022-durable-workflow-core/data-model.md` if earlier packet work changed touched seams
-- [ ] T003 [P] Refresh `specs/022-durable-workflow-core/contracts/durable-workflow-contract.md`
-      and `specs/022-durable-workflow-core/quickstart.md` before coding begins
-- [ ] T004 Reconcile `specs/022-durable-workflow-core/tasks.md` with the refreshed packet scope
-      and mark any changed assumptions before implementation starts
+- [ ] T001 Freeze the exact durable event shape in
+      `specs/022-durable-workflow-core/contracts/durable-workflow-contract.md` and
+      `specs/022-durable-workflow-core/data-model.md`
+- [ ] T002 [P] Freeze the first lifecycle verb table and any explicit deferred verbs in
+      `specs/022-durable-workflow-core/spec.md` and
+      `specs/022-durable-workflow-core/design.md`
+- [ ] T003 [P] Freeze the first intent/effect boundary placement and durable intent/outcome model
+      in `specs/022-durable-workflow-core/design.md` and
+      `specs/022-durable-workflow-core/contracts/durable-workflow-contract.md`
+- [ ] T004 Freeze the first compaction mechanism and replay-regression fixture posture in
+      `specs/022-durable-workflow-core/research.md`,
+      `specs/022-durable-workflow-core/quickstart.md`, and
+      `specs/022-durable-workflow-core/tasks.md`
 
-**Checkpoint**: Packet `022` is refreshed and safe to execute as bounded work
+**Checkpoint**: Packet `022` first-slice decisions are frozen and code work can widen safely
 
 ---
 
@@ -194,9 +199,9 @@ from the compacted lineage
 
 ### Phase Dependencies
 
-- **Phase 1** blocks everything else until the scaffold is refreshed
+- **Phase 1** blocks everything else until the first-slice choices are frozen
 - **Phase 2** blocks all user stories until the shared durable contract is frozen
-- **User Stories** can only start after Phase 2, and only on refreshed packet truth
+- **User Stories** can only start after Phase 2 and the Phase 1 kickoff decisions
 - **Phase 7** happens after the selected user stories are implemented
 
 ### User Story Dependencies
@@ -209,7 +214,7 @@ from the compacted lineage
 
 ### Parallel Opportunities
 
-- Phase 1 refresh tasks marked `[P]` can run in parallel inside the packet directory
+- Phase 1 kickoff tasks marked `[P]` can run in parallel inside the packet directory
 - Once Phase 2 is complete:
   - persistence work can split from projection work
   - agent replay work can split from HTTP projection work
@@ -222,14 +227,14 @@ from the compacted lineage
 
 ### MVP First
 
-1. Complete the refresh gate
+1. Complete the kickoff phase
 2. Freeze the shared contract
 3. Deliver User Story 1
 4. Stop and validate replay plus session continuity before widening further
 
 ### Incremental Delivery
 
-1. Refresh the scaffold
+1. Freeze the first-slice packet decisions
 2. Add durable replay
 3. Add effect boundaries
 4. Add lifecycle verbs
@@ -237,5 +242,5 @@ from the compacted lineage
 
 ### Important Note
 
-If earlier packet work changes the touched seams materially, update this file before starting
-implementation instead of forcing the existing task graph onto stale repo truth.
+If current `main` materially contradicts the packet, update this file before widening code work
+instead of forcing the existing task graph onto stale repo truth.

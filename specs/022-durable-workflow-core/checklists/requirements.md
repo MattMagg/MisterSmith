@@ -31,6 +31,5 @@
 
 ## Notes
 
-- This packet is scaffold-ready for follow-on SpecKit steps.
-- The packet is still provisional and must be refreshed before implementation because earlier
-  packet work is still in flight.
+- This packet is ready for implementation work on current `main`.
+- Open first-slice choices stay explicit, but they are not a stop condition for `/speckit.implement`.

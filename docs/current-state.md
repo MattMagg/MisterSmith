@@ -23,8 +23,8 @@ Use this file when you need one honest answer to:
 | ---- | ---------------- | ---- |
 | Overall direction | `docs/direction.md` | Single authoritative direction source that merges repo truth and research-backed priorities |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
-| Latest frontier packet | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Packet-021 closure note and deterministic proof-boundary record for the landed predictive-supervision slice |
-| Next frozen frontier packet | None yet | No newer post-packet-021 bounded phase is frozen |
+| Latest frontier packet | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Packet-021 closure note and deterministic proof-boundary record for predictive-supervision |
+| Next frozen frontier packet | `specs/022-durable-workflow-core/` | Packet `022` freezes durable workflow semantics and lifecycle plus effect boundaries |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for the completed packet-019 runtime-routing slice |
 | Previous frontier closure | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Packet-019 scope freeze and closure router |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final-validation artifact for the completed packet-016 epic |
@@ -210,7 +210,9 @@ The completed frontier epics are:
 
 Packet `019` is complete on `main`. Packet `020` is now landed on `main` through `MS-104`
 through `MS-107`. Packet `021` is under review on PR `#250` as the `MS-114` through `MS-118`
-closure candidate, and no newer post-packet-021 bounded phase is frozen yet.
+closure candidate. Packet `022` is now frozen under `specs/022-durable-workflow-core/` as the
+next bounded implementation packet for durable workflow semantics, effect boundaries, and
+lifecycle control.
 
 The remaining March 27 adaptive-topology follow-up is still not a frozen implementation packet.
 It remains a backlog planning item for future evidence-backed work beyond the current

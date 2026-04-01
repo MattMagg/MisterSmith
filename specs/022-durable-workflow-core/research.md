@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This file records the decision-quality research for packet `022` as a scaffold packet.
-Where the repo is not ready to freeze an exact implementation choice yet, this file says that
-plainly instead of guessing.
+This file records the decision-quality research for packet `022`.
+Where the repo is not ready to freeze one exact first-slice implementation choice yet, this file
+says that plainly instead of guessing.
 
 ## Decision 1: Event history should be the semantic source of truth
 
@@ -53,26 +53,27 @@ that proof surface, not redefine it.
 - Redesign session semantics at the same time as durable workflow semantics.
   Rejected because it would widen the packet and erase a useful proof baseline.
 
-## Decision 4: Lifecycle verbs must be frozen, but some exact posture may remain refresh-required
+## Decision 4: Lifecycle verbs must be frozen, but some exact posture may remain open
 
 **Decision**: Freeze the requirement that pause, resume, cancel, terminate, and reset or rewind
 posture must be made explicit, but leave the exact first-cycle implementation posture to the
 refresh gate if upstream work materially changes touched seams.
 
-**Rationale**: The packet must own lifecycle semantics, but the user also asked for honest
-scaffolding while adjacent packet work is still moving.
+**Rationale**: The packet must own lifecycle semantics while still keeping the few remaining
+first-slice choices explicit.
 
 **Alternatives considered**:
 
-- Force exact lifecycle meanings now even if upstream seams shift.
-  Rejected because it risks writing false finality into a scaffold packet.
+- Force exact lifecycle meanings now even if the first implementation slice still needs narrower
+  crate-level mapping work.
+  Rejected because the packet should stay honest about what gets finalized in code.
 - Leave lifecycle verbs fully unspecified.
   Rejected because the packet would lose one of its main reasons to exist.
 
 ## Decision 5: Compaction must be planned now, but the first exact mechanism remains open
 
 **Decision**: Require a bounded compaction rule in the packet, while leaving the first exact
-mechanism open until the pre-implementation refresh.
+mechanism open for the first implementation slice.
 
 **Rationale**: Replay cost cannot grow forever. At the same time, the repo does not yet prove one
 best mechanism for the first slice.

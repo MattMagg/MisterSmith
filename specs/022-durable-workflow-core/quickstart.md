@@ -2,12 +2,11 @@
 
 ## Purpose
 
-This quickstart is for the later session that turns packet `022` from scaffold into an
-implementation-ready packet.
+This quickstart is for starting packet `022` implementation on current `main`.
 
-## Step 1: Refresh Before Coding
+## Step 1: Kickoff Check
 
-Run this refresh pass first:
+Run this quick check first:
 
 ```bash
 git status --short --branch
@@ -28,7 +27,7 @@ cat crates/mister-smith-app/src/conversation.rs
 cat docs/plans/2026-03-19-session-restart-resume-live-proof.md
 ```
 
-If those seams changed materially, refresh this packet before implementation.
+If those seams materially contradict packet `022`, fix the packet docs first, then continue.
 
 ## Step 2: Revalidate The Packet Boundaries
 
@@ -45,16 +44,17 @@ Confirm these boundaries still hold:
 npx markdownlint-cli2 "specs/022-durable-workflow-core/**/*.md" --config .markdownlint.json
 ```
 
-## Step 4: Use The Tasks Only After Refresh
+## Step 4: Start The Task Pack
 
 - Review `tasks.md`
 - Review `design.md`
-- Mark any refresh-dependent items before coding
-- Only then move to implementation planning or `/speckit.implement`
+- Resolve the open first-slice decisions at the top of the task pack
+- Then move straight into `/speckit.implement`
 
 ## Expected Outcome
 
-After this quickstart, the packet should either:
+After this quickstart, the packet should:
 
-- remain valid with only light wording updates, or
-- get one bounded refresh before implementation starts
+- remain aligned with current `main`
+- have any real contradiction fixed
+- be ready for immediate packet `022` implementation

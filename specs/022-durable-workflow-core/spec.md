@@ -2,7 +2,7 @@
 
 **Feature Branch**: `022-durable-workflow-core`
 **Created**: 2026-04-01
-**Status**: Draft scaffold
+**Status**: Implementation-ready
 **Input**: `docs/direction.md`, `docs/current-state.md`,
 `docs/research-output/analysis/2026-03-28-durable-workflows-transfer-brief.md`, and current
 durability seams in `crates/mister-smith-agents/src/branch_checkpoint.rs`,
@@ -13,12 +13,11 @@ durability seams in `crates/mister-smith-agents/src/branch_checkpoint.rs`,
 
 ## Current Truth & Scope
 
-This packet is a scaffold packet written against current repo truth while earlier packet
-implementation work is still in flight.
+Packet `022` is now the frozen implementation packet for durable workflow core on current
+`main`.
 
-It is meant to speed up later packet work, not to act as final implementation authority.
-Before any implementation starts, this packet must be rechecked against `docs/current-state.md`,
-`docs/direction.md`, the completed upstream packet work, and the touched durability seams.
+It is ready for `/speckit.implement`. The open design points called out below are first-slice
+narrowing decisions, not a reason to stop or defer implementation.
 
 Current repo truth already includes:
 
@@ -44,23 +43,23 @@ This packet stays strictly inside that seam. It does not cover:
 - interoperability or federation work
 - strong coordination or consensus work
 - a Temporal clone or Azure Durable Functions clone
-- any claim that this scaffold packet itself makes the feature live by default
+- any claim that this packet itself makes the feature live by default
 
 ## Clarifications
 
 ### Session 2026-04-01
 
-- Q: Is packet `022` implementation-ready now? → A: No. This is a scaffold packet only and it
-  must be refreshed after earlier in-flight packet work completes and before any coding starts.
+- Q: Is packet `022` implementation-ready now? → A: Yes. It is the active implementation packet
+  for durable workflow semantics, effect boundaries, and lifecycle control on current `main`.
 - Q: Are Temporal and Azure Durable Functions the target architecture? → A: No. They are semantic
   comparators only.
 - Q: Which adjacent areas are deliberately deferred out of this packet? → A: Coordinator-runtime
   expansion, interoperability, strong coordination, and any new live-default claim.
 
-## Refresh-Required Questions
+## Open Design Questions For The First Slice
 
-These questions are explicit on purpose. They should be resolved or narrowed during the required
-pre-implementation refresh instead of being hidden behind fake certainty.
+These questions are explicit on purpose. They should be resolved in the first bounded
+implementation slice instead of being hidden behind fake certainty.
 
 - What is the exact repo-native shape of one durable workflow history event?
 - What is the first bounded compaction mechanism: rollup event, snapshot record, KV pointer, or a
@@ -191,8 +190,8 @@ once and still resume correctly from the compacted lineage.
 - **FR-012**: System MUST stay scoped to durable workflow semantics, effect boundaries, and
   lifecycle control, and MUST NOT absorb coordinator-runtime, interoperability, or strong
   coordination work.
-- **FR-013**: System MUST mark any packet decisions that depend on unfinished upstream packet work
-  as refresh-required before implementation.
+- **FR-013**: System MUST keep unresolved first-slice choices explicit and resolve them in the
+  first bounded implementation slice instead of hiding them behind vague wording.
 - **FR-014**: System MUST keep live truth, landed-not-default substrate, deterministic-only proof,
   and planned packet work clearly separated in packet wording and downstream notes.
 
@@ -228,8 +227,8 @@ once and still resume correctly from the compacted lineage.
 
 ## Assumptions
 
-- Earlier packet implementation work may still change adjacent seams, so this scaffold packet
-  requires a pre-implementation refresh before coding begins.
+- Packet `022` is the current implementation authority for durable workflow core on `main`, even
+  if adjacent packet work continues elsewhere.
 - The first compaction mechanism may be intentionally minimal as long as it keeps replay bounded
   and keeps recovery lineage inspectable.
 - The first effect-boundary slice covers runtime-visible external side effects and does not attempt

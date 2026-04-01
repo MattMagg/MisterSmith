@@ -25,8 +25,8 @@ durable workflow semantics, lifecycle control, and effect boundaries
   effect boundaries? [Clarity, Spec §FR-005]
 - [ ] CHK007 Is the packet explicit about preserving current session continuity instead of
   redesigning session behavior? [Clarity, Spec §FR-003]
-- [ ] CHK008 Are refresh-required questions and assumptions separated clearly enough that open
-  design points are not mistaken for frozen contracts? [Clarity]
+- [ ] CHK008 Are first-slice open questions separated clearly enough that open design points are
+  not mistaken for frozen contracts? [Clarity]
 
 ## Requirement Consistency
 
@@ -54,28 +54,26 @@ durable workflow semantics, lifecycle control, and effect boundaries
 - [ ] CHK016 Are repeated lifecycle-command and repeated-effect scenarios covered explicitly?
   [Coverage, Spec §User Story 2, Spec §User Story 3, Spec §Edge Cases]
 - [ ] CHK017 Are history-version and upstream-packet-drift scenarios called out honestly rather
-  than hidden? [Coverage, Spec §Refresh-Required Questions, Spec §Edge Cases]
+  than hidden? [Coverage, Spec §Open Design Questions For The First Slice, Spec §Edge Cases]
 
 ## Dependencies And Assumptions
 
-- [ ] CHK018 Is the scaffold nature of this packet made explicit everywhere that later work could
-  otherwise treat it as implementation-ready? [Dependency, Spec §Current Truth & Scope,
+- [ ] CHK018 Is this packet clearly implementation-ready everywhere a later agent would look, with
+  no false refresh gate left behind? [Dependency, Spec §Current Truth & Scope,
   Spec §Clarifications, Spec §Assumptions]
-- [ ] CHK019 Are unfinished upstream packet dependencies marked as refresh-required instead of
+- [ ] CHK019 Are unfinished or still-open first-slice choices kept explicit and bounded instead of
   silently frozen? [Dependency, Spec §FR-013]
 
 ## Ambiguities And Conflicts
 
 - [ ] CHK020 Is the first compaction mechanism intentionally left open but still bounded enough to
-  keep the packet useful? [Ambiguity, Spec §Refresh-Required Questions]
+  keep the packet useful? [Ambiguity, Spec §Open Design Questions For The First Slice]
 - [ ] CHK021 Is the initial placement of the intent and effect boundary explicit enough for plan
   work, or does it still need a pre-implementation narrowing note? [Ambiguity, Spec
-  §Refresh-Required Questions]
+  §Open Design Questions For The First Slice]
 
 ## Notes
 
 - Check items off as completed: `[x]`
-- Mark any item that depends on unfinished upstream packet work as `Deferred until refresh`
-- Expected early `Deferred until refresh` items for this scaffold packet: `CHK018`, `CHK019`,
-  `CHK020`, and `CHK021` if earlier packet work still changes the touched seams
-- Use this checklist to harden the scaffold before any later `/speckit.implement` run
+- If a current-main contradiction appears, fix the packet before implementation continues
+- Use this checklist to keep packet `022` honest and implementation-ready during the first coding pass

@@ -2,8 +2,8 @@
 
 ## Status
 
-Scaffold contract for packet `022`.
-This contract is provisional and must be refreshed before implementation starts.
+Implementation contract for packet `022`.
+This contract is ready for the first bounded implementation slice on current `main`.
 
 ## Purpose
 
@@ -49,11 +49,11 @@ Freeze one bounded contract for:
 - Long-running workflow replay cost must have a bounded strategy.
 - The first compaction mechanism may be minimal, but it must preserve resumability and explainable
   lineage.
-- The exact first compaction mechanism remains refresh-required in this scaffold packet.
+- The exact first compaction mechanism remains open for the first implementation slice.
 
 ## Proof Boundary
 
-- This scaffold packet does not claim new live-default truth.
+- This packet does not claim new live-default truth just by existing.
 - Existing restart-resume proof remains the current live baseline that packet `022` must preserve.
 - Any later implementation must distinguish deterministic validation from fresh live runtime proof.
 

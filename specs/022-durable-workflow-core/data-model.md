@@ -2,10 +2,9 @@
 
 ## Notes
 
-- This model is a scaffold for packet `022`.
+- This model is the active data-model authority for packet `022`.
 - Entity names and required relationships are intentionally more stable than exact field lists.
-- Any field or enum that depends on unfinished upstream packet work must be refreshed before
-  implementation.
+- Any field or enum that is still open gets resolved in the first bounded implementation slice.
 
 ## Entities
 
@@ -106,8 +105,8 @@
 
 ## Candidate State Groups
 
-These are state groups the packet must freeze. Exact enum names stay refresh-required until the
-pre-implementation gate confirms no adjacent packet work shifted the touched seams.
+These are state groups the packet must freeze. Exact enum names can be finalized in the first
+implementation slice without reopening packet scope.
 
 ### Workflow lifecycle group
 
