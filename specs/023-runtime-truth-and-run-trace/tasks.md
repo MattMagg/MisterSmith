@@ -1,6 +1,6 @@
 # Tasks: Runtime Truth And Run Trace
 
-**Input**: Design documents from `/Users/macmain/MisterSmith/specs/023-runtime-truth-and-run-trace/`
+**Input**: Design documents from `specs/023-runtime-truth-and-run-trace/`
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `quickstart.md`,
 `contracts/`
 
@@ -23,9 +23,10 @@ any later code work starts.
 
 **CRITICAL**: No later task may begin until this phase is complete.
 
-- [ ] T001 Reread `docs/direction.md`, `docs/current-state.md`, and
-      `docs/packet-prep/023-runtime-truth-and-run-trace.md` and record any truth drift in
-      `specs/023-runtime-truth-and-run-trace/spec.md`
+- [ ] T001 Reread `docs/direction.md`, `docs/current-state.md`,
+      `docs/research-output/analysis/2026-03-28-dynamic-orchestration-transfer-brief.md`, and
+      `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`, then record any
+      truth drift in `specs/023-runtime-truth-and-run-trace/spec.md`
 - [ ] T002 Confirm packet `022` and any reused upstream packet work are complete enough to rely on
       before code work begins, then update `specs/023-runtime-truth-and-run-trace/spec.md`,
       `specs/023-runtime-truth-and-run-trace/plan.md`, and

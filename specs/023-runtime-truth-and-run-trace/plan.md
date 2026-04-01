@@ -2,7 +2,7 @@
 
 **Branch**: `023-runtime-truth-and-run-trace` | **Date**: 2026-04-01 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from
-`/Users/macmain/MisterSmith/specs/023-runtime-truth-and-run-trace/spec.md`
+`specs/023-runtime-truth-and-run-trace/spec.md`
 
 ## Scaffold Status
 
