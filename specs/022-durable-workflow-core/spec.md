@@ -3,8 +3,7 @@
 **Feature Branch**: `022-durable-workflow-core`
 **Created**: 2026-04-01
 **Status**: Draft scaffold
-**Input**: `docs/direction.md`, `docs/current-state.md`, `docs/packet-prep/README.md`,
-`docs/packet-prep/022-durable-workflow-core.md`,
+**Input**: `docs/direction.md`, `docs/current-state.md`,
 `docs/research-output/analysis/2026-03-28-durable-workflows-transfer-brief.md`, and current
 durability seams in `crates/mister-smith-agents/src/branch_checkpoint.rs`,
 `crates/mister-smith-persistence/src/kv/state.rs`,

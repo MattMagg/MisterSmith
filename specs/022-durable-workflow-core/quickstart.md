@@ -13,8 +13,8 @@ Run this refresh pass first:
 git status --short --branch
 cat docs/current-state.md
 cat docs/direction.md
-cat docs/packet-prep/022-durable-workflow-core.md
 cat docs/research-output/analysis/2026-03-28-durable-workflows-transfer-brief.md
+cat docs/plans/2026-03-19-session-restart-resume-live-proof.md
 ```
 
 Then re-read these touched seams:
@@ -48,6 +48,7 @@ npx markdownlint-cli2 "specs/022-durable-workflow-core/**/*.md" --config .markdo
 ## Step 4: Use The Tasks Only After Refresh
 
 - Review `tasks.md`
+- Review `design.md`
 - Mark any refresh-dependent items before coding
 - Only then move to implementation planning or `/speckit.implement`
 

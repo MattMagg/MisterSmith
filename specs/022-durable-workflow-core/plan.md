@@ -20,7 +20,7 @@ in flight.
 **Language/Version**: Rust 1.88.0 plus packet docs and plan artifacts
 **Primary Dependencies**: `mister-smith-core`, `mister-smith-agents`,
 `mister-smith-persistence`, `mister-smith-app`, `mister-smith-events`, and the existing proof
-notes and packet-prep dossier
+notes plus the March 28 durable-workflows transfer brief
 **Storage**: JetStream KV, PostgreSQL, and existing hybrid durability helpers
 **Testing**: markdown lint for packet docs now; later targeted Rust tests around branch
 checkpointing, durable replay, lifecycle projections, and the existing restart-resume proof lane
@@ -39,8 +39,8 @@ boundaries, and minimal compaction plus replay-governance rules
 
 | Principle | Status | Evidence |
 | --------- | ------ | -------- |
-| I. Canonical Single Source | PASS | Grounded in `docs/direction.md`, `docs/current-state.md`, packet-prep dossier `022`, the durable-workflows transfer brief, and the named repo seams. |
-| II. Spec-First Design | PASS | `spec.md`, `plan.md`, `research.md`, `data-model.md`, `quickstart.md`, `contracts/`, and `tasks.md` are created before any implementation. |
+| I. Canonical Single Source | PASS | Grounded in `docs/direction.md`, `docs/current-state.md`, the durable-workflows transfer brief, the restart-resume proof note, and the named repo seams. |
+| II. Spec-First Design | PASS | `spec.md`, `plan.md`, `design.md`, `research.md`, `data-model.md`, `quickstart.md`, `contracts/`, and `tasks.md` are created before any implementation. |
 | III. Phase-And-Packet-Gated Delivery | PASS | Treats packet `022` as the next bounded durable-semantics scaffold and explicitly defers adjacent packets and unfinished upstream work to refresh. |
 | IV. Model-Agnostic Architecture | PASS | Defines durable workflow semantics without binding the product to one provider or framework clone. |
 | V. Erlang/OTP-Style Fault Tolerance | PASS | Extends fault-tolerant recovery semantics over existing restart-resume and checkpoint surfaces rather than replacing them. |
@@ -52,8 +52,9 @@ boundaries, and minimal compaction plus replay-governance rules
 
 This gate is mandatory before any `/speckit.implement` or manual coding work starts.
 
-1. Re-read `docs/current-state.md`, `docs/direction.md`, `docs/packet-prep/README.md`, and
-   `docs/packet-prep/022-durable-workflow-core.md`.
+1. Re-read `docs/current-state.md`, `docs/direction.md`,
+   `docs/research-output/analysis/2026-03-28-durable-workflows-transfer-brief.md`, and
+   `docs/plans/2026-03-19-session-restart-resume-live-proof.md`.
 2. Reconfirm whether earlier in-flight packet work changed any of these seams materially:
    - `crates/mister-smith-agents/src/branch_checkpoint.rs`
    - `crates/mister-smith-persistence/src/kv/state.rs`
@@ -62,8 +63,8 @@ This gate is mandatory before any `/speckit.implement` or manual coding work sta
    - `crates/mister-smith-app/src/conversation.rs`
    - `crates/mister-smith-app/src/execution.rs`
    - `crates/mister-smith-events/src/autonomy.rs`
-3. Refresh `spec.md`, `research.md`, `data-model.md`, `contracts/`, and `tasks.md` if the repo
-   truth or touched seams changed in a material way.
+3. Refresh `spec.md`, `design.md`, `research.md`, `data-model.md`, `contracts/`, and `tasks.md`
+   if the repo truth or touched seams changed in a material way.
 4. Only after that refresh, choose the first actual implementation slice and its validation set.
 
 ## Project Structure
@@ -72,6 +73,7 @@ This gate is mandatory before any `/speckit.implement` or manual coding work sta
 specs/022-durable-workflow-core/
 ├── spec.md
 ├── plan.md
+├── design.md
 ├── research.md
 ├── data-model.md
 ├── quickstart.md
@@ -140,6 +142,14 @@ and restart-resume surfaces rather than replacing them.
 refresh-required.
 
 **Rationale**: The user asked for speed and scaffolding, not false implementation readiness.
+
+### D5: Cross-crate tradeoffs live in a dedicated design note
+
+**Decision**: Keep one `design.md` in the packet so the first coding session can review write
+seams, invariants, and refresh-sensitive tradeoffs in one place.
+
+**Rationale**: This packet crosses agents, persistence, app, events, and HTTP surfaces, so the
+architecture note should be explicit before implementation starts.
 
 ## Minimal Implementation Slice
 

@@ -132,7 +132,7 @@ autonomy views
 - [ ] T019 [P] [US3] Add lifecycle projection coverage in
       `crates/mister-smith-app/tests/lifecycle_control_tests.rs`
 - [ ] T020 [P] [US3] Add task and session lifecycle handler tests in
-      `crates/mister-smith-http/src/handlers.rs`
+      `crates/mister-smith-http/tests/lifecycle_handler_tests.rs`
 
 ### Implementation for User Story 3
 
@@ -176,6 +176,7 @@ from the compacted lineage
 ## Phase 7: Polish & Cross-Cutting Closure
 
 - [ ] T027 Refresh `specs/022-durable-workflow-core/spec.md`,
+      `specs/022-durable-workflow-core/design.md`,
       `specs/022-durable-workflow-core/plan.md`, and
       `specs/022-durable-workflow-core/contracts/durable-workflow-contract.md` to match landed
       implementation truth
