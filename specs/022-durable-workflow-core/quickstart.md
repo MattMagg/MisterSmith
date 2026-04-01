@@ -11,21 +11,21 @@ Run this refresh pass first:
 
 ```bash
 git status --short --branch
-sed -n '1,260p' docs/current-state.md
-sed -n '1,220p' docs/direction.md
-sed -n '1,260p' docs/packet-prep/022-durable-workflow-core.md
-sed -n '1,260p' docs/research-output/analysis/2026-03-28-durable-workflows-transfer-brief.md
+cat docs/current-state.md
+cat docs/direction.md
+cat docs/packet-prep/022-durable-workflow-core.md
+cat docs/research-output/analysis/2026-03-28-durable-workflows-transfer-brief.md
 ```
 
 Then re-read these touched seams:
 
 ```bash
-sed -n '1,260p' crates/mister-smith-agents/src/branch_checkpoint.rs
-sed -n '1,260p' crates/mister-smith-persistence/src/kv/state.rs
-sed -n '1,260p' crates/mister-smith-persistence/src/hybrid/manager.rs
-sed -n '1,260p' crates/mister-smith-persistence/src/repository/task.rs
-sed -n '1,260p' crates/mister-smith-app/src/conversation.rs
-sed -n '1,260p' docs/plans/2026-03-19-session-restart-resume-live-proof.md
+cat crates/mister-smith-agents/src/branch_checkpoint.rs
+cat crates/mister-smith-persistence/src/kv/state.rs
+cat crates/mister-smith-persistence/src/hybrid/manager.rs
+cat crates/mister-smith-persistence/src/repository/task.rs
+cat crates/mister-smith-app/src/conversation.rs
+cat docs/plans/2026-03-19-session-restart-resume-live-proof.md
 ```
 
 If those seams changed materially, refresh this packet before implementation.

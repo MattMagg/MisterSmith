@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-04-01
-**Feature**: `/Users/macmain/.local/share/symphony-workspaces/022-durable-workflow-core/specs/022-durable-workflow-core/spec.md`
+**Feature**: `specs/022-durable-workflow-core/spec.md`
 
 ## Content Quality
 

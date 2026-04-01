@@ -131,7 +131,7 @@ autonomy views
 
 - [ ] T019 [P] [US3] Add lifecycle projection coverage in
       `crates/mister-smith-app/tests/lifecycle_control_tests.rs`
-- [ ] T020 [P] [US3] Extend task and session handler coverage in
+- [ ] T020 [P] [US3] Add task and session lifecycle handler tests in
       `crates/mister-smith-http/src/handlers.rs`
 
 ### Implementation for User Story 3
