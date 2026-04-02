@@ -1,6 +1,6 @@
 # Specification Quality Checklist: Step-Level Intelligence v2
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Purpose**: Validate specification completeness and quality before proceeding to implementation
 **Created**: 2026-04-01
 **Feature**: `/Users/macmain/.local/share/symphony-workspaces/025-step-level-intelligence-v2/specs/025-step-level-intelligence-v2/spec.md`
 
@@ -31,6 +31,7 @@
 
 ## Notes
 
-- First-pass scaffold validation passed for the packet-025 spec.
-- This remains a scaffolding packet that must be revised before implementation after earlier packet
-  work settles.
+- Implementation-ready packet-025 revision passed after replacing stale scaffold wording and
+  removed prep-doc anchors.
+- The packet now reflects landed packet `022`, packet `023`, and packet `024` truth and is ready
+  for `speckit.implement`.

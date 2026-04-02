@@ -2317,8 +2317,7 @@ fn build_runtime_truth_view(
     step_routing_history: &[StepRoutingDecisionSummary],
     guard_decisions: &[GuardDecision],
 ) -> RuntimeTruthView {
-    let branch_id = supervision_evidence
-        .and_then(|evidence| evidence.target_scope.branch_id);
+    let branch_id = supervision_evidence.and_then(|evidence| evidence.target_scope.branch_id);
     let node_id = supervision_evidence.and_then(|evidence| evidence.target_scope.node_id);
     let mut relationships = vec![
         RunTraceRelationshipKind::Graph,
@@ -2348,7 +2347,7 @@ fn build_runtime_truth_view(
     }
     if step_routing_history
         .iter()
-        .any(|entry| matches!(step_routing_action_label(entry.carryover_signal.action), "retry" | "fallback"))
+        .any(|entry| entry.action == "retry" || entry.action == "fallback")
     {
         relationships.push(RunTraceRelationshipKind::Retry);
     }

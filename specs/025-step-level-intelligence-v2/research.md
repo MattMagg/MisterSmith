@@ -2,113 +2,119 @@
 
 ## Current repo truth
 
-- packet `020` already landed verifier-gated step decisions, clarification, and repair lineage on
-  the runtime-backed task path
-- packet `021` already landed supervision evidence on task, autonomy, and operator-visible
-  surfaces, but the newer packet-021 proof remains deterministic-only unless fresher live proof is
-  produced
-- packet `023` is the scoped owner of run-trace taxonomy and proof-boundary language in the
-  packet-prep layer
-- the March 28 session context report still shows the core truth gap: `workflow.execute_step`
-  proves orchestration-substrate completion, not grounded task proof
+- packet `020` already landed verifier-gated step decisions, clarification handling, and repair
+  lineage on the runtime-backed task path
+- packet `021` already landed bounded supervision evidence on task, autonomy, and operator-facing
+  surfaces
+- packet `022` already landed durable workflow lifecycle, history, compaction, and effect-boundary
+  ownership on current `main`
+- packet `023` already landed the shared `runtime_truth` contract, run-trace summary, and
+  proof-boundary wording across task, session, autonomy, and operator surfaces
+- packet `024` already landed least-privilege external capability enforcement, quarantine reasons,
+  and auth-callout fallback clamping on current `main`
+- current packet-025 seams already expose the raw inputs needed for a first deterministic slice:
+  `StepEvaluationRecord`, `StepRoutingDecisionSummary`, `ContextPressureSummary`,
+  `TeamSizingDecision`, `RuntimeTruthView`, `SupervisionEvidenceView`, and the existing result
+  projections
 
-## Decision 1: Use the OpenAI Responses event taxonomy as the canonical event input
+## Decision 1: First slice uses landed internal step signals, not a new stream parser
 
-**Decision**: Packet `025` should treat the OpenAI Responses event taxonomy as the canonical event
-input for streamed step-policy terms.
-
-**Rationale**:
-
-- the current official streaming guide says the Responses API uses semantic typed events for
-  streaming
-- the function-calling streaming guide names concrete tool-call events such as
-  `response.output_item.added`, `response.function_call_arguments.delta`, and
-  `response.function_call_arguments.done`
-- packet `025` needs one event-language baseline for step-policy naming, and the packet-prep
-  dossier already points to Responses docs as that baseline
-
-**Alternatives considered**:
-
-- older Chat Completions streaming docs: rejected because packet `025` should not backslide to an
-  older event model
-- repo-only ad hoc event names: rejected because the packet explicitly wants official Responses
-  terminology as the input baseline
-
-## Decision 2: Re-confirm the exact official streaming-events reference page before freeze
-
-**Decision**: The final implementation freeze should re-confirm the exact current official
-  streaming-events reference page before packet `025` treats individual event names as frozen.
+**Decision**: Packet `025` should consume the landed internal step, routing, budget, supervision,
+and runtime-truth seams instead of introducing a new raw streaming-event parser in the first
+implementation slice.
 
 **Rationale**:
 
-- the packet-prep dossier names a standalone streaming-events reference path
-- the current OpenAI docs still clearly document the Responses semantic event model, but the exact
-  standalone reference URL may have moved
-- packet `025` should preserve the Responses event taxonomy as canonical without pretending the
-  current reference path is already stable forever
+- the current runtime already records `StepEvaluationRecord`
+- step-routing history is already projected through workflow-visible state
+- packet `023` already owns the runtime-truth and proof-boundary story
+- a new raw event parser would widen scope before the packet has frozen a useful deterministic
+  policy surface
 
 **Alternatives considered**:
 
-- freezing the older packet-prep URL without re-checking: rejected because the docs path may move
-- ignoring official docs entirely and relying only on the packet-prep note: rejected because the
-  final packet must be grounded in current primary-source docs
+- using OpenAI Responses event taxonomy as the first implementation input: rejected because the
+  landed internal seams are already the current repo authority for step-level decisions
+- inventing repo-local ad hoc step signals outside the landed seams: rejected because it would
+  compete with the current runtime truth
 
-## Decision 3: Keep the first slice heuristic and deterministic
+## Decision 2: Keep the first slice heuristic and deterministic
 
-**Decision**: The first real packet-025 implementation slice should use deterministic heuristics
-and bounded policy rules rather than a judge-heavy or training-heavy control loop.
+**Decision**: The first packet-025 implementation slice should use deterministic heuristics and
+bounded policy rules rather than PRM, judge-heavy, or training-heavy control loops.
 
 **Rationale**:
 
-- the packet-prep dossier explicitly says the first slice should stay heuristic and deterministic
-- the repo already has useful step-evaluation, routing, repair, and supervision seams to build on
-- deterministic policy is easier to audit and keeps the proof boundary honest while the underlying
-  step boundary is still placeholder-only
+- the current repo already has useful verifier, routing, budget, and supervision seams to build on
+- deterministic policy is easier to audit and keeps the proof boundary honest
+- the external research corpus remains useful directionally, but it is not required for the first
+  bounded implementation
 
 **Alternatives considered**:
 
-- PRM or judge-heavy scoring from day one: rejected because it would widen the scope into training
-  or heavier runtime claims before the packet owns a stable deterministic policy surface
+- PRM-backed scoring from day one: rejected because it widens scope into training or model-program
+  work
 - benchmark-first work: rejected because packet `025` is a policy packet, not a benchmark packet
 
-## Decision 4: Packet `025` consumes packet `023` proof ownership instead of competing with it
+## Decision 3: Packet `023` remains the owner of proof wording
 
-**Decision**: Packet `025` should use packet-023-owned proof or grounding references and never
-create a competing proof-boundary schema.
+**Decision**: Packet `025` should consume packet-023 runtime-truth and proof-boundary fields and
+never create a competing proof schema.
 
 **Rationale**:
 
-- packet `023` is the packet-prep owner of run-trace taxonomy and proof-boundary language
+- packet `023` already froze the placeholder-versus-grounded wording
 - packet `025` is about step scoring and action policy, not about redefining run truth
-- keeping ownership boundaries clean prevents the same proof claim from drifting across packets
+- keeping ownership boundaries clean prevents proof claims from drifting across packets
 
 **Alternatives considered**:
 
-- embedding a packet-025-specific proof schema in step policy: rejected because it would silently
-  duplicate packet-023 scope
-- treating step-policy summaries as self-sufficient proof: rejected because the March 28 session
-  report shows why placeholder completion must stay explicit
+- embedding packet-025-specific proof wording in step policy: rejected because it silently
+  duplicates packet-023 scope
+- treating step-policy summaries as self-sufficient proof: rejected because the repo already
+  records why placeholder completion must stay explicit
 
-## Decision 5: Existing inspect surfaces stay canonical
+## Decision 4: Packet `022` and packet `024` stay upstream ownership layers
 
-**Decision**: Packet `025` should project step-policy summaries through existing task inspect and
-autonomy surfaces, with only a bounded operator-facing summary layered on top if needed.
+**Decision**: Packet `025` may read packet-022 durable lifecycle state and packet-024 boundary
+decisions when they affect step-policy presentation, but it must not absorb those ownership
+domains.
 
 **Rationale**:
 
-- those are already the current runtime truth surfaces
-- the packet goal is better step policy, not a new observability product
-- keeping the first slice on current surfaces reduces scope and preserves current-state honesty
+- packet `022` already owns lifecycle, history, compaction, and effect-boundary semantics
+- packet `024` already owns capability boundary, quarantine, sandbox, and auth-callout posture
+- packet `025` only needs those upstream layers as policy inputs or scope boundaries
 
 **Alternatives considered**:
 
-- a new endpoint or a new trace dashboard: rejected because it widens scope and collides with
-  packet `023`
+- widening packet `025` into durable lifecycle semantics: rejected because packet `022` already
+  owns that contract
+- widening packet `025` into security-boundary policy: rejected because packet `024` already owns
+  that contract
+
+## Decision 5: Existing result surfaces stay canonical
+
+**Decision**: Packet `025` should project step-policy summaries through the existing task,
+session, autonomy, and operator-facing result surfaces rather than a new endpoint.
+
+**Rationale**:
+
+- those are already the current runtime truth surfaces on `main`
+- the packet goal is stronger step policy, not a new observability product
+- using current surfaces reduces scope and keeps router docs honest
+
+**Alternatives considered**:
+
+- a new packet-owned endpoint: rejected because it widens scope and competes with current
+  result-surface authority
+- task-only projection: rejected because packet `023` and packet `021` already established a
+  multi-surface projection pattern
 
 ## Bounded conclusion
 
-The legitimate packet-025 scaffold is a deterministic step-policy packet layered on current packet
-`020` and packet `021` seams. It should freeze one bounded score and action contract, carry
-budget-aware hints, and project honest placeholder-vs-grounded wording through current inspect
-surfaces without widening into trace ownership, grounded execution, training, benchmarks,
-coordinator runtime, or interoperability.
+The legitimate packet-025 implementation packet is a deterministic step-policy packet layered on
+landed packet `020` through packet `024` seams. It should freeze one bounded difficulty
+assessment, one bounded action ladder, and one coherent projection through current result surfaces
+without widening into proof ownership, durable-workflow ownership, security ownership, grounded
+execution, PRM training, benchmarks, coordinator runtime, or interoperability.

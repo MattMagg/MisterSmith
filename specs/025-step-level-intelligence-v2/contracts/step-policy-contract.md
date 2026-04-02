@@ -5,25 +5,39 @@
 ## Design Goal
 
 Freeze one shared step-policy contract that scores the current step, chooses one bounded action,
-and projects that summary through existing inspect surfaces without competing with packet `023`
-truth ownership or packet `020` repair ownership.
+and projects that summary through current result surfaces without competing with packet `020`,
+packet `022`, packet `023`, or packet `024` ownership.
 
-This packet does **not** create a new proof-boundary schema. Packet `023` remains the owner of
-run-trace taxonomy and proof-boundary language.
+This packet does **not** create a new durable-workflow, runtime-truth, or security schema.
+
+## Canonical Inputs
+
+The first packet-025 slice consumes the landed internal runtime seams:
+
+- `StepEvaluationRecord`
+- latest available `StepRoutingDecisionSummary`
+- `ContextPressureSummary` when available
+- `TeamSizingDecision` when available
+- `SupervisionEvidenceView` when available
+- `RuntimeTruthView`
+- durable lifecycle state when available
+
+The first slice does **not** require a new raw streaming-event parser.
 
 ## Canonical Mapping
 
 The contract for this packet is:
 
 - `StepDifficultyAssessment` scores the current step using deterministic current-state inputs
-- `StepBudgetPressureSummary` carries bounded budget hints that can influence action choice
+- `StepBudgetPressureSummary` carries bounded pressure hints that can influence action choice
 - `StepPolicyDecision` chooses one bounded action from `keep`, `retry`, `clarify`, `downgrade`,
   and `escalate`
-- `StepPolicySummaryView` projects those packet-owned summaries onto existing inspect surfaces
-- `proof_boundary_ref` and any grounding status remain packet-023-owned references that packet
-  `025` consumes but does not redefine
+- `StepPolicySummaryView` projects those packet-owned summaries onto current result surfaces
+- packet-020 repair lineage, packet-022 lifecycle state, packet-023 runtime truth, and packet-024
+  boundary policy remain upstream inputs or scope boundaries, not packet-025-owned outputs
 
-No packet-025 surface may become a competing run-trace or proof-boundary contract.
+No packet-025 surface may become a competing proof-boundary, lifecycle, or boundary-security
+contract.
 
 ## Canonical Evidence Shape
 
@@ -31,32 +45,29 @@ Example authoritative payload shape:
 
 ```json
 {
-  "step_id": "result_track",
+  "step_id": "planner.step.2",
   "difficulty_assessment": {
     "difficulty_bucket": "high",
     "confidence_label": "deterministic",
     "reason_codes": [
       "weak_current_evidence",
-      "unstable_recent_step_history"
+      "budget_softcap_active"
     ],
-    "grounding_status_ref": {
+    "runtime_truth_ref": {
       "owner_packet": "023",
-      "grounding_status": "placeholder_completion"
+      "evidence_class": "placeholder_or_simulated_step_completion"
     }
   },
   "budget_pressure": {
-    "budget_root": "runtime.task_path",
+    "pressure_source": "team_sizing",
     "pressure_level": "softcap",
-    "policy_hint": "prefer_downgrade_before_escalate"
+    "policy_hint": "prefer_downgrade_before_escalate",
+    "display_note": "budget pressure capped the active team"
   },
   "policy_decision": {
     "chosen_action": "downgrade",
     "action_reason": "high_difficulty_plus_softcap_budget_pressure",
     "repair_lineage_ref": "packet-020:last-stable-checkpoint"
-  },
-  "proof_boundary_ref": {
-    "owner_packet": "023",
-    "proof_boundary": "supported task path only"
   },
   "display_note": "placeholder orchestration proof only"
 }
@@ -65,69 +76,54 @@ Example authoritative payload shape:
 Behavior:
 
 - the only bounded action values are `keep`, `retry`, `clarify`, `downgrade`, and `escalate`
-- budget hints may influence action choice but do not create a second proof schema
-- `grounding_status_ref` and `proof_boundary_ref` are packet-023-owned references
-- packet `020` repair lineage may be linked when the chosen action overlaps with the current repair
-  seam, but packet `025` does not replace that lineage
+- budget hints may influence action choice but do not create a second proof or lifecycle schema
+- packet-023 proof wording remains canonical
+- packet-020 repair lineage may be linked when the chosen action overlaps with the current repair
+  seam
+- durable lifecycle state may narrow or suppress forward-action wording when the workflow is
+  paused, cancelled, or terminated
 
-## Event Taxonomy Guidance
+## Result Surface Contract
 
-Packet `025` treats the OpenAI Responses event taxonomy as the canonical input baseline for
-streamed step-policy terminology.
+Current result surfaces remain authoritative:
 
-Expected posture:
-
-- use the current Responses semantic event model as the source for streamed event naming guidance
-- re-confirm the exact official streaming reference page before final implementation freeze
-- do not let event-naming alignment turn packet `025` into the owner of packet-023 trace schema
-
-## Task Surface Contract
-
-`task.result` remains the task-facing authoritative inspection surface for the latest step-policy
-summary.
+- `TaskResultView`
+- `SessionRetainedResultView`
+- `AutonomyStatusView`
+- `OperatorResultPreview`
 
 Expected behavior:
 
-- task inspection exposes the latest bounded score, action, and budget summary
-- task inspection carries packet-023-owned proof references without redefining them
-- the task surface can state explicitly that a result is placeholder orchestration proof
-
-## Autonomy Surface Contract
-
-`AutonomyStatusView` remains the operator-facing status surface for packet-owned summaries.
-
-Expected behavior:
-
-- autonomy status can show the latest bounded step-policy summary
-- autonomy status remains a summary surface, not a competing trace owner
-- autonomy status points back to task inspection for the canonical full view when needed
-
-## Operator Summary Contract
-
-Any packet-owned operator-facing summary must remain a bounded projection of current inspect
-surfaces.
-
-Expected behavior:
-
+- each surface can expose the latest packet-owned step-policy summary
+- task and autonomy remain the full canonical surfaces
+- session and operator projections remain compact summaries of the same packet-owned data
 - no new endpoint is introduced
-- the operator summary shows score, action, budget hint, and explicit placeholder-vs-grounded
-  wording if UI work is in scope
-- the summary does not widen into a new dashboard or a new run-trace owner
+
+## Proof-Honesty Contract
+
+Packet `025` must preserve packet-023 proof wording exactly where placeholder completion is the
+best available evidence.
+
+Expected behavior:
+
+- a step-policy summary can say that the runtime completed a step boundary
+- a step-policy summary cannot say that placeholder completion proved grounded task execution
+- packet-025 display wording may summarize packet-023 proof posture, but it may not strengthen it
 
 ## Relationship To Existing Surfaces
 
 The following existing surfaces remain authoritative baseline inputs:
 
 - `crates/mister-smith-core/src/autonomy.rs`
+- `crates/mister-smith-events/src/autonomy.rs`
 - `crates/mister-smith-app/src/execution.rs`
 - `crates/mister-smith-app/src/autonomy.rs`
-- `crates/mister-smith-events/src/autonomy.rs`
 - `crates/mister-smith-app/tests/autonomy_status_tests.rs`
 - `scripts/tests/test_live_runtime_proof_smoke.py`
 
 This packet only extends them with:
 
-- one explicit deterministic step-scoring surface
+- one explicit deterministic step-difficulty surface
 - one bounded action-decision vocabulary
-- one bounded budget-aware summary
-- one coherent projection through current inspect surfaces
+- one bounded budget-pressure summary
+- one coherent projection through current result surfaces

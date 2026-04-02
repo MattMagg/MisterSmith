@@ -681,14 +681,12 @@ fn recovery_plan_history_event(
     checkpoint: &BranchCheckpoint,
     resume_metadata: &BranchResumeMetadata,
 ) -> Result<WorkflowHistoryEventRecord, AgentSystemError> {
-    let branch = graph
-        .branch(&resume_metadata.branch_id)
-        .ok_or_else(|| {
-            AgentSystemError::OrchestrationError(format!(
-                "branch {} not found while recording recovery history",
-                resume_metadata.branch_id
-            ))
-        })?;
+    let branch = graph.branch(&resume_metadata.branch_id).ok_or_else(|| {
+        AgentSystemError::OrchestrationError(format!(
+            "branch {} not found while recording recovery history",
+            resume_metadata.branch_id
+        ))
+    })?;
     let payload = BranchReplayStatePayload {
         branch_anchor_step_key: branch
             .node_ids
