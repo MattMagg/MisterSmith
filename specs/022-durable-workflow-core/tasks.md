@@ -19,8 +19,9 @@ independently testable. This file is executable now on current `main`.
 ## Status Reconciliation (2026-04-01)
 
 - packet `022` is the active durable workflow implementation packet on current `main`
-- no packet `022` implementation work has started yet
-- the top phase freezes the remaining first-slice choices before code branches widen
+- the first-slice durable history, lifecycle, effect-boundary, and compaction decisions are now
+  frozen in the packet docs
+- the top phase no longer blocks on open packet design choices
 - these tasks are ready for immediate `/speckit.implement`
 
 ---
@@ -32,16 +33,16 @@ widens
 
 **⚠️ CRITICAL**: No later implementation task may begin until this phase is complete
 
-- [ ] T001 Freeze the exact durable event shape in
+- [x] T001 Freeze the exact durable event shape in
       `specs/022-durable-workflow-core/contracts/durable-workflow-contract.md` and
       `specs/022-durable-workflow-core/data-model.md`
-- [ ] T002 [P] Freeze the first lifecycle verb table and any explicit deferred verbs in
+- [x] T002 [P] Freeze the first lifecycle verb table and any explicit deferred verbs in
       `specs/022-durable-workflow-core/spec.md` and
       `specs/022-durable-workflow-core/design.md`
-- [ ] T003 [P] Freeze the first intent/effect boundary placement and durable intent/outcome model
+- [x] T003 [P] Freeze the first intent/effect boundary placement and durable intent/outcome model
       in `specs/022-durable-workflow-core/design.md` and
       `specs/022-durable-workflow-core/contracts/durable-workflow-contract.md`
-- [ ] T004 Freeze the first compaction mechanism and replay-regression fixture posture in
+- [x] T004 Freeze the first compaction mechanism and replay-regression fixture posture in
       `specs/022-durable-workflow-core/research.md`,
       `specs/022-durable-workflow-core/quickstart.md`, and
       `specs/022-durable-workflow-core/tasks.md`
@@ -55,13 +56,13 @@ widens
 **Purpose**: Freeze the shared durable history, lifecycle, and persistence contract before story
 work begins
 
-- [ ] T005 [P] Add shared durable-history contract coverage in
+- [x] T005 [P] Add shared durable-history contract coverage in
       `crates/mister-smith-events/tests/autonomy_event_tests.rs`
-- [ ] T006 Add durable lifecycle enums and shared value mappings in
+- [x] T006 Add durable lifecycle enums and shared value mappings in
       `crates/mister-smith-core/src/enums.rs` and `crates/mister-smith-core/src/lib.rs`
-- [ ] T007 Add durable history and effect-boundary persistence records in
+- [x] T007 Add durable history and effect-boundary persistence records in
       `crates/mister-smith-persistence/src/repository/task.rs`
-- [ ] T008 Add durable history and compaction keys in
+- [x] T008 Add durable history and compaction keys in
       `crates/mister-smith-persistence/src/kv/state.rs`
 
 **Checkpoint**: The shared contract is frozen before story-specific runtime work begins
@@ -77,21 +78,21 @@ history and preserve current restart-resume lineage
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Add deterministic replay coverage in
+- [x] T009 [P] [US1] Add deterministic replay coverage in
       `crates/mister-smith-agents/tests/durable_workflow_replay_tests.rs`
-- [ ] T010 [P] [US1] Extend restart-resume projection coverage in
+- [x] T010 [P] [US1] Extend restart-resume projection coverage in
       `crates/mister-smith-app/tests/autonomy_status_tests.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Extend checkpoint-backed replay planning in
+- [x] T011 [P] [US1] Extend checkpoint-backed replay planning in
       `crates/mister-smith-agents/src/branch_checkpoint.rs`
-- [ ] T012 [US1] Integrate durable-history reconstruction into
+- [x] T012 [US1] Integrate durable-history reconstruction into
       `crates/mister-smith-agents/src/orchestrator.rs` and
       `crates/mister-smith-app/src/execution.rs`
-- [ ] T013 [US1] Preserve session continuity projections in
+- [x] T013 [US1] Preserve session continuity projections validated through
       `crates/mister-smith-app/src/conversation.rs` and
-      `crates/mister-smith-http/src/handlers.rs`
+      `crates/mister-smith-http/src/handlers.rs` without additional source changes
 
 **Checkpoint**: Durable history replay works without breaking current restart-resume behavior
 
@@ -106,18 +107,18 @@ operator-visible external outcome
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Add effect-boundary persistence coverage in
+- [x] T014 [P] [US2] Add effect-boundary persistence coverage in
       `crates/mister-smith-persistence/tests/effect_boundary_tests.rs`
-- [ ] T015 [P] [US2] Add replay-versus-effect projection coverage in
+- [x] T015 [P] [US2] Add replay-versus-effect projection coverage in
       `crates/mister-smith-app/tests/effect_boundary_projection_tests.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T016 [P] [US2] Add durable effect intent and completion helpers in
+- [x] T016 [P] [US2] Add durable effect intent and completion helpers in
       `crates/mister-smith-persistence/src/repository/task.rs`
-- [ ] T017 [P] [US2] Extend hybrid durability handling for effect-boundary recovery in
+- [x] T017 [P] [US2] Extend hybrid durability handling for effect-boundary recovery in
       `crates/mister-smith-persistence/src/hybrid/manager.rs`
-- [ ] T018 [US2] Integrate idempotent effect-boundary handling on the runtime path in
+- [x] T018 [US2] Integrate idempotent effect-boundary handling on the runtime path in
       `crates/mister-smith-app/src/execution.rs`
 
 **Checkpoint**: Replay-safe effect boundaries are explicit and do not overclaim exactly-once
@@ -134,19 +135,19 @@ autonomy views
 
 ### Tests for User Story 3
 
-- [ ] T019 [P] [US3] Add lifecycle projection coverage in
+- [x] T019 [P] [US3] Add lifecycle projection coverage in
       `crates/mister-smith-app/tests/lifecycle_control_tests.rs`
-- [ ] T020 [P] [US3] Add task and session lifecycle handler tests in
+- [x] T020 [P] [US3] Add task and session lifecycle handler tests in
       `crates/mister-smith-http/tests/lifecycle_handler_tests.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T021 [P] [US3] Freeze durable lifecycle mappings in
+- [x] T021 [P] [US3] Freeze durable lifecycle mappings in
       `crates/mister-smith-core/src/enums.rs` and `crates/mister-smith-core/src/lib.rs`
-- [ ] T022 [P] [US3] Apply lifecycle-command handling in
+- [x] T022 [P] [US3] Apply lifecycle-command handling in
       `crates/mister-smith-app/src/conversation.rs` and
       `crates/mister-smith-app/src/execution.rs`
-- [ ] T023 [US3] Surface consistent lifecycle meanings in
+- [x] T023 [US3] Surface consistent lifecycle meanings in
       `crates/mister-smith-http/src/handlers.rs` and
       `crates/mister-smith-events/src/autonomy.rs`
 
@@ -163,14 +164,14 @@ from the compacted lineage
 
 ### Tests for User Story 4
 
-- [ ] T024 [P] [US4] Add compaction and replay-regression coverage in
+- [x] T024 [P] [US4] Add compaction and replay-regression coverage in
       `crates/mister-smith-persistence/tests/history_compaction_tests.rs`
 
 ### Implementation for User Story 4
 
-- [ ] T025 [P] [US4] Add bounded compaction metadata and replay keys in
+- [x] T025 [P] [US4] Add bounded compaction metadata and replay keys in
       `crates/mister-smith-persistence/src/kv/state.rs`
-- [ ] T026 [US4] Integrate compaction lineage handling in
+- [x] T026 [US4] Integrate compaction lineage handling in
       `crates/mister-smith-agents/src/orchestrator.rs` and
       `crates/mister-smith-app/src/execution.rs`
 
@@ -180,20 +181,20 @@ from the compacted lineage
 
 ## Phase 7: Polish & Cross-Cutting Closure
 
-- [ ] T027 Refresh `specs/022-durable-workflow-core/spec.md`,
+- [x] T027 Refresh `specs/022-durable-workflow-core/spec.md`,
       `specs/022-durable-workflow-core/design.md`,
       `specs/022-durable-workflow-core/plan.md`, and
       `specs/022-durable-workflow-core/contracts/durable-workflow-contract.md` to match landed
       implementation truth
-- [ ] T028 Run `cargo test -p mister-smith-agents`
-- [ ] T029 Run `cargo test -p mister-smith-persistence`
-- [ ] T030 Run `cargo test -p mister-smith-app`
-- [ ] T031 Run `cargo test -p mister-smith-events`
-- [ ] T032 Run `cargo clippy -p mister-smith-agents -- -D warnings`
-- [ ] T033 Run `cargo clippy -p mister-smith-persistence -- -D warnings`
-- [ ] T034 Run `cargo clippy -p mister-smith-app -- -D warnings`
-- [ ] T035 Run `cargo clippy -p mister-smith-events -- -D warnings`
-- [ ] T036 Run `npx markdownlint-cli2 "specs/022-durable-workflow-core/**/*.md" --config .markdownlint.json`
+- [x] T028 Run `cargo test -p mister-smith-agents`
+- [x] T029 Run `cargo test -p mister-smith-persistence`
+- [x] T030 Run `cargo test -p mister-smith-app`
+- [x] T031 Run `cargo test -p mister-smith-events`
+- [x] T032 Run `cargo clippy -p mister-smith-agents -- -D warnings`
+- [x] T033 Run `cargo clippy -p mister-smith-persistence -- -D warnings`
+- [x] T034 Run `cargo clippy -p mister-smith-app -- -D warnings`
+- [x] T035 Run `cargo clippy -p mister-smith-events -- -D warnings`
+- [x] T036 Run `npx markdownlint-cli2 "specs/022-durable-workflow-core/**/*.md" --config .markdownlint.json`
 
 ## Dependencies & Execution Order
 

@@ -11,11 +11,11 @@ use serde_json::Value;
 use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
-    ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, GraphState, GuardDecision, HealthState,
-    InterventionRecord, MemorySnapshotId, OperatorResultPreview, ProfileSnapshot,
-    ProfileSnapshotId, ProofOutcomeClassification, ProvenanceChain, RevocationState, SessionId,
-    SupervisionEvidenceView, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
-    TopologyKind, TopologyRationale,
+    DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionGraphId, ExecutionNodeId,
+    GraphState, GuardDecision, HealthState, InterventionRecord, MemorySnapshotId,
+    OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProofOutcomeClassification,
+    ProvenanceChain, RevocationState, SessionId, SupervisionEvidenceView, TaskId,
+    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -23,6 +23,19 @@ use crate::types::{Event, EventType};
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+/// Derive the default durable lifecycle fallback from the current graph state.
+#[must_use]
+pub fn lifecycle_state_for_graph_state(graph_state: GraphState) -> DurableWorkflowLifecycleState {
+    match graph_state {
+        GraphState::Pending | GraphState::Running | GraphState::Checkpointed => {
+            DurableWorkflowLifecycleState::Active
+        }
+        GraphState::Completed => DurableWorkflowLifecycleState::Completed,
+        GraphState::Failed => DurableWorkflowLifecycleState::Failed,
+        GraphState::Aborted => DurableWorkflowLifecycleState::Cancelled,
+    }
 }
 
 /// Summary of an execution graph for operator-visible status surfaces.
@@ -354,6 +367,9 @@ pub struct AutonomyStatusView {
     /// Restart and resume provenance for the workflow when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_provenance: Option<ResumeProvenanceSummary>,
+    /// Durable workflow lifecycle projected for operator-facing status surfaces.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle_state: Option<DurableWorkflowLifecycleState>,
     /// Graph summary for the running workflow.
     pub graph: ExecutionGraphSummary,
     /// Selected topology summary.

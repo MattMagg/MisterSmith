@@ -139,6 +139,240 @@ pub enum GraphState {
     Aborted,
 }
 
+/// Stable durable-history event kinds recorded for workflow replay.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DurableWorkflowEventKind {
+    /// Accepted workflow lifecycle change.
+    LifecycleChanged,
+    /// Accepted branch state transition.
+    BranchStateChanged,
+    /// Accepted node state transition.
+    NodeStateChanged,
+    /// Durable effect intent was recorded.
+    EffectIntentRecorded,
+    /// Durable effect outcome was recorded.
+    EffectOutcomeRecorded,
+    /// Durable compaction lineage was recorded.
+    HistoryCompacted,
+}
+
+impl DurableWorkflowEventKind {
+    /// Return the stable contract label for this event kind.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LifecycleChanged => "lifecycle_changed",
+            Self::BranchStateChanged => "branch_state_changed",
+            Self::NodeStateChanged => "node_state_changed",
+            Self::EffectIntentRecorded => "effect_intent_recorded",
+            Self::EffectOutcomeRecorded => "effect_outcome_recorded",
+            Self::HistoryCompacted => "history_compacted",
+        }
+    }
+}
+
+/// Operator-visible lifecycle verbs supported by the durable workflow contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DurableWorkflowLifecycleVerb {
+    /// Pause an active workflow without changing its lineage.
+    Pause,
+    /// Resume a paused workflow from its accepted durable state.
+    Resume,
+    /// Start graceful cancellation for a workflow.
+    Cancel,
+    /// Force terminal termination for a workflow.
+    Terminate,
+}
+
+impl DurableWorkflowLifecycleVerb {
+    /// Return the stable contract label for this lifecycle verb.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pause => "pause",
+            Self::Resume => "resume",
+            Self::Cancel => "cancel",
+            Self::Terminate => "terminate",
+        }
+    }
+
+    /// Return the target durable lifecycle state implied by this verb.
+    #[must_use]
+    pub const fn target_state(self) -> DurableWorkflowLifecycleState {
+        match self {
+            Self::Pause => DurableWorkflowLifecycleState::Paused,
+            Self::Resume => DurableWorkflowLifecycleState::Active,
+            Self::Cancel => DurableWorkflowLifecycleState::Cancelled,
+            Self::Terminate => DurableWorkflowLifecycleState::Terminated,
+        }
+    }
+}
+
+/// Durable workflow lifecycle states projected from accepted history.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DurableWorkflowLifecycleState {
+    /// Workflow is actively progressing.
+    Active,
+    /// Workflow is paused and may be resumed.
+    Paused,
+    /// Workflow is moving toward cancellation.
+    Cancelling,
+    /// Workflow was cancelled gracefully.
+    Cancelled,
+    /// Workflow was terminated forcefully.
+    Terminated,
+    /// Workflow completed successfully.
+    Completed,
+    /// Workflow failed before successful completion.
+    Failed,
+}
+
+impl DurableWorkflowLifecycleState {
+    /// Return the stable contract label for this lifecycle state.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Paused => "paused",
+            Self::Cancelling => "cancelling",
+            Self::Cancelled => "cancelled",
+            Self::Terminated => "terminated",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+
+    /// Return the persisted task-status label that currently carries this lifecycle state.
+    #[must_use]
+    pub const fn task_status_label(self) -> &'static str {
+        match self {
+            Self::Active | Self::Cancelling => "running",
+            Self::Paused => "paused",
+            Self::Cancelled => "cancelled",
+            Self::Terminated | Self::Failed => "failed",
+            Self::Completed => "completed",
+        }
+    }
+
+    /// Return whether this lifecycle state is terminal for operator-facing workflow views.
+    #[must_use]
+    pub const fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Cancelled | Self::Terminated | Self::Completed | Self::Failed
+        )
+    }
+
+    /// Derive the closest lifecycle state from the persisted task status label.
+    #[must_use]
+    pub fn from_task_status(status: &str) -> Self {
+        match status.trim().to_ascii_lowercase().as_str() {
+            "paused" => Self::Paused,
+            "cancelled" => Self::Cancelled,
+            "completed" => Self::Completed,
+            "failed" => Self::Failed,
+            _ => Self::Active,
+        }
+    }
+
+    /// Derive the durable lifecycle state from the current graph state.
+    #[must_use]
+    pub const fn from_graph_state(graph_state: GraphState) -> Self {
+        match graph_state {
+            GraphState::Pending | GraphState::Running | GraphState::Checkpointed => Self::Active,
+            GraphState::Completed => Self::Completed,
+            GraphState::Failed | GraphState::Aborted => Self::Failed,
+        }
+    }
+}
+
+/// Accepted durable outcome of a lifecycle command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LifecycleDecisionOutcome {
+    /// The lifecycle change was applied.
+    Applied,
+    /// The requested lifecycle change was already true and became a stable no-op.
+    Noop,
+    /// The lifecycle change is intentionally deferred behind an existing durable boundary.
+    Deferred,
+}
+
+impl LifecycleDecisionOutcome {
+    /// Return the stable contract label for this lifecycle decision outcome.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Applied => "applied",
+            Self::Noop => "noop",
+            Self::Deferred => "deferred",
+        }
+    }
+}
+
+/// Durable intent state for an effect boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectBoundaryIntentState {
+    /// Effect intent is durably recorded and awaiting outcome.
+    Recorded,
+}
+
+impl EffectBoundaryIntentState {
+    /// Return the stable contract label for this intent state.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Recorded => "recorded",
+        }
+    }
+}
+
+/// Durable outcome state for an effect boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectBoundaryOutcomeState {
+    /// Completion is not yet known durably.
+    CompletionUnknown,
+    /// Effect completion was durably recorded.
+    Completed,
+    /// Effect failure was durably recorded.
+    Failed,
+}
+
+impl EffectBoundaryOutcomeState {
+    /// Return the stable contract label for this effect outcome state.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::CompletionUnknown => "completion_unknown",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// Bounded compaction mode used to keep replay cost under control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryCompactionMode {
+    /// Replay starts from a compacted pointer while preserved lineage stays inspectable.
+    ReplayPointer,
+}
+
+impl HistoryCompactionMode {
+    /// Return the stable contract label for this compaction mode.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReplayPointer => "replay_pointer",
+        }
+    }
+}
+
 /// Lifecycle state for an execution node.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum NodeState {
@@ -479,5 +713,106 @@ mod tests {
             assert_eq!(action, deserialized);
             assert_eq!(json.trim_matches('"'), action.as_str());
         }
+    }
+
+    #[test]
+    fn durable_workflow_contract_labels_are_stable() {
+        assert_eq!(
+            [
+                DurableWorkflowEventKind::LifecycleChanged.as_str(),
+                DurableWorkflowEventKind::BranchStateChanged.as_str(),
+                DurableWorkflowEventKind::NodeStateChanged.as_str(),
+                DurableWorkflowEventKind::EffectIntentRecorded.as_str(),
+                DurableWorkflowEventKind::EffectOutcomeRecorded.as_str(),
+                DurableWorkflowEventKind::HistoryCompacted.as_str(),
+            ],
+            [
+                "lifecycle_changed",
+                "branch_state_changed",
+                "node_state_changed",
+                "effect_intent_recorded",
+                "effect_outcome_recorded",
+                "history_compacted",
+            ]
+        );
+        assert_eq!(
+            [
+                DurableWorkflowLifecycleVerb::Pause.as_str(),
+                DurableWorkflowLifecycleVerb::Resume.as_str(),
+                DurableWorkflowLifecycleVerb::Cancel.as_str(),
+                DurableWorkflowLifecycleVerb::Terminate.as_str(),
+            ],
+            ["pause", "resume", "cancel", "terminate"]
+        );
+        assert_eq!(
+            [
+                DurableWorkflowLifecycleState::Active.as_str(),
+                DurableWorkflowLifecycleState::Paused.as_str(),
+                DurableWorkflowLifecycleState::Cancelling.as_str(),
+                DurableWorkflowLifecycleState::Cancelled.as_str(),
+                DurableWorkflowLifecycleState::Terminated.as_str(),
+                DurableWorkflowLifecycleState::Completed.as_str(),
+                DurableWorkflowLifecycleState::Failed.as_str(),
+            ],
+            [
+                "active",
+                "paused",
+                "cancelling",
+                "cancelled",
+                "terminated",
+                "completed",
+                "failed",
+            ]
+        );
+        assert_eq!(
+            [
+                LifecycleDecisionOutcome::Applied.as_str(),
+                LifecycleDecisionOutcome::Noop.as_str(),
+                LifecycleDecisionOutcome::Deferred.as_str(),
+            ],
+            ["applied", "noop", "deferred"]
+        );
+        assert_eq!(EffectBoundaryIntentState::Recorded.as_str(), "recorded");
+        assert_eq!(
+            [
+                EffectBoundaryOutcomeState::CompletionUnknown.as_str(),
+                EffectBoundaryOutcomeState::Completed.as_str(),
+                EffectBoundaryOutcomeState::Failed.as_str(),
+            ],
+            ["completion_unknown", "completed", "failed"]
+        );
+        assert_eq!(
+            HistoryCompactionMode::ReplayPointer.as_str(),
+            "replay_pointer"
+        );
+
+        assert_eq!(
+            serde_json::to_value(DurableWorkflowEventKind::EffectOutcomeRecorded).unwrap(),
+            serde_json::Value::String("effect_outcome_recorded".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(DurableWorkflowLifecycleVerb::Terminate).unwrap(),
+            serde_json::Value::String("terminate".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(DurableWorkflowLifecycleState::Cancelled).unwrap(),
+            serde_json::Value::String("cancelled".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(LifecycleDecisionOutcome::Deferred).unwrap(),
+            serde_json::Value::String("deferred".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(EffectBoundaryIntentState::Recorded).unwrap(),
+            serde_json::Value::String("recorded".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(EffectBoundaryOutcomeState::CompletionUnknown).unwrap(),
+            serde_json::Value::String("completion_unknown".to_string())
+        );
+        assert_eq!(
+            serde_json::to_value(HistoryCompactionMode::ReplayPointer).unwrap(),
+            serde_json::Value::String("replay_pointer".to_string())
+        );
     }
 }

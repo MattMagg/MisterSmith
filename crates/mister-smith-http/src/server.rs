@@ -9,8 +9,10 @@ use axum::middleware as axum_mw;
 use axum::Router;
 use chrono::{DateTime, Utc};
 use mister_smith_core::{
-    AgentAvailability, AgentId, AgentType, ExternalDelegationEnvelope, OperatorResultPreview,
-    ProofOutcomeClassification, SessionId, SessionRetainedResultView, SessionStatus, TaskId,
+    AgentAvailability, AgentId, AgentType, DurableWorkflowLifecycleState,
+    DurableWorkflowLifecycleVerb, ExternalDelegationEnvelope, LifecycleDecisionOutcome,
+    OperatorResultPreview, ProofOutcomeClassification, SessionId, SessionRetainedResultView,
+    SessionStatus, TaskId,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -68,6 +70,8 @@ pub struct TaskStatusView {
     pub task_id: TaskId,
     /// Current persisted status.
     pub status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
     /// Final result payload when the task is terminal.
     pub result: Option<serde_json::Value>,
 }
@@ -90,6 +94,8 @@ pub struct TaskSummaryView {
     pub task_id: TaskId,
     /// Persisted workflow status.
     pub status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
     /// Persisted numeric priority.
     pub priority: i32,
     /// Operator-visible workflow description.
@@ -122,8 +128,31 @@ pub trait TaskExecutionService: Send + Sync {
     /// Look up the latest task state by its stable identifier.
     async fn get_task(&self, task_id: TaskId) -> Result<Option<TaskStatusView>, String>;
 
+    /// Apply one durable lifecycle verb to a root workflow.
+    async fn apply_task_lifecycle(
+        &self,
+        task_id: TaskId,
+        verb: DurableWorkflowLifecycleVerb,
+        reason: Option<String>,
+    ) -> Result<Option<TaskLifecycleView>, String>;
+
     /// List root workflow runs for operator collection views.
     async fn list_tasks(&self, request: TaskListRequest) -> Result<Vec<TaskSummaryView>, String>;
+}
+
+/// Durable lifecycle command result returned by the runtime task service.
+#[derive(Debug, Clone)]
+pub struct TaskLifecycleView {
+    /// Stable task identifier.
+    pub task_id: TaskId,
+    /// Current persisted status after applying the command.
+    pub status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
+    /// Durable accepted outcome of the lifecycle command.
+    pub outcome: LifecycleDecisionOutcome,
+    /// Optional operator-facing note for no-op or deferred handling.
+    pub note: Option<String>,
 }
 
 /// Session context attached to a workflow submission.
@@ -187,6 +216,8 @@ pub struct ConversationTurnSummaryView {
     pub workflow_id: TaskId,
     /// Current turn status mirrored from the root workflow.
     pub status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
     /// Original operator message for the turn.
     pub user_message: String,
     /// Retained session-facing result projection for the turn, when available.

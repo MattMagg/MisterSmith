@@ -33,7 +33,9 @@ pub use autonomy::{
 pub use enums::{
     AgentAvailability, AgentState, AgentType, BranchRecoveryStrategy, BranchState, BudgetPolicy,
     BudgetScope, CheckpointPolicy, CoordinationPolicy, DelegationScope, DependencyType,
-    FailureClass, GraphState, HealthState, InterventionType, MessagePriority, NodeState,
+    DurableWorkflowEventKind, DurableWorkflowLifecycleState, DurableWorkflowLifecycleVerb,
+    EffectBoundaryIntentState, EffectBoundaryOutcomeState, FailureClass, GraphState, HealthState,
+    HistoryCompactionMode, InterventionType, LifecycleDecisionOutcome, MessagePriority, NodeState,
     ProcessLifecycle, ProfileTarget, RepairDirectiveAction, RevocationState, SemanticSignalKind,
     SessionStatus, ShutdownReason, TopologyKind, VerifierVerdict,
 };

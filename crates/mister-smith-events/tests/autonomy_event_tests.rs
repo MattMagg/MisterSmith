@@ -1,10 +1,12 @@
 use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
     CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
-    ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, FailureClass, GraphState, GuardDecision,
-    GuardDecisionId, GuardEvidence, HealthState, InterventionRecord, InterventionRecordId,
-    InterventionType, OperatorResultPreview, OrchestrationQualityView, ProfileFingerprintId,
-    ProfileFingerprintRef, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
+    DurableWorkflowEventKind, DurableWorkflowLifecycleState, DurableWorkflowLifecycleVerb,
+    EffectBoundaryIntentState, EffectBoundaryOutcomeState, ExecutionBranchId, ExecutionGraphId,
+    ExecutionNodeId, FailureClass, GraphState, GuardDecision, GuardDecisionId, GuardEvidence,
+    HealthState, HistoryCompactionMode, InterventionRecord, InterventionRecordId, InterventionType,
+    LifecycleDecisionOutcome, OperatorResultPreview, OrchestrationQualityView,
+    ProfileFingerprintId, ProfileFingerprintRef, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
     ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirectiveAction,
     RepairLineageRef, ResultProvenanceSummary, RevocationState, SupervisionDecisionBasis,
     SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, TaskId,
@@ -438,6 +440,42 @@ fn proof_outcome_classification_freezes_the_three_packet_labels() {
 }
 
 #[test]
+fn durable_workflow_contract_labels_remain_stable_for_autonomy_projections() {
+    assert_eq!(
+        serde_json::to_value(DurableWorkflowEventKind::LifecycleChanged).unwrap(),
+        serde_json::Value::String("lifecycle_changed".to_string())
+    );
+    assert_eq!(
+        serde_json::to_value(DurableWorkflowEventKind::EffectIntentRecorded).unwrap(),
+        serde_json::Value::String("effect_intent_recorded".to_string())
+    );
+    assert_eq!(
+        serde_json::to_value(DurableWorkflowLifecycleVerb::Resume).unwrap(),
+        serde_json::Value::String("resume".to_string())
+    );
+    assert_eq!(
+        serde_json::to_value(DurableWorkflowLifecycleState::Cancelling).unwrap(),
+        serde_json::Value::String("cancelling".to_string())
+    );
+    assert_eq!(
+        serde_json::to_value(LifecycleDecisionOutcome::Noop).unwrap(),
+        serde_json::Value::String("noop".to_string())
+    );
+    assert_eq!(
+        serde_json::to_value(EffectBoundaryIntentState::Recorded).unwrap(),
+        serde_json::Value::String("recorded".to_string())
+    );
+    assert_eq!(
+        serde_json::to_value(EffectBoundaryOutcomeState::CompletionUnknown).unwrap(),
+        serde_json::Value::String("completion_unknown".to_string())
+    );
+    assert_eq!(
+        serde_json::to_value(HistoryCompactionMode::ReplayPointer).unwrap(),
+        serde_json::Value::String("replay_pointer".to_string())
+    );
+}
+
+#[test]
 fn autonomy_status_view_serializes_with_typed_summaries() {
     let workflow_id = TaskId::new();
     let graph_id = ExecutionGraphId::new();
@@ -463,6 +501,7 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             resumed_from_workflow_id: Some(TaskId::new()),
             resumed_from_turn_index: Some(1),
         }),
+        lifecycle_state: Some(DurableWorkflowLifecycleState::Active),
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -1055,6 +1094,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
+        lifecycle_state: Some(DurableWorkflowLifecycleState::Active),
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -1215,6 +1255,7 @@ async fn event_bus_preserves_supervision_evidence_from_status_updated() {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
+        lifecycle_state: Some(DurableWorkflowLifecycleState::Active),
         graph: sample_graph_summary(
             workflow_id,
             graph_id,
@@ -1877,6 +1918,7 @@ async fn event_bus_merges_explicit_preview_with_projection_provenance() {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
+        lifecycle_state: Some(DurableWorkflowLifecycleState::Completed),
         graph: sample_graph_summary(
             workflow_id,
             graph_id,
@@ -1963,6 +2005,7 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
+        lifecycle_state: Some(DurableWorkflowLifecycleState::Active),
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -2148,6 +2191,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
+        lifecycle_state: Some(DurableWorkflowLifecycleState::Active),
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,

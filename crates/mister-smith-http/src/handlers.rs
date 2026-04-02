@@ -6,7 +6,9 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use mister_smith_core::{
-    AgentAvailability, AgentId, AgentType, ExternalDelegationEnvelope, SessionId, TaskId,
+    AgentAvailability, AgentId, AgentType, DurableWorkflowLifecycleState,
+    DurableWorkflowLifecycleVerb, ExternalDelegationEnvelope, LifecycleDecisionOutcome, SessionId,
+    TaskId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -132,6 +134,8 @@ pub struct TaskSummaryResponse {
     pub task_id: TaskId,
     /// Persisted workflow status.
     pub status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
     /// Persisted numeric priority.
     pub priority: i32,
     /// Operator-visible workflow description.
@@ -189,9 +193,37 @@ pub struct TaskStatusResponse {
     pub task_id: TaskId,
     /// Current status.
     pub status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
     /// Task result, if complete.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<serde_json::Value>,
+}
+
+/// Task lifecycle command request.
+#[derive(Debug, Deserialize)]
+pub struct TaskLifecycleRequest {
+    /// Durable lifecycle verb to apply.
+    pub verb: DurableWorkflowLifecycleVerb,
+    /// Optional operator-visible reason.
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// Task lifecycle command response.
+#[derive(Debug, Serialize)]
+pub struct TaskLifecycleResponse {
+    /// Task identifier.
+    pub task_id: TaskId,
+    /// Current persisted task status after the command.
+    pub status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
+    /// Durable accepted outcome of the lifecycle command.
+    pub outcome: LifecycleDecisionOutcome,
+    /// Optional operator-facing note for no-op or deferred handling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// Session create request.
@@ -238,6 +270,8 @@ pub struct SessionTurnSummaryResponse {
     pub workflow_id: TaskId,
     /// Current turn status mirrored from the root workflow.
     pub status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
     /// Original operator message.
     pub user_message: String,
     /// Retained session-facing result projection for the turn, when available.
@@ -519,6 +553,7 @@ pub async fn list_tasks(
             .map(|row| TaskSummaryResponse {
                 task_id: row.task_id,
                 status: row.status,
+                lifecycle_state: row.lifecycle_state,
                 priority: row.priority,
                 description: row.description,
                 created_at: row.created_at,
@@ -663,6 +698,7 @@ pub async fn get_session(
                 turn_index: turn.turn_index,
                 workflow_id: turn.workflow_id,
                 status: turn.status,
+                lifecycle_state: turn.lifecycle_state,
                 user_message: turn.user_message,
                 assistant_result: turn.assistant_result,
                 resume_provenance: turn.resume_provenance.map(|provenance| {
@@ -763,7 +799,38 @@ pub async fn get_task(
     Ok(Json(TaskStatusResponse {
         task_id: status.task_id,
         status: status.status,
+        lifecycle_state: status.lifecycle_state,
         result: status.result,
+    }))
+}
+
+/// `POST /api/v1/tasks/{task_id}/lifecycle` — Apply one durable lifecycle verb.
+pub async fn apply_task_lifecycle(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    Json(request): Json<TaskLifecycleRequest>,
+) -> Result<Json<TaskLifecycleResponse>, HttpError> {
+    let uuid = Uuid::parse_str(&task_id)
+        .map_err(|_| HttpError::BadRequest(format!("Invalid task ID: {task_id}")))?;
+
+    let task_service = state
+        .task_service
+        .as_ref()
+        .ok_or_else(|| HttpError::InternalError("runtime task service unavailable".to_string()))?;
+
+    let task_id = TaskId::from_uuid(uuid);
+    let decision = task_service
+        .apply_task_lifecycle(task_id, request.verb, request.reason)
+        .await
+        .map_err(HttpError::InternalError)?
+        .ok_or_else(|| HttpError::NotFound(format!("Task {task_id} not found")))?;
+
+    Ok(Json(TaskLifecycleResponse {
+        task_id: decision.task_id,
+        status: decision.status,
+        lifecycle_state: decision.lifecycle_state,
+        outcome: decision.outcome,
+        note: decision.note,
     }))
 }
 
@@ -847,7 +914,8 @@ mod tests {
     };
     use mister_smith_core::{
         AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
-        DelegationScope, ExternalDelegationEnvelope, SessionRetainedResultView,
+        DelegationScope, DurableWorkflowLifecycleState, DurableWorkflowLifecycleVerb,
+        ExternalDelegationEnvelope, SessionRetainedResultView,
     };
 
     #[derive(Clone)]
@@ -1006,6 +1074,7 @@ mod tests {
                             .expect("fixed task id should parse"),
                     ),
                     status: "completed".to_string(),
+                    lifecycle_state: DurableWorkflowLifecycleState::Completed,
                     priority: 2,
                     description: "Operator task".to_string(),
                     created_at: chrono::Utc::now(),
@@ -1043,6 +1112,15 @@ mod tests {
         }
 
         async fn get_task(&self, _task_id: TaskId) -> Result<Option<TaskStatusView>, String> {
+            Ok(None)
+        }
+
+        async fn apply_task_lifecycle(
+            &self,
+            _task_id: TaskId,
+            _verb: DurableWorkflowLifecycleVerb,
+            _reason: Option<String>,
+        ) -> Result<Option<crate::server::TaskLifecycleView>, String> {
             Ok(None)
         }
 
@@ -1321,6 +1399,7 @@ mod tests {
                         turn_index: 1,
                         workflow_id: resumed_from_workflow_id,
                         status: "failed".to_string(),
+                        lifecycle_state: DurableWorkflowLifecycleState::Failed,
                         user_message: "turn one".to_string(),
                         assistant_result: Some(retained_result),
                         resume_provenance: Some(ConversationResumeProvenanceView {
@@ -1339,6 +1418,7 @@ mod tests {
                         turn_index: 2,
                         workflow_id: active_workflow_id,
                         status: "queued".to_string(),
+                        lifecycle_state: DurableWorkflowLifecycleState::Active,
                         user_message: "turn two".to_string(),
                         assistant_result: None,
                         resume_provenance: Some(ConversationResumeProvenanceView {

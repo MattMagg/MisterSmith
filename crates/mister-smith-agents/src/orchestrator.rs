@@ -5,15 +5,19 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use mister_smith_core::{
-    AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, ExecutionBranchId, ExecutionNodeId,
-    GraphState, GuardDecision, GuardTarget, HealthState, InterventionRecord, ProfileSnapshot,
-    RepairLineageRef, SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope,
-    TaskId, TeamSizingDecision,
+    AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, DurableWorkflowLifecycleState,
+    ExecutionBranchId, ExecutionNodeId, GraphState, GuardDecision, GuardTarget, HealthState,
+    InterventionRecord, NodeState, ProfileSnapshot, RepairLineageRef, SupervisionEvidenceView,
+    SupervisionTargetKind, SupervisionTargetScope, TaskId, TeamSizingDecision,
 };
+use mister_smith_persistence::WorkflowHistoryEventRecord;
+use serde_json::Value;
 use tracing::{instrument, warn};
+use uuid::Uuid;
 
 use crate::branch_checkpoint::{
-    BranchCheckpointCoordinator, BranchCheckpointStore, BranchRecoveryPlan,
+    checkpoint_from_replay_payload, BranchCheckpointCoordinator, BranchCheckpointStore,
+    BranchRecoveryPlan,
 };
 use crate::config::TaskState;
 use crate::errors::AgentSystemError;
@@ -28,7 +32,9 @@ use crate::roles::supervisor::{SupervisorMessage, SupervisorState};
 use crate::scheduler::{ResultAggregator, TaskAssignment, TaskDecomposer, TaskScheduler};
 use crate::team::{plan_adaptive_team, AdaptiveTeamPlan, AdaptiveTeamSizingInputs};
 use crate::topology::{TopologyCompiler, TopologySignals};
-use mister_smith_events::autonomy::infer_result_preview_from_projection;
+use mister_smith_events::autonomy::{
+    infer_result_preview_from_projection, lifecycle_state_for_graph_state,
+};
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, Event, EventBus, ExecutionGraphSummary,
@@ -278,6 +284,20 @@ impl Orchestrator {
             .map(|entry| entry.value().clone())
     }
 
+    /// Restore a replayed execution graph snapshot without emitting fresh autonomy events.
+    pub fn restore_execution_graph_snapshot(&self, graph: ExecutionGraph) {
+        self.execution_graphs.insert(graph.workflow_id, graph);
+    }
+
+    /// Rebuild a graph from accepted durable workflow history.
+    pub fn replay_execution_graph(
+        &self,
+        graph: ExecutionGraph,
+        history: &[WorkflowHistoryEventRecord],
+    ) -> Result<ExecutionGraph, AgentSystemError> {
+        self.replay_execution_graph_from_history(graph, history)
+    }
+
     /// Register a precompiled execution graph for later supervision or inspection.
     pub fn register_execution_graph(&self, graph: ExecutionGraph) {
         let workflow_id = graph.workflow_id;
@@ -359,6 +379,43 @@ impl Orchestrator {
         for event in initial_events {
             self.record_autonomy_event(&workflow_id, event);
         }
+    }
+
+    /// Rebuild graph and checkpoint state from accepted durable workflow history.
+    pub fn replay_execution_graph_from_history(
+        &self,
+        mut graph: ExecutionGraph,
+        history: &[WorkflowHistoryEventRecord],
+    ) -> Result<ExecutionGraph, AgentSystemError> {
+        let mut ordered_history = history.to_vec();
+        ordered_history.sort_by(|left, right| {
+            left.replay_position
+                .cmp(&right.replay_position)
+                .then_with(|| left.recorded_at.cmp(&right.recorded_at))
+                .then_with(|| left.event_id.cmp(&right.event_id))
+        });
+
+        for event in &ordered_history {
+            match event.event_kind {
+                mister_smith_core::DurableWorkflowEventKind::LifecycleChanged => {
+                    apply_lifecycle_history_event(&mut graph, event)?
+                }
+                mister_smith_core::DurableWorkflowEventKind::BranchStateChanged => {
+                    apply_branch_history_event(&mut graph, event)?
+                }
+                mister_smith_core::DurableWorkflowEventKind::NodeStateChanged => {
+                    apply_node_history_event(&mut graph, event)?
+                }
+                mister_smith_core::DurableWorkflowEventKind::EffectIntentRecorded
+                | mister_smith_core::DurableWorkflowEventKind::EffectOutcomeRecorded => {}
+                mister_smith_core::DurableWorkflowEventKind::HistoryCompacted => {
+                    apply_compaction_history_event(&mut graph, event)?
+                }
+            }
+        }
+
+        recompute_replayed_graph_state(&mut graph);
+        Ok(graph)
     }
 
     /// Record a branch checkpoint after graph registration and emit a typed autonomy event.
@@ -822,6 +879,7 @@ impl Orchestrator {
             turn_index: None,
             coordinator_agent_id: None,
             resume_provenance: None,
+            lifecycle_state: Some(lifecycle_state_for_graph_state(graph_summary.state)),
             result_preview,
             graph: graph_summary,
             topology: topology_summary,
@@ -1556,6 +1614,89 @@ fn task_id_for_node(node_id: ExecutionNodeId) -> TaskId {
     TaskId::from_uuid(*node_id.as_ref())
 }
 
+fn recompute_replayed_graph_state(graph: &mut ExecutionGraph) {
+    let checkpointed_branches = graph
+        .checkpoint_lineage
+        .iter()
+        .map(|checkpoint| checkpoint.branch_id)
+        .collect::<HashSet<_>>();
+
+    for branch in &mut graph.branches {
+        let branch_nodes = graph
+            .nodes
+            .iter()
+            .filter(|node| node.branch_id == branch.branch_id)
+            .collect::<Vec<_>>();
+        let has_checkpoint = checkpointed_branches.contains(&branch.branch_id);
+        let has_active_nodes = branch_nodes
+            .iter()
+            .any(|node| matches!(node.state, NodeState::Running | NodeState::Checkpointed));
+        let all_nodes_completed = !branch_nodes.is_empty()
+            && branch_nodes
+                .iter()
+                .all(|node| node.state == NodeState::Completed);
+        let any_node_failed = branch_nodes
+            .iter()
+            .any(|node| node.state == NodeState::Failed);
+
+        branch.state = if any_node_failed {
+            BranchState::Failed
+        } else if all_nodes_completed {
+            BranchState::Completed
+        } else if matches!(
+            branch.state,
+            BranchState::Running | BranchState::Checkpointed | BranchState::Reassigned
+        ) && (has_active_nodes || has_checkpoint)
+        {
+            branch.state
+        } else if has_active_nodes {
+            BranchState::Running
+        } else {
+            BranchState::Pending
+        };
+    }
+
+    let any_failed_branch = graph
+        .branches
+        .iter()
+        .any(|branch| branch.state == BranchState::Failed);
+    let any_active_branch = graph.branches.iter().any(|branch| {
+        matches!(
+            branch.state,
+            BranchState::Running | BranchState::Checkpointed | BranchState::Reassigned
+        )
+    });
+
+    graph.state = if graph
+        .nodes
+        .iter()
+        .any(|node| node.state == NodeState::Failed)
+        || any_failed_branch
+    {
+        GraphState::Failed
+    } else if !graph.nodes.is_empty()
+        && graph
+            .nodes
+            .iter()
+            .all(|node| node.state == NodeState::Completed)
+    {
+        GraphState::Completed
+    } else if matches!(graph.state, GraphState::Running | GraphState::Checkpointed)
+        && any_active_branch
+    {
+        graph.state
+    } else if graph
+        .nodes
+        .iter()
+        .any(|node| matches!(node.state, NodeState::Running | NodeState::Checkpointed))
+        || any_active_branch
+    {
+        GraphState::Running
+    } else {
+        GraphState::Pending
+    };
+}
+
 fn recovery_scope_node_ids(
     graph: &ExecutionGraph,
     branch_id: ExecutionBranchId,
@@ -1568,6 +1709,266 @@ fn recovery_scope_node_ids(
             .map(|branch| branch.node_ids.clone())
             .unwrap_or_default()
     }
+}
+
+fn apply_lifecycle_history_event(
+    graph: &mut ExecutionGraph,
+    event: &WorkflowHistoryEventRecord,
+) -> Result<(), AgentSystemError> {
+    if let Some(graph_state) =
+        deserialize_history_value::<GraphState>(&event.payload, "graph_state")?
+    {
+        graph.state = graph_state;
+    } else if let Some(lifecycle_state) = event.lifecycle_state.or(deserialize_history_value::<
+        DurableWorkflowLifecycleState,
+    >(
+        &event.payload,
+        "lifecycle_state",
+    )?) {
+        graph.state = match lifecycle_state {
+            DurableWorkflowLifecycleState::Active
+            | DurableWorkflowLifecycleState::Paused
+            | DurableWorkflowLifecycleState::Cancelling => GraphState::Running,
+            DurableWorkflowLifecycleState::Completed => GraphState::Completed,
+            DurableWorkflowLifecycleState::Cancelled
+            | DurableWorkflowLifecycleState::Terminated
+            | DurableWorkflowLifecycleState::Failed => GraphState::Failed,
+        };
+    }
+
+    Ok(())
+}
+
+fn apply_branch_history_event(
+    graph: &mut ExecutionGraph,
+    event: &WorkflowHistoryEventRecord,
+) -> Result<(), AgentSystemError> {
+    if let Some(checkpoint) = checkpoint_from_replay_payload(graph, &event.payload) {
+        if graph.branch(&checkpoint.branch_id).is_some() {
+            hydrate_checkpoint(graph, checkpoint);
+        }
+    }
+
+    let Some(branch_id) = resolve_branch_id(graph, event)? else {
+        return Ok(());
+    };
+    let Some(branch) = graph.branch_mut(&branch_id) else {
+        return Ok(());
+    };
+
+    if let Some(branch_state) =
+        deserialize_history_value::<BranchState>(&event.payload, "branch_state")?
+    {
+        branch.state = branch_state;
+    }
+    if let Some(recovery_strategy) =
+        deserialize_history_value::<BranchRecoveryStrategy>(&event.payload, "recovery_strategy")?
+    {
+        branch.recovery_strategy = recovery_strategy;
+    }
+    if let Some(assigned_agents) =
+        deserialize_history_value::<Vec<AgentId>>(&event.payload, "assigned_agent_ids")?
+    {
+        branch.assigned_agents = assigned_agents;
+    }
+
+    Ok(())
+}
+
+fn apply_node_history_event(
+    graph: &mut ExecutionGraph,
+    event: &WorkflowHistoryEventRecord,
+) -> Result<(), AgentSystemError> {
+    let Some(node_index) = resolve_node_index(graph, event)? else {
+        return Ok(());
+    };
+    let branch_id = graph.nodes[node_index].branch_id;
+
+    if let Some(node_state) = deserialize_history_value::<NodeState>(&event.payload, "node_state")?
+    {
+        graph.nodes[node_index].state = node_state;
+    }
+
+    if let Some(branch) = graph.branch_mut(&branch_id) {
+        if let Some(branch_state) =
+            deserialize_history_value::<BranchState>(&event.payload, "branch_state")?
+        {
+            branch.state = branch_state;
+        }
+    }
+
+    if let Some(graph_state) =
+        deserialize_history_value::<GraphState>(&event.payload, "graph_state")?
+    {
+        graph.state = graph_state;
+    }
+
+    Ok(())
+}
+
+fn apply_compaction_history_event(
+    graph: &mut ExecutionGraph,
+    event: &WorkflowHistoryEventRecord,
+) -> Result<(), AgentSystemError> {
+    if let Some(graph_state) =
+        deserialize_history_value::<GraphState>(&event.payload, "graph_state")?
+    {
+        graph.state = graph_state;
+    }
+
+    if let Some(branch_states) = event.payload.get("branch_states").and_then(Value::as_array) {
+        for branch_snapshot in branch_states {
+            let Some(branch_key) = branch_snapshot.get("branch_key").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(branch_id) = resolve_branch_key(graph, branch_key) else {
+                continue;
+            };
+            let Some(branch) = graph.branch_mut(&branch_id) else {
+                continue;
+            };
+            if let Some(branch_state) = branch_snapshot
+                .get("branch_state")
+                .cloned()
+                .and_then(|raw| serde_json::from_value::<BranchState>(raw).ok())
+            {
+                branch.state = branch_state;
+            }
+            if let Some(recovery_strategy) = branch_snapshot
+                .get("recovery_strategy")
+                .cloned()
+                .and_then(|raw| serde_json::from_value::<BranchRecoveryStrategy>(raw).ok())
+            {
+                branch.recovery_strategy = recovery_strategy;
+            }
+            if let Some(assigned_agents) = branch_snapshot
+                .get("assigned_agent_ids")
+                .cloned()
+                .and_then(|raw| serde_json::from_value::<Vec<AgentId>>(raw).ok())
+            {
+                branch.assigned_agents = assigned_agents;
+            }
+        }
+    }
+
+    if let Some(node_states) = event.payload.get("node_states").and_then(Value::as_array) {
+        for node_snapshot in node_states {
+            let Some(step_key) = node_snapshot.get("step_key").and_then(Value::as_str) else {
+                continue;
+            };
+            if let Some(node) = graph
+                .nodes
+                .iter_mut()
+                .find(|node| node.step_key == step_key)
+            {
+                if let Some(node_state) = node_snapshot
+                    .get("node_state")
+                    .cloned()
+                    .and_then(|raw| serde_json::from_value::<NodeState>(raw).ok())
+                {
+                    node.state = node_state;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn resolve_branch_key(graph: &ExecutionGraph, branch_key: &str) -> Option<ExecutionBranchId> {
+    Uuid::parse_str(branch_key)
+        .ok()
+        .map(ExecutionBranchId::from_uuid)
+        .filter(|branch_id| graph.branch(branch_id).is_some())
+        .or_else(|| {
+            graph
+                .nodes
+                .iter()
+                .find(|node| node.step_key == branch_key)
+                .map(|node| node.branch_id)
+        })
+}
+
+fn resolve_node_index(
+    graph: &ExecutionGraph,
+    event: &WorkflowHistoryEventRecord,
+) -> Result<Option<usize>, AgentSystemError> {
+    if let Some(node_id) = event.node_id {
+        if let Some(index) = graph.nodes.iter().position(|node| node.node_id == node_id) {
+            return Ok(Some(index));
+        }
+    }
+
+    if let Some(step_id) = event
+        .payload
+        .get("step_id")
+        .and_then(Value::as_str)
+        .or_else(|| event.payload.get("step_key").and_then(Value::as_str))
+    {
+        return Ok(graph.nodes.iter().position(|node| node.step_key == step_id));
+    }
+
+    Ok(None)
+}
+
+fn resolve_branch_id(
+    graph: &ExecutionGraph,
+    event: &WorkflowHistoryEventRecord,
+) -> Result<Option<ExecutionBranchId>, AgentSystemError> {
+    if let Some(branch_id) = event.branch_id {
+        if graph.branch(&branch_id).is_some() {
+            return Ok(Some(branch_id));
+        }
+    }
+
+    if let Some(step_id) = event
+        .payload
+        .get("step_id")
+        .and_then(Value::as_str)
+        .or_else(|| event.payload.get("step_key").and_then(Value::as_str))
+        .or_else(|| {
+            event
+                .payload
+                .get("branch_anchor_step_key")
+                .and_then(Value::as_str)
+        })
+    {
+        if let Some(node) = graph.nodes.iter().find(|node| node.step_key == step_id) {
+            return Ok(Some(node.branch_id));
+        }
+    }
+
+    Ok(None)
+}
+
+fn deserialize_history_value<T>(payload: &Value, key: &str) -> Result<Option<T>, AgentSystemError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    payload
+        .get(key)
+        .cloned()
+        .map(|value| {
+            serde_json::from_value(value).map_err(|error| {
+                AgentSystemError::OrchestrationError(format!(
+                    "workflow history payload field '{key}' failed to deserialize: {error}"
+                ))
+            })
+        })
+        .transpose()
+}
+
+fn hydrate_checkpoint(
+    graph: &mut ExecutionGraph,
+    checkpoint: crate::execution_graph::BranchCheckpoint,
+) {
+    graph
+        .checkpoint_lineage
+        .retain(|existing| existing.checkpoint_id != checkpoint.checkpoint_id);
+    graph.checkpoint_lineage.push(checkpoint);
+    graph
+        .checkpoint_lineage
+        .sort_by_key(|entry| entry.created_at);
 }
 
 fn ready_node_ids_for_branch(

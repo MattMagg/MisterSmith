@@ -341,6 +341,122 @@ impl HybridStateManager {
             .await
     }
 
+    /// Cache ordered durable workflow history for a workflow namespace.
+    pub async fn write_workflow_history(
+        &self,
+        workflow_id: Uuid,
+        history: &Value,
+    ) -> Result<u64, PersistenceError> {
+        self.kv
+            .save(
+                &crate::kv::state::workflow_history_state_key(
+                    mister_smith_core::TaskId::from_uuid(workflow_id),
+                ),
+                history,
+            )
+            .await
+    }
+
+    /// Load ordered cached durable workflow history for a workflow namespace.
+    pub async fn read_workflow_history(
+        &self,
+        workflow_id: Uuid,
+    ) -> Result<Option<Value>, PersistenceError> {
+        self.kv
+            .get(&crate::kv::state::workflow_history_state_key(
+                mister_smith_core::TaskId::from_uuid(workflow_id),
+            ))
+            .await
+    }
+
+    /// Cache ordered lifecycle-decision history for a workflow namespace.
+    pub async fn write_lifecycle_decisions(
+        &self,
+        workflow_id: Uuid,
+        lifecycle_decisions: &Value,
+    ) -> Result<u64, PersistenceError> {
+        self.kv
+            .save(
+                &crate::kv::state::lifecycle_decision_state_key(
+                    mister_smith_core::TaskId::from_uuid(workflow_id),
+                ),
+                lifecycle_decisions,
+            )
+            .await
+    }
+
+    /// Load ordered cached lifecycle-decision history for a workflow namespace.
+    pub async fn read_lifecycle_decisions(
+        &self,
+        workflow_id: Uuid,
+    ) -> Result<Option<Value>, PersistenceError> {
+        self.kv
+            .get(&crate::kv::state::lifecycle_decision_state_key(
+                mister_smith_core::TaskId::from_uuid(workflow_id),
+            ))
+            .await
+    }
+
+    /// Cache a durable effect-boundary record for a workflow namespace.
+    pub async fn write_effect_boundary(
+        &self,
+        workflow_id: Uuid,
+        effect_boundary_id: Uuid,
+        effect_boundary: &Value,
+    ) -> Result<u64, PersistenceError> {
+        self.kv
+            .save(
+                &crate::kv::state::workflow_effect_boundary_state_key(
+                    mister_smith_core::TaskId::from_uuid(workflow_id),
+                    effect_boundary_id,
+                ),
+                effect_boundary,
+            )
+            .await
+    }
+
+    /// Load a cached durable effect-boundary record for a workflow namespace.
+    pub async fn read_effect_boundary(
+        &self,
+        workflow_id: Uuid,
+        effect_boundary_id: Uuid,
+    ) -> Result<Option<Value>, PersistenceError> {
+        self.kv
+            .get(&crate::kv::state::workflow_effect_boundary_state_key(
+                mister_smith_core::TaskId::from_uuid(workflow_id),
+                effect_boundary_id,
+            ))
+            .await
+    }
+
+    /// Cache the latest history-compaction lineage for a workflow namespace.
+    pub async fn write_history_compaction(
+        &self,
+        workflow_id: Uuid,
+        compaction: &Value,
+    ) -> Result<u64, PersistenceError> {
+        self.kv
+            .save(
+                &crate::kv::state::history_compaction_state_key(
+                    mister_smith_core::TaskId::from_uuid(workflow_id),
+                ),
+                compaction,
+            )
+            .await
+    }
+
+    /// Load the latest cached history-compaction lineage for a workflow namespace.
+    pub async fn read_history_compaction(
+        &self,
+        workflow_id: Uuid,
+    ) -> Result<Option<Value>, PersistenceError> {
+        self.kv
+            .get(&crate::kv::state::history_compaction_state_key(
+                mister_smith_core::TaskId::from_uuid(workflow_id),
+            ))
+            .await
+    }
+
     /// Flush all dirty keys from KV to PostgreSQL.
     ///
     /// Reads each dirty key from KV and upserts it into the SQL agent state table

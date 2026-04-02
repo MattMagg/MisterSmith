@@ -79,6 +79,26 @@ pub fn branch_resume_state_key(branch_id: Uuid) -> String {
     format!("branch:{branch_id}:resumes")
 }
 
+/// Build the workflow-history key used for replay-assist state in KV.
+pub fn workflow_history_state_key(workflow_id: TaskId) -> String {
+    format!("workflow-history:{workflow_id}")
+}
+
+/// Build the lifecycle-decision key used for workflow lifecycle state in KV.
+pub fn lifecycle_decision_state_key(workflow_id: TaskId) -> String {
+    format!("workflow-lifecycle:{workflow_id}")
+}
+
+/// Build the effect-boundary key used for workflow effect state in KV.
+pub fn workflow_effect_boundary_state_key(workflow_id: TaskId, effect_boundary_id: Uuid) -> String {
+    format!("workflow-effect:{workflow_id}:{effect_boundary_id}")
+}
+
+/// Build the compaction-lineage key used for bounded replay state in KV.
+pub fn history_compaction_state_key(workflow_id: TaskId) -> String {
+    format!("workflow-compaction:{workflow_id}")
+}
+
 /// Typed state operations backed by a JetStream KV bucket.
 ///
 /// Wraps a single [`kv::Store`] and provides ergonomic typed access with
@@ -373,5 +393,45 @@ mod tests {
         let formatted = format!("{:?}", change);
         assert!(formatted.contains("Purge"));
         assert!(formatted.contains("revision: 0"));
+    }
+
+    #[test]
+    fn durable_workflow_key_builders_are_stable() {
+        let workflow_id = TaskId::from_uuid(Uuid::nil());
+        let branch_id = ExecutionBranchId::from_uuid(Uuid::nil());
+        let effect_boundary_id = Uuid::nil();
+
+        assert_eq!(
+            branch_checkpoint_key(workflow_id, branch_id),
+            "branch-checkpoint:00000000-0000-0000-0000-000000000000:00000000-0000-0000-0000-000000000000"
+        );
+        assert_eq!(
+            branch_resume_history_key(workflow_id, branch_id),
+            "branch-resume-history:00000000-0000-0000-0000-000000000000:00000000-0000-0000-0000-000000000000"
+        );
+        assert_eq!(
+            workflow_history_state_key(workflow_id),
+            "workflow-history:00000000-0000-0000-0000-000000000000"
+        );
+        assert_eq!(
+            lifecycle_decision_state_key(workflow_id),
+            "workflow-lifecycle:00000000-0000-0000-0000-000000000000"
+        );
+        assert_eq!(
+            workflow_effect_boundary_state_key(workflow_id, effect_boundary_id),
+            "workflow-effect:00000000-0000-0000-0000-000000000000:00000000-0000-0000-0000-000000000000"
+        );
+        assert_eq!(
+            history_compaction_state_key(workflow_id),
+            "workflow-compaction:00000000-0000-0000-0000-000000000000"
+        );
+        assert_eq!(
+            branch_checkpoint_state_key(Uuid::nil()),
+            "branch:00000000-0000-0000-0000-000000000000:checkpoint"
+        );
+        assert_eq!(
+            branch_resume_state_key(Uuid::nil()),
+            "branch:00000000-0000-0000-0000-000000000000:resumes"
+        );
     }
 }

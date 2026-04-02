@@ -11,10 +11,10 @@ use axum::Json;
 use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{
-    AgentId, CapabilityId, CoordinationPolicy, DelegationScope, ExecutionGraphId, GraphState,
-    OperatorResultPreview, OrchestrationQualityView, ProofOutcomeClassification,
-    RepairDirectiveAction, ResultProvenanceSummary, RevocationState, SessionId,
-    SessionRetainedResultView, StepEvaluationRecord, SupervisionEvidenceView,
+    AgentId, CapabilityId, CoordinationPolicy, DelegationScope, DurableWorkflowLifecycleState,
+    ExecutionGraphId, GraphState, OperatorResultPreview, OrchestrationQualityView,
+    ProofOutcomeClassification, RepairDirectiveAction, ResultProvenanceSummary, RevocationState,
+    SessionId, SessionRetainedResultView, StepEvaluationRecord, SupervisionEvidenceView,
     SupervisionTargetKind, TaskId, TaskResultView, TaskShapeClassification, TaskShapeKind,
     TopologyKind, TopologyRationale, UnifiedResultEnvelope, VerifierVerdict,
 };
@@ -25,6 +25,7 @@ use mister_smith_events::{
     StepRoutingDecisionSummary,
 };
 use mister_smith_persistence::postgres::queries;
+use mister_smith_persistence::{lifecycle_decision_history, workflow_history};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -212,6 +213,7 @@ pub async fn status_from_bus_with_metadata_continuity(
         })?
     {
         enrich_session_linkage(&mut view, &record.metadata);
+        enrich_lifecycle_state(&mut view, &record.metadata);
         enrich_accepted_task_ingress_continuity(&mut view, &record.metadata);
         enrich_step_routing_history(&mut view, &record.metadata);
         enrich_result_preview(&mut view, &record.metadata, record.result.as_ref());
@@ -244,6 +246,12 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         .as_ref()
         .map(render_resume_provenance)
         .unwrap_or_else(|| "none".to_string());
+    let lifecycle_summary = view
+        .lifecycle_state
+        .unwrap_or_else(|| {
+            mister_smith_events::autonomy::lifecycle_state_for_graph_state(view.graph.state)
+        })
+        .as_str();
     let topology_reason = &view.topology.rationale.selected_for;
     let task_shape = view.topology.task_shape.kind.as_str();
     let structural_signals = if view.topology.task_shape.structural_signals.is_empty() {
@@ -464,12 +472,13 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nresult preview: {}\nsupervision: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\nlifecycle: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nresult preview: {}\nsupervision: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
         session_summary,
         resume_summary,
+        lifecycle_summary,
         view.topology.topology_kind,
         view.topology.parallelism_width,
         task_shape,
@@ -541,6 +550,30 @@ pub(crate) fn enrich_session_linkage(view: &mut AutonomyStatusView, metadata: &s
                 resumed_from_turn_index: details.resumed_from_turn_index,
             });
     }
+}
+
+pub(crate) fn durable_lifecycle_state_from_metadata(
+    metadata: &Value,
+) -> Option<DurableWorkflowLifecycleState> {
+    lifecycle_decision_history(metadata)
+        .ok()
+        .and_then(|history| history.last().map(|decision| decision.resulting_state))
+        .or_else(|| {
+            workflow_history(metadata)
+                .ok()
+                .and_then(|history| history.iter().rev().find_map(|event| event.lifecycle_state))
+        })
+}
+
+pub(crate) fn lifecycle_state_from_status(status: &str) -> DurableWorkflowLifecycleState {
+    DurableWorkflowLifecycleState::from_task_status(status)
+}
+
+pub(crate) fn enrich_lifecycle_state(view: &mut AutonomyStatusView, metadata: &Value) {
+    view.lifecycle_state = Some(
+        durable_lifecycle_state_from_metadata(metadata)
+            .unwrap_or_else(|| DurableWorkflowLifecycleState::from_graph_state(view.graph.state)),
+    );
 }
 
 pub(crate) fn enrich_accepted_task_ingress_continuity(
@@ -878,6 +911,7 @@ pub(crate) fn synthesize_failed_before_graph_status(
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
+        lifecycle_state: Some(DurableWorkflowLifecycleState::Failed),
         graph: mister_smith_events::ExecutionGraphSummary {
             graph_id,
             workflow_id,

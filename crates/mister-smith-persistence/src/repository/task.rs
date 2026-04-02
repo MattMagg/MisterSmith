@@ -11,7 +11,9 @@ use uuid::Uuid;
 
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, CapabilityId, CheckpointId, DelegationScope,
-    ExecutionBranchId, ExecutionNodeId, MemorySnapshotId, PersistenceError, TaskId,
+    DurableWorkflowEventKind, DurableWorkflowLifecycleState, DurableWorkflowLifecycleVerb,
+    EffectBoundaryIntentState, EffectBoundaryOutcomeState, ExecutionBranchId, ExecutionNodeId,
+    HistoryCompactionMode, LifecycleDecisionOutcome, MemorySnapshotId, PersistenceError, TaskId,
 };
 
 use crate::memory::{
@@ -23,10 +25,15 @@ use crate::postgres::queries::{self, TaskRecord};
 use super::Repository;
 
 const MANAGED_MEMORY_KEY: &str = "managed_memory";
+const DURABLE_WORKFLOW_KEY: &str = "durable_workflow";
 const FRAGMENT_INDEX_KEY: &str = "fragments";
 const SNAPSHOT_INDEX_KEY: &str = "snapshots";
 const BRANCH_CHECKPOINT_INDEX_KEY: &str = "branch_checkpoints";
 const BRANCH_RESUME_INDEX_KEY: &str = "branch_resumes";
+const WORKFLOW_HISTORY_INDEX_KEY: &str = "workflow_history";
+const LIFECYCLE_DECISION_INDEX_KEY: &str = "lifecycle_decisions";
+const EFFECT_BOUNDARY_INDEX_KEY: &str = "effect_boundaries";
+const HISTORY_COMPACTION_INDEX_KEY: &str = "history_compactions";
 
 /// Durable branch checkpoint entry stored in task metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -80,6 +87,112 @@ pub struct BranchResumeRecord {
     pub notes: Vec<String>,
     /// When the resume or reassignment was recorded.
     pub resumed_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Durable accepted workflow-history event stored in task metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkflowHistoryEventRecord {
+    /// Workflow that owns this history event.
+    pub workflow_id: TaskId,
+    /// Stable event identifier.
+    pub event_id: Uuid,
+    /// Monotonic replay position for deterministic reconstruction.
+    pub replay_position: u64,
+    /// Kind of accepted durable event recorded.
+    pub event_kind: DurableWorkflowEventKind,
+    /// When the event was recorded durably.
+    pub recorded_at: chrono::DateTime<chrono::Utc>,
+    /// Actor that recorded the event when an agent identity is relevant.
+    pub actor_agent_id: Option<AgentId>,
+    /// Operator-visible source label when an agent identity is not enough.
+    pub source: Option<String>,
+    /// Branch referenced by this event when relevant.
+    pub branch_id: Option<ExecutionBranchId>,
+    /// Node referenced by this event when relevant.
+    pub node_id: Option<ExecutionNodeId>,
+    /// Durable lifecycle state accepted by this event when relevant.
+    pub lifecycle_state: Option<DurableWorkflowLifecycleState>,
+    /// Effect boundary referenced by this event when relevant.
+    pub effect_boundary_id: Option<Uuid>,
+    /// Compaction record referenced by this event when relevant.
+    pub compaction_id: Option<Uuid>,
+    /// Optional parent event used to preserve explainable lineage.
+    pub parent_event_id: Option<Uuid>,
+    /// Minimum replay payload for the accepted event.
+    pub payload: Value,
+}
+
+/// Durable accepted lifecycle command result stored in task metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LifecycleDecisionRecord {
+    /// Workflow that owns this lifecycle command.
+    pub workflow_id: TaskId,
+    /// Stable command identifier.
+    pub command_id: Uuid,
+    /// Lifecycle verb requested by the operator or runtime.
+    pub verb: DurableWorkflowLifecycleVerb,
+    /// Agent that requested the lifecycle change when relevant.
+    pub requested_by_agent_id: Option<AgentId>,
+    /// Optional source label when the requester is not a local agent.
+    pub source: Option<String>,
+    /// When the lifecycle change was requested.
+    pub requested_at: chrono::DateTime<chrono::Utc>,
+    /// Optional operator-visible reason for the request.
+    pub reason: Option<String>,
+    /// Durable accepted outcome of the lifecycle command.
+    pub outcome: LifecycleDecisionOutcome,
+    /// Durable lifecycle state after the decision is applied.
+    pub resulting_state: DurableWorkflowLifecycleState,
+    /// When the decision was recorded durably.
+    pub decided_at: chrono::DateTime<chrono::Utc>,
+    /// Optional operator-visible note for no-op or deferred handling.
+    pub note: Option<String>,
+}
+
+/// Durable effect-boundary record stored in task metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EffectBoundaryRecord {
+    /// Workflow that owns this effect boundary.
+    pub workflow_id: TaskId,
+    /// Stable effect-boundary identifier.
+    pub effect_boundary_id: Uuid,
+    /// Durable idempotency or deduplication reference for the effect.
+    pub idempotency_key: String,
+    /// Current durable intent state for the effect.
+    pub intent_state: EffectBoundaryIntentState,
+    /// Current durable outcome state for the effect.
+    pub outcome_state: EffectBoundaryOutcomeState,
+    /// When effect intent was recorded.
+    pub intent_recorded_at: chrono::DateTime<chrono::Utc>,
+    /// When effect outcome was recorded, when known.
+    pub outcome_recorded_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Latest history event tied to the effect boundary when relevant.
+    pub history_event_id: Option<Uuid>,
+    /// Optional operator-visible note or reason for unknown outcome.
+    pub note: Option<String>,
+}
+
+/// Durable compaction lineage record stored in task metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HistoryCompactionRecord {
+    /// Workflow that owns this compaction lineage.
+    pub workflow_id: TaskId,
+    /// Stable compaction identifier.
+    pub compaction_id: Uuid,
+    /// Bounded compaction mechanism used by the first slice.
+    pub mode: HistoryCompactionMode,
+    /// First replay position covered by the compaction.
+    pub source_replay_start: u64,
+    /// Last replay position covered by the compaction.
+    pub source_replay_end: u64,
+    /// Replay position to resume from after compaction.
+    pub replay_start_position: u64,
+    /// Optional replacement event created by the compaction.
+    pub replacement_event_id: Option<Uuid>,
+    /// Operator-visible lineage note preserved for inspection.
+    pub preserved_lineage_note: String,
+    /// When the compaction record was created.
+    pub recorded_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Repository for task records.
@@ -186,6 +299,28 @@ impl TaskRepository {
         queries::update_task_metadata(&self.pool, task_id, record.metadata.clone()).await
     }
 
+    /// Persist durable workflow history, lifecycle decisions, effects, and compaction metadata.
+    #[cfg(feature = "sqlx")]
+    pub async fn persist_durable_workflow_metadata(
+        &self,
+        task_id: Uuid,
+        history: &[WorkflowHistoryEventRecord],
+        lifecycle_decisions: &[LifecycleDecisionRecord],
+        effect_boundaries: &[EffectBoundaryRecord],
+        history_compactions: &[HistoryCompactionRecord],
+    ) -> Result<TaskRecord, PersistenceError> {
+        let mut record = queries::find_task(&self.pool, task_id)
+            .await?
+            .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
+
+        merge_workflow_history_metadata(&mut record.metadata, history)?;
+        merge_lifecycle_decision_metadata(&mut record.metadata, lifecycle_decisions)?;
+        merge_effect_boundary_metadata(&mut record.metadata, effect_boundaries)?;
+        merge_history_compaction_metadata(&mut record.metadata, history_compactions)?;
+
+        queries::update_task_metadata(&self.pool, task_id, record.metadata.clone()).await
+    }
+
     /// Load the latest durable branch checkpoint for a task, when available.
     #[cfg(feature = "sqlx")]
     pub async fn load_latest_branch_checkpoint(
@@ -212,6 +347,58 @@ impl TaskRepository {
             .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
 
         branch_resume_history(&record.metadata, branch_id)
+    }
+
+    /// Load ordered durable workflow history for a task.
+    #[cfg(feature = "sqlx")]
+    pub async fn load_workflow_history(
+        &self,
+        task_id: Uuid,
+    ) -> Result<Vec<WorkflowHistoryEventRecord>, PersistenceError> {
+        let record = queries::find_task(&self.pool, task_id)
+            .await?
+            .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
+
+        workflow_history(&record.metadata)
+    }
+
+    /// Load ordered lifecycle decision history for a task.
+    #[cfg(feature = "sqlx")]
+    pub async fn load_lifecycle_decision_history(
+        &self,
+        task_id: Uuid,
+    ) -> Result<Vec<LifecycleDecisionRecord>, PersistenceError> {
+        let record = queries::find_task(&self.pool, task_id)
+            .await?
+            .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
+
+        lifecycle_decision_history(&record.metadata)
+    }
+
+    /// Load durable effect-boundary records for a task.
+    #[cfg(feature = "sqlx")]
+    pub async fn load_effect_boundaries(
+        &self,
+        task_id: Uuid,
+    ) -> Result<Vec<EffectBoundaryRecord>, PersistenceError> {
+        let record = queries::find_task(&self.pool, task_id)
+            .await?
+            .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
+
+        effect_boundary_records(&record.metadata)
+    }
+
+    /// Load the latest history-compaction record for a task when available.
+    #[cfg(feature = "sqlx")]
+    pub async fn load_latest_history_compaction(
+        &self,
+        task_id: Uuid,
+    ) -> Result<Option<HistoryCompactionRecord>, PersistenceError> {
+        let record = queries::find_task(&self.pool, task_id)
+            .await?
+            .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
+
+        latest_history_compaction(&record.metadata)
     }
 
     /// Page persisted fragment metadata for a task.
@@ -309,6 +496,74 @@ pub fn merge_branch_resume_metadata(
     store_index_entries(metadata, BRANCH_RESUME_INDEX_KEY, &merged)
 }
 
+/// Merge durable workflow history into task metadata.
+pub fn merge_workflow_history_metadata(
+    metadata: &mut Value,
+    history: &[WorkflowHistoryEventRecord],
+) -> Result<(), PersistenceError> {
+    if history.is_empty() {
+        return Ok(());
+    }
+
+    let existing = load_durable_workflow_entries::<WorkflowHistoryEventRecord>(
+        metadata,
+        WORKFLOW_HISTORY_INDEX_KEY,
+    )?;
+    let merged = merge_entries_by_key(existing, history.to_vec(), |entry| entry.event_id);
+    store_durable_workflow_entries(metadata, WORKFLOW_HISTORY_INDEX_KEY, &merged)
+}
+
+/// Merge lifecycle decision records into task metadata.
+pub fn merge_lifecycle_decision_metadata(
+    metadata: &mut Value,
+    decisions: &[LifecycleDecisionRecord],
+) -> Result<(), PersistenceError> {
+    if decisions.is_empty() {
+        return Ok(());
+    }
+
+    let existing = load_durable_workflow_entries::<LifecycleDecisionRecord>(
+        metadata,
+        LIFECYCLE_DECISION_INDEX_KEY,
+    )?;
+    let merged = merge_entries_by_key(existing, decisions.to_vec(), |entry| entry.command_id);
+    store_durable_workflow_entries(metadata, LIFECYCLE_DECISION_INDEX_KEY, &merged)
+}
+
+/// Merge effect-boundary records into task metadata.
+pub fn merge_effect_boundary_metadata(
+    metadata: &mut Value,
+    effects: &[EffectBoundaryRecord],
+) -> Result<(), PersistenceError> {
+    if effects.is_empty() {
+        return Ok(());
+    }
+
+    let existing =
+        load_durable_workflow_entries::<EffectBoundaryRecord>(metadata, EFFECT_BOUNDARY_INDEX_KEY)?;
+    let merged = merge_entries_by_key(existing, effects.to_vec(), |entry| {
+        entry.idempotency_key.clone()
+    });
+    store_durable_workflow_entries(metadata, EFFECT_BOUNDARY_INDEX_KEY, &merged)
+}
+
+/// Merge history-compaction records into task metadata.
+pub fn merge_history_compaction_metadata(
+    metadata: &mut Value,
+    compactions: &[HistoryCompactionRecord],
+) -> Result<(), PersistenceError> {
+    if compactions.is_empty() {
+        return Ok(());
+    }
+
+    let existing = load_durable_workflow_entries::<HistoryCompactionRecord>(
+        metadata,
+        HISTORY_COMPACTION_INDEX_KEY,
+    )?;
+    let merged = merge_entries_by_key(existing, compactions.to_vec(), |entry| entry.compaction_id);
+    store_durable_workflow_entries(metadata, HISTORY_COMPACTION_INDEX_KEY, &merged)
+}
+
 /// Load the latest durable checkpoint for a branch from task metadata.
 pub fn latest_branch_checkpoint(
     metadata: &Value,
@@ -333,6 +588,66 @@ pub fn branch_resume_history(
     resumes.retain(|resume| resume.branch_id == branch_id);
     resumes.sort_by(|left, right| left.resumed_at.cmp(&right.resumed_at));
     Ok(resumes)
+}
+
+/// Load ordered durable workflow history from task metadata.
+pub fn workflow_history(
+    metadata: &Value,
+) -> Result<Vec<WorkflowHistoryEventRecord>, PersistenceError> {
+    let mut history = load_durable_workflow_entries_from_value::<WorkflowHistoryEventRecord>(
+        metadata,
+        WORKFLOW_HISTORY_INDEX_KEY,
+    )?;
+    history.sort_by(|left, right| {
+        left.replay_position
+            .cmp(&right.replay_position)
+            .then_with(|| left.recorded_at.cmp(&right.recorded_at))
+    });
+    Ok(history)
+}
+
+/// Load ordered lifecycle decision history from task metadata.
+pub fn lifecycle_decision_history(
+    metadata: &Value,
+) -> Result<Vec<LifecycleDecisionRecord>, PersistenceError> {
+    let mut decisions = load_durable_workflow_entries_from_value::<LifecycleDecisionRecord>(
+        metadata,
+        LIFECYCLE_DECISION_INDEX_KEY,
+    )?;
+    decisions.sort_by(|left, right| left.decided_at.cmp(&right.decided_at));
+    Ok(decisions)
+}
+
+/// Load durable effect-boundary records from task metadata.
+pub fn effect_boundary_records(
+    metadata: &Value,
+) -> Result<Vec<EffectBoundaryRecord>, PersistenceError> {
+    let mut effects = load_durable_workflow_entries_from_value::<EffectBoundaryRecord>(
+        metadata,
+        EFFECT_BOUNDARY_INDEX_KEY,
+    )?;
+    effects.sort_by(|left, right| left.intent_recorded_at.cmp(&right.intent_recorded_at));
+    Ok(effects)
+}
+
+/// Load ordered history-compaction records from task metadata.
+pub fn history_compaction_records(
+    metadata: &Value,
+) -> Result<Vec<HistoryCompactionRecord>, PersistenceError> {
+    let mut compactions = load_durable_workflow_entries_from_value::<HistoryCompactionRecord>(
+        metadata,
+        HISTORY_COMPACTION_INDEX_KEY,
+    )?;
+    compactions.sort_by(|left, right| left.recorded_at.cmp(&right.recorded_at));
+    Ok(compactions)
+}
+
+/// Load the latest durable history-compaction record from task metadata.
+pub fn latest_history_compaction(
+    metadata: &Value,
+) -> Result<Option<HistoryCompactionRecord>, PersistenceError> {
+    let mut compactions = history_compaction_records(metadata)?;
+    Ok(compactions.pop())
 }
 
 /// Page persisted fragment metadata from a task metadata document.
@@ -415,12 +730,7 @@ fn load_index_entries<T>(metadata: &mut Value, index_key: &str) -> Result<Vec<T>
 where
     T: DeserializeOwned,
 {
-    let root = ensure_root_object(metadata)?;
-    let managed_memory = ensure_managed_memory_object(root)?;
-    match managed_memory.get(index_key) {
-        Some(value) => deserialize_index_entries(value),
-        None => Ok(Vec::new()),
-    }
+    load_root_index_entries(metadata, MANAGED_MEMORY_KEY, index_key)
 }
 
 fn load_index_entries_from_value<T>(
@@ -430,28 +740,7 @@ fn load_index_entries_from_value<T>(
 where
     T: DeserializeOwned,
 {
-    let Some(root) = metadata.as_object() else {
-        if metadata.is_null() {
-            return Ok(Vec::new());
-        }
-        return Err(PersistenceError::DataCorrupted(
-            "task metadata must be a JSON object".to_string(),
-        ));
-    };
-
-    let Some(managed_memory) = root.get(MANAGED_MEMORY_KEY) else {
-        return Ok(Vec::new());
-    };
-    let Some(managed_memory) = managed_memory.as_object() else {
-        return Err(PersistenceError::DataCorrupted(
-            "task metadata managed_memory index must be a JSON object".to_string(),
-        ));
-    };
-
-    match managed_memory.get(index_key) {
-        Some(value) => deserialize_index_entries(value),
-        None => Ok(Vec::new()),
-    }
+    load_root_index_entries_from_value(metadata, MANAGED_MEMORY_KEY, index_key)
 }
 
 fn deserialize_index_entries<T>(value: &Value) -> Result<Vec<T>, PersistenceError>
@@ -476,9 +765,100 @@ fn store_index_entries<T>(
 where
     T: Serialize,
 {
+    store_root_index_entries(metadata, MANAGED_MEMORY_KEY, index_key, entries)
+}
+
+fn load_durable_workflow_entries<T>(
+    metadata: &mut Value,
+    index_key: &str,
+) -> Result<Vec<T>, PersistenceError>
+where
+    T: DeserializeOwned,
+{
+    load_root_index_entries(metadata, DURABLE_WORKFLOW_KEY, index_key)
+}
+
+fn load_durable_workflow_entries_from_value<T>(
+    metadata: &Value,
+    index_key: &str,
+) -> Result<Vec<T>, PersistenceError>
+where
+    T: DeserializeOwned,
+{
+    load_root_index_entries_from_value(metadata, DURABLE_WORKFLOW_KEY, index_key)
+}
+
+fn store_durable_workflow_entries<T>(
+    metadata: &mut Value,
+    index_key: &str,
+    entries: &[T],
+) -> Result<(), PersistenceError>
+where
+    T: Serialize,
+{
+    store_root_index_entries(metadata, DURABLE_WORKFLOW_KEY, index_key, entries)
+}
+
+fn load_root_index_entries<T>(
+    metadata: &mut Value,
+    root_key: &str,
+    index_key: &str,
+) -> Result<Vec<T>, PersistenceError>
+where
+    T: DeserializeOwned,
+{
     let root = ensure_root_object(metadata)?;
-    let managed_memory = ensure_managed_memory_object(root)?;
-    managed_memory.insert(
+    let scoped_root = ensure_named_object(root, root_key)?;
+    match scoped_root.get(index_key) {
+        Some(value) => deserialize_index_entries(value),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn load_root_index_entries_from_value<T>(
+    metadata: &Value,
+    root_key: &str,
+    index_key: &str,
+) -> Result<Vec<T>, PersistenceError>
+where
+    T: DeserializeOwned,
+{
+    let Some(root) = metadata.as_object() else {
+        if metadata.is_null() {
+            return Ok(Vec::new());
+        }
+        return Err(PersistenceError::DataCorrupted(
+            "task metadata must be a JSON object".to_string(),
+        ));
+    };
+
+    let Some(scoped_root) = root.get(root_key) else {
+        return Ok(Vec::new());
+    };
+    let Some(scoped_root) = scoped_root.as_object() else {
+        return Err(PersistenceError::DataCorrupted(format!(
+            "task metadata {root_key} index must be a JSON object"
+        )));
+    };
+
+    match scoped_root.get(index_key) {
+        Some(value) => deserialize_index_entries(value),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn store_root_index_entries<T>(
+    metadata: &mut Value,
+    root_key: &str,
+    index_key: &str,
+    entries: &[T],
+) -> Result<(), PersistenceError>
+where
+    T: Serialize,
+{
+    let root = ensure_root_object(metadata)?;
+    let scoped_root = ensure_named_object(root, root_key)?;
+    scoped_root.insert(
         index_key.to_string(),
         serde_json::to_value(entries)
             .map_err(|error| PersistenceError::SerializationFailed(error.to_string()))?,
@@ -498,17 +878,16 @@ fn ensure_root_object(
     })
 }
 
-fn ensure_managed_memory_object(
-    root: &mut serde_json::Map<String, Value>,
-) -> Result<&mut serde_json::Map<String, Value>, PersistenceError> {
+fn ensure_named_object<'a>(
+    root: &'a mut serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<&'a mut serde_json::Map<String, Value>, PersistenceError> {
     let entry = root
-        .entry(MANAGED_MEMORY_KEY.to_string())
+        .entry(key.to_string())
         .or_insert_with(|| Value::Object(serde_json::Map::new()));
 
     entry.as_object_mut().ok_or_else(|| {
-        PersistenceError::DataCorrupted(
-            "task metadata managed_memory index must be a JSON object".to_string(),
-        )
+        PersistenceError::DataCorrupted(format!("task metadata {key} index must be a JSON object"))
     })
 }
 
@@ -551,11 +930,18 @@ impl Repository<TaskRecord> for TaskRepository {
 mod tests {
     use chrono::Utc;
     use serde_json::json;
+    use uuid::Uuid;
 
-    use super::{BranchCheckpointRecord, BranchResumeRecord};
+    use super::{
+        BranchCheckpointRecord, BranchResumeRecord, EffectBoundaryRecord, HistoryCompactionRecord,
+        LifecycleDecisionRecord, WorkflowHistoryEventRecord,
+    };
     use mister_smith_core::{
         AgentId, AgentType, BranchRecoveryStrategy, CheckpointId, ContextBudgetId,
-        ExecutionBranchId, ExecutionNodeId, MemoryFragmentId, MemorySnapshotId, TaskId,
+        DurableWorkflowEventKind, DurableWorkflowLifecycleState, DurableWorkflowLifecycleVerb,
+        EffectBoundaryIntentState, EffectBoundaryOutcomeState, ExecutionBranchId, ExecutionNodeId,
+        HistoryCompactionMode, LifecycleDecisionOutcome, MemoryFragmentId, MemorySnapshotId,
+        TaskId,
     };
 
     use crate::memory::{
@@ -782,5 +1168,134 @@ mod tests {
             super::branch_resume_history(&metadata, branch_a).expect("branch history should load");
 
         assert_eq!(history, vec![first, second]);
+    }
+
+    #[test]
+    fn durable_workflow_history_merges_by_event_id_and_orders_by_replay_position() {
+        let workflow_id = TaskId::new();
+        let event_id = Uuid::new_v4();
+        let replacement = WorkflowHistoryEventRecord {
+            workflow_id,
+            event_id,
+            replay_position: 1,
+            event_kind: DurableWorkflowEventKind::LifecycleChanged,
+            recorded_at: Utc::now(),
+            actor_agent_id: Some(AgentId::new()),
+            source: Some("runtime".to_string()),
+            branch_id: None,
+            node_id: None,
+            lifecycle_state: Some(DurableWorkflowLifecycleState::Active),
+            effect_boundary_id: None,
+            compaction_id: None,
+            parent_event_id: None,
+            payload: json!({"state": "active"}),
+        };
+        let later = WorkflowHistoryEventRecord {
+            workflow_id,
+            event_id: Uuid::new_v4(),
+            replay_position: 2,
+            event_kind: DurableWorkflowEventKind::BranchStateChanged,
+            recorded_at: Utc::now(),
+            actor_agent_id: Some(AgentId::new()),
+            source: Some("runtime".to_string()),
+            branch_id: Some(ExecutionBranchId::new()),
+            node_id: None,
+            lifecycle_state: None,
+            effect_boundary_id: None,
+            compaction_id: None,
+            parent_event_id: Some(event_id),
+            payload: json!({"branch_state": "running"}),
+        };
+        let older_duplicate = WorkflowHistoryEventRecord {
+            workflow_id,
+            event_id,
+            replay_position: 1,
+            event_kind: DurableWorkflowEventKind::LifecycleChanged,
+            recorded_at: Utc::now() - chrono::Duration::seconds(5),
+            actor_agent_id: None,
+            source: Some("older".to_string()),
+            branch_id: None,
+            node_id: None,
+            lifecycle_state: Some(DurableWorkflowLifecycleState::Paused),
+            effect_boundary_id: None,
+            compaction_id: None,
+            parent_event_id: None,
+            payload: json!({"state": "paused"}),
+        };
+        let mut metadata = json!({});
+
+        super::merge_workflow_history_metadata(
+            &mut metadata,
+            &[older_duplicate, replacement.clone(), later.clone()],
+        )
+        .expect("workflow history should merge");
+
+        let history = super::workflow_history(&metadata).expect("workflow history should load");
+
+        assert_eq!(history, vec![replacement, later]);
+    }
+
+    #[test]
+    fn lifecycle_effect_and_compaction_metadata_round_trip() {
+        let workflow_id = TaskId::new();
+        let command_id = Uuid::new_v4();
+        let effect_boundary_id = Uuid::new_v4();
+        let compaction_id = Uuid::new_v4();
+        let decision = LifecycleDecisionRecord {
+            workflow_id,
+            command_id,
+            verb: DurableWorkflowLifecycleVerb::Pause,
+            requested_by_agent_id: Some(AgentId::new()),
+            source: Some("operator".to_string()),
+            requested_at: Utc::now() - chrono::Duration::seconds(5),
+            reason: Some("maintenance window".to_string()),
+            outcome: LifecycleDecisionOutcome::Applied,
+            resulting_state: DurableWorkflowLifecycleState::Paused,
+            decided_at: Utc::now() - chrono::Duration::seconds(4),
+            note: None,
+        };
+        let effect = EffectBoundaryRecord {
+            workflow_id,
+            effect_boundary_id,
+            idempotency_key: "effect/send-notify".to_string(),
+            intent_state: EffectBoundaryIntentState::Recorded,
+            outcome_state: EffectBoundaryOutcomeState::CompletionUnknown,
+            intent_recorded_at: Utc::now() - chrono::Duration::seconds(3),
+            outcome_recorded_at: None,
+            history_event_id: None,
+            note: Some("waiting for durable completion".to_string()),
+        };
+        let compaction = HistoryCompactionRecord {
+            workflow_id,
+            compaction_id,
+            mode: HistoryCompactionMode::ReplayPointer,
+            source_replay_start: 1,
+            source_replay_end: 8,
+            replay_start_position: 9,
+            replacement_event_id: None,
+            preserved_lineage_note: "rolled up history positions 1-8".to_string(),
+            recorded_at: Utc::now(),
+        };
+        let mut metadata = json!({});
+
+        super::merge_lifecycle_decision_metadata(&mut metadata, std::slice::from_ref(&decision))
+            .expect("lifecycle decisions should merge");
+        super::merge_effect_boundary_metadata(&mut metadata, std::slice::from_ref(&effect))
+            .expect("effect boundaries should merge");
+        super::merge_history_compaction_metadata(&mut metadata, std::slice::from_ref(&compaction))
+            .expect("compaction metadata should merge");
+
+        assert_eq!(
+            super::lifecycle_decision_history(&metadata).expect("lifecycle history should load"),
+            vec![decision]
+        );
+        assert_eq!(
+            super::effect_boundary_records(&metadata).expect("effect boundaries should load"),
+            vec![effect]
+        );
+        assert_eq!(
+            super::latest_history_compaction(&metadata).expect("compaction should load"),
+            Some(compaction)
+        );
     }
 }

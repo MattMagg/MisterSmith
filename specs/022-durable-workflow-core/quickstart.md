@@ -48,7 +48,14 @@ npx markdownlint-cli2 "specs/022-durable-workflow-core/**/*.md" --config .markdo
 
 - Review `tasks.md`
 - Review `design.md`
-- Resolve the open first-slice decisions at the top of the task pack
+- Use the frozen first-slice decisions from the packet docs:
+  - canonical workflow history stored on the SQL-backed workflow record
+  - supported lifecycle verbs: `pause`, `resume`, `cancel`, `terminate`
+  - deferred lifecycle posture: `reset/rewind`
+  - lifecycle decisions are recorded durably with `applied`, `noop`, or `deferred` outcomes
+  - live runner pause, resume, cancel, or terminate control is not claimed by packet `022`
+  - persistence-owned effect intent and outcome records
+  - minimal lineage-preserving compaction record with replay start pointer
 - Then move straight into `/speckit.implement`
 
 ## Expected Outcome

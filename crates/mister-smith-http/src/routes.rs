@@ -25,6 +25,10 @@ pub fn protected_api_router() -> Router<AppState> {
         )
         .route("/api/v1/tasks/{task_id}", get(handlers::get_task))
         .route(
+            "/api/v1/tasks/{task_id}/lifecycle",
+            post(handlers::apply_task_lifecycle),
+        )
+        .route(
             "/api/v1/sessions",
             get(handlers::list_sessions).post(handlers::create_session),
         )

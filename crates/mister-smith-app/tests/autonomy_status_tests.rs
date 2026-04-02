@@ -7,14 +7,14 @@ mod observability;
 
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope, CheckpointId,
-    CoordinationPolicy, ExecutionBranchId, ExecutionGraphId, FailureClass,
-    FailureContextCheckpoint, GraphState, GuardDecision, GuardDecisionId, GuardEvidence,
-    HandoffClarificationRequest, HealthState, InterventionRecord, InterventionRecordId,
-    InterventionType, MemorySnapshotId, OrchestrationQualityView, ProfileFingerprintId,
-    ProfileFingerprintRef, ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification,
-    ProvenanceChain, ProvenanceLink, RepairDirective, RepairDirectiveAction, RepairLineageRef,
-    RevocationState, SemanticSignal, SemanticSignalKind, StepEvaluationRecord,
-    SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
+    CoordinationPolicy, DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionGraphId,
+    FailureClass, FailureContextCheckpoint, GraphState, GuardDecision, GuardDecisionId,
+    GuardEvidence, HandoffClarificationRequest, HealthState, InterventionRecord,
+    InterventionRecordId, InterventionType, MemorySnapshotId, OrchestrationQualityView,
+    ProfileFingerprintId, ProfileFingerprintRef, ProfileSnapshotId, ProfileTarget,
+    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirective,
+    RepairDirectiveAction, RepairLineageRef, RevocationState, SemanticSignal, SemanticSignalKind,
+    StepEvaluationRecord, SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
     SupervisionTargetScope, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
     TopologyKind, TopologyRationale, VerifierVerdict,
 };
@@ -75,6 +75,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
         turn_index: None,
         coordinator_agent_id: None,
         resume_provenance: None,
+        lifecycle_state: Some(DurableWorkflowLifecycleState::Active),
         graph: ExecutionGraphSummary {
             graph_id,
             workflow_id,
@@ -1606,6 +1607,34 @@ fn render_status_surfaces_restart_resume_provenance() {
     assert!(rendered.contains("resumed_from_turn=1"));
     assert!(rendered.contains(&format!("resumed_from_workflow={resumed_from_workflow_id}")));
     assert!(rendered.contains("runtime restart before session sync"));
+}
+
+#[test]
+fn render_status_keeps_restart_resume_provenance_visible_after_replay_restores_running_branch() {
+    let (mut view, _, branch_id) = sample_view();
+    let resumed_from_workflow_id = TaskId::new();
+    view.graph.state = GraphState::Running;
+    view.session_id = Some(mister_smith_core::SessionId::new());
+    view.turn_index = Some(2);
+    view.coordinator_agent_id = Some(AgentId::new());
+    view.branches[0].state = BranchState::Running;
+    view.resume_provenance = Some(ResumeProvenanceSummary {
+        recovered_after_restart: true,
+        resumed_after_restart: true,
+        recovered_at: Some(chrono::Utc::now()),
+        recovery_reason: Some("replayed durable workflow history before session sync".to_string()),
+        resumed_from_workflow_id: Some(resumed_from_workflow_id),
+        resumed_from_turn_index: Some(1),
+    });
+
+    let rendered = autonomy::render_status(&view);
+
+    assert!(rendered.contains("graph:"));
+    assert!(rendered.contains("Running"));
+    assert!(rendered.contains("resume provenance:"));
+    assert!(rendered.contains("replayed durable workflow history before session sync"));
+    assert!(rendered.contains(&format!("{branch_id} Running")));
+    assert!(rendered.contains("checkpoints:"));
 }
 
 #[test]
