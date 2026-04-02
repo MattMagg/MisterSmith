@@ -1756,10 +1756,16 @@ fn apply_branch_history_event(
     }
 
     let Some(branch_id) = resolve_branch_id(graph, event)? else {
-        return Ok(());
+        return Err(AgentSystemError::OrchestrationError(format!(
+            "branch replay failed: could not resolve branch_id for event {}",
+            event.event_id
+        )));
     };
     let Some(branch) = graph.branch_mut(&branch_id) else {
-        return Ok(());
+        return Err(AgentSystemError::OrchestrationError(format!(
+            "branch replay failed: branch {} not found in graph for event {}",
+            branch_id, event.event_id
+        )));
     };
 
     if let Some(branch_state) =
@@ -1786,7 +1792,10 @@ fn apply_node_history_event(
     event: &WorkflowHistoryEventRecord,
 ) -> Result<(), AgentSystemError> {
     let Some(node_index) = resolve_node_index(graph, event)? else {
-        return Ok(());
+        return Err(AgentSystemError::OrchestrationError(format!(
+            "node replay failed: could not resolve node_index for event {}",
+            event.event_id
+        )));
     };
     let branch_id = graph.nodes[node_index].branch_id;
 
@@ -1825,13 +1834,22 @@ fn apply_compaction_history_event(
     if let Some(branch_states) = event.payload.get("branch_states").and_then(Value::as_array) {
         for branch_snapshot in branch_states {
             let Some(branch_key) = branch_snapshot.get("branch_key").and_then(Value::as_str) else {
-                continue;
+                return Err(AgentSystemError::OrchestrationError(format!(
+                    "compaction replay failed: branch snapshot missing branch_key in event {}",
+                    event.event_id
+                )));
             };
             let Some(branch_id) = resolve_branch_key(graph, branch_key) else {
-                continue;
+                return Err(AgentSystemError::OrchestrationError(format!(
+                    "compaction replay failed: could not resolve branch_key '{}' for event {}",
+                    branch_key, event.event_id
+                )));
             };
             let Some(branch) = graph.branch_mut(&branch_id) else {
-                continue;
+                return Err(AgentSystemError::OrchestrationError(format!(
+                    "compaction replay failed: branch {} not found in graph for event {}",
+                    branch_id, event.event_id
+                )));
             };
             if let Some(branch_state) = branch_snapshot
                 .get("branch_state")
@@ -1860,20 +1878,27 @@ fn apply_compaction_history_event(
     if let Some(node_states) = event.payload.get("node_states").and_then(Value::as_array) {
         for node_snapshot in node_states {
             let Some(step_key) = node_snapshot.get("step_key").and_then(Value::as_str) else {
-                continue;
+                return Err(AgentSystemError::OrchestrationError(format!(
+                    "compaction replay failed: node snapshot missing step_key in event {}",
+                    event.event_id
+                )));
             };
-            if let Some(node) = graph
+            let Some(node) = graph
                 .nodes
                 .iter_mut()
                 .find(|node| node.step_key == step_key)
+            else {
+                return Err(AgentSystemError::OrchestrationError(format!(
+                    "compaction replay failed: node with step_key '{}' not found in graph for event {}",
+                    step_key, event.event_id
+                )));
+            };
+            if let Some(node_state) = node_snapshot
+                .get("node_state")
+                .cloned()
+                .and_then(|raw| serde_json::from_value::<NodeState>(raw).ok())
             {
-                if let Some(node_state) = node_snapshot
-                    .get("node_state")
-                    .cloned()
-                    .and_then(|raw| serde_json::from_value::<NodeState>(raw).ok())
-                {
-                    node.state = node_state;
-                }
+                node.state = node_state;
             }
         }
     }

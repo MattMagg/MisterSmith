@@ -538,7 +538,7 @@ impl BranchCheckpointCoordinator {
         store
             .persist_workflow_history_event(
                 workflow_id,
-                recovery_plan_history_event(workflow_id, graph, &checkpoint, &resume_metadata),
+                recovery_plan_history_event(workflow_id, graph, &checkpoint, &resume_metadata)?,
             )
             .await
             .map_err(map_persistence_error)?;
@@ -680,10 +680,15 @@ fn recovery_plan_history_event(
     graph: &ExecutionGraph,
     checkpoint: &BranchCheckpoint,
     resume_metadata: &BranchResumeMetadata,
-) -> WorkflowHistoryEventRecord {
+) -> Result<WorkflowHistoryEventRecord, AgentSystemError> {
     let branch = graph
         .branch(&resume_metadata.branch_id)
-        .expect("branch exists while recording recovery history");
+        .ok_or_else(|| {
+            AgentSystemError::OrchestrationError(format!(
+                "branch {} not found while recording recovery history",
+                resume_metadata.branch_id
+            ))
+        })?;
     let payload = BranchReplayStatePayload {
         branch_anchor_step_key: branch
             .node_ids
@@ -708,7 +713,7 @@ fn recovery_plan_history_event(
         captured_at: Some(checkpoint.created_at),
     };
 
-    WorkflowHistoryEventRecord {
+    Ok(WorkflowHistoryEventRecord {
         workflow_id,
         event_id: Uuid::new_v4(),
         replay_position: 0,
@@ -723,7 +728,7 @@ fn recovery_plan_history_event(
         compaction_id: None,
         parent_event_id: None,
         payload: serde_json::to_value(payload).unwrap_or(Value::Null),
-    }
+    })
 }
 
 fn recovery_node_ids_from_checkpoint(

@@ -309,16 +309,53 @@ impl TaskRepository {
         effect_boundaries: &[EffectBoundaryRecord],
         history_compactions: &[HistoryCompactionRecord],
     ) -> Result<TaskRecord, PersistenceError> {
-        let mut record = queries::find_task(&self.pool, task_id)
-            .await?
-            .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
+        let mut tx = queries::begin_transaction(&self.pool).await?;
+
+        let mut record = sqlx::query_as::<_, queries::TaskRecord>(
+            r#"
+            SELECT task_id, task_type, agent_id, payload, result,
+                   metadata, status::TEXT AS status, priority, correlation_id,
+                   parent_task_id, created_at, started_at,
+                   completed_at, expires_at
+            FROM tasks.records
+            WHERE task_id = $1
+            FOR UPDATE
+            "#,
+        )
+        .bind(task_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|error| PersistenceError::ConnectionFailed(error.to_string()))?
+        .ok_or_else(|| PersistenceError::NotFound(format!("task {task_id} not found")))?;
 
         merge_workflow_history_metadata(&mut record.metadata, history)?;
         merge_lifecycle_decision_metadata(&mut record.metadata, lifecycle_decisions)?;
         merge_effect_boundary_metadata(&mut record.metadata, effect_boundaries)?;
         merge_history_compaction_metadata(&mut record.metadata, history_compactions)?;
 
-        queries::update_task_metadata(&self.pool, task_id, record.metadata.clone()).await
+        let updated_record = sqlx::query_as::<_, queries::TaskRecord>(
+            r#"
+            UPDATE tasks.records
+            SET metadata = $2
+            WHERE task_id = $1
+            RETURNING
+                task_id, task_type, agent_id, payload, result,
+                metadata, status::TEXT AS status, priority, correlation_id,
+                parent_task_id, created_at, started_at,
+                completed_at, expires_at
+            "#,
+        )
+        .bind(task_id)
+        .bind(&record.metadata)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|error| PersistenceError::ConnectionFailed(error.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|error| PersistenceError::ConnectionFailed(error.to_string()))?;
+
+        Ok(updated_record)
     }
 
     /// Load the latest durable branch checkpoint for a task, when available.
@@ -505,10 +542,28 @@ pub fn merge_workflow_history_metadata(
         return Ok(());
     }
 
-    let existing = load_durable_workflow_entries::<WorkflowHistoryEventRecord>(
+    let mut existing = load_durable_workflow_entries::<WorkflowHistoryEventRecord>(
         metadata,
         WORKFLOW_HISTORY_INDEX_KEY,
     )?;
+
+    // Check for compaction records in incoming history to prune compacted events
+    let compaction_upper_bound = history
+        .iter()
+        .filter(|event| event.event_kind == DurableWorkflowEventKind::HistoryCompacted)
+        .filter_map(|event| {
+            event
+                .payload
+                .get("source_replay_end")
+                .and_then(|v| v.as_u64())
+        })
+        .max();
+
+    // Remove compacted events from existing history
+    if let Some(upper_bound) = compaction_upper_bound {
+        existing.retain(|event| event.replay_position > upper_bound);
+    }
+
     let merged = merge_entries_by_key(existing, history.to_vec(), |entry| entry.event_id);
     store_durable_workflow_entries(metadata, WORKFLOW_HISTORY_INDEX_KEY, &merged)
 }

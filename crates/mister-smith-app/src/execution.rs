@@ -703,7 +703,8 @@ fn append_durable_workflow_history_event(
         parent_event_id: None,
         payload,
     };
-    let _ = merge_workflow_history_metadata(metadata, &[history_event]);
+    merge_workflow_history_metadata(metadata, &[history_event])
+        .expect("workflow history metadata merge should succeed");
     maybe_record_history_compaction(metadata, workflow_id);
 }
 
@@ -738,7 +739,8 @@ fn append_effect_boundary_history_event(
         parent_event_id: None,
         payload,
     };
-    let _ = merge_workflow_history_metadata(metadata, &[history_event]);
+    merge_workflow_history_metadata(metadata, &[history_event])
+        .expect("workflow history metadata merge should succeed");
     maybe_record_history_compaction(metadata, workflow_id);
 }
 
@@ -804,15 +806,35 @@ fn workflow_lifecycle_state_from_metadata(
     metadata: &Value,
     status: &str,
 ) -> DurableWorkflowLifecycleState {
-    lifecycle_decision_history(metadata)
+    let decision_state_and_time = lifecycle_decision_history(metadata)
         .ok()
-        .and_then(|history| history.last().map(|decision| decision.resulting_state))
-        .or_else(|| {
-            workflow_history(metadata)
-                .ok()
-                .and_then(|history| history.iter().rev().find_map(|event| event.lifecycle_state))
-        })
-        .unwrap_or_else(|| DurableWorkflowLifecycleState::from_task_status(status))
+        .and_then(|history| {
+            history
+                .last()
+                .map(|decision| (decision.resulting_state, decision.decided_at))
+        });
+
+    let workflow_state_and_time = workflow_history(metadata)
+        .ok()
+        .and_then(|history| {
+            history
+                .iter()
+                .rev()
+                .find_map(|event| event.lifecycle_state.map(|state| (state, event.recorded_at)))
+        });
+
+    match (decision_state_and_time, workflow_state_and_time) {
+        (Some((decision_state, decision_time)), Some((workflow_state, workflow_time))) => {
+            if workflow_time > decision_time || workflow_state.is_terminal() {
+                workflow_state
+            } else {
+                decision_state
+            }
+        }
+        (Some((decision_state, _)), None) => decision_state,
+        (None, Some((workflow_state, _))) => workflow_state,
+        (None, None) => DurableWorkflowLifecycleState::from_task_status(status),
+    }
 }
 
 fn workflow_lifecycle_state_for_record(record: &TaskRecord) -> DurableWorkflowLifecycleState {
@@ -1080,10 +1102,6 @@ fn latest_node_states_from_history(history: &[WorkflowHistoryEventRecord]) -> Ve
 }
 
 fn maybe_record_history_compaction(metadata: &mut Value, workflow_id: TaskId) {
-    if latest_history_compaction(metadata).ok().flatten().is_some() {
-        return;
-    }
-
     let Ok(history) = workflow_history(metadata) else {
         return;
     };
@@ -1133,14 +1151,26 @@ fn maybe_record_history_compaction(metadata: &mut Value, workflow_id: TaskId) {
         .last()
         .map(|event| event.replay_position.saturating_add(1))
         .unwrap_or(1);
+
+    // Find earliest tail event position that should not be compacted
+    let tail_events = &history[(source_end_index + 1)..];
+    let earliest_tail_position = tail_events
+        .iter()
+        .filter(|event| event.event_kind == DurableWorkflowEventKind::HistoryCompactedReplayTail)
+        .map(|event| event.replay_position)
+        .min();
+
+    let replay_start_position = earliest_tail_position.unwrap_or(replay_position);
+
     let note = format!(
-        "compacted replay positions {}-{} into snapshot {}",
+        "compacted replay positions {}-{} into snapshot {}, replay starts at {}",
         history
             .first()
             .map(|event| event.replay_position)
             .unwrap_or(1),
         source_end_event.replay_position,
-        replay_position
+        replay_position,
+        replay_start_position
     );
     let compaction_id = Uuid::new_v4();
     let compaction = HistoryCompactionRecord {
@@ -1152,7 +1182,7 @@ fn maybe_record_history_compaction(metadata: &mut Value, workflow_id: TaskId) {
             .map(|event| event.replay_position)
             .unwrap_or(1),
         source_replay_end: source_end_event.replay_position,
-        replay_start_position: replay_position,
+        replay_start_position,
         replacement_event_id: Some(snapshot_event_id),
         preserved_lineage_note: note.clone(),
         recorded_at: Utc::now(),
@@ -1183,8 +1213,10 @@ fn maybe_record_history_compaction(metadata: &mut Value, workflow_id: TaskId) {
         }),
     };
 
-    let _ = merge_history_compaction_metadata(metadata, std::slice::from_ref(&compaction));
-    let _ = merge_workflow_history_metadata(metadata, std::slice::from_ref(&snapshot_event));
+    merge_history_compaction_metadata(metadata, std::slice::from_ref(&compaction))
+        .expect("history compaction metadata merge should succeed");
+    merge_workflow_history_metadata(metadata, std::slice::from_ref(&snapshot_event))
+        .expect("workflow history metadata merge should succeed");
 }
 
 fn retain_replay_history_after_compaction(
@@ -2005,15 +2037,23 @@ impl RuntimeTaskService {
             Some(Utc::now()),
         )
         .await?;
-        self.publish_effect_boundary_event(
-            coordinator_id,
-            workflow_id,
-            &mut metadata,
-            "workflow.completed",
-            "workflow.completed",
-            result_views.final_result,
-        )
-        .await?;
+        if let Err(error) = self
+            .publish_effect_boundary_event(
+                coordinator_id,
+                workflow_id,
+                &mut metadata,
+                "workflow.completed",
+                "workflow.completed",
+                result_views.final_result,
+            )
+            .await
+        {
+            warn!(
+                workflow_id = %workflow_id,
+                error = %error,
+                "effect boundary event publish failed after workflow completion; workflow state preserved"
+            );
+        }
 
         info!(
             workflow_id = %workflow_id,
@@ -2448,6 +2488,8 @@ impl RuntimeTaskService {
         } else {
             record.completed_at
         };
+        // TODO: Replace whole-document write with DB-level JSONB merge to avoid clobbering concurrent updates
+        // Current implementation performs read-modify-write which can race with concurrent step/effect updates
         self.update_root_record(
             workflow_id,
             &decision.persisted_status,
@@ -2833,15 +2875,24 @@ impl RuntimeTaskService {
         self.capture_autonomy_status_metadata(workflow_id, metadata, None);
         self.update_task_metadata(workflow_id, metadata.clone())
             .await?;
-        self.publish_effect_boundary_event(
-            coordinator_id,
-            workflow_id,
-            metadata,
-            "workflow.step.completed",
-            "workflow.step.completed",
-            step_result,
-        )
-        .await
+        if let Err(error) = self
+            .publish_effect_boundary_event(
+                coordinator_id,
+                workflow_id,
+                metadata,
+                "workflow.step.completed",
+                "workflow.step.completed",
+                step_result,
+            )
+            .await
+        {
+            warn!(
+                workflow_id = %workflow_id,
+                error = %error,
+                "effect boundary event publish failed after step completion; step state preserved"
+            );
+        }
+        Ok(())
     }
 
     async fn record_failed_step(
