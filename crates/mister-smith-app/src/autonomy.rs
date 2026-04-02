@@ -24,6 +24,7 @@ use mister_smith_events::{
     ExternalCapabilityDecisionSummary, ExternalCapabilityDecisionSurface, ResumeProvenanceSummary,
     StepRoutingDecisionSummary,
 };
+use mister_smith_events::autonomy::AttestationSource;
 use mister_smith_persistence::postgres::queries;
 use mister_smith_persistence::{lifecycle_decision_history, workflow_history};
 use reqwest::Client;
@@ -669,9 +670,13 @@ pub(crate) fn enrich_accepted_task_ingress_continuity(
         .get("policy_resource_id")
         .and_then(Value::as_str)
         .map(ToString::to_string);
-    let revocation_state = accepted_ingress
+    let revocation_state_raw = accepted_ingress
         .get("revocation_state")
-        .and_then(parse_enum_value::<RevocationState>);
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let revocation_state = revocation_state_raw
+        .as_ref()
+        .and_then(|raw| serde_json::from_value::<RevocationState>(Value::String(raw.clone())).ok());
     let chain_depth = accepted_ingress
         .get("chain_depth")
         .and_then(Value::as_u64)
@@ -679,10 +684,11 @@ pub(crate) fn enrich_accepted_task_ingress_continuity(
         .unwrap_or_default();
 
     let mut rationale = vec![
-        format!("accepted delegated task ingress remained authorized at {request_surface}"),
+        format!("accepted delegated task ingress metadata was present at {request_surface}"),
         format!(
             "continuity projected from workflow metadata {ACCEPTED_TASK_INGRESS_METADATA_KEY} sourced from {source_metadata_key}"
         ),
+        "trust state derived from persisted metadata, not re-verified at inspection time".to_string(),
     ];
     if let Some(descriptor_id) = capability_descriptor_id.as_deref() {
         rationale.push(format!(
@@ -700,6 +706,20 @@ pub(crate) fn enrich_accepted_task_ingress_continuity(
             required_scope, scope
         ));
     }
+    if let Some(revocation_state) = revocation_state {
+        rationale.push(format!(
+            "revocation_state was {:?} in persisted ingress metadata",
+            revocation_state
+        ));
+    } else if revocation_state_raw.is_some() {
+        rationale.push(
+            "revocation_state not present or invalid in persisted ingress metadata".to_string(),
+        );
+    } else {
+        rationale.push(
+            "revocation_state not present or invalid in persisted ingress metadata".to_string(),
+        );
+    }
     if let (Some(action), Some(policy_scope), Some(resource)) = (
         policy_action.as_deref(),
         policy_scope.as_deref(),
@@ -708,6 +728,20 @@ pub(crate) fn enrich_accepted_task_ingress_continuity(
         rationale.push(format!(
             "policy continuity preserved as {action}/{policy_scope}/{resource}"
         ));
+    }
+
+    let outcome = match revocation_state {
+        Some(RevocationState::Active) => ExternalCapabilityDecisionOutcome::Allowed,
+        Some(RevocationState::Revoked) | Some(RevocationState::Expired) => {
+            ExternalCapabilityDecisionOutcome::Rejected
+        }
+        None => ExternalCapabilityDecisionOutcome::Rejected,
+    };
+
+    if matches!(revocation_state, Some(RevocationState::Revoked)) {
+        rationale.push("revocation_state was revoked at ingress time".to_string());
+    } else if matches!(revocation_state, Some(RevocationState::Expired)) {
+        rationale.push("revocation_state was expired at ingress time".to_string());
     }
 
     view.external_capability_decisions
@@ -728,8 +762,9 @@ pub(crate) fn enrich_accepted_task_ingress_continuity(
             policy_scope,
             policy_resource_id,
             revocation_state,
+            attestation_source: Some(AttestationSource::MetadataContinuity),
             chain_depth,
-            outcome: ExternalCapabilityDecisionOutcome::Allowed,
+            outcome,
             observed_at: None,
             rationale,
         });
@@ -2330,6 +2365,13 @@ fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSumma
         _ => "none".to_string(),
     };
     let resource_id = summary.policy_resource_id.as_deref().unwrap_or("none");
+    let attestation_source = summary
+        .attestation_source
+        .map(|source| match source {
+            AttestationSource::RuntimeVerified => "runtime_verified",
+            AttestationSource::MetadataContinuity => "metadata_continuity",
+        })
+        .unwrap_or("none");
     let observed_at = summary
         .observed_at
         .map(|timestamp| timestamp.to_rfc3339())
@@ -2341,7 +2383,7 @@ fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSumma
     };
 
     format!(
-        "{} surface={} branch={} observed_at={} outcome={} capability_descriptor={} action_descriptor={} action_id={} title={} scope={} required_scope={} state={} depth={} policy={} resource_id={} rationale={}",
+        "{} surface={} branch={} observed_at={} outcome={} capability_descriptor={} action_descriptor={} action_id={} title={} scope={} required_scope={} source={} state={} depth={} policy={} resource_id={} rationale={}",
         capability_id,
         boundary_surface,
         branch_id,
@@ -2353,6 +2395,7 @@ fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSumma
         action_title,
         scope,
         required_scope,
+        attestation_source,
         revocation_state,
         summary.chain_depth,
         policy,

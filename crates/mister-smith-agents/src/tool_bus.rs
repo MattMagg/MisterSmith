@@ -1080,6 +1080,7 @@ fn external_capability_decision_from_validated(
         policy_scope: Some(action.policy.scope.clone()),
         policy_resource_id: action.policy.resource_id.clone(),
         revocation_state: Some(capability.revocation_state),
+        attestation_source: Some(mister_smith_events::autonomy::AttestationSource::RuntimeVerified),
         chain_depth: validated.provenance.links.len(),
         outcome: ExternalCapabilityDecisionOutcome::Allowed,
         observed_at: Some(Utc::now()),
@@ -1178,6 +1179,7 @@ fn external_capability_decision_from_claims(
         policy_scope: Some(action.policy.scope.clone()),
         policy_resource_id: action.policy.resource_id.clone(),
         revocation_state,
+        attestation_source: Some(mister_smith_events::autonomy::AttestationSource::RuntimeVerified),
         chain_depth,
         outcome,
         observed_at: Some(Utc::now()),
@@ -1208,6 +1210,7 @@ impl Default for ToolBus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mister_smith_core::AuthorityPrincipal;
 
     #[test]
     fn test_register_and_discover() {
@@ -1273,5 +1276,53 @@ mod tests {
         assert_eq!(metrics.invocation_count, 2);
         assert_eq!(metrics.error_count, 1);
         assert_eq!(metrics.total_latency_ms, 150);
+    }
+
+    #[test]
+    fn external_capability_decision_from_validated_marks_runtime_verified() {
+        let service = DelegationService::new();
+        let recipient = AgentId::new();
+        let (capability, provenance) = service
+            .issue_capability(
+                AuthorityPrincipal::Policy("operator".to_string()),
+                recipient,
+                DelegationScope::InvokeTool,
+                Some("tool:test".to_string()),
+                Duration::from_secs(300),
+                None,
+                None,
+            )
+            .expect("capability should issue");
+        let action = DelegatedAction {
+            descriptor_id: "tool:test".to_string(),
+            action_id: "tool:test#execute".to_string(),
+            title: "execute test".to_string(),
+            description: "execute access for tool test".to_string(),
+            kind: CapabilityActionKind::Execute,
+            policy: DelegatedActionPolicy {
+                action: "execute".to_string(),
+                resource: "tool".to_string(),
+                scope: "test".to_string(),
+                resource_id: Some("test".to_string()),
+            },
+            required_scope: Some(DelegationScope::InvokeTool),
+            revocation_key: "tool:test#execute".to_string(),
+        };
+
+        let validated = service
+            .validate_action(&capability, &provenance, &action)
+            .expect("action should validate locally");
+
+        let summary = external_capability_decision_from_validated(
+            Some(ExecutionBranchId::new()),
+            &validated,
+            &action,
+            None,
+        );
+
+        assert_eq!(
+            summary.attestation_source,
+            Some(mister_smith_events::autonomy::AttestationSource::RuntimeVerified)
+        );
     }
 }

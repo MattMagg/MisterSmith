@@ -25,6 +25,7 @@ use mister_smith_events::{
     ExternalCapabilityDecisionSurface, ResumeProvenanceSummary, RoutingDecisionSummary,
     StepRoutingDecisionSummary, TopologyPlanSummary,
 };
+use mister_smith_events::autonomy::AttestationSource;
 
 fn sample_task_shape(kind: TaskShapeKind) -> TaskShapeClassification {
     TaskShapeClassification {
@@ -218,6 +219,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             policy_scope: Some("agent".to_string()),
             policy_resource_id: Some("agent.echo".to_string()),
             revocation_state: Some(RevocationState::Active),
+            attestation_source: None,
             chain_depth: 1,
             outcome: ExternalCapabilityDecisionOutcome::Allowed,
             observed_at: None,
@@ -644,6 +646,83 @@ fn enrich_accepted_task_ingress_continuity_surfaces_task_ingress_decision() {
     let rendered = autonomy::render_status(&view);
     assert!(rendered.contains("surface=task_ingress"));
     assert!(rendered.contains("branch=none"));
+}
+
+#[test]
+fn enrich_accepted_task_ingress_continuity_rejects_revoked_ingress_metadata() {
+    let (mut view, _, _) = sample_view();
+    view.external_capability_decisions.clear();
+    let capability_id = mister_smith_core::CapabilityId::new();
+    let mut metadata = sample_accepted_task_ingress_metadata(capability_id);
+    metadata["accepted_task_ingress"]["revocation_state"] =
+        serde_json::Value::String("Revoked".to_string());
+
+    autonomy::enrich_accepted_task_ingress_continuity(&mut view, &metadata);
+
+    let summary = view
+        .external_capability_decisions
+        .first()
+        .expect("accepted task ingress should project one boundary decision");
+
+    assert_eq!(summary.outcome, ExternalCapabilityDecisionOutcome::Rejected);
+    assert_eq!(
+        summary.attestation_source,
+        Some(AttestationSource::MetadataContinuity)
+    );
+    assert!(summary
+        .rationale
+        .iter()
+        .any(|line| line.contains("revocation_state was Revoked")));
+}
+
+#[test]
+fn enrich_accepted_task_ingress_continuity_rejects_expired_ingress_metadata() {
+    let (mut view, _, _) = sample_view();
+    view.external_capability_decisions.clear();
+    let capability_id = mister_smith_core::CapabilityId::new();
+    let mut metadata = sample_accepted_task_ingress_metadata(capability_id);
+    metadata["accepted_task_ingress"]["revocation_state"] =
+        serde_json::Value::String("Expired".to_string());
+
+    autonomy::enrich_accepted_task_ingress_continuity(&mut view, &metadata);
+
+    let summary = view
+        .external_capability_decisions
+        .first()
+        .expect("accepted task ingress should project one boundary decision");
+
+    assert_eq!(summary.outcome, ExternalCapabilityDecisionOutcome::Rejected);
+    assert_eq!(
+        summary.attestation_source,
+        Some(AttestationSource::MetadataContinuity)
+    );
+    assert!(summary
+        .rationale
+        .iter()
+        .any(|line| line.contains("revocation_state was Expired")));
+}
+
+#[test]
+fn enrich_accepted_task_ingress_continuity_tags_metadata_continuity_source() {
+    let (mut view, _, _) = sample_view();
+    view.external_capability_decisions.clear();
+    let capability_id = mister_smith_core::CapabilityId::new();
+
+    autonomy::enrich_accepted_task_ingress_continuity(
+        &mut view,
+        &sample_accepted_task_ingress_metadata(capability_id),
+    );
+
+    let summary = view
+        .external_capability_decisions
+        .first()
+        .expect("accepted task ingress should project one boundary decision");
+
+    assert_eq!(summary.outcome, ExternalCapabilityDecisionOutcome::Allowed);
+    assert_eq!(
+        summary.attestation_source,
+        Some(AttestationSource::MetadataContinuity)
+    );
 }
 
 #[test]

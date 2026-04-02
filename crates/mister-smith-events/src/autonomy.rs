@@ -262,6 +262,16 @@ pub enum ExternalCapabilityDecisionOutcome {
     Rejected,
 }
 
+/// Source of the attestation that backed an external boundary decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttestationSource {
+    /// The boundary decision was re-verified at runtime during ToolBus execution.
+    RuntimeVerified,
+    /// The boundary decision was projected from persisted ingress metadata continuity.
+    MetadataContinuity,
+}
+
 /// Runtime surface that emitted an external capability boundary decision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -317,6 +327,9 @@ pub struct ExternalCapabilityDecisionSummary {
     /// Effective revocation state observed for the capability, when one was present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revocation_state: Option<RevocationState>,
+    /// Source that attested the boundary decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attestation_source: Option<AttestationSource>,
     /// Depth of the authority chain used for the boundary call.
     pub chain_depth: usize,
     /// Final operator-facing decision outcome.
