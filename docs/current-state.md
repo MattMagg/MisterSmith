@@ -1,6 +1,6 @@
 # Mister Smith Current State
 
-Date: March 29, 2026
+Date: April 1, 2026
 Status: Current
 
 ## Purpose
@@ -23,8 +23,8 @@ Use this file when you need one honest answer to:
 | ---- | ---------------- | ---- |
 | Overall direction | `docs/direction.md` | Single authoritative direction source that merges repo truth and research-backed priorities |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
-| Latest frontier packet | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Packet-021 closure note and deterministic proof-boundary record for predictive-supervision |
-| Next frozen frontier packet | `specs/022-durable-workflow-core/` | Packet `022` freezes durable workflow semantics and lifecycle plus effect boundaries |
+| Latest landed frontier packet | `docs/plans/2026-04-01-packet-022-durable-workflow-core.md` | Packet-022 closure note for durable history, lifecycle, effect-boundary, and bounded compaction landed on `main` |
+| Active implementation packet | `specs/023-runtime-truth-and-run-trace/` | Packet `023` is the active runtime-truth and run-trace implementation packet on current `main` |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for the completed packet-019 runtime-routing slice |
 | Previous frontier closure | `docs/plans/2026-03-26-budget-backed-runtime-routing-control-loop.md` | Packet-019 scope freeze and closure router |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final-validation artifact for the completed packet-016 epic |
@@ -91,9 +91,11 @@ external workflow services such as Linear or Symphony.
   path now supports verifier-gated step decisions, first-class handoff clarification, preserved
   failure-context plus last stable checkpoint repair lineage, and operator-visible
   orchestration-quality provenance.
-- Packet 021 is not yet landed on `main`: PR `#250` carries the `MS-114` through `MS-118`
-  closure candidate for bounded predictive-supervision evidence plus explicit proof-boundary text
-  on the task inspect path, autonomy status, and operator-console selected-run detail.
+- Packet 021 is landed on `main`: the runtime-backed task path now projects bounded
+  predictive-supervision evidence plus explicit proof-boundary text on task inspect, autonomy
+  status, and operator-console selected-run detail, with deterministic validation only.
+- Packet 022 is landed on `main`: durable workflow lifecycle, event-history, compaction, and
+  effect-boundary ownership are now part of current repo truth with deterministic validation only.
 - Task and autonomy provenance now surface runtime routing policy, registered-provider count,
   budget root, the latest accepted step tier/checkpoint evidence, and verifier/repair lineage from
   the runtime task path.
@@ -110,9 +112,10 @@ external workflow services such as Linear or Symphony.
 - Packet 018 is the in-review smoke-harness lane and is not yet part of landed `main` truth.
 - The watched Symphony queue can be empty without implying a product problem; that queue is part of
   the development workflow, not the OS runtime.
-- The packet-016 family remains terminal, packet `019` is closed, packet `020` is now closed on
-  `main`, packet `018` remains an out-of-main review lane, and packet `021` remains the active
-  predictive-supervision review lane until PR `#250` lands on `main`.
+- The packet-016 family remains terminal, packet `019` is closed, packet `020` is closed on
+  `main`, packet `018` remains an out-of-main review lane, packet `021` and packet `022` are
+  landed on `main`, and packet `023` is the active implementation packet for runtime truth and run
+  trace.
 
 ## Important Distinction
 
@@ -167,9 +170,10 @@ Read the current state in three layers:
   detail surfaces, with deterministic closure evidence captured in
   `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`
 
-The packet-021 projection surface is currently deterministically validated. The last fresh live
-runtime-proof baseline remains the earlier supported-path packet-019 and packet-020 evidence;
-packet-021 does not yet introduce a new live rerun claim.
+The packet-021 projection surface is currently deterministically validated. Packet 022 durable
+workflow ownership is also deterministically validated on `main`. The last fresh live runtime-proof
+baseline remains the earlier supported-path packet-019 and packet-020 evidence; packet 021 and
+packet 022 do not introduce a new live rerun claim by themselves.
 
 This is the current OS path that has real end-to-end proof.
 
@@ -208,11 +212,10 @@ The completed frontier epics are:
 - packet 016: external-agent boundary continuity and runtime proof (`MS-97` through `MS-100`,
   parent `MS-96`)
 
-Packet `019` is complete on `main`. Packet `020` is now landed on `main` through `MS-104`
-through `MS-107`. Packet `021` is under review on PR `#250` as the `MS-114` through `MS-118`
-closure candidate. Packet `022` is now frozen under `specs/022-durable-workflow-core/` as the
-next bounded implementation packet for durable workflow semantics, effect boundaries, and
-lifecycle control.
+Packet `019` is complete on `main`. Packet `020` is landed on `main` through `MS-104`
+through `MS-107`. Packet `021` is landed on `main` with deterministic validation for
+predictive-supervision evidence. Packet `022` is landed on `main` as the durable workflow core.
+Packet `023` is the active bounded implementation packet for runtime truth and run trace.
 
 The remaining March 27 adaptive-topology follow-up is still not a frozen implementation packet.
 It remains a backlog planning item for future evidence-backed work beyond the current
@@ -221,7 +224,9 @@ smallest-workflow baseline.
 This current posture is tracked in:
 
 - `docs/current-state.md`
+- `docs/plans/2026-04-01-packet-022-durable-workflow-core.md`
 - `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`
+- `specs/023-runtime-truth-and-run-trace/`
 - `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`
 - `docs/plans/2026-03-27-runtime-planning-simplification.md`
 - `specs/020-verifier-gated-adaptive-orchestration/`

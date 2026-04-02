@@ -14,7 +14,7 @@ use mister_smith_core::{
     DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionGraphId, ExecutionNodeId,
     GraphState, GuardDecision, HealthState, InterventionRecord, MemorySnapshotId,
     OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProofOutcomeClassification,
-    ProvenanceChain, RevocationState, SessionId, SupervisionEvidenceView, TaskId,
+    ProvenanceChain, RevocationState, RuntimeTruthView, SessionId, SupervisionEvidenceView, TaskId,
     TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 
@@ -407,6 +407,9 @@ pub struct AutonomyStatusView {
     /// Frozen combined packet-021 supervision evidence projection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supervision_evidence: Option<SupervisionEvidenceView>,
+    /// Packet-023 runtime-truth projection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_truth: Option<RuntimeTruthView>,
     /// Reasons the system narrowed autonomy conservatively.
     pub conservative_reasons: Vec<String>,
 }
@@ -579,6 +582,7 @@ pub fn infer_result_preview_from_projection(
         preview_text,
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
+        runtime_truth: None,
         provenance_lines,
     })
 }

@@ -66,7 +66,7 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 use tokio::sync::broadcast;
 use tokio::task::JoinSet;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::auth;
@@ -814,14 +814,13 @@ fn workflow_lifecycle_state_from_metadata(
                 .map(|decision| (decision.resulting_state, decision.decided_at))
         });
 
-    let workflow_state_and_time = workflow_history(metadata)
-        .ok()
-        .and_then(|history| {
-            history
-                .iter()
-                .rev()
-                .find_map(|event| event.lifecycle_state.map(|state| (state, event.recorded_at)))
-        });
+    let workflow_state_and_time = workflow_history(metadata).ok().and_then(|history| {
+        history.iter().rev().find_map(|event| {
+            event
+                .lifecycle_state
+                .map(|state| (state, event.recorded_at))
+        })
+    });
 
     match (decision_state_and_time, workflow_state_and_time) {
         (Some((decision_state, decision_time)), Some((workflow_state, workflow_time))) => {
@@ -1156,7 +1155,7 @@ fn maybe_record_history_compaction(metadata: &mut Value, workflow_id: TaskId) {
     let tail_events = &history[(source_end_index + 1)..];
     let earliest_tail_position = tail_events
         .iter()
-        .filter(|event| event.event_kind == DurableWorkflowEventKind::HistoryCompactedReplayTail)
+        .filter(|event| event.event_kind == DurableWorkflowEventKind::HistoryCompacted)
         .map(|event| event.replay_position)
         .min();
 
@@ -3770,6 +3769,7 @@ mod tests {
             external_capability_decisions: vec![],
             profiles: vec![],
             guard_decisions: vec![],
+            runtime_truth: None,
             supervision_evidence: None,
             conservative_reasons: vec!["restart-safe recovery".to_string()],
         }
@@ -5994,7 +5994,9 @@ fn build_step_evaluation_record(
             .as_ref()
             .map(|directive| directive.failure_context_ref.clone())
             .ok_or_else(|| {
-                format!("workflow step '{step_id}' rejected verifier_policy missing failure_context_ref")
+                format!(
+                    "workflow step '{step_id}' rejected verifier_policy missing failure_context_ref"
+                )
             })?;
         Some(FailureContextCheckpoint {
             failed_step_id: step_id.clone(),

@@ -278,6 +278,60 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 require_consistency=True,
             )
 
+    def test_assert_runtime_truth_surfaces_requires_packet023_fields_and_consistency(self) -> None:
+        task_status = {
+            "result": {
+                "runtime_truth": {
+                    "evidence_class": "placeholder_or_simulated_step_completion",
+                    "proof_boundary": {
+                        "graph_execution": "workflow graph executed successfully",
+                        "semantic_completion": "semantic completion not yet proven",
+                        "grounded_tool_execution": "grounded tool execution: none/minimal",
+                        "task_proof": "result is orchestration proof, not substantive task proof",
+                    },
+                    "run_trace": {
+                        "trace_root_id": "workflow-1",
+                        "workflow_id": "workflow-1",
+                        "relationships": ["graph", "tool_boundary", "supervision"],
+                    },
+                    "grounded_evidence": [],
+                }
+            }
+        }
+        autonomy_status = {
+            "runtime_truth": {
+                "evidence_class": "placeholder_or_simulated_step_completion",
+                "proof_boundary": {
+                    "graph_execution": "workflow graph executed successfully",
+                    "semantic_completion": "semantic completion not yet proven",
+                    "grounded_tool_execution": "grounded tool execution: none/minimal",
+                    "task_proof": "result is orchestration proof, not substantive task proof",
+                },
+                "run_trace": {
+                    "trace_root_id": "workflow-1",
+                    "workflow_id": "workflow-1",
+                    "relationships": ["graph", "tool_boundary", "supervision"],
+                },
+                "grounded_evidence": [],
+            }
+        }
+
+        self.module.assert_runtime_truth_surfaces(
+            task_status,
+            autonomy_status,
+            require_consistency=True,
+        )
+
+        autonomy_status["runtime_truth"]["proof_boundary"][
+            "task_proof"
+        ] = "fresh live task proof captured"
+        with self.assertRaises(self.module.SmokeHarnessError):
+            self.module.assert_runtime_truth_surfaces(
+                task_status,
+                autonomy_status,
+                require_consistency=True,
+            )
+
     def test_build_config_sets_packet021_probe_expectations(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             namespace = type(
@@ -299,6 +353,7 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
             config = self.module.build_config(namespace)
 
         self.assertTrue(config.require_supervision_evidence)
+        self.assertTrue(config.require_runtime_truth)
         self.assertEqual(config.expected_topology_kind, "Hybrid")
         self.assertEqual(config.min_parallelism_width, 2)
         self.assertEqual(config.allowed_supervision_target_kinds, ("branch", "node", "graph"))

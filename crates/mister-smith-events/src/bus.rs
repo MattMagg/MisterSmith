@@ -14,9 +14,10 @@ use tokio::sync::{broadcast, RwLock};
 use tracing;
 
 use mister_smith_core::{
-    CheckpointId, ContextBudgetId, EventPublisher, ExecutionBranchId, ExecutionGraphId,
-    GuardDecision, GuardDecisionId, GuardTarget, InterventionRecord, InterventionRecordId,
-    OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProfileTarget, RepairLineageRef,
+    packet_023_placeholder_runtime_truth, CheckpointId, ContextBudgetId, EventPublisher,
+    ExecutionBranchId, ExecutionGraphId, GuardDecision, GuardDecisionId, GuardTarget,
+    InterventionRecord, InterventionRecordId, OperatorResultPreview, ProfileSnapshot,
+    ProfileSnapshotId, ProfileTarget, RepairLineageRef, RunTraceRelationshipKind, RuntimeTruthView,
     SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, SystemEvent, TaskId,
     TeamSizingDecision,
 };
@@ -60,6 +61,7 @@ struct AutonomyStatusAccumulator {
     profiles: HashMap<ProfileSnapshotId, ProfileSnapshot>,
     guard_decisions: HashMap<GuardDecisionId, GuardDecision>,
     guard_decision_branch_ids: HashMap<GuardDecisionId, Option<ExecutionBranchId>>,
+    runtime_truth: Option<RuntimeTruthView>,
     supervision_evidence: Option<SupervisionEvidenceView>,
     conservative_reasons: Vec<String>,
     latest_profile_id: Option<ProfileSnapshotId>,
@@ -208,7 +210,7 @@ impl AutonomyStatusAccumulator {
             &branches,
             &self.routing_history,
         );
-        let result_preview = match (
+        let mut result_preview = match (
             self.result_preview.as_ref(),
             inferred_result_preview.as_ref(),
         ) {
@@ -230,6 +232,19 @@ impl AutonomyStatusAccumulator {
                 }
             })
             .or_else(|| self.supervision_evidence.clone());
+        let runtime_truth = self.runtime_truth.clone().unwrap_or_else(|| {
+            synthesize_runtime_truth(
+                &graph,
+                &topology,
+                &branches,
+                &self.step_routing_history,
+                supervision_evidence.as_ref(),
+                &guard_decisions,
+            )
+        });
+        if let Some(preview) = result_preview.as_mut() {
+            preview.runtime_truth = Some(runtime_truth.clone());
+        }
 
         Some(AutonomyStatusView {
             session_id: self.session_id,
@@ -255,12 +270,14 @@ impl AutonomyStatusAccumulator {
             profiles,
             guard_decisions,
             supervision_evidence,
+            runtime_truth: Some(runtime_truth),
             conservative_reasons: self.conservative_reasons.clone(),
         })
     }
 
     fn from_view(view: AutonomyStatusView) -> Self {
         let supervision_evidence = view.supervision_evidence.clone();
+        let runtime_truth = view.runtime_truth.clone();
         let mut accumulator = Self {
             session_id: view.session_id,
             turn_index: view.turn_index,
@@ -271,6 +288,7 @@ impl AutonomyStatusAccumulator {
             graph: Some(view.graph),
             topology: Some(view.topology),
             team_sizing: view.team_sizing,
+            runtime_truth,
             supervision_evidence,
             ..Self::default()
         };
@@ -505,6 +523,70 @@ fn merge_supervision_evidence(
         synthesized.proof_boundary = preserved.proof_boundary.clone();
     }
     synthesized
+}
+
+fn synthesize_runtime_truth(
+    graph: &ExecutionGraphSummary,
+    topology: &TopologyPlanSummary,
+    branches: &[BranchSummary],
+    step_routing_history: &[StepRoutingDecisionSummary],
+    supervision_evidence: Option<&SupervisionEvidenceView>,
+    guard_decisions: &[GuardDecision],
+) -> RuntimeTruthView {
+    let branch_id = supervision_evidence
+        .and_then(|evidence| evidence.target_scope.branch_id)
+        .or_else(|| branches.first().map(|branch| branch.branch_id));
+    let node_id = supervision_evidence.and_then(|evidence| evidence.target_scope.node_id);
+    let mut relationships = vec![
+        RunTraceRelationshipKind::Graph,
+        RunTraceRelationshipKind::ToolBoundary,
+    ];
+
+    if !branches.is_empty() {
+        relationships.push(RunTraceRelationshipKind::Branch);
+    }
+    if node_id.is_some() || graph.node_count > 0 {
+        relationships.push(RunTraceRelationshipKind::Node);
+    }
+    if branches.len() > 1 {
+        relationships.push(RunTraceRelationshipKind::FanOut);
+    }
+    if topology.task_shape.has_join {
+        relationships.push(RunTraceRelationshipKind::Join);
+    }
+    if supervision_evidence.is_some() {
+        relationships.push(RunTraceRelationshipKind::Supervision);
+    }
+    if supervision_evidence
+        .and_then(|evidence| evidence.repair_lineage_ref.as_ref())
+        .is_some()
+    {
+        relationships.push(RunTraceRelationshipKind::Repair);
+    }
+    if !step_routing_history.is_empty() {
+        relationships.push(RunTraceRelationshipKind::Retry);
+    }
+    if guard_decisions.iter().any(|decision| {
+        decision
+            .evidence
+            .notes
+            .iter()
+            .any(|note| note.contains("handoff"))
+    }) {
+        relationships.push(RunTraceRelationshipKind::Handoff);
+    }
+
+    relationships.sort_by_key(|kind| *kind as u8);
+    relationships.dedup();
+
+    packet_023_placeholder_runtime_truth(
+        graph.workflow_id,
+        Some(graph.graph_id),
+        branch_id,
+        node_id,
+        relationships,
+        vec![],
+    )
 }
 
 fn repair_lineage_ref_from_checkpoint_lineage<'a>(

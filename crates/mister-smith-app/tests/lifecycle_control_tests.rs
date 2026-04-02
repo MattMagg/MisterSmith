@@ -105,6 +105,7 @@ fn sample_autonomy_view(workflow_id: TaskId) -> AutonomyStatusView {
         profiles: vec![],
         guard_decisions: vec![],
         supervision_evidence: None,
+        runtime_truth: None,
         conservative_reasons: vec![],
     }
 }

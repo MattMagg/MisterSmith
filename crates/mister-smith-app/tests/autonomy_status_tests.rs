@@ -250,6 +250,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             target_scope: mister_smith_core::GuardTarget::Branch(branch_id),
             operator_visibility: true,
         }],
+        runtime_truth: None,
         supervision_evidence: None,
         conservative_reasons: vec![
             "conservative fallback: control-plane state unavailable".to_string()
@@ -700,11 +701,9 @@ fn enrich_result_preview_prefers_task_result_projection() {
             && line.contains("budget_policy")
             && line.contains("confidence_review")
     }));
-    assert!(preview
-        .provenance_lines
-        .iter()
-        .any(|line| line
-            .contains("session assistant_result derives from the canonical result object")));
+    assert!(preview.provenance_lines.iter().any(|line| {
+        line.contains("session assistant_result derives from the canonical result object")
+    }));
 }
 
 #[test]
@@ -1047,6 +1046,45 @@ fn build_task_result_view_preserves_supervision_evidence_projection() {
     );
 
     assert_eq!(summary.supervision_evidence, Some(supervision_evidence));
+}
+
+#[test]
+fn build_task_result_view_preserves_runtime_truth_projection() {
+    let workflow_id = TaskId::new();
+    let canonical_result = sample_canonical_result(
+        workflow_id,
+        "completed",
+        vec![serde_json::json!({ "id": "draft-outline" })],
+        vec![],
+    );
+    let summary = autonomy::build_task_result_view("completed", canonical_result, None);
+    let runtime_truth = serde_json::to_value(
+        summary
+            .runtime_truth
+            .expect("completed task result should synthesize runtime truth"),
+    )
+    .expect("runtime truth should serialize");
+
+    assert_eq!(
+        runtime_truth["evidence_class"],
+        serde_json::json!("placeholder_or_simulated_step_completion")
+    );
+    assert_eq!(
+        runtime_truth["proof_boundary"]["graph_execution"],
+        serde_json::json!("workflow graph executed successfully")
+    );
+    assert_eq!(
+        runtime_truth["proof_boundary"]["task_proof"],
+        serde_json::json!("result is orchestration proof, not substantive task proof")
+    );
+    assert_eq!(
+        runtime_truth["run_trace"]["trace_root_id"],
+        serde_json::json!(workflow_id.to_string())
+    );
+    assert_eq!(
+        runtime_truth["run_trace"]["relationships"],
+        serde_json::json!(["graph", "tool_boundary"])
+    );
 }
 
 #[test]
@@ -1405,6 +1443,7 @@ fn render_status_surfaces_result_preview_block() {
         preview_text: Some("bounded answer preview".to_string()),
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
+        runtime_truth: None,
         provenance_lines: vec![
             "graph formed and completed before final result publication".to_string(),
             "provider=openai_chatgpt model=gpt-5.4".to_string(),
@@ -1427,6 +1466,27 @@ fn render_status_surfaces_result_preview_block() {
 }
 
 #[test]
+fn enrich_result_preview_surfaces_runtime_truth_summary() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    let task_result = sample_task_result_view(
+        view.graph.workflow_id,
+        ProofOutcomeClassification::CollapsedToSequential,
+    );
+
+    autonomy::enrich_result_preview(&mut view, &serde_json::json!({}), Some(&task_result));
+
+    let rendered = autonomy::render_status(&view);
+
+    assert!(rendered.contains("runtime truth: class=placeholder_or_simulated_step_completion"));
+    assert!(rendered.contains("relationships=graph|tool_boundary"));
+    assert!(rendered.contains("graph_execution=workflow graph executed successfully"));
+    assert!(
+        rendered.contains("task_proof=result is orchestration proof, not substantive task proof")
+    );
+}
+
+#[test]
 fn enrich_result_preview_merges_existing_structural_provenance() {
     let (mut view, _, _) = sample_view();
     view.graph.state = GraphState::Completed;
@@ -1436,6 +1496,7 @@ fn enrich_result_preview_merges_existing_structural_provenance() {
         preview_text: Some("structural preview only".to_string()),
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
+        runtime_truth: None,
         provenance_lines: vec![
             "projection observed graph state Completed with topology Sequential (1 branch(es), 3 node(s))".to_string(),
             "routing history retained 1 decision(s)".to_string(),

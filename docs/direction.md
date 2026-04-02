@@ -1,6 +1,6 @@
 # Mister Smith Direction
 
-Date: March 29, 2026
+Date: April 1, 2026
 Status: Authoritative
 
 ## Purpose and Authority
@@ -45,8 +45,9 @@ Already landed and proven:
 - ToolBus-backed execution on the default runtime path
 - real local provider-backed runtime proof on the supported `openai_chatgpt` / `gpt-5.4` baseline
 - bounded same-agent sessions and operator-visible provenance
-- bounded runtime routing, budget, verifier-gated orchestration, repair-lineage foundations, and
-  deterministic packet-021 predictive-supervision evidence surfaces on `main`
+- bounded runtime routing, budget, verifier-gated orchestration, repair-lineage foundations,
+  deterministic packet-021 predictive-supervision evidence surfaces on `main`, and landed
+  packet-022 durable workflow core ownership on `main`
 
 Exists but is still opt-in, partial, or not the default runtime path:
 
@@ -96,6 +97,10 @@ should be treated as base layers to harden and generalize.
   routing, budget, verifier, and provenance foundations that should become more robust and more
   honestly default over time. This belongs now because the system should finish and harden what is
   already partially real before opening new orchestration surfaces.
+- **Runtime truth and run-trace hardening.** This matters because the current runtime can still
+  look successful at the graph layer while grounded task proof is missing. This belongs now
+  because the system should make proof boundaries honest across task, session, autonomy, and
+  operator surfaces before widening observability claims.
 - **Benchmark and observability proof.** This matters because strategic claims need runtime proof,
   comparative evidence, and AI-native observability instead of theory alone. This belongs now
   because Mister Smith should prove its advantages while the substrate is still becoming the stable

@@ -1,5 +1,10 @@
 import { type FormEvent } from 'react';
-import type { RunSummary, TaskInspectResponse, TaskSupervisionEvidence } from '../types';
+import type {
+  RunSummary,
+  TaskInspectResponse,
+  TaskRuntimeTruth,
+  TaskSupervisionEvidence,
+} from '../types';
 import { formatTimestamp, prettyJson } from '../utils/format';
 import { StatusPill } from '../components/StatusPill';
 import { EmptyState } from '../components/EmptyState';
@@ -36,6 +41,7 @@ export function RunsView(props: RunsViewProps) {
     taskDetail,
   } = props;
   const supervision = taskDetail?.result?.supervision_evidence ?? null;
+  const runtimeTruth = taskDetail?.result?.runtime_truth ?? null;
 
   return (
     <div className="tab-layout">
@@ -136,6 +142,31 @@ export function RunsView(props: RunsViewProps) {
             />
 
             <PreviewCard preview={selectedRunSummary.result_preview} />
+
+            {runtimeTruth ? (
+              <section className="subpanel">
+                <h3>Runtime truth</h3>
+                <KeyValueGrid
+                  rows={[
+                    ['Evidence class', runtimeTruth.evidence_class],
+                    ['Trace root', runtimeTruth.run_trace.trace_root_id],
+                    ['Relationships', formatRelationships(runtimeTruth)],
+                    ['Graph', runtimeTruth.run_trace.graph_id ?? 'not recorded'],
+                    ['Branch', runtimeTruth.run_trace.branch_id ?? 'not recorded'],
+                    ['Node', runtimeTruth.run_trace.node_id ?? 'not recorded'],
+                  ]}
+                />
+                <KeyValueGrid
+                  rows={[
+                    ['Graph execution', runtimeTruth.proof_boundary.graph_execution],
+                    ['Semantic completion', runtimeTruth.proof_boundary.semantic_completion],
+                    ['Grounded tool execution', runtimeTruth.proof_boundary.grounded_tool_execution],
+                    ['Task proof', runtimeTruth.proof_boundary.task_proof],
+                  ]}
+                />
+                <p>Grounded evidence: {formatGroundedEvidence(runtimeTruth)}</p>
+              </section>
+            ) : null}
 
             {supervision ? (
               <section className="subpanel">
@@ -275,4 +306,18 @@ function formatRepairLineage(supervision: TaskSupervisionEvidence): string {
   return lineage.checkpoint_ref
     ? `${lineage.source} via ${lineage.checkpoint_ref}`
     : lineage.source;
+}
+
+function formatRelationships(runtimeTruth: TaskRuntimeTruth): string {
+  return runtimeTruth.run_trace.relationships.length > 0
+    ? runtimeTruth.run_trace.relationships.join(', ')
+    : 'not recorded';
+}
+
+function formatGroundedEvidence(runtimeTruth: TaskRuntimeTruth): string {
+  return runtimeTruth.grounded_evidence.length > 0
+    ? runtimeTruth.grounded_evidence
+        .map((reference) => `${reference.source}: ${reference.reference}`)
+        .join(', ')
+    : 'none/minimal';
 }

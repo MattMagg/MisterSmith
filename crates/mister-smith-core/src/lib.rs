@@ -18,15 +18,20 @@ pub use ids::{
 
 // Shared autonomy value objects
 pub use autonomy::{
+    packet_023_placeholder_proof_boundary, packet_023_placeholder_runtime_truth,
     AuthorityPrincipal, CapabilityActionKind, ContextBudget, DelegatedAction,
-    DelegatedActionPolicy, DelegationCapability, ExternalDelegationEnvelope, GuardDecision,
-    GuardEvidence, GuardTarget, HandoffClarificationRequest, InterventionRecord, MetricWindow,
+    DelegatedActionPolicy, DelegationCapability, ExecutionEvidenceClass,
+    ExternalDelegationEnvelope, GroundedEvidenceReference, GuardDecision, GuardEvidence,
+    GuardTarget, HandoffClarificationRequest, InterventionRecord, MetricWindow,
     OperatorResultPreview, OrchestrationQualityView, ProfileFingerprint, ProfileFingerprintRef,
-    ProfileSnapshot, ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairLineageRef,
-    ResultProvenanceSummary, SemanticSignal, SessionRetainedResultView, StepEvaluationRecord,
-    SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
+    ProfileSnapshot, ProofBoundaryView, ProofOutcomeClassification, ProvenanceChain,
+    ProvenanceLink, RepairLineageRef, ResultProvenanceSummary, RunTraceRelationshipKind,
+    RunTraceSummaryView, RuntimeTruthView, SemanticSignal, SessionRetainedResultView,
+    StepEvaluationRecord, SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
     SupervisionTargetScope, TaskResultView, TaskShapeClassification, TaskShapeKind,
     TeamSizingDecision, TopologyPlan, TopologyRationale, UnifiedResultEnvelope,
+    PACKET_023_GRAPH_EXECUTION_SUCCESS, PACKET_023_GROUNDED_TOOL_EXECUTION_MINIMAL,
+    PACKET_023_ORCHESTRATION_ONLY, PACKET_023_SEMANTIC_COMPLETION_UNPROVEN,
 };
 
 // Core enums

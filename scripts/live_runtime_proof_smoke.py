@@ -129,6 +129,8 @@ class HarnessConfig:
     require_supervision_proof_boundary: bool
     require_detailed_supervision_payload: bool
     require_supervision_consistency: bool
+    require_runtime_truth: bool = False
+    require_runtime_truth_consistency: bool = False
 
 
 @dataclass(frozen=True)
@@ -143,6 +145,8 @@ class ScenarioConfig:
     require_supervision_proof_boundary: bool = False
     require_detailed_supervision_payload: bool = False
     require_supervision_consistency: bool = False
+    require_runtime_truth: bool = False
+    require_runtime_truth_consistency: bool = False
 
 
 SCENARIOS: dict[str, ScenarioConfig] = {
@@ -168,6 +172,8 @@ SCENARIOS: dict[str, ScenarioConfig] = {
         require_supervision_proof_boundary=True,
         require_detailed_supervision_payload=True,
         require_supervision_consistency=True,
+        require_runtime_truth=True,
+        require_runtime_truth_consistency=True,
     ),
 }
 
@@ -1110,6 +1116,117 @@ def summarize_supervision_evidence(payload: dict[str, Any] | None) -> dict[str, 
     }
 
 
+def extract_task_runtime_truth(task_status_payload: dict[str, Any]) -> dict[str, Any] | None:
+    result = task_status_payload.get("result")
+    if result is None:
+        return None
+    if not isinstance(result, dict):
+        raise SmokeHarnessError("task result payload was not a JSON object")
+    runtime_truth = result.get("runtime_truth")
+    if runtime_truth is None:
+        return None
+    if not isinstance(runtime_truth, dict):
+        raise SmokeHarnessError("task result runtime_truth was not a JSON object")
+    return runtime_truth
+
+
+def extract_autonomy_runtime_truth(
+    autonomy_status_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    runtime_truth = autonomy_status_payload.get("runtime_truth")
+    if runtime_truth is None:
+        return None
+    if not isinstance(runtime_truth, dict):
+        raise SmokeHarnessError("autonomy runtime_truth was not a JSON object")
+    return runtime_truth
+
+
+def runtime_truth_consistency_projection(payload: dict[str, Any]) -> dict[str, Any]:
+    proof_boundary = payload.get("proof_boundary")
+    if not isinstance(proof_boundary, dict):
+        raise SmokeHarnessError("runtime_truth.proof_boundary was not a JSON object")
+    run_trace = payload.get("run_trace")
+    if not isinstance(run_trace, dict):
+        raise SmokeHarnessError("runtime_truth.run_trace was not a JSON object")
+    relationships = run_trace.get("relationships")
+    if not isinstance(relationships, list) or not all(
+        isinstance(value, str) for value in relationships
+    ):
+        raise SmokeHarnessError("runtime_truth.run_trace.relationships was not a string list")
+    grounded_evidence = payload.get("grounded_evidence")
+    if not isinstance(grounded_evidence, list):
+        raise SmokeHarnessError("runtime_truth.grounded_evidence was not a JSON list")
+    return {
+        "evidence_class": payload.get("evidence_class"),
+        "graph_execution": proof_boundary.get("graph_execution"),
+        "semantic_completion": proof_boundary.get("semantic_completion"),
+        "grounded_tool_execution": proof_boundary.get("grounded_tool_execution"),
+        "task_proof": proof_boundary.get("task_proof"),
+        "trace_root_id": run_trace.get("trace_root_id"),
+        "workflow_id": run_trace.get("workflow_id"),
+        "relationships": tuple(relationships),
+        "grounded_evidence_count": len(grounded_evidence),
+    }
+
+
+def assert_runtime_truth_surfaces(
+    task_status_payload: dict[str, Any],
+    autonomy_status_payload: dict[str, Any],
+    *,
+    require_consistency: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    task_runtime_truth = extract_task_runtime_truth(task_status_payload)
+    autonomy_runtime_truth = extract_autonomy_runtime_truth(autonomy_status_payload)
+    if task_runtime_truth is None or autonomy_runtime_truth is None:
+        raise SmokeHarnessError(
+            "packet-023 runtime-truth probe expected runtime_truth on both task result and autonomy status"
+        )
+
+    expected_boundary = {
+        "graph_execution": "workflow graph executed successfully",
+        "semantic_completion": "semantic completion not yet proven",
+        "grounded_tool_execution": "grounded tool execution: none/minimal",
+        "task_proof": "result is orchestration proof, not substantive task proof",
+    }
+
+    for surface_name, payload in (
+        ("task result", task_runtime_truth),
+        ("autonomy status", autonomy_runtime_truth),
+    ):
+        projection = runtime_truth_consistency_projection(payload)
+        if projection["evidence_class"] != "placeholder_or_simulated_step_completion":
+            raise SmokeHarnessError(
+                f"{surface_name} runtime truth used unexpected evidence_class {projection['evidence_class']!r}"
+            )
+        for key, expected_value in expected_boundary.items():
+            if projection[key] != expected_value:
+                raise SmokeHarnessError(
+                    f"{surface_name} runtime truth {key} expected {expected_value!r}, observed {projection[key]!r}"
+                )
+        if not isinstance(projection["trace_root_id"], str):
+            raise SmokeHarnessError(
+                f"{surface_name} runtime truth was missing trace_root_id"
+            )
+        if not isinstance(projection["workflow_id"], str):
+            raise SmokeHarnessError(
+                f"{surface_name} runtime truth was missing workflow_id"
+            )
+        if "graph" not in projection["relationships"] or "tool_boundary" not in projection["relationships"]:
+            raise SmokeHarnessError(
+                f"{surface_name} runtime truth was missing required graph/tool_boundary relationships"
+            )
+
+    if require_consistency:
+        task_projection = runtime_truth_consistency_projection(task_runtime_truth)
+        autonomy_projection = runtime_truth_consistency_projection(autonomy_runtime_truth)
+        if task_projection != autonomy_projection:
+            raise SmokeHarnessError(
+                "task result and autonomy runtime truth surfaces did not agree on the packet-023 proof fields"
+            )
+
+    return task_runtime_truth, autonomy_runtime_truth
+
+
 def assert_supervision_surfaces(
     task_status_payload: dict[str, Any],
     autonomy_status_payload: dict[str, Any],
@@ -1325,6 +1442,8 @@ def build_config(args: argparse.Namespace) -> HarnessConfig:
         require_supervision_proof_boundary=scenario.require_supervision_proof_boundary,
         require_detailed_supervision_payload=scenario.require_detailed_supervision_payload,
         require_supervision_consistency=scenario.require_supervision_consistency,
+        require_runtime_truth=scenario.require_runtime_truth,
+        require_runtime_truth_consistency=scenario.require_runtime_truth_consistency,
     )
 
 
@@ -1540,6 +1659,12 @@ def main() -> int:
                 require_proof_boundary=config.require_supervision_proof_boundary,
                 require_detailed_payload=config.require_detailed_supervision_payload,
                 require_consistency=config.require_supervision_consistency,
+            )
+        if config.require_runtime_truth:
+            assert_runtime_truth_surfaces(
+                task_status,
+                autonomy_status,
+                require_consistency=config.require_runtime_truth_consistency,
             )
 
         if is_budget_aware_profile(config.profile):

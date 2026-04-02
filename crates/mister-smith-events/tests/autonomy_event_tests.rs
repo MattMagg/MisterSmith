@@ -1,17 +1,17 @@
 use mister_smith_core::{
-    AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
-    CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
-    DurableWorkflowEventKind, DurableWorkflowLifecycleState, DurableWorkflowLifecycleVerb,
-    EffectBoundaryIntentState, EffectBoundaryOutcomeState, ExecutionBranchId, ExecutionGraphId,
-    ExecutionNodeId, FailureClass, GraphState, GuardDecision, GuardDecisionId, GuardEvidence,
-    HealthState, HistoryCompactionMode, InterventionRecord, InterventionRecordId, InterventionType,
-    LifecycleDecisionOutcome, OperatorResultPreview, OrchestrationQualityView,
-    ProfileFingerprintId, ProfileFingerprintRef, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
-    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirectiveAction,
-    RepairLineageRef, ResultProvenanceSummary, RevocationState, SupervisionDecisionBasis,
-    SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, TaskId,
-    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
-    VerifierVerdict,
+    packet_023_placeholder_runtime_truth, AgentId, AuthorityPrincipal, BranchRecoveryStrategy,
+    BranchState, BudgetPolicy, BudgetScope, CapabilityId, CheckpointId, ContextBudgetId,
+    CoordinationPolicy, DelegationScope, DurableWorkflowEventKind, DurableWorkflowLifecycleState,
+    DurableWorkflowLifecycleVerb, EffectBoundaryIntentState, EffectBoundaryOutcomeState,
+    ExecutionBranchId, ExecutionGraphId, ExecutionNodeId, FailureClass, GraphState, GuardDecision,
+    GuardDecisionId, GuardEvidence, HealthState, HistoryCompactionMode, InterventionRecord,
+    InterventionRecordId, InterventionType, LifecycleDecisionOutcome, OperatorResultPreview,
+    OrchestrationQualityView, ProfileFingerprintId, ProfileFingerprintRef, ProfileSnapshot,
+    ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification, ProvenanceChain, ProvenanceLink,
+    RepairDirectiveAction, RepairLineageRef, ResultProvenanceSummary, RevocationState,
+    SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
+    SupervisionTargetScope, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
+    TopologyKind, TopologyRationale, VerifierVerdict,
 };
 use mister_smith_events::autonomy::{
     infer_proof_outcome_from_projection, merge_operator_result_preview,
@@ -177,6 +177,18 @@ fn sample_result_preview(
         preview_text: Some("bounded answer preview".to_string()),
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
+        runtime_truth: Some(packet_023_placeholder_runtime_truth(
+            workflow_id,
+            Some(ExecutionGraphId::new()),
+            Some(ExecutionBranchId::new()),
+            None,
+            vec![
+                mister_smith_core::RunTraceRelationshipKind::Graph,
+                mister_smith_core::RunTraceRelationshipKind::Branch,
+                mister_smith_core::RunTraceRelationshipKind::ToolBoundary,
+            ],
+            vec![],
+        )),
         provenance_lines: vec![
             "canonical result stored in metadata.final_result".to_string(),
             "aggregated payload nested under metadata.aggregated_result".to_string(),
@@ -194,6 +206,7 @@ fn merge_operator_result_preview_preserves_orchestration_quality_from_fallback()
         preview_text: Some("preferred preview".to_string()),
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
+        runtime_truth: None,
         provenance_lines: vec!["preferred provenance".to_string()],
     };
     let fallback = OperatorResultPreview {
@@ -211,6 +224,19 @@ fn merge_operator_result_preview_preserves_orchestration_quality_from_fallback()
             failure_context_ref: Some("draft-outline/clarify".to_string()),
             outcome_summary: "accepted_after_clarify_handoff".to_string(),
         }),
+        runtime_truth: Some(mister_smith_core::packet_023_placeholder_runtime_truth(
+            workflow_id,
+            Some(ExecutionGraphId::new()),
+            Some(ExecutionBranchId::new()),
+            None,
+            vec![
+                mister_smith_core::RunTraceRelationshipKind::Graph,
+                mister_smith_core::RunTraceRelationshipKind::Branch,
+                mister_smith_core::RunTraceRelationshipKind::ToolBoundary,
+                mister_smith_core::RunTraceRelationshipKind::Supervision,
+            ],
+            vec![],
+        )),
         provenance_lines: vec!["fallback provenance".to_string()],
     };
 
@@ -675,6 +701,19 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             }),
             proof_boundary: Some("deterministic-only".to_string()),
         }),
+        runtime_truth: Some(packet_023_placeholder_runtime_truth(
+            workflow_id,
+            Some(graph_id),
+            Some(branch_id),
+            None,
+            vec![
+                mister_smith_core::RunTraceRelationshipKind::Graph,
+                mister_smith_core::RunTraceRelationshipKind::Branch,
+                mister_smith_core::RunTraceRelationshipKind::ToolBoundary,
+                mister_smith_core::RunTraceRelationshipKind::Supervision,
+            ],
+            vec![],
+        )),
         conservative_reasons: vec!["control-plane state unavailable".to_string()],
     };
 
@@ -1084,6 +1123,66 @@ async fn event_bus_synthesizes_node_scoped_lineage_from_guard_branch_hint() {
     );
 }
 
+#[tokio::test]
+async fn event_bus_synthesizes_runtime_truth_on_result_preview() {
+    let event_bus = EventBus::default();
+    let workflow_id = TaskId::new();
+    let graph_id = ExecutionGraphId::new();
+    let branch = sample_branch_summary(graph_id);
+    let routing = sample_routing_summary(workflow_id, graph_id, branch.branch_id);
+
+    publish_projection(
+        &event_bus,
+        sample_graph_summary(
+            workflow_id,
+            graph_id,
+            GraphState::Completed,
+            2,
+            4,
+            Some(TopologyKind::Hybrid),
+        ),
+        sample_topology_summary(graph_id, TopologyKind::Hybrid, 2, TaskShapeKind::FanoutJoin),
+        vec![branch],
+        vec![routing],
+    )
+    .await;
+
+    let runtime_truth = event_bus
+        .autonomy_status(&workflow_id)
+        .await
+        .expect("projection should assemble")
+        .result_preview
+        .and_then(|preview| preview.runtime_truth)
+        .expect("runtime truth should synthesize onto the result preview");
+
+    assert_eq!(
+        runtime_truth.proof_boundary.graph_execution,
+        "workflow graph executed successfully"
+    );
+    assert_eq!(
+        runtime_truth.proof_boundary.semantic_completion,
+        "semantic completion not yet proven"
+    );
+    assert_eq!(
+        runtime_truth.proof_boundary.grounded_tool_execution,
+        "grounded tool execution: none/minimal"
+    );
+    assert_eq!(
+        runtime_truth.proof_boundary.task_proof,
+        "result is orchestration proof, not substantive task proof"
+    );
+    assert_eq!(runtime_truth.run_trace.workflow_id, workflow_id);
+    assert_eq!(runtime_truth.run_trace.graph_id, Some(graph_id));
+    assert!(runtime_truth
+        .run_trace
+        .relationships
+        .contains(&mister_smith_core::RunTraceRelationshipKind::Graph));
+    assert!(runtime_truth
+        .run_trace
+        .relationships
+        .contains(&mister_smith_core::RunTraceRelationshipKind::ToolBoundary));
+}
+
 #[test]
 fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
     let workflow_id = TaskId::new();
@@ -1167,6 +1266,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
         profiles: vec![],
         guard_decisions: vec![],
         supervision_evidence: None,
+        runtime_truth: None,
         conservative_reasons: vec!["control-plane freshness unavailable".to_string()],
     };
     let event = AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
@@ -1291,6 +1391,19 @@ async fn event_bus_preserves_supervision_evidence_from_status_updated() {
         profiles: vec![],
         guard_decisions: vec![],
         supervision_evidence: Some(supervision_evidence.clone()),
+        runtime_truth: Some(packet_023_placeholder_runtime_truth(
+            workflow_id,
+            Some(graph_id),
+            Some(branch_id),
+            None,
+            vec![
+                mister_smith_core::RunTraceRelationshipKind::Graph,
+                mister_smith_core::RunTraceRelationshipKind::Branch,
+                mister_smith_core::RunTraceRelationshipKind::ToolBoundary,
+                mister_smith_core::RunTraceRelationshipKind::Supervision,
+            ],
+            vec![],
+        )),
         conservative_reasons: vec![],
     };
 
@@ -1716,32 +1829,51 @@ async fn event_bus_aggregates_the_frozen_proof_outcome_matrix() {
         ),
         Some(ProofOutcomeClassification::GraphFormedAndCompleted)
     );
+    let success_preview = success_view
+        .result_preview
+        .expect("success case should infer a result preview");
+    assert_eq!(success_preview.workflow_id, success_workflow_id);
     assert_eq!(
-        success_view
-            .result_preview
-            .expect("success case should infer a result preview"),
-        OperatorResultPreview {
-            workflow_id: success_workflow_id,
-            proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
-            preview_text: Some("workflow completed with 2 branch(es) across 4 node(s)".to_string()),
-            payload_location: "task.result".to_string(),
-            orchestration_quality: None,
-            provenance_lines: vec![
-                "graph formed and completed before final result publication".to_string(),
-                format!(
-                    "projection observed graph state {:?} with topology {:?} ({} branch(es), {} node(s))",
-                    GraphState::Completed,
-                    TopologyKind::Hybrid,
-                    2,
-                    4
-                ),
-                "canonical result stored in metadata.final_result".to_string(),
-                "aggregated payload nested under metadata.aggregated_result".to_string(),
-                "full payload remains recoverable from task.result".to_string(),
-                "projection retained 1 branch detail record(s)".to_string(),
-                "routing history retained 1 decision(s)".to_string(),
-            ],
-        }
+        success_preview.proof_outcome,
+        ProofOutcomeClassification::GraphFormedAndCompleted
+    );
+    assert_eq!(
+        success_preview.preview_text,
+        Some("workflow completed with 2 branch(es) across 4 node(s)".to_string())
+    );
+    assert_eq!(success_preview.payload_location, "task.result");
+    assert_eq!(success_preview.orchestration_quality, None);
+    assert!(success_preview
+        .provenance_lines
+        .contains(&"graph formed and completed before final result publication".to_string()));
+    assert!(success_preview.provenance_lines.contains(&format!(
+        "projection observed graph state {:?} with topology {:?} ({} branch(es), {} node(s))",
+        GraphState::Completed,
+        TopologyKind::Hybrid,
+        2,
+        4
+    )));
+    assert!(success_preview
+        .provenance_lines
+        .contains(&"canonical result stored in metadata.final_result".to_string()));
+    assert!(success_preview
+        .provenance_lines
+        .contains(&"aggregated payload nested under metadata.aggregated_result".to_string()));
+    assert!(success_preview
+        .provenance_lines
+        .contains(&"full payload remains recoverable from task.result".to_string()));
+    assert!(success_preview
+        .provenance_lines
+        .contains(&"projection retained 1 branch detail record(s)".to_string()));
+    assert!(success_preview
+        .provenance_lines
+        .contains(&"routing history retained 1 decision(s)".to_string()));
+    assert_eq!(
+        success_preview
+            .runtime_truth
+            .as_ref()
+            .map(|truth| truth.proof_boundary.task_proof.as_str()),
+        Some("result is orchestration proof, not substantive task proof")
     );
 
     let collapse_bus = EventBus::default();
@@ -1950,6 +2082,7 @@ async fn event_bus_merges_explicit_preview_with_projection_provenance() {
         profiles: vec![],
         guard_decisions: vec![],
         supervision_evidence: None,
+        runtime_truth: None,
         conservative_reasons: vec![],
     };
 
@@ -2062,6 +2195,7 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         profiles: vec![],
         guard_decisions: vec![],
         supervision_evidence: None,
+        runtime_truth: None,
         conservative_reasons: vec![],
     };
 
@@ -2114,13 +2248,20 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
     }
 
     let view = event_bus.autonomy_status(&workflow_id).await.unwrap();
+    let preview = view
+        .result_preview
+        .as_ref()
+        .expect("result preview should remain present");
+    assert_eq!(preview.workflow_id, workflow_id);
     assert_eq!(
-        view.result_preview,
-        Some(sample_result_preview(
-            workflow_id,
-            ProofOutcomeClassification::GraphFormedAndCompleted,
-        ))
+        preview.proof_outcome,
+        ProofOutcomeClassification::GraphFormedAndCompleted
     );
+    assert_eq!(
+        preview.preview_text.as_deref(),
+        Some("bounded answer preview")
+    );
+    assert!(preview.runtime_truth.is_some());
 
     let view = event_bus
         .autonomy_status(&workflow_id)
@@ -2248,6 +2389,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         profiles: vec![],
         guard_decisions: vec![],
         supervision_evidence: None,
+        runtime_truth: None,
         conservative_reasons: vec!["delegation scope suspended".to_string()],
     };
 

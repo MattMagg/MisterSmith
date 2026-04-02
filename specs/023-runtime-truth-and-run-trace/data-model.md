@@ -1,87 +1,91 @@
 # Data Model: Runtime Truth And Run Trace
 
-## Core trace entities
+## Core packet-023 entities
 
-### `RunTraceRecord`
+### `RuntimeTruthView`
 
-- `workflow_id`: canonical workflow identifier and primary run anchor
-- `trace_root_id`: canonical trace-root identifier for the run
-- `proof_boundary`: latest bounded proof statement for the run
-- `evidence_class`: current class of execution evidence for the run
-- `surface_projection_targets`: task, session, autonomy, and operator run-detail surfaces that
-  should render the same truth story
-- `source_refs`: packet notes, artifact bundles, or future runtime references used to justify the
-  rendered truth story
-
-### `TraceRoot`
-
-- represents the top-level trace identity for one workflow run
-- may reuse packet `022` durable identifiers later, but does not define packet `022` ownership
-- remains distinct from any external tracing vendor or export identifier
-
-### `TraceEvent`
-
-- typed event in the run trace
-- expected event classes include:
-  - graph formation
-  - branch execution
-  - node execution
-  - tool-boundary crossing
-  - handoff
-  - repair
-  - retry
-  - supervision
-  - join or reconvergence
-- may point to grounded evidence references when such evidence actually exists
-
-### `TraceLink`
-
-- explicit relationship between two trace events
-- supported relationship types include:
-  - parent-child execution flow
-  - fan-out
-  - join or reconvergence
-  - retry of prior work
-  - repair of prior work
-  - supervision attached to an execution edge
-
-## Proof-boundary entities
+- `trace_root_id`: canonical run-trace root for the workflow run
+- `evidence_class`: strongest evidence class the run actually produced
+- `proof_boundary`: explicit statement of what the run proved and did not prove
+- `run_trace`: bounded summary of observed run-trace relationships
+- `grounded_evidence_refs`: stable references to grounded work when such evidence exists
 
 ### `ProofBoundaryView`
 
-- operator-facing summary of what the run proved and what it did not prove
-- should preserve the packet-owned conservative phrases when the placeholder step boundary is still
-  active
-- should carry current proof status without collapsing packet `019`, `020`, and `021` into one
-  vague label
+- `execution_summary`: short statement of orchestration-substrate completion
+- `semantic_status`: short statement of whether grounded task completion was proven
+- `grounded_tool_execution`: short statement of grounded tool evidence strength
+- `summary`: operator-facing one-line explanation of the current proof boundary
+
+### `RunTraceSummaryView`
+
+- `workflow_id`: canonical run anchor
+- `trace_root_id`: stable run-trace root identifier
+- `observed_relationships`: ordered unique list of observed relationship kinds
+- `graph_id`: graph identifier when one exists
+- `branch_ids`: branch identifiers when known
+- `node_ids`: node identifiers when known
 
 ### `ExecutionEvidenceClass`
 
-- classifies the strongest evidence the run actually produced
-- expected classes for this packet:
-  - `substrate_completion`
-  - `placeholder_or_simulated_step_completion`
-  - `grounded_tool_execution`
-  - `grounded_task_proof`
-- packet `023` defines the naming and semantics of these classes, not the later implementation
-  mechanics
+- `orchestration_substrate_completion`
+- `placeholder_or_simulated_step_completion`
+- `grounded_tool_execution`
+- `grounded_task_proof`
+
+The first slice only promotes the class when current runtime evidence actually justifies it.
 
 ### `GroundedEvidenceReference`
 
-- stable reference to real files, endpoints, artifacts, or other grounded work touched during the
-  run
-- may be absent when the run only proved orchestration-substrate completion
-- absence is meaningful and must not be silently backfilled with optimistic language
+- `kind`: stable evidence class such as `file`, `endpoint`, `artifact`, or `checkpoint`
+- `reference`: stable identifier, path, URL, or artifact key
+- `label`: short human-readable explanation for the evidence
+
+### `RunTraceRelationshipKind`
+
+- `graph`
+- `branch`
+- `node`
+- `tool_boundary`
+- `handoff`
+- `repair`
+- `retry`
+- `fanout`
+- `join`
+- `supervision`
+
+## Projection targets
+
+### `TaskResultView`
+
+- adds `runtime_truth`
+- keeps `supervision_evidence` unchanged and separate
+
+### `SessionRetainedResultView`
+
+- adds `runtime_truth`
+- keeps the retained result preview and provenance model
+
+### `OperatorResultPreview`
+
+- adds `runtime_truth`
+- keeps `orchestration_quality` unchanged
+
+### `AutonomyStatusView`
+
+- adds `runtime_truth`
+- keeps `supervision_evidence` unchanged and separate
 
 ## Invariants
 
+- packet `021` `supervision_evidence` remains predictive-supervision data, not the packet-023
+  runtime-truth contract
 - packet `022` remains the owner of durable lifecycle, event-history, compaction, and effect
   boundary semantics
 - placeholder `workflow.execute_step` completion is not enough to classify a run as grounded task
   proof
-- packet `019` and `020` live-proof notes remain distinct from packet `021` deterministic-only
-  proof for newer supervision-evidence claims
-- external tracing docs may shape names and link concepts, but they do not prove a full emitted
-  span model exists in the repo today
+- packet `019` and packet `020` remain the last fresh live baseline; packet `021`, packet `022`,
+  and packet `023` remain deterministic-only unless a fresh live rerun is captured
+- transport schema stays unchanged in the first slice
 - all rendered proof-boundary views should tell the same bounded truth story across task, session,
   autonomy, and operator surfaces
