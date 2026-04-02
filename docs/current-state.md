@@ -25,7 +25,7 @@ Use this file when you need one honest answer to:
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
 | Latest landed runtime packet | `specs/023-runtime-truth-and-run-trace/` | Packet `023` landed on `main` via `4d1d044` and owns runtime-truth, proof-boundary, and bounded run-trace projections |
 | Latest landed security packet | `specs/024-agent-boundary-security-hardening/` | Packet `024` landed on `main` via `59e4ca2` and owns the current least-privilege agent-boundary hardening slice |
-| Next implementation-ready packet | `specs/025-step-level-intelligence-v2/` | Packet `025` is the next implementation-ready packet for stronger step-level policy and is ready for `/speckit.implement` |
+| Next implementation-ready packet | `specs/025-step-level-intelligence-v2/` | Packet `025` is the next packet for stronger step-level policy and is ready for `/speckit.implement` |
 | Packet 022 implementation authority | `specs/022-durable-workflow-core/` | Durable workflow lifecycle, event-history, compaction, and effect-boundary ownership on current `main` |
 | Packet 021 closure evidence | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Deterministic packet-021 proof-boundary and supervision-evidence note |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for packet `019` |

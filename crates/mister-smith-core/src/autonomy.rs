@@ -339,7 +339,12 @@ pub struct GroundedEvidenceReference {
     /// Stable identifier, path, URL, or artifact key.
     pub reference: String,
     /// Short human-readable explanation for the evidence.
-    #[serde(rename = "label", alias = "detail", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "label",
+        alias = "detail",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub label: Option<String>,
 }
 
