@@ -1007,10 +1007,23 @@ fn render_retained_result(view: &SessionRetainedResultView) -> String {
         .runtime_truth
         .as_ref()
         .map(|summary| {
+            let relationships = if summary.run_trace.relationships.is_empty() {
+                "none".to_string()
+            } else {
+                summary
+                    .run_trace
+                    .relationships
+                    .iter()
+                    .map(|r| format!("{:?}", r))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
             format!(
-                "{}:{}",
+                "{}:{} trace_root={} relationships=[{}]",
                 summary.evidence_class.as_str(),
-                summary.proof_boundary.task_proof
+                summary.proof_boundary.task_proof,
+                summary.run_trace.trace_root_id,
+                relationships
             )
         })
         .unwrap_or_else(|| "none".to_string());

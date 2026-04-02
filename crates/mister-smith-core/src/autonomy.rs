@@ -279,6 +279,7 @@ pub const PACKET_023_ORCHESTRATION_ONLY: &str =
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionEvidenceClass {
     /// The runtime proved workflow-substrate completion only.
+    #[serde(rename = "orchestration_substrate_completion")]
     SubstrateCompletion,
     /// The runtime completed a placeholder or simulated step boundary.
     PlaceholderOrSimulatedStepCompletion,
@@ -293,7 +294,7 @@ impl ExecutionEvidenceClass {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::SubstrateCompletion => "substrate_completion",
+            Self::SubstrateCompletion => "orchestration_substrate_completion",
             Self::PlaceholderOrSimulatedStepCompletion => {
                 "placeholder_or_simulated_step_completion"
             }
@@ -332,13 +333,14 @@ pub enum RunTraceRelationshipKind {
 /// Stable reference to real grounded evidence touched during a run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroundedEvidenceReference {
-    /// Stable source surface such as `task.result` or `packet-020`.
-    pub source: String,
-    /// Stable identifier, endpoint, file path, or artifact reference.
+    /// Stable evidence class such as `file`, `endpoint`, `artifact`, or `checkpoint`.
+    #[serde(rename = "kind", alias = "source")]
+    pub kind: String,
+    /// Stable identifier, path, URL, or artifact key.
     pub reference: String,
-    /// Optional human-readable detail for the reference.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
+    /// Short human-readable explanation for the evidence.
+    #[serde(rename = "label", alias = "detail", default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// Shared packet-023 run-trace summary anchored to one workflow run.

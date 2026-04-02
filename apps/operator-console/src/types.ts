@@ -94,16 +94,16 @@ export interface RuntimeTruthRunTrace {
 }
 
 export interface RuntimeTruthGroundedEvidenceReference {
-  source: string;
+  kind: string;
   reference: string;
-  detail?: string | null;
+  label?: string | null;
 }
 
 export interface TaskRuntimeTruth {
   evidence_class: string;
   proof_boundary: RuntimeTruthProofBoundary;
   run_trace: RuntimeTruthRunTrace;
-  grounded_evidence: RuntimeTruthGroundedEvidenceReference[];
+  grounded_evidence?: RuntimeTruthGroundedEvidenceReference[];
 }
 
 export interface TaskSupervisionEvidence {

@@ -1122,6 +1122,9 @@ def extract_task_runtime_truth(task_status_payload: dict[str, Any]) -> dict[str,
         return None
     if not isinstance(result, dict):
         raise SmokeHarnessError("task result payload was not a JSON object")
+    # Unwrap nested envelope if present
+    if "result" in result and isinstance(result["result"], dict):
+        result = result["result"]
     runtime_truth = result.get("runtime_truth")
     if runtime_truth is None:
         return None
@@ -1164,7 +1167,11 @@ def runtime_truth_consistency_projection(payload: dict[str, Any]) -> dict[str, A
         "task_proof": proof_boundary.get("task_proof"),
         "trace_root_id": run_trace.get("trace_root_id"),
         "workflow_id": run_trace.get("workflow_id"),
+        "graph_id": run_trace.get("graph_id"),
+        "branch_id": run_trace.get("branch_id"),
+        "node_id": run_trace.get("node_id"),
         "relationships": tuple(relationships),
+        "grounded_evidence": grounded_evidence,
         "grounded_evidence_count": len(grounded_evidence),
     }
 

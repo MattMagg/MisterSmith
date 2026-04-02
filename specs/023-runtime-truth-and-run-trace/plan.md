@@ -147,6 +147,7 @@ from current graph, repair, retry, and supervision state in `mister-smith-agents
 
 **Validation**:
 
+- `cargo build --workspace`
 - `cargo test -p mister-smith-core`
 - `cargo test -p mister-smith-agents`
 - `cargo test -p mister-smith-events --test autonomy_event_tests`
@@ -158,10 +159,12 @@ operator console rendering a separate Runtime truth panel.
 
 **Validation**:
 
+- `cargo build --workspace`
 - `cargo test -p mister-smith-app --test autonomy_status_tests`
 - `cargo test -p mister-smith-app workflow_step_tool_marks_payload_as_tool_bus_completed`
 - `npm --prefix apps/operator-console test`
 - `npm --prefix apps/operator-console run build`
+- `python3 scripts/live_runtime_proof_smoke.py`
 - `python3 -m unittest scripts.tests.test_live_runtime_proof_smoke`
 
 ## Parallel Staging Posture

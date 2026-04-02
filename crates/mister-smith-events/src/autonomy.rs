@@ -603,6 +603,9 @@ pub fn merge_operator_result_preview(
     if merged.orchestration_quality.is_none() {
         merged.orchestration_quality = fallback.orchestration_quality.clone();
     }
+    if merged.runtime_truth.is_none() {
+        merged.runtime_truth = fallback.runtime_truth.clone();
+    }
     for line in &fallback.provenance_lines {
         if !merged.provenance_lines.contains(line) {
             merged.provenance_lines.push(line.clone());

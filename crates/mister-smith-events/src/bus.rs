@@ -232,18 +232,22 @@ impl AutonomyStatusAccumulator {
                 }
             })
             .or_else(|| self.supervision_evidence.clone());
-        let runtime_truth = self.runtime_truth.clone().unwrap_or_else(|| {
-            synthesize_runtime_truth(
-                &graph,
-                &topology,
-                &branches,
-                &self.step_routing_history,
-                supervision_evidence.as_ref(),
-                &guard_decisions,
-            )
-        });
+        let synthesized_runtime_truth = synthesize_runtime_truth(
+            &graph,
+            &topology,
+            &branches,
+            &self.step_routing_history,
+            supervision_evidence.as_ref(),
+            &guard_decisions,
+        );
+        let runtime_truth = self
+            .runtime_truth
+            .clone()
+            .or(Some(synthesized_runtime_truth.clone()));
         if let Some(preview) = result_preview.as_mut() {
-            preview.runtime_truth = Some(runtime_truth.clone());
+            if preview.runtime_truth.is_none() && graph.state == GraphState::Completed {
+                preview.runtime_truth = Some(synthesized_runtime_truth.clone());
+            }
         }
 
         Some(AutonomyStatusView {
@@ -542,13 +546,13 @@ fn synthesize_runtime_truth(
         RunTraceRelationshipKind::ToolBoundary,
     ];
 
-    if !branches.is_empty() {
+    if graph.branch_count > 0 {
         relationships.push(RunTraceRelationshipKind::Branch);
     }
     if node_id.is_some() || graph.node_count > 0 {
         relationships.push(RunTraceRelationshipKind::Node);
     }
-    if branches.len() > 1 {
+    if graph.branch_count > 1 {
         relationships.push(RunTraceRelationshipKind::FanOut);
     }
     if topology.task_shape.has_join {
@@ -563,7 +567,10 @@ fn synthesize_runtime_truth(
     {
         relationships.push(RunTraceRelationshipKind::Repair);
     }
-    if !step_routing_history.is_empty() {
+    if step_routing_history
+        .iter()
+        .any(|entry| matches!(entry.action.as_str(), "retry" | "fallback"))
+    {
         relationships.push(RunTraceRelationshipKind::Retry);
     }
     if guard_decisions.iter().any(|decision| {

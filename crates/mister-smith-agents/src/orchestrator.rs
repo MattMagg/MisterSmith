@@ -882,7 +882,9 @@ impl Orchestrator {
             &guard_decisions,
         );
         if let Some(preview) = result_preview.as_mut() {
-            preview.runtime_truth = Some(runtime_truth.clone());
+            if graph_summary.state == GraphState::Completed {
+                preview.runtime_truth = Some(runtime_truth.clone());
+            }
         }
 
         Some(AutonomyStatusView {
@@ -2316,8 +2318,7 @@ fn build_runtime_truth_view(
     guard_decisions: &[GuardDecision],
 ) -> RuntimeTruthView {
     let branch_id = supervision_evidence
-        .and_then(|evidence| evidence.target_scope.branch_id)
-        .or_else(|| graph.branches.first().map(|branch| branch.branch_id));
+        .and_then(|evidence| evidence.target_scope.branch_id);
     let node_id = supervision_evidence.and_then(|evidence| evidence.target_scope.node_id);
     let mut relationships = vec![
         RunTraceRelationshipKind::Graph,
@@ -2345,7 +2346,10 @@ fn build_runtime_truth_view(
     {
         relationships.push(RunTraceRelationshipKind::Repair);
     }
-    if !step_routing_history.is_empty() {
+    if step_routing_history
+        .iter()
+        .any(|entry| matches!(step_routing_action_label(entry.carryover_signal.action), "retry" | "fallback"))
+    {
         relationships.push(RunTraceRelationshipKind::Retry);
     }
     if guard_decisions.iter().any(|decision| {
