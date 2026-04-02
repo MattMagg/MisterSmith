@@ -309,7 +309,7 @@ fn delegation_service_validates_external_envelope_after_transport_serialization(
 }
 
 #[test]
-fn delegation_service_allows_legacy_descriptorless_capability_for_actions() {
+fn delegation_service_rejects_descriptorless_capability_for_actions() {
     let service = DelegationService::new();
     let recipient = mister_smith_core::AgentId::from_uuid(uuid::Uuid::new_v4());
     let (capability, provenance) = service
@@ -339,10 +339,13 @@ fn delegation_service_allows_legacy_descriptorless_capability_for_actions() {
         revocation_key: "tool:data.echo#execute".to_string(),
     };
 
-    let validated = service
+    let error = service
         .validate_action(&capability, &provenance, &action)
-        .expect("legacy descriptorless capability should remain valid until expiry");
+        .expect_err("descriptorless capability should be rejected on action-bound execution");
 
-    assert_eq!(validated.capability.scope, DelegationScope::InvokeTool);
-    assert_eq!(validated.capability.descriptor_id, None);
+    assert!(matches!(
+        error,
+        mister_smith_core::DelegationError::InvalidChain(message)
+            if message.contains("missing descriptor binding for action descriptor")
+    ));
 }

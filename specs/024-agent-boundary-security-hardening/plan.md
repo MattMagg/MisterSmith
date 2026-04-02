@@ -5,31 +5,30 @@
 **Input**: Feature specification from
 `/specs/024-agent-boundary-security-hardening/spec.md`
 
-## Draft Status And Revision Gate
-
-This is draft scaffolding, not final implementation authority.
-
-- packet `024` is being scaffolded before earlier packets are fully complete
-- claims are based on current repo truth and current dossiers
-- before implementation, this plan MUST be revised against the then-current
-  `docs/current-state.md`, `docs/direction.md`, and any newly landed earlier packet artifacts
-- if earlier packet work changes reused contracts, packet `024` wins no authority over those
-  contracts until revised
-
 ## Summary
 
-Current repo truth already includes the major security building blocks needed for packet `024`:
-ToolBus discover-versus-execute separation, MCP descriptor-and-action-bound enforcement, bounded
-delegation validation, auth callout, quarantine inspection, state validation, sandbox isolation,
-and packet `016` accepted-ingress continuity. This packet freezes those seams into one bounded
-least-privilege contract before later packets widen delegation or interoperability surfaces.
+Current `main` already has the core boundary pieces that packet `024` needs: separate discover and
+execute actions in ToolBus, bounded MCP discovery, action-bound delegation validation, auth
+callout, quarantine inspection, state validation, sandbox isolation, shared-state mediation, and
+packet `016` continuity. Packet `024` does not redesign those seams. It hardens the remaining
+gaps:
+
+- remove legacy descriptorless execute authorization
+- publish both discover and execute actions in MCP capability metadata
+- make quarantine reasons deterministic for sanitized and monitored outcomes
+- clamp auth-callout fallback to the quarantined permission ceiling
+
+The clean packet-024 worktree is based on `origin/main`, but packet authority also uses the newer
+packet-022 current-state and closure notes from the primary checkout because those user-owned docs
+already record the landed durable-workflow baseline and are intentionally outside this packet-024
+write set.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.88.0 plus repo-owned markdown artifacts
 **Primary Dependencies**: `mister-smith-security`, `mister-smith-agents`,
-`mister-smith-mcp`, `mister-smith-persistence`, packet `016` continuity notes, and the Phase 9.1
-security-hardening contracts
+`mister-smith-mcp`, `mister-smith-persistence`, packet `016` continuity notes,
+`specs/022-durable-workflow-core/`, and the Phase 9.1 security-hardening contracts
 **Storage**: existing delegation metadata, audit streams, and shared-state storage through current
 PostgreSQL and JetStream-backed seams; no new storage technology is introduced by this packet
 **Testing**: targeted Rust tests in `mister-smith-security`, `mister-smith-agents`,
@@ -38,24 +37,24 @@ PostgreSQL and JetStream-backed seams; no new storage technology is introduced b
 workspace
 **Project Type**: Rust workspace packet plus bounded packet documentation
 **Performance Goals**: keep least-privilege checks on the current runtime path, keep quarantine and
-validation deterministic, and avoid widening current hot paths into a generic policy engine
+validation deterministic, and avoid widening hot paths into a generic policy engine
 **Constraints**: no generic IAM rollout, no broader interop design, no new live reject surface, no
 compliance expansion, and no silent drift away from MCP `2025-11-25` protocol pages
-**Scale/Scope**: one bounded packet that freezes boundary rules and defers implementation until a
-later refresh pass
+**Scale/Scope**: one bounded packet that freezes boundary rules across ToolBus, MCP, quarantine,
+auth callout, sandboxing, and shared-state mediation
 
 ## Constitution Check
 
 | Principle | Status | Evidence |
 | --------- | ------ | -------- |
-| I. Canonical Single Source | PASS | Grounded in `docs/direction.md`, `docs/current-state.md`, packet `016`, `MS-77`, and current code seams. |
-| II. Spec-First Design | PASS | This packet is being scaffolded entirely through spec artifacts before implementation. |
-| III. Phase-And-Packet-Gated Delivery | PASS | Packet `024` is bounded and includes a mandatory pre-implementation refresh gate because earlier packets are still moving. |
-| IV. Model-Agnostic Architecture | PASS | The packet hardens boundaries and identity posture without introducing provider-specific logic. |
+| I. Canonical Single Source | PASS | Grounded in `docs/current-state.md`, `docs/direction.md`, packet `016`, `MS-77`, packet `022`, and current code seams. |
+| II. Spec-First Design | PASS | Packet docs, contracts, checklist, and tasks are revised before code changes. |
+| III. Phase-And-Packet-Gated Delivery | PASS | Checklist completion and packet authority are explicit blockers before code work. |
+| IV. Model-Agnostic Architecture | PASS | The packet hardens boundary mechanics without provider-specific logic. |
 | V. Erlang/OTP-Style Fault Tolerance | PASS | The packet builds on existing sandbox, quarantine, and auth-callout isolation rather than weakening them. |
 | VI. Evidence-Based Validation | PASS | Validation remains deterministic and explicitly avoids inventing live rejection proof. |
 | VII. Explicit Dependency Management | PASS | The write set and contract reuse are explicit and tied to named repo anchors. |
-| VIII. Clean Closure And Resumability | PASS | The scaffold includes draft-status notes, a refresh gate, and an analysis report for cold-start reuse. |
+| VIII. Clean Closure And Resumability | PASS | The packet ends with checklist completion, deterministic validation, and explicit proof boundaries. |
 
 ## Project Structure
 
@@ -89,9 +88,11 @@ crates/mister-smith-agents/
 └── tests/
 
 crates/mister-smith-mcp/
+├── src/client.rs
+├── src/bridge.rs
 ├── src/server.rs
 ├── src/compatibility.rs
-└── tests/
+└── tests embedded in src modules
 
 crates/mister-smith-persistence/
 ├── src/repository/agent.rs
@@ -100,31 +101,36 @@ crates/mister-smith-persistence/
 
 ## Design Decisions
 
-### D1: This scaffold is real packet prep, but not final implementation authority
+### D1: Checklist completion is the authority gate
 
-**Decision**: packet `024` is authored now for speed, but implementation is blocked on a later
-refresh pass against newly landed earlier packet work.
+**Decision**: packet `024` is not allowed to move into code until the packet docs are updated to
+current truth and the requirements checklist is fully complete.
 
-**Rationale**: this gives the repo a reusable packet shape now without pretending that moving
-upstream truth is already final.
+**Rationale**: the packet must be brought onto current `main` truth before code changes can be
+trusted.
 
 ### D2: Discover and execute remain separate everywhere
 
-**Decision**: the packet freezes discover and execute as separate permissions and separate action
-bindings across ToolBus, MCP discovery, and MCP invocation.
+**Decision**: packet `024` preserves separate discover and execute actions across ToolBus, MCP
+metadata, MCP discovery, and MCP execution.
 
-**Rationale**: MS-77 and the current ToolBus/MCP seams already prove this split is the safest
-baseline to preserve.
+**Rationale**: MS-77 already proved this is the clean least-privilege baseline.
 
-### D3: Quarantine and schema enforcement happen before agent consumption
+### D3: Execute paths must be descriptor-bound
 
-**Decision**: cross-boundary content and shared-state reads remain mediated by size checks, schema
-validation, malicious-pattern inspection, and quarantine outcomes before agent context sees them.
+**Decision**: action-bound execute checks will no longer accept legacy descriptorless capabilities.
 
-**Rationale**: the research and the Phase 9.1 contracts both point to deterministic mediation, not
-prompt-only handling, as the boundary rule to freeze.
+**Rationale**: packet `024` is specifically about least-privilege boundary hardening, so legacy
+descriptorless compatibility is now the wrong default on execute paths.
 
-### D4: Current JWT/auth-callout/delegation posture stays the identity baseline
+### D4: Quarantine reasons must be explicit
+
+**Decision**: sanitized and monitored pass-through outcomes get deterministic human-readable
+reasons in the quarantine inspection and audit surface.
+
+**Rationale**: packet `024` owns boundary evidence, not just pass/fail behavior.
+
+### D5: Current JWT/auth-callout/delegation posture stays the identity baseline
 
 **Decision**: packet `024` keeps the current JWT, auth-callout, and delegation-envelope posture as
 the implementation baseline and leaves SPIFFE as comparator guidance only.
@@ -132,83 +138,86 @@ the implementation baseline and leaves SPIFFE as comparator guidance only.
 **Rationale**: this packet hardens the existing shipped seams rather than opening a second identity
 program.
 
-### D5: Persistent and ephemeral separation is a boundary rule, not a broader redesign
+### D6: Packet 016 continuity and no-fabrication stay intact
 
-**Decision**: packet `024` freezes persistent-versus-ephemeral separation for credentials, subject
-reach, and shared-state mediation without widening into a larger IAM or role-system rewrite.
+**Decision**: packet `024` composes with packet `016` accepted-ingress truth and does not invent a
+workflow-backed live reject surface.
 
-**Rationale**: the repo already has the right sandbox direction; the missing piece is one coherent
-boundary contract.
+**Rationale**: packet `016` already closed that scope honestly, and packet `024` is not allowed to
+reopen it.
 
-### D6: Packet `016` continuity and no-fabrication stay intact
+## Milestones
 
-**Decision**: packet `024` must compose with packet `016` accepted-ingress truth and must not
-invent a workflow-backed live reject surface.
+### Phase 0: Checklist completion and packet authority
 
-**Rationale**: packet `016` already closed that scope honestly, and this packet is not allowed to
-reopen it casually.
+**Scope**:
 
-## Minimal Implementation Slice
-
-### Milestone 0: Mandatory refresh gate before implementation
-
-**Scope**: re-read `docs/current-state.md`, `docs/direction.md`,
-`docs/packet-prep/024-agent-boundary-security-hardening.md`, and any earlier packet artifacts that
-land before packet `024` code starts.
+- revise packet docs to current `main`
+- replace dead references
+- align tasks, contracts, research, quickstart, and analysis
+- complete the packet checklist
 
 **Validation**:
 
-- packet `024` spec, plan, contracts, and tasks are revised if reused contracts drifted
-- no implementation begins until the refresh note is complete
+- `checklists/requirements.md` is `16/16`
+- markdownlint passes on the packet docs
 
-### Milestone 1: Freeze the capability-boundary contract
+### Phase 1: Freeze the shared boundary contracts
 
-**Scope**: preserve discover-versus-execute separation, exact descriptor/action binding, and
-bounded MCP capability discovery without widening authority.
+**Scope**:
 
-**Validation**:
-
-- targeted ToolBus and MCP tests prove the action-bound boundary still holds
-- packet contracts and tasks keep discover separate from execute everywhere
-
-### Milestone 2: Freeze quarantine and schema-enforcement behavior
-
-**Scope**: preserve deterministic size, schema, malicious-pattern, and quarantine behavior across
-cross-boundary payloads and shared-state reads.
+- capability-boundary contract
+- quarantine and schema contract
+- identity and sandbox contract
 
 **Validation**:
 
-- targeted validator, quarantine, sandbox, and persistence tests cover clean, sanitized,
-  suspicious, rejected, and quarantined outcomes
+- packet docs describe the current repo seams and the exact hardening changes
+- packet authority wording is implementation-ready and matches the completed checklist
 
-### Milestone 3: Freeze identity, sandbox, and continuity behavior
+### Phase 2: Capability-boundary hardening
 
-**Scope**: preserve least-privilege auth-callout and sandbox credential posture, revocation,
-packet `016` continuity, and boundary evidence without widening into general IAM.
+**Scope**:
+
+- ToolBus execute enforcement
+- MCP descriptor shape
+- MCP metadata and catalog propagation
 
 **Validation**:
 
-- auth-callout, delegation, sandbox, and continuity tests remain green
-- packet `016` no-fabrication and no-live-reject rules remain intact
+- ToolBus tests reject descriptorless legacy execute authority
+- MCP tests publish and preserve both discover and execute actions
+
+### Phase 3: Quarantine and boundary-evidence hardening
+
+**Scope**:
+
+- deterministic reasons for sanitized and monitored outcomes
+- shared-state mediation remains unchanged except for stronger evidence
+
+**Validation**:
+
+- security, agents, and persistence tests cover reasons and taint behavior
+
+### Phase 4: Identity and fallback hardening
+
+**Scope**:
+
+- auth-callout fallback ceiling
+- delegation continuity remains intact
+
+**Validation**:
+
+- auth-callout tests prove fallback cannot exceed quarantined access
+- packet `016` continuity assumptions remain unchanged
 
 ## Parallel Staging Posture
 
-- blocking refresh checkpoint before any implementation lane begins:
-  - packet refresh and contract reconciliation
-- allowed disjoint lanes after the refresh checkpoint:
-  - ToolBus and MCP boundary lane
-  - quarantine and validator lane
-  - auth-callout and sandbox lane
-- single-owner choke points:
-  - `crates/mister-smith-agents/src/tool_bus.rs`
-  - `crates/mister-smith-mcp/src/server.rs`
-  - `crates/mister-smith-mcp/src/compatibility.rs`
-  - `crates/mister-smith-security/src/delegation.rs`
-  - `crates/mister-smith-security/src/auth_callout.rs`
-  - `crates/mister-smith-security/src/quarantine.rs`
-  - `crates/mister-smith-security/src/state_validator.rs`
-  - `crates/mister-smith-security/src/sandbox.rs`
-  - `crates/mister-smith-persistence/src/repository/agent.rs`
+- doc authority work stays parent-owned and runs first
+- after docs are settled, code can split into two disjoint lanes:
+  - ToolBus plus MCP capability metadata and enforcement
+  - security crate plus shared-state and auth-callout hardening
+- final validation runs serially after both lanes merge
 
 ## Explicitly Deferred
 

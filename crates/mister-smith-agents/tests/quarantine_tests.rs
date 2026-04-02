@@ -80,6 +80,10 @@ fn sandbox_cross_boundary_transfer_is_sanitized_before_forwarding() {
 
     assert_eq!(transfer.action, QuarantineAction::Sanitize);
     assert_eq!(transfer.payload, json!({ "task": "helloworld" }));
+    assert_eq!(
+        transfer.reason.as_deref(),
+        Some("payload sanitized for state type 'task.assignment' before boundary forwarding")
+    );
 
     let event = audit
         .recent_events(1)
@@ -89,6 +93,13 @@ fn sandbox_cross_boundary_transfer_is_sanitized_before_forwarding() {
     assert_eq!(event.principal.as_deref(), Some("persistent-agent"));
     assert_eq!(event.outcome, AuditOutcome::Warning);
     assert_eq!(event.details.get("decision"), Some(&"Sanitize".to_string()));
+    assert_eq!(
+        event.details.get("reason"),
+        Some(
+            &"payload sanitized for state type 'task.assignment' before boundary forwarding"
+                .to_string()
+        )
+    );
 }
 
 #[test]
