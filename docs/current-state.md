@@ -25,7 +25,7 @@ Use this file when you need one honest answer to:
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
 | Latest landed runtime packet | `specs/023-runtime-truth-and-run-trace/` | Packet `023` landed on `main` via `4d1d044` and owns runtime-truth, proof-boundary, and bounded run-trace projections |
 | Latest landed security packet | `specs/024-agent-boundary-security-hardening/` | Packet `024` landed on `main` via `59e4ca2` and owns the current least-privilege agent-boundary hardening slice |
-| Next packet scaffold | `specs/025-step-level-intelligence-v2/` | Packet `025` is the next draft scaffold and is not yet the active runnable slice |
+| Next implementation-ready packet | `specs/025-step-level-intelligence-v2/` | Packet `025` is the next implementation-ready packet for stronger step-level policy and is ready for `/speckit.implement` |
 | Packet 022 implementation authority | `specs/022-durable-workflow-core/` | Durable workflow lifecycle, event-history, compaction, and effect-boundary ownership on current `main` |
 | Packet 021 closure evidence | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Deterministic packet-021 proof-boundary and supervision-evidence note |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for packet `019` |
@@ -104,7 +104,8 @@ external workflow services such as Linear or Symphony.
 - packet `024` is landed on `main`: action-bound external capability enforcement, clearer
   quarantine reasons, and auth-callout fallback clamping are part of current ToolBus, MCP, and
   security truth with deterministic validation
-- packet `025` remains a draft scaffold under `specs/025-step-level-intelligence-v2/`
+- packet `025` is implementation-ready under `specs/025-step-level-intelligence-v2/` and is the
+  next runnable packet for `/speckit.implement`
 - packets `026`, `027`, and `028` remain later draft scaffolds rather than current runnable work
 - the watched Symphony queue can be empty without implying a product problem; that queue is part
   of the development workflow, not the OS runtime
@@ -173,8 +174,8 @@ them end to end:
   enforcement that is live-proven for one bounded profile but is still opt-in rather than the
   no-profile default
 - additive external-agent interoperability surfaces and capability discovery adapters
-- later packet scaffolds for stronger step policy, first real coordinator/subagent runtime,
-  interoperability, and stronger coordination
+- later packet scaffolds for first real coordinator/subagent runtime, interoperability, and
+  stronger coordination
 
 Current default runtime limitations to keep in mind:
 
@@ -203,9 +204,8 @@ The completed frontier epics are:
 
 Packets `019`, `020`, `021`, `022`, `023`, and `024` are all landed on `main`.
 
-Packet `025` is the next draft scaffold. It is the next on-deck packet for stronger
-step-level policy, but it is not yet the active runnable slice until it is refreshed against
-current repo truth and split into bounded implementation work. Packets `026`, `027`, and `028`
+Packet `025` is the next implementation-ready packet. It is the next on-deck packet for stronger
+step-level policy and is now ready for `/speckit.implement`. Packets `026`, `027`, and `028`
 remain later scaffolds.
 
 ## Practical Reading Order
@@ -217,7 +217,7 @@ If you need to understand the repo quickly:
 3. read `README.md`
 4. read `specs/023-runtime-truth-and-run-trace/` and
    `specs/024-agent-boundary-security-hardening/`
-5. read `specs/025-step-level-intelligence-v2/` for the next scaffold
+5. read `specs/025-step-level-intelligence-v2/` for the next implementation-ready packet
 6. read `WORKFLOW.md` and `docs/linear/LINEAR.md` only if you are working on the development
    control plane
 7. read `ROADMAP.md`, `spec/`, and the rest of `specs/` when you need architectural or
@@ -230,7 +230,7 @@ If you need to understand the repo quickly:
 - Use `specs/023-runtime-truth-and-run-trace/` for the landed packet-023 runtime-truth contract.
 - Use `specs/024-agent-boundary-security-hardening/` for the landed packet-024 agent-boundary
   hardening slice.
-- Use `specs/025-step-level-intelligence-v2/` for the next draft scaffold.
+- Use `specs/025-step-level-intelligence-v2/` for the next implementation-ready packet.
 - Use `specs/022-durable-workflow-core/` for packet-022 durable workflow ownership.
 - Use `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` for the landed
   packet-021 closure and deterministic proof-boundary context.

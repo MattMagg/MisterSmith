@@ -1,45 +1,48 @@
 # Specification Analysis Report
 
-This report reflects the post-clarify packet-025 scaffold pass across `spec.md`, `plan.md`,
+This report reflects the implementation-ready packet-025 revision across `spec.md`, `plan.md`,
 `contracts/`, and `tasks.md`.
 
 ## Findings
 
 | ID | Category | Severity | Location(s) | Summary | Recommendation |
 | -- | -------- | -------- | ----------- | ------- | -------------- |
-| A1 | Ambiguity | LOW | `research.md` | The exact standalone Responses streaming-events URL may move before freeze. | Re-check the official reference URL at implementation freeze. |
+| A1 | Scope | LOW | `spec.md`, `plan.md`, `tasks.md` | Session-level step-policy projection stays deferred in the first slice. | Keep it deferred unless task inspect proves insufficient. |
 
-No critical or high-severity cross-artifact conflicts were detected. Packet `023` ownership of
-run-trace and proof-boundary schema stays intact across the packet-025 scaffold.
+No critical or high-severity cross-artifact conflicts were detected. Packet `025` now matches
+current repo truth and is implementation-ready.
 
 ## Coverage Summary
 
 | Requirement Key | Has Task? | Task IDs | Notes |
 | --------------- | --------- | -------- | ----- |
-| deterministic-step-difficulty-assessment | Yes | T006, T008, T009, T010 | Deterministic scoring is covered in both types and runtime assembly. |
-| bounded-action-vocabulary | Yes | T011, T013, T014 | The keep or retry or clarify or downgrade or escalate ladder is explicit. |
-| preserve-packet-020-repair-ownership | Yes | T005, T015 | Packet `020` ownership remains explicit in spec, plan, and runtime projection tasks. |
-| preserve-packet-023-proof-ownership | Yes | T001, T005 | Packet `023` ownership is frozen in the shared contract and scaffold docs. |
-| budget-hints-without-new-trace-schema | Yes | T011, T013, T014 | Budget-aware policy is covered without widening trace ownership. |
-| existing-inspect-surfaces-remain-canonical | Yes | T003, T010, T018, T019 | Current task and autonomy surfaces remain the read path. |
-| explicit-placeholder-vs-grounded-wording | Yes | T007, T016, T020 | Summary tests and smoke-harness wording protect proof honesty. |
-| preserve-current-fallback-behavior | Yes | T006, T009, T014 | Deterministic scoring and policy still preserve existing fallback behavior. |
-| responses-event-taxonomy-as-canonical-input | Yes | T001, T005 | The contract and research note preserve the current OpenAI event-taxonomy posture. |
-| deterministic-first-slice | Yes | T006, T011, T014 | No judge-heavy or training-heavy scoring is needed in the current task map. |
-| no-grounded-proof-from-placeholder-completion | Yes | T012, T016, T020 | Tasks explicitly preserve this honesty rule. |
-| bounded-implementation-scope | Yes | T001-T028 | The full task list keeps implementation inside current seams and excludes broader programs. |
+| step-difficulty-assessment | Yes | T006, T008, T009, T010 | Deterministic assessment is covered in types, runtime assembly, and projection. |
+| bounded-action-ladder | Yes | T011, T013, T014 | The keep or retry or clarify or downgrade or escalate ladder is frozen. |
+| preserve-packet-022-ownership | Yes | T001, T010, T020 | Packet `022` lifecycle and event-history ownership stays explicit in docs and projections. |
+| preserve-packet-020-ownership | Yes | T005, T015 | Packet `020` ownership stays explicit in docs and runtime projection. |
+| preserve-packet-023-ownership | Yes | T001, T005, T020 | Packet `023` proof ownership stays explicit in contract, docs, and smoke assertions. |
+| preserve-packet-024-ownership | Yes | T001, T002, T010 | Packet `024` boundary ownership stays explicit and unchanged. |
+| budget-pressure-summary | Yes | T011, T013, T014 | Budget-aware summary and action choice are explicitly covered. |
+| existing-read-surfaces-only | Yes | T003, T010, T018, T019 | Task inspect, autonomy, and selected-run detail remain the read path. |
+| proof-boundary-wording | Yes | T007, T016, T020 | Summary rendering and smoke assertions keep packet-023 wording honest. |
+| preserve-fallback-behavior | Yes | T006, T009, T014 | Runtime assembly tasks require bounded fallback behavior. |
+| deterministic-first-slice | Yes | T006, T011, T014 | No training-heavy or judge-heavy policy is required. |
+| no-placeholder-proof-upgrade | Yes | T017, T020, T025 | Packet `025` does not turn placeholder completion into grounded proof. |
+| bounded-current-seam-scope | Yes | T001-T028 | The task map stays inside current repo seams. |
+| repo-anchor-traceability | Yes | T001, T002, T006 | Packet claims stay tied to named repo anchors and current router docs. |
 
 ## Contract Alignment
 
-- `contracts/step-policy-contract.md` freezes the packet-owned action vocabulary, score summary,
-  budget summary, and packet-023-owned proof reference posture.
-- `plan.md` and `tasks.md` both keep packet `020` repair ownership and packet `023` proof
-  ownership explicit instead of implying a new runtime truth owner.
+- `contracts/step-policy-contract.md` freezes the packet-owned step-policy entities, bounded
+  action ladder, and exact surface placement.
+- `spec.md` and `plan.md` both keep packet `020`, `021`, and `023` ownership boundaries explicit
+  instead of implying a new runtime-truth owner.
+- `tasks.md` keeps the implementation choke points aligned with the same file seams named in the
+  plan and contract.
 
 ## Constitution Alignment Issues
 
-None detected. The scaffold remains spec-first, packet-bounded, model-agnostic in runtime policy,
-and explicit about deterministic versus live proof.
+None detected.
 
 ## Unmapped Tasks
 
@@ -47,18 +50,17 @@ None. All tasks map to packet-owned requirements or final validation closure.
 
 ## Metrics
 
-- Total Requirements: 12
+- Total Requirements: 14
 - Total Tasks: 28
-- Coverage: 12/12 requirements mapped to one or more tasks (100%)
-- Ambiguity Count: 1
+- Coverage: 14/14 requirements mapped to one or more tasks (100%)
+- Ambiguity Count: 0
 - Duplication Count: 0
 - Critical Issues Count: 0
 
 ## Next Actions
 
-- Packet `025` is ready for later revision and implementation planning once earlier packets settle.
-- Before any implementation freeze, re-check the current OpenAI Responses streaming reference page
-  and reconfirm that packet `021` supervision evidence is still only deterministic-only unless a
-  fresher live proof has been produced.
-- If implementation begins later, keep the shared contract freeze serial before runtime or UI
-  lanes start.
+- Packet `025` is ready for `/speckit.implement`.
+- If a later packet wants PRM-backed or learned step intelligence, split that into a new bounded
+  packet instead of widening packet `025`.
+- Keep any future live runtime-proof claim separate from packet-025 deterministic implementation
+  work.
