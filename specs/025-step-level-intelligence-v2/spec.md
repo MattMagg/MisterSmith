@@ -175,7 +175,8 @@ endpoint.
   `StepEvaluationRecord`, routing history, step-routing history, supervision evidence,
   runtime-truth, and budget-hint inputs already present on current `main`.
 - **FR-002**: System MUST define one bounded step-policy action vocabulary across `keep`, `retry`,
-  `clarify`, `downgrade`, and `escalate`.
+  `clarify`, `downgrade`, and `escalate`, and that packet-owned summary MUST remain separate from
+  existing step-routing action fields.
 - **FR-003**: System MUST preserve packet `020` ownership of verifier verdicts, repair
   directives, clarification requests, failure-context checkpoints, and `orchestration_quality`,
   with packet `025` only layering step policy on top of those existing seams.

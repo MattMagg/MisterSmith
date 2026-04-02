@@ -18,7 +18,7 @@ The contract for this packet is:
 - `StepDifficultyAssessment` scores the current step using deterministic current-state inputs
 - `StepBudgetPressureSummary` carries bounded pressure hints that can shape action choice
 - `StepPolicyDecision` chooses one bounded action from `keep`, `retry`, `clarify`, `downgrade`,
-  and `escalate`
+  and `escalate`, and that summary does not rename existing step-routing action values
 - `StepPolicySummaryView` projects those packet-owned summaries onto existing inspect surfaces
 - `proof_boundary_ref` and grounding posture remain packet-023-owned references that packet `025`
   consumes but does not redefine
@@ -81,7 +81,8 @@ Example authoritative payload shape:
       "latest_step_evaluation": "packet-020:planner.step.2",
       "latest_step_routing": "step-routing:planner.step.2",
       "supervision_evidence": "packet-021:planner.step.2",
-      "runtime_truth": "packet-023:placeholder_or_simulated_step_completion"
+      "runtime_truth": "packet-023:placeholder_or_simulated_step_completion",
+      "boundary_evidence": "packet-024:clean_quarantine_boundary"
     },
     "proof_boundary_ref": {
       "owner_packet": "023",
@@ -95,6 +96,8 @@ Example authoritative payload shape:
 Behavior:
 
 - the only bounded action values are `keep`, `retry`, `clarify`, `downgrade`, and `escalate`
+- `policy_decision.chosen_action` is a new packet-owned summary field and does not replace
+  `step_routing_history.action`
 - packet `020` repair lineage may be referenced, but packet `025` does not replace that contract
 - packet `021` supervision evidence may be referenced, but packet `025` does not replace that
   contract

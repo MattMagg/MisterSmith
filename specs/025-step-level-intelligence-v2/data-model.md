@@ -32,6 +32,7 @@
 - `workflow_id`: stable workflow identifier
 - `step_id`: stable step identifier
 - `chosen_action`: one bounded value from `keep`, `retry`, `clarify`, `downgrade`, or `escalate`
+  and a new packet-owned summary field rather than a rename of `step_routing_history.action`
 - `action_reason`: concise explanation for why that action was chosen
 - `difficulty_ref`: reference to the driving `StepDifficultyAssessment`
 - `budget_ref`: optional reference to the driving `StepBudgetPressureSummary`
@@ -45,6 +46,7 @@
 - `latest_step_routing`: latest step-routing reference used as input
 - `supervision_evidence`: latest packet-021 supervision-evidence reference when used
 - `runtime_truth`: latest packet-023 runtime-truth reference when used
+- `boundary_evidence`: latest packet-024 boundary evidence reference when relevant
 
 ### `StepPolicySummaryView`
 
