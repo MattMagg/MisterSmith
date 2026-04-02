@@ -4,19 +4,10 @@
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `quickstart.md`,
 `contracts/`
 
-**Draft Status**: This task list is scaffolding only.
+**Tests**: Included. Use targeted Rust tests for capability-boundary, quarantine, validator,
+sandbox, delegation, and auth-callout seams, plus bounded doc hygiene.
 
-- packet `024` is being scaffolded before earlier packets are fully complete
-- claims are based on current repo truth and current dossiers
-- before implementation, this task list MUST be revised against the then-current
-  `docs/current-state.md`, `docs/direction.md`, and any newly landed earlier packet artifacts
-- if earlier packet work changes reused contracts, packet `024` wins no authority over those
-  contracts until revised
-
-**Tests**: Included. Future implementation should use targeted Rust tests for capability-boundary,
-quarantine, validator, sandbox, delegation, and auth-callout seams, plus bounded doc hygiene.
-
-**Organization**: Tasks are grouped by a blocking refresh gate first, then by the three bounded
+**Organization**: Tasks are grouped by the packet-authority gate first, then by the three bounded
 stories frozen in the packet.
 
 ## Format: `[ID] [P?] [Story] Description`
@@ -28,38 +19,30 @@ stories frozen in the packet.
 
 ---
 
-## Phase 0: Mandatory Refresh Gate (Blocking)
+## Phase 0: Checklist Completion And Packet Authority (Blocking)
 
-**Purpose**: Reconcile packet `024` against landed truth before any implementation work starts.
+**Purpose**: Make packet `024` implementation-ready before any code changes start.
 
-- [ ] T001 Re-read `docs/current-state.md`, `docs/direction.md`,
-      `docs/packet-prep/024-agent-boundary-security-hardening.md`, and newly landed earlier packet
-      artifacts, then record any contract drift in
-      `specs/024-agent-boundary-security-hardening/spec.md`
-- [ ] T002 Refresh draft packet artifacts in
-      `specs/024-agent-boundary-security-hardening/plan.md`,
-      `specs/024-agent-boundary-security-hardening/research.md`,
+- [x] T001 Revise `specs/024-agent-boundary-security-hardening/spec.md` and
+      `specs/024-agent-boundary-security-hardening/plan.md` to current `main` truth, replacing
+      obsolete prep references with live repo authority docs and current code seams
+- [x] T002 Revise `specs/024-agent-boundary-security-hardening/research.md`,
       `specs/024-agent-boundary-security-hardening/data-model.md`,
-      `specs/024-agent-boundary-security-hardening/contracts/`, and
-      `specs/024-agent-boundary-security-hardening/tasks.md` if upstream packet work changed reused
-      seams
+      `specs/024-agent-boundary-security-hardening/quickstart.md`, and
+      `specs/024-agent-boundary-security-hardening/analyze.md` to describe the actual open
+      hardening gaps on `main`
+- [x] T003 Revise `specs/024-agent-boundary-security-hardening/contracts/capability-boundary-contract.md`,
+      `specs/024-agent-boundary-security-hardening/contracts/quarantine-and-schema-enforcement.md`,
+      and `specs/024-agent-boundary-security-hardening/contracts/identity-and-sandbox-boundary.md`
+      so the contracts match current `main`
+- [x] T004 Rewrite `specs/024-agent-boundary-security-hardening/tasks.md` so the packet authority
+      gate is checklist-first, followed by capability-boundary, quarantine-evidence, and
+      identity-fallback hardening
+- [x] T005 Audit `specs/024-agent-boundary-security-hardening/checklists/requirements.md` against
+      the revised packet docs and mark every checklist item `[X]` only when the revised docs
+      satisfy it
 
-**Checkpoint**: Packet `024` is refreshed against current truth and safe to implement.
-
----
-
-## Phase 1: Shared Boundary Contract Freeze (Blocking Prerequisites)
-
-**Purpose**: Keep the packet contracts authoritative before code changes start.
-
-- [ ] T003 Refresh the capability boundary contract in
-      `specs/024-agent-boundary-security-hardening/contracts/capability-boundary-contract.md`
-- [ ] T004 Refresh the quarantine and schema enforcement contract in
-      `specs/024-agent-boundary-security-hardening/contracts/quarantine-and-schema-enforcement.md`
-- [ ] T005 Refresh the identity and sandbox boundary contract in
-      `specs/024-agent-boundary-security-hardening/contracts/identity-and-sandbox-boundary.md`
-
-**Checkpoint**: The shared contracts match the current repo seams and block scope drift.
+**Checkpoint**: Packet `024` is implementation-ready and the checklist is fully complete.
 
 ---
 
@@ -68,27 +51,33 @@ stories frozen in the packet.
 **Goal**: Keep ToolBus and MCP capability boundaries least-privilege, action-bound, and explicit
 about discover-versus-execute separation.
 
-**Independent Test**: prove discovery remains bounded and execution rejects mismatched or revoked
-delegated action bindings before handler execution.
+**Independent Test**: prove discovery remains bounded and execution rejects mismatched, revoked, or
+descriptorless delegated action bindings before handler execution.
 
 ### Tests For User Story 1
 
-- [ ] T006 [P] [US1] Extend ToolBus capability-boundary coverage in
+- [x] T006 [P] [US1] Extend ToolBus capability-boundary coverage in
       `crates/mister-smith-agents/tests/tool_bus_tests.rs`
-- [ ] T007 [P] [US1] Extend MCP discovery and action-bound invocation coverage in
-      `crates/mister-smith-mcp/src/server.rs` and
+- [x] T007 [P] [US1] Extend MCP discovery and action-metadata coverage in
+      `crates/mister-smith-mcp/src/server.rs`,
+      `crates/mister-smith-mcp/src/client.rs`,
+      `crates/mister-smith-mcp/src/bridge.rs`, and
       `crates/mister-smith-mcp/src/compatibility.rs`
 
 ### Implementation For User Story 1
 
-- [ ] T008 [P] [US1] Reconcile shared capability descriptor and delegated-action use in
+- [x] T008 [P] [US1] Remove descriptorless legacy execute authorization in
+      `crates/mister-smith-security/src/delegation.rs`
+- [x] T009 [P] [US1] Validate current shared capability descriptor use in
       `crates/mister-smith-agents/src/tool_bus.rs`
-- [ ] T009 [P] [US1] Tighten MCP boundary action generation and tool metadata publication in
-      `crates/mister-smith-mcp/src/server.rs`
-- [ ] T010 [US1] Preserve bounded discovery and exact action enforcement in
-      `crates/mister-smith-mcp/src/compatibility.rs`
+- [x] T010 [P] [US1] Publish both discover and execute actions in MCP capability metadata in
+      `crates/mister-smith-mcp/src/client.rs` and `crates/mister-smith-mcp/src/server.rs`
+- [x] T011 [US1] Preserve bounded discovery and exact action enforcement in
+      `crates/mister-smith-mcp/src/compatibility.rs` and
+      `crates/mister-smith-mcp/src/bridge.rs`
 
-**Checkpoint**: Discovery and execution remain separate across ToolBus and MCP.
+**Checkpoint**: Discovery and execution remain separate across ToolBus and MCP, and execute paths
+require a descriptor-bound capability.
 
 ---
 
@@ -97,35 +86,36 @@ delegated action bindings before handler execution.
 **Goal**: Keep cross-boundary payloads and shared-state reads deterministically validated before
 agent consumption.
 
-**Independent Test**: prove clean payloads pass, sanitized payloads are marked, suspicious payloads
-stay monitored, and rejected or quarantined payloads do not reach agent context.
+**Independent Test**: prove clean payloads pass, sanitized payloads are marked with a reason,
+monitored suspicious payloads keep a reason, and rejected or quarantined payloads do not reach
+agent context.
 
 ### Tests For User Story 2
 
-- [ ] T011 [P] [US2] Extend validator pipeline coverage in
-      `crates/mister-smith-security/tests/validator_tests.rs`
-- [ ] T012 [P] [US2] Extend quarantine and sandbox crossing coverage in
+- [x] T012 [P] [US2] Validate the size, sanitize, schema, and malicious-pattern pipeline through
+      `crates/mister-smith-security/tests/quarantine_tests.rs`
+- [x] T013 [P] [US2] Extend quarantine and sandbox crossing coverage in
       `crates/mister-smith-security/tests/quarantine_tests.rs`,
       `crates/mister-smith-security/tests/sandbox_tests.rs`,
       `crates/mister-smith-agents/tests/quarantine_tests.rs`, and
       `crates/mister-smith-agents/tests/sandbox_tests.rs`
-- [ ] T013 [P] [US2] Extend shared-state mediation coverage in
+- [x] T014 [P] [US2] Validate shared-state mediation coverage in
       `crates/mister-smith-persistence/tests/repository_tests.rs`
 
 ### Implementation For User Story 2
 
-- [ ] T014 [P] [US2] Reconcile quarantine decision mapping and audit reasons in
+- [x] T015 [P] [US2] Tighten quarantine decision mapping, monitored reasons, and audit reasons in
       `crates/mister-smith-security/src/quarantine.rs`
-- [ ] T015 [P] [US2] Tighten state validation, taint labels, and malicious-pattern handling in
-      `crates/mister-smith-security/src/state_validator.rs`
-- [ ] T016 [P] [US2] Preserve required quarantine enforcement for protected crossings in
+- [x] T016 [P] [US2] Preserve the current size, sanitization, schema, and malicious-pattern
+      pipeline in `crates/mister-smith-security/src/state_validator.rs`
+- [x] T017 [P] [US2] Preserve required quarantine enforcement for protected crossings in
       `crates/mister-smith-security/src/sandbox.rs` and
       `crates/mister-smith-agents/src/sandbox.rs`
-- [ ] T017 [US2] Reconcile validated shared-state mediation in
+- [x] T018 [US2] Preserve validated shared-state mediation in
       `crates/mister-smith-persistence/src/repository/agent.rs`
 
 **Checkpoint**: Cross-boundary content and shared-state reads are deterministically mediated before
-agent use.
+agent use with explicit evidence.
 
 ---
 
@@ -134,29 +124,30 @@ agent use.
 **Goal**: Keep least-privilege identity and delegation rules bounded without widening into a new
 IAM program or breaking packet `016` continuity truth.
 
-**Independent Test**: prove auth-callout fallback stays minimal, delegated authority remains
-action-bound, sandbox classes stay isolated, and packet `016` continuity assumptions still hold.
+**Independent Test**: prove auth-callout fallback stays capped at quarantined access, delegated
+authority remains action-bound, sandbox classes stay isolated, and packet `016` continuity still
+holds.
 
 ### Tests For User Story 3
 
-- [ ] T018 [P] [US3] Extend auth-callout permission-tier and fallback coverage in
+- [x] T019 [P] [US3] Extend auth-callout permission-tier and fallback coverage in
       `crates/mister-smith-security/tests/auth_callout_tests.rs`
-- [ ] T019 [P] [US3] Extend delegated-action binding, expiry, and revocation coverage in
+- [x] T020 [P] [US3] Extend delegated-action binding, expiry, and revocation coverage in
       `crates/mister-smith-security/tests/delegation_tests.rs`
-- [ ] T020 [P] [US3] Extend identity and sandbox lifecycle isolation coverage in
+- [x] T021 [P] [US3] Validate identity and sandbox lifecycle isolation coverage in
       `crates/mister-smith-security/tests/sandbox_tests.rs` and
       `crates/mister-smith-agents/tests/sandbox_tests.rs`
 
 ### Implementation For User Story 3
 
-- [ ] T021 [P] [US3] Tighten least-privilege auth-callout issuance and quarantined fallback in
+- [x] T022 [P] [US3] Clamp least-privilege auth-callout fallback at the quarantined ceiling in
       `crates/mister-smith-security/src/auth_callout.rs`
-- [ ] T022 [P] [US3] Tighten external envelope, action binding, and revocation continuity in
+- [x] T023 [P] [US3] Keep external envelope, action binding, and revocation continuity strict in
       `crates/mister-smith-security/src/delegation.rs`
-- [ ] T023 [US3] Reconcile packet `016` continuity assumptions in
+- [x] T024 [US3] Preserve packet `016` continuity wording in
       `specs/024-agent-boundary-security-hardening/spec.md`,
       `specs/024-agent-boundary-security-hardening/contracts/identity-and-sandbox-boundary.md`,
-      and `specs/024-agent-boundary-security-hardening/analyze.md` before landing code changes
+      and `specs/024-agent-boundary-security-hardening/analyze.md`
 
 **Checkpoint**: Least-privilege identity posture stays bounded and packet `016` continuity remains
 honest.
@@ -165,14 +156,14 @@ honest.
 
 ## Final Validation And Evidence
 
-- [ ] T024 Run `cargo test -p mister-smith-security`
-- [ ] T025 Run `cargo test -p mister-smith-agents --test tool_bus_tests`
-- [ ] T026 Run `cargo test -p mister-smith-agents --test quarantine_tests`
-- [ ] T027 Run `cargo test -p mister-smith-mcp`
-- [ ] T028 Run `cargo test -p mister-smith-persistence`
-- [ ] T029 Run `cargo build --workspace`
-- [ ] T030 Run `git diff --check`
-- [ ] T031 Run `npx markdownlint-cli2 "specs/024-agent-boundary-security-hardening/**/*.md" --config .markdownlint.json`
+- [x] T025 Run `npx markdownlint-cli2 "specs/024-agent-boundary-security-hardening/**/*.md" --config .markdownlint.json`
+- [x] T026 Run `cargo test -p mister-smith-security --test delegation_tests --test auth_callout_tests --test quarantine_tests --test sandbox_tests`
+- [x] T027 Run `cargo test -p mister-smith-agents --test tool_bus_tests --test quarantine_tests --test sandbox_tests`
+- [x] T028 Run `cargo test -p mister-smith-mcp`
+- [x] T029 Run `cargo test -p mister-smith-persistence`
+- [x] T030 Run `cargo build --workspace`
+- [x] T031 Run `git diff --check`
+- [x] T032 Run `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`
 
 ## Parallel Staging Directive
 
@@ -184,6 +175,8 @@ honest.
 Shared-write choke points for this packet:
 
 - `crates/mister-smith-agents/src/tool_bus.rs`
+- `crates/mister-smith-mcp/src/client.rs`
+- `crates/mister-smith-mcp/src/bridge.rs`
 - `crates/mister-smith-mcp/src/server.rs`
 - `crates/mister-smith-mcp/src/compatibility.rs`
 - `crates/mister-smith-security/src/delegation.rs`

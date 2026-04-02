@@ -169,6 +169,7 @@ impl AgentSandbox {
                 taint_label: TaintLabel::Clean,
                 payload: payload.clone(),
                 schema_version: None,
+                reason: None,
                 monitored: false,
             }),
             CrossingDecision::Quarantine => {

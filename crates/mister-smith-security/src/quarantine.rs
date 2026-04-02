@@ -10,7 +10,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::state_validator::{StateValidator, TaintLabel, ValidationError};
+use crate::state_validator::{StateValidator, TaintLabel, ValidatedState, ValidationError};
 
 /// Decision emitted by quarantine inspection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +93,8 @@ pub struct QuarantineTransfer {
     pub payload: Value,
     /// Schema version used for validation.
     pub schema_version: Option<String>,
+    /// Human-readable explanation for forwarded sanitized or monitored payloads.
+    pub reason: Option<String>,
     /// Whether downstream systems should keep monitoring the transfer.
     pub monitored: bool,
 }
@@ -148,6 +150,8 @@ pub fn inspect_quarantine_payload(
                 TaintLabel::Suspicious => (QuarantineAction::Pass, true),
                 TaintLabel::Rejected => (QuarantineAction::Reject, false),
             };
+            let reason = inspection_reason_for_validated_state(state_type, &validated, monitored);
+            let schema_version = validated.schema_version.clone();
 
             QuarantineInspection {
                 action,
@@ -157,13 +161,35 @@ pub fn inspect_quarantine_payload(
                     QuarantineAction::Pass | QuarantineAction::Sanitize
                 )
                 .then_some(validated.data),
-                schema_version: Some(validated.schema_version),
-                reason: None,
+                schema_version: Some(schema_version),
+                reason,
                 detected_pattern: None,
                 monitored,
             }
         }
         Err(error) => inspection_from_error(error),
+    }
+}
+
+fn inspection_reason_for_validated_state(
+    state_type: &str,
+    validated: &ValidatedState,
+    monitored: bool,
+) -> Option<String> {
+    match validated.taint_label {
+        TaintLabel::Clean => None,
+        TaintLabel::Sanitized => Some(format!(
+            "payload sanitized for state type '{state_type}' before boundary forwarding"
+        )),
+        TaintLabel::Suspicious if monitored => Some(format!(
+            "no registered schema for state type '{state_type}'; forwarded under monitoring"
+        )),
+        TaintLabel::Suspicious => Some(format!(
+            "state type '{state_type}' flagged suspicious during validation"
+        )),
+        TaintLabel::Rejected => Some(format!(
+            "state type '{state_type}' was rejected during validation"
+        )),
     }
 }
 
@@ -272,6 +298,7 @@ impl QuarantineActor {
                     .forwarded_payload
                     .expect("forwarded payload must exist for pass/sanitize decisions"),
                 schema_version: inspection.schema_version,
+                reason: inspection.reason.clone(),
                 monitored: inspection.monitored,
             }),
             QuarantineAction::Reject | QuarantineAction::Quarantine => {

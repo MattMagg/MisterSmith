@@ -5,7 +5,7 @@
 ### `BoundaryCapabilityDescriptor`
 
 - `descriptor_id`: stable surface identifier such as `tool:namespace.name`
-- `boundary_family`: boundary class such as `tool_bus`, `mcp_tool`, or future adapter family
+- `boundary_family`: boundary class such as `tool_bus` or `mcp_tool`
 - `title`: human-readable surface title
 - `description`: short operator-facing description
 - `discover_action`: action binding for bounded discovery
@@ -50,6 +50,7 @@
 - `taint_label`: clean, sanitized, suspicious, or rejected
 - `forwardable`: whether the payload may continue toward agent context
 - `monitored`: whether the payload should remain under heightened monitoring
+- `reason`: deterministic human-readable explanation for any sanitized or monitored outcome
 
 ### `QuarantineInspectionRecord`
 
@@ -59,7 +60,8 @@
 - `resource`: crossed subject or state key
 - `action`: pass, sanitize, reject, or quarantine
 - `taint_label`: final validation label
-- `reason`: human-readable explanation for non-pass outcomes
+- `reason`: deterministic human-readable explanation for sanitize, monitored suspicious, reject, or
+  quarantine outcomes
 - `detected_pattern`: optional malicious pattern marker
 
 ## Boundary evidence entity
@@ -82,7 +84,7 @@
 - persistent and ephemeral separation remains a boundary rule for credentials and shared-state
   mediation
 - shared-state reads and cross-boundary payloads are validated before agent consumption
-- suspicious content may be monitored but still requires explicit labeling
+- suspicious content may be monitored but still requires explicit labeling and a deterministic
+  reason
 - packet `016` continuity may be preserved, but a live rejection surface must not be fabricated
-- this draft data model is provisional until the pre-implementation refresh gate confirms reused
-  contracts still match landed truth
+- MCP metadata uses one descriptor with two first-class actions, not one flattened action summary

@@ -146,6 +146,19 @@ impl Permissions {
         }
     }
 
+    #[must_use]
+    fn clamped_to_ceiling(&self, ceiling: &Self) -> Self {
+        Self {
+            publish_allow: filter_in_ceiling_order(&self.publish_allow, &ceiling.publish_allow),
+            publish_deny: union_with_ceiling_first(&self.publish_deny, &ceiling.publish_deny),
+            subscribe_allow: filter_in_ceiling_order(
+                &self.subscribe_allow,
+                &ceiling.subscribe_allow,
+            ),
+            subscribe_deny: union_with_ceiling_first(&self.subscribe_deny, &ceiling.subscribe_deny),
+        }
+    }
+
     pub(crate) fn apply_to(self, mut token: Token<nats_jwt::User>) -> Token<nats_jwt::User> {
         for subject in self.publish_allow {
             token = token.allow_publish(subject);
@@ -260,7 +273,7 @@ impl AuthCalloutHandler {
     /// Override the minimal fallback permissions used for quarantined access.
     #[must_use]
     pub fn with_default_permissions(mut self, default_permissions: Permissions) -> Self {
-        self.default_permissions = default_permissions;
+        self.default_permissions = clamp_fallback_permissions(&default_permissions);
         self
     }
 
@@ -396,7 +409,7 @@ impl AuthCalloutHandler {
             None => AuthorizationResult {
                 agent_id: agent_id.to_string(),
                 permission_tier: PermissionTier::Quarantined,
-                permissions: self.default_permissions.clone(),
+                permissions: clamp_fallback_permissions(&self.default_permissions),
                 jwt_ttl_secs: constrained_jwt_ttl_secs(
                     PermissionTier::Quarantined.jwt_ttl_secs(self.max_jwt_ttl_secs),
                     authenticated
@@ -780,6 +793,28 @@ fn constrained_jwt_ttl_secs(
         .max(0) as u64;
 
     default_ttl_secs.min(expires_in)
+}
+
+fn clamp_fallback_permissions(default_permissions: &Permissions) -> Permissions {
+    default_permissions.clamped_to_ceiling(&Permissions::quarantined())
+}
+
+fn filter_in_ceiling_order(values: &[String], ceiling: &[String]) -> Vec<String> {
+    ceiling
+        .iter()
+        .filter(|candidate| values.iter().any(|value| value == *candidate))
+        .cloned()
+        .collect()
+}
+
+fn union_with_ceiling_first(values: &[String], ceiling: &[String]) -> Vec<String> {
+    let mut merged = ceiling.to_vec();
+    for value in values {
+        if !merged.iter().any(|existing| existing == value) {
+            merged.push(value.clone());
+        }
+    }
+    merged
 }
 
 fn decode_jwt_payload<T>(jwt: &str) -> Result<T, SecurityError>

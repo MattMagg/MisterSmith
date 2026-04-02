@@ -364,7 +364,7 @@ async fn invoke_requires_valid_delegation_for_privileged_tools() {
 }
 
 #[tokio::test]
-async fn invoke_allows_legacy_descriptorless_delegation_for_privileged_tools() {
+async fn invoke_rejects_descriptorless_delegation_for_privileged_tools() {
     let audit = Arc::new(AuditLogger::new(&AuditConfig::default()));
     let delegation_service = Arc::new(DelegationService::new());
     let bus = ToolBus::with_security(
@@ -409,7 +409,7 @@ async fn invoke_allows_legacy_descriptorless_delegation_for_privileged_tools() {
         Arc::new(EchoTool { id: ToolId::new() }),
     );
 
-    let result = bus
+    let err = bus
         .invoke(
             Some(&principal),
             "data",
@@ -418,21 +418,19 @@ async fn invoke_allows_legacy_descriptorless_delegation_for_privileged_tools() {
             Some(Duration::from_millis(50)),
         )
         .await
-        .expect("legacy descriptorless delegation should remain valid");
+        .expect_err("descriptorless delegation should be rejected");
 
-    assert_eq!(result, json!({ "echo": { "value": "legacy" } }));
+    assert!(matches!(err, AgentSystemError::PermissionDenied(_)));
 
     let events = audit.recent_events(10);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].event_type, AuditEventType::Delegation);
-    assert_eq!(events[0].outcome, AuditOutcome::Success);
-    assert_eq!(
-        events[0]
-            .delegation
-            .as_ref()
-            .and_then(|delegation| delegation.descriptor_id.as_deref()),
-        None
-    );
+    assert_eq!(events[0].outcome, AuditOutcome::Blocked);
+    assert!(events[0]
+        .delegation
+        .as_ref()
+        .and_then(|delegation| delegation.rejection_reason.as_ref())
+        .is_some_and(|reason| reason.contains("missing descriptor binding for action descriptor")));
 }
 
 #[tokio::test]

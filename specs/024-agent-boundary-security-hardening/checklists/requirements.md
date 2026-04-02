@@ -1,71 +1,75 @@
 # Packet Quality Checklist: Agent-Boundary Security Hardening
 
-**Purpose**: Validate the quality, clarity, and boundedness of the packet `024` requirements before
-implementation planning moves forward
+**Purpose**: Validate that packet `024` is implementation-ready, repo-grounded, and still bounded
+to its named hardening scope
 **Created**: 2026-04-01
 **Feature**: `/Users/macmain/MisterSmith/specs/024-agent-boundary-security-hardening/spec.md`
 
-**Note**: This checklist tests packet requirements and packet-authoring quality. It does not test
-implementation behavior.
+**Note**: This checklist validates packet authority and packet readiness. It does not replace code
+validation.
 
 ## Repo Anchor Accuracy
 
-- [ ] CHK001 Are all major claims tied to exact repo seams rather than broad crate summaries?
+- [X] CHK001 Are all major claims tied to exact repo seams rather than broad crate summaries?
       [Completeness, Spec §Current Truth & Scope]
-- [ ] CHK002 Are packet `016`, `MS-77`, and Phase 9.1 contract references aligned with the
-      current packet wording? [Consistency, Spec §Input]
+- [X] CHK002 Are packet `016`, `MS-77`, packet `022`, and Phase 9.1 contract references aligned
+      with the current packet wording? [Consistency, Spec §Input, Plan §Constitution Check]
+
+## Current Main Gap Fidelity
+
+- [X] CHK003 Does the packet describe only the narrow open hardening gaps still present on current
+      `main`? [Accuracy, Spec §Current Truth & Scope, Research §Exact hardening gaps on current
+      `main`]
+- [X] CHK004 Does the packet keep generic IAM, SPIFFE rollout, broader interop, and packet `022`
+      ownership out of scope? [Boundedness, Spec §Current Truth & Scope, Plan §Explicitly Deferred]
 
 ## Boundary Separation
 
-- [ ] CHK003 Are discover and execute permissions described as separate boundary actions everywhere
-      they appear? [Clarity, Spec §FR-001]
-- [ ] CHK004 Is descriptor-only matching explicitly rejected in favor of descriptor-and-action
-      matching? [Clarity, Spec §FR-002]
+- [X] CHK005 Are discover and execute permissions described as separate boundary actions everywhere
+      they appear? [Clarity, Spec §FR-001, Contract `capability-boundary-contract.md`]
+- [X] CHK006 Is descriptor-only matching explicitly rejected in favor of descriptor-and-action
+      matching, including missing-descriptor execute rejection? [Clarity, Spec §FR-002 and
+      §FR-011]
 
 ## Protocol Baseline
 
-- [ ] CHK005 Does the packet clearly pin MCP protocol references to the `2025-11-25` versioned
+- [X] CHK007 Does the packet clearly pin MCP protocol references to the `2025-11-25` versioned
       pages? [Completeness, Spec §Clarifications, Spec §FR-003]
-- [ ] CHK006 Does the packet clearly keep MCP security best-practices docs in a guidance role
-      instead of a frozen protocol role? [Clarity, Research §Official docs and why they matter]
+- [X] CHK008 Does the packet clearly keep MCP security best-practices docs in a guidance role
+      instead of a frozen protocol role? [Clarity, Research §Official sources and why they matter]
 
 ## Quarantine And Schema Enforcement
 
-- [ ] CHK007 Are size, schema, malicious-pattern, and quarantine stages all explicitly covered in
-      the requirements? [Coverage, Spec §FR-007 through Spec §FR-009]
-- [ ] CHK008 Are pass, sanitize, reject, and quarantine outcomes defined clearly enough for future
-      tests and contract writing? [Measurability, Spec §FR-009]
+- [X] CHK009 Are size, sanitization, schema, malicious-pattern, taint-label, and quarantine stages
+      all explicitly covered in the requirements? [Coverage, Spec §FR-007 through §FR-009,
+      Contract `quarantine-and-schema-enforcement.md`]
+- [X] CHK010 Are sanitize, monitored suspicious, reject, and quarantine outcomes defined clearly
+      enough for future tests and contract writing, including deterministic reasons? [Measurability,
+      Spec §FR-009, Data Model §QuarantineInspectionRecord]
+
+## Shared-State And Sandbox Boundary
+
+- [X] CHK011 Does the packet keep shared-state reads and writes mediated before agent consumption?
+      [Consistency, Spec §User Story 2, Contract `quarantine-and-schema-enforcement.md`]
+- [X] CHK012 Is persistent-versus-ephemeral separation framed as a boundary rule rather than a
+      broader redesign? [Clarity, Spec §Clarifications, Spec §FR-006]
 
 ## Packet 016 Continuity
 
-- [ ] CHK009 Does the packet preserve accepted delegated task-ingress continuity without reopening
+- [X] CHK013 Does the packet preserve accepted delegated task-ingress continuity without reopening
       the rejected-path proof question? [Consistency, Spec §FR-004]
-- [ ] CHK010 Does the packet avoid fabricating a workflow-backed live reject surface? [Clarity,
-      Spec §Clarifications]
+- [X] CHK014 Does the packet avoid fabricating a workflow-backed live reject surface? [Clarity,
+      Spec §Clarifications, Contract `identity-and-sandbox-boundary.md`]
 
-## Draft Scaffold Integrity
+## Identity And Fallback Discipline
 
-- [ ] CHK011 Is the provisional scaffold note present in `spec.md`, `plan.md`, and `tasks.md`?
-      [Completeness]
-- [ ] CHK012 Is the revision-before-implementation gate explicit and easy to find? [Clarity,
-      Spec §Draft Status And Revision Gate]
-
-## Scope Discipline
-
-- [ ] CHK013 Are generic IAM, compliance, and broader interop design clearly kept out of scope?
-      [Coverage, Spec §Current Truth & Scope, Spec §FR-012]
-- [ ] CHK014 Is persistent-versus-ephemeral separation framed as a boundary rule rather than a
-      broader redesign? [Clarity, Spec §Clarifications, Spec §FR-006]
-
-## Future Implementation Readiness
-
-- [ ] CHK015 Do the packet contracts and tasks preserve the current JWT/auth-callout/delegation
-      baseline without silently upgrading to SPIFFE? [Consistency]
-- [ ] CHK016 Does every functional requirement have at least one future task path in `tasks.md`?
-      [Traceability]
+- [X] CHK015 Do the packet contracts and tasks preserve the current JWT/auth-callout/delegation
+      baseline without silently upgrading to SPIFFE? [Consistency, Spec §FR-005]
+- [X] CHK016 Does the packet require auth-callout fallback to stay capped at the quarantined
+      ceiling and map every functional requirement to at least one task? [Traceability, Spec
+      §FR-013, Analyze §Coverage Summary]
 
 ## Notes
 
-- Use this checklist before future implementation work starts.
-- If earlier packets land with changed contracts, refresh this packet before checking off these
-  items.
+- Checklist status: `16/16` complete.
+- This packet is implementation-ready.

@@ -7,16 +7,13 @@
 Freeze one deterministic mediation contract for cross-boundary payloads and shared-state reads so
 content is validated before agent consumption and boundary outcomes are explicit.
 
-This contract is part of draft packet scaffolding and must be refreshed before implementation if
-earlier packet work changes the reused validator, quarantine, or sandbox seams.
-
 ## Validation Pipeline
 
 Packet `024` keeps the current validation pipeline as the canonical baseline:
 
 1. size check
-2. sanitization of disallowed control content
-3. schema validation
+2. deterministic sanitization of disallowed control content
+3. schema validation against the expected payload shape
 4. malicious-pattern inspection
 5. taint-label classification
 6. quarantine action mapping
@@ -36,11 +33,14 @@ The packet freezes these canonical outcomes:
 - `Pass`
   - clean payload, forward unchanged
 - `Sanitize`
-  - payload forwarded after deterministic sanitization
+  - payload forwarded after deterministic sanitization with a human-readable reason
+- `Suspicious`
+  - payload may continue only under monitored handling with a human-readable reason
 - `Reject`
-  - boundary blocks the payload and returns an error
+  - boundary blocks the payload, returns an error, and records a human-readable reason
 - `Quarantine`
-  - boundary isolates the payload for investigation and blocks it
+  - boundary isolates the payload for investigation, blocks it, and records a human-readable
+    reason
 
 The packet also preserves the existing taint labels:
 
@@ -48,8 +48,6 @@ The packet also preserves the existing taint labels:
 - `Sanitized`
 - `Suspicious`
 - `Rejected`
-
-`Suspicious` remains a monitored state, not silent success.
 
 ## Shared-State Contract
 
@@ -91,7 +89,9 @@ Example authoritative shape:
 Behavior:
 
 - the action and taint label must stay coherent
-- non-pass outcomes always carry a reason
+- sanitized outcomes always carry a reason
+- monitored suspicious outcomes always carry a reason
+- rejected and quarantined outcomes always carry a reason
 - suspicious or sanitized content remains visible to audit and monitoring
 
 ## Source Rule

@@ -1,73 +1,67 @@
 # Specification Analysis Report
 
-This report reflects the draft-scaffolding pass across `spec.md`, `plan.md`, `contracts/`, and
-`tasks.md` for packet `024`.
+This report reflects the implementation-ready revision across `spec.md`, `plan.md`, `research.md`,
+`data-model.md`, `quickstart.md`, `contracts/`, `tasks.md`, and the requirements checklist for
+packet `024`.
 
 ## Findings
 
 | ID | Category | Severity | Location(s) | Summary | Recommendation |
 | -- | -------- | -------- | ----------- | ------- | -------------- |
-| A1 | Ambiguity | LOW | packet docs | Earlier packet work may change reused contracts before `024` implementation starts. | Refresh before code starts. |
+| A1 | Coverage | LOW | packet docs | Packet `024` uses MS-77, packet `016`, packet `022`, and Phase 9.1 as source anchors. | Stay anchored to those sources and do not widen scope during code work. |
 
-No critical or high-severity cross-artifact conflicts were detected in this draft scaffold.
-The one intentional low-severity risk is already captured by the packet's revision gate.
+No critical or high-severity cross-artifact conflicts were found after the revision pass.
 
 ## Coverage Summary
 
 | Requirement Key | Has Task? | Task IDs | Notes |
 | --------------- | --------- | -------- | ----- |
-| discover-execute-separation | Yes | T006, T007, T008, T009, T010 | ToolBus and MCP both preserve separate discover and execute actions. |
-| descriptor-and-action-binding | Yes | T006, T007, T008, T009, T010, T019, T022 | Exact delegated action matching and revocation stay covered. |
-| mcp-2025-11-25-baseline | Yes | T001, T002, T003 | The refresh gate and contract refresh preserve the version-pinned protocol rule. |
-| packet-016-continuity-no-live-reject | Yes | T001, T002, T018, T019, T022, T023 | Continuity remains preserved without inventing a new live reject surface. |
-| jwt-auth-callout-delegation-baseline | Yes | T018, T019, T021, T022 | Identity work stays on the current least-privilege baseline. |
-| persistent-ephemeral-boundary-rule | Yes | T012, T016, T020, T021 | Sandbox and lifecycle isolation remain explicit. |
-| required-quarantine-for-protected-crossings | Yes | T012, T014, T016 | Required quarantine paths and failures stay covered. |
-| size-schema-pattern-validation | Yes | T011, T013, T015, T017 | Validation and shared-state mediation both remain explicit. |
-| explicit-pass-sanitize-reject-quarantine-outcomes | Yes | T011, T012, T014, T015 | Outcome mapping and audit reasons are part of the packet. |
-| revocation-audit-no-fabrication | Yes | T018, T019, T021, T022, T023 | Boundary evidence and continuity stay tied to real runtime facts. |
-| bounded-packet-scope | Yes | T001, T002, T003, T004, T005 | Refresh and contract freeze keep scope tight. |
-| no-generic-iam-compliance-interop-expansion | Yes | T001, T002, T003, T004, T005 | Deferred scope is explicit across all packet artifacts. |
-| pre-implementation-refresh-gate | Yes | T001, T002 | The packet blocks implementation on a revision pass. |
-| exact-repo-anchor-fidelity | Yes | T001, T002, T003, T004, T005 | Refresh and contract tasks enforce anchor-based packet wording. |
-| deny-wins-and-quarantined-fallback | Yes | T018, T021 | Auth-callout and identity tasks preserve current fallback posture. |
+| discover-execute-separation | Yes | T006, T007, T009, T010, T011 | ToolBus, MCP discovery, and MCP metadata all preserve separate discover and execute actions. |
+| descriptor-and-action-binding | Yes | T006, T008, T011, T020, T023 | Exact delegated action matching and no-descriptor execute rejection stay covered. |
+| mcp-2025-11-25-baseline | Yes | T001, T002, T003 | The packet keeps protocol claims pinned to the versioned MCP pages. |
+| packet-016-continuity-no-live-reject | Yes | T001, T003, T018, T023, T024 | Continuity stays preserved without inventing a new live reject surface. |
+| jwt-auth-callout-delegation-baseline | Yes | T003, T019, T022, T023 | Identity work stays on the current least-privilege baseline. |
+| persistent-ephemeral-boundary-rule | Yes | T003, T017, T021, T024 | Sandbox class isolation remains a boundary rule, not a redesign. |
+| required-quarantine-for-protected-crossings | Yes | T013, T015, T017, T018 | Required quarantine paths and shared-state mediation stay covered. |
+| size-sanitize-schema-pattern-validation | Yes | T012, T015, T016, T018 | The current validation pipeline stays explicit and bounded. |
+| explicit-reasons-for-sanitize-suspicious-reject-quarantine | Yes | T013, T015, T018 | Boundary outcomes and reasons are explicit in both packet docs and tests. |
+| revocation-audit-no-fabrication | Yes | T008, T020, T023, T024 | Boundary evidence and continuity stay tied to real runtime facts. |
+| bounded-packet-scope | Yes | T001, T002, T003, T004, T005 | The packet-authority gate keeps the scope narrow. |
+| no-generic-iam-compliance-interop-expansion | Yes | T001, T002, T003, T024 | Deferred scope is explicit across spec, plan, research, and contracts. |
+| exact-repo-anchor-fidelity | Yes | T001, T002, T003, T005 | Every major packet claim is tied to named repo seams. |
+| quarantined-fallback-ceiling | Yes | T019, T022 | Auth-callout fallback remains capped at quarantined access. |
+| full-packet-validation-boundary | Yes | T025, T026, T027, T028, T029, T030, T031, T032 | Validation and proof boundary are explicit and deterministic. |
 
 ## Contract Alignment
 
 - `contracts/capability-boundary-contract.md` freezes the discover-versus-execute split and
-  descriptor-and-action matching across ToolBus and MCP.
+  descriptor-and-action matching across ToolBus and MCP, including the missing-descriptor reject
+  rule on execute paths.
 - `contracts/quarantine-and-schema-enforcement.md` freezes the validation pipeline and explicit
-  boundary outcomes before agent consumption.
+  boundary outcomes and reasons before agent consumption.
 - `contracts/identity-and-sandbox-boundary.md` freezes the current JWT/auth-callout/delegation
-  baseline plus persistent-versus-ephemeral sandbox rules and packet `016` continuity.
+  baseline, the quarantined fallback ceiling, the persistent-versus-ephemeral sandbox rules, and
+  packet `016` continuity.
 
 ## Constitution Alignment Issues
 
 None detected.
 
-- the packet is spec-first
-- the packet is bounded
-- the packet is explicit about provisional status and later refresh
-- the packet keeps deterministic validation and live-proof claims separate
-
 ## Unmapped Tasks
 
-None. The refresh gate and contract-refresh tasks map to the packet's provisional-authority and
-bounded-scope requirements.
+None. All packet requirements map to one or more explicit tasks.
 
 ## Metrics
 
-- Total Requirements: 15
-- Total Tasks: 31
-- Coverage: 15/15 requirements mapped to one or more tasks (100%)
+- Total Requirements: 16
+- Total Tasks: 32
+- Coverage: 16/16 requirements mapped to one or more tasks (100%)
 - Ambiguity Count: 1
 - Duplication Count: 0
 - Critical Issues Count: 0
 
 ## Next Actions
 
-- Packet `024` is ready as a draft scaffold and does not need another clarify pass right now.
-- Before any implementation starts, run the refresh gate and revise the packet against newly landed
-  earlier packet work.
-- If implementation begins later, keep Phase 0 and Phase 1 serial until the reused contracts stop
-  moving.
+- Packet `024` is implementation-ready.
+- Keep Phase 0 and Phase 1 complete before any code task starts.
+- During implementation, keep deterministic validation separate from any future live-proof claim.

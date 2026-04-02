@@ -1,48 +1,53 @@
 # Quickstart: Agent-Boundary Security Hardening
 
-## Draft Status
+## Packet-ready workflow
 
-This quickstart is part of draft packet scaffolding.
+Use this packet in two steps:
 
-- packet `024` is being scaffolded before earlier packets are fully complete
-- before implementation, refresh the packet against the then-current `docs/current-state.md`,
-  `docs/direction.md`, and newly landed earlier packet artifacts
+1. finish the packet-authority gate
+2. run the bounded code hardening and deterministic validation
 
-## Targeted deterministic validation
+Phase 0 is complete only when `spec.md`, `plan.md`, `research.md`, `data-model.md`, `quickstart.md`,
+`analyze.md`, `contracts/`, `tasks.md`, and `checklists/requirements.md` all match current
+`main`, and the checklist is `16/16`.
 
-Run the narrowest honest checks for a future packet `024` implementation:
+## Targeted implementation checks
+
+Use the narrowest honest checks for the code and docs touched by packet `024`:
 
 ```bash
-cargo test -p mister-smith-security
-cargo test -p mister-smith-agents --test tool_bus_tests
-cargo test -p mister-smith-agents --test quarantine_tests
+npx markdownlint-cli2 "specs/024-agent-boundary-security-hardening/**/*.md" --config .markdownlint.json
+cargo test -p mister-smith-security --test delegation_tests --test auth_callout_tests --test quarantine_tests --test sandbox_tests
+cargo test -p mister-smith-agents --test tool_bus_tests --test quarantine_tests --test sandbox_tests
 cargo test -p mister-smith-mcp
 cargo test -p mister-smith-persistence
 cargo build --workspace
 git diff --check
-npx markdownlint-cli2 "specs/024-agent-boundary-security-hardening/**/*.md" --config .markdownlint.json
+scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync
 ```
 
 ## Proof expectation
 
-Packet `024` earns proof by showing:
+Packet `024` is done when the checks above prove:
 
 - discover and execute remain separate across ToolBus and MCP boundaries
-- delegated action mismatch, missing delegation, and revocation are rejected before handler
-  execution
+- action-bound execution rejects mismatched, revoked, or descriptorless delegated authority before
+  handler execution
 - cross-boundary and shared-state payloads are deterministically validated before agent
   consumption
-- auth-callout fallback stays on the current minimal quarantined posture
+- sanitized and monitored suspicious outcomes always carry deterministic reasons
+- auth-callout fallback stays at or below the current quarantined posture even when broader
+  defaults are configured
 - packet `016` continuity remains intact without inventing a workflow-backed live reject surface
 
-## Live-proof boundary
+## Proof boundary
 
-This scaffolding pass does not create a new live runtime proof claim.
+This packet reports deterministic hardening only.
 
-If a later implementation captures live proof, it must stay bounded to the actual runtime surface
-used and must not imply:
+Do not claim:
 
 - a new generic IAM program
 - a new interoperability protocol claim
 - a broader compliance or observability claim
 - a new workflow-backed live reject surface unless the runtime actually grows one
+- a new packet-022-owned live rerun or a broader runtime-truth packet
