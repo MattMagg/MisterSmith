@@ -132,7 +132,6 @@ Deliverables:
 - packet-owned `StepDifficultyAssessment`, `StepBudgetPressureSummary`, `StepPolicyDecision`, and
   `StepPolicySummaryView`
 - one shared surface contract for task inspect, autonomy status, and operator selected-run detail
-- repo router docs updated so packet `025` is no longer described as a draft scaffold
 
 Validation:
 

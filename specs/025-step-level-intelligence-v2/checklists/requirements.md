@@ -28,7 +28,7 @@ validation.
 
 - [X] CHK005 Are packet `020` repair-lineage ownership, packet `021` supervision-evidence
       ownership, and packet `023` proof-boundary ownership kept separate from packet `025`?
-      [Clarity, Spec §FR-005 through §FR-007]
+      [Clarity, Spec §Current Truth And Scope, Spec §FR-003 through §FR-005]
 - [X] CHK006 Does the packet explicitly keep placeholder orchestration proof below grounded task
       proof? [Clarity, Spec §FR-010]
 
@@ -37,7 +37,7 @@ validation.
 - [X] CHK007 Does the packet clearly keep existing task inspect, autonomy status, and operator
       selected-run detail as the read surfaces? [Completeness, Spec §FR-008]
 - [X] CHK008 Does the packet clearly defer any new endpoint or session projection in the first
-      slice? [Clarity, Spec §First-Slice Decisions, Contract `step-policy-contract.md`]
+      slice? [Clarity, Spec §FR-008, Plan §D4, Contract `step-policy-contract.md`]
 
 ## Deterministic First Slice
 
@@ -56,7 +56,7 @@ validation.
 ## Validation Posture
 
 - [X] CHK013 Does the packet keep deterministic validation separate from any fresh live runtime
-      proof claim? [Consistency, Spec §FR-015, Quickstart §Live-proof boundary]
+      proof claim? [Consistency, Spec §FR-011 through §FR-013, Quickstart §Live-proof boundary]
 - [X] CHK014 Do the quickstart and final validation tasks use narrow honest checks for the planned
       seams? [Traceability, Quickstart §Targeted implementation validation, Tasks §Final
       Validation]

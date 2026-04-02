@@ -7,7 +7,7 @@ This report reflects the implementation-ready packet-025 revision across `spec.m
 
 | ID | Category | Severity | Location(s) | Summary | Recommendation |
 | -- | -------- | -------- | ----------- | ------- | -------------- |
-| A1 | Scope | LOW | `spec.md`, `plan.md`, `tasks.md` | Session-level step-policy projection is intentionally deferred in the first slice. | Keep session projection deferred unless task inspect and autonomy delivery prove insufficient. |
+| A1 | Scope | LOW | `spec.md`, `plan.md`, `tasks.md` | Session-level step-policy projection stays deferred in the first slice. | Keep it deferred unless task inspect proves insufficient. |
 
 No critical or high-severity cross-artifact conflicts were detected. Packet `025` now matches
 current repo truth and is implementation-ready.
@@ -17,17 +17,19 @@ current repo truth and is implementation-ready.
 | Requirement Key | Has Task? | Task IDs | Notes |
 | --------------- | --------- | -------- | ----- |
 | step-difficulty-assessment | Yes | T006, T008, T009, T010 | Deterministic assessment is covered in types, runtime assembly, and projection. |
-| budget-pressure-summary | Yes | T011, T013, T014 | Budget-aware summary and action choice are explicitly covered. |
 | bounded-action-ladder | Yes | T011, T013, T014 | The keep or retry or clarify or downgrade or escalate ladder is frozen. |
+| preserve-packet-022-ownership | Yes | T001, T010, T020 | Packet `022` lifecycle and event-history ownership stays explicit in docs and projections. |
 | preserve-packet-020-ownership | Yes | T005, T015 | Packet `020` ownership stays explicit in docs and runtime projection. |
 | preserve-packet-023-ownership | Yes | T001, T005, T020 | Packet `023` proof ownership stays explicit in contract, docs, and smoke assertions. |
-| keep-step-policy-separate-from-supervision | Yes | T003, T010, T018 | Packet `025` stays adjacent to packet `021`, not merged into it. |
+| preserve-packet-024-ownership | Yes | T001, T002, T010 | Packet `024` boundary ownership stays explicit and unchanged. |
+| budget-pressure-summary | Yes | T011, T013, T014 | Budget-aware summary and action choice are explicitly covered. |
 | existing-read-surfaces-only | Yes | T003, T010, T018, T019 | Task inspect, autonomy, and selected-run detail remain the read path. |
-| proof-honesty-for-placeholder-completion | Yes | T007, T016, T020 | Summary rendering and smoke assertions keep proof wording honest. |
+| proof-boundary-wording | Yes | T007, T016, T020 | Summary rendering and smoke assertions keep packet-023 wording honest. |
 | preserve-fallback-behavior | Yes | T006, T009, T014 | Runtime assembly tasks require bounded fallback behavior. |
 | deterministic-first-slice | Yes | T006, T011, T014 | No training-heavy or judge-heavy policy is required. |
+| no-placeholder-proof-upgrade | Yes | T017, T020, T025 | Packet `025` does not turn placeholder completion into grounded proof. |
 | bounded-current-seam-scope | Yes | T001-T028 | The task map stays inside current repo seams. |
-| deterministic-vs-live-proof-separation | Yes | T020, T028 | The packet keeps deterministic validation and any fresh live proof separate. |
+| repo-anchor-traceability | Yes | T001, T002, T006 | Packet claims stay tied to named repo anchors and current router docs. |
 
 ## Contract Alignment
 
@@ -48,9 +50,9 @@ None. All tasks map to packet-owned requirements or final validation closure.
 
 ## Metrics
 
-- Total Requirements: 15
+- Total Requirements: 14
 - Total Tasks: 28
-- Coverage: 15/15 requirements mapped to one or more tasks (100%)
+- Coverage: 14/14 requirements mapped to one or more tasks (100%)
 - Ambiguity Count: 0
 - Duplication Count: 0
 - Critical Issues Count: 0

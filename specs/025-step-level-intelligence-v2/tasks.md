@@ -19,9 +19,10 @@ stories frozen in the packet.
 
 ---
 
-## Phase 0: Packet Revision And Truth Sync (Blocking)
+## Phase 0: Completed Packet Revision And Truth Sync
 
-**Purpose**: Make packet `025` implementation-ready before any code changes start.
+**Purpose**: Record the completed doc sync that made packet `025` implementation-ready before code
+changes start.
 
 - [x] T001 Revise `specs/025-step-level-intelligence-v2/spec.md` and
       `specs/025-step-level-intelligence-v2/plan.md` to current `main` truth, replacing stale

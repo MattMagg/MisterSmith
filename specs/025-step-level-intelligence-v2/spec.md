@@ -4,6 +4,7 @@
 **Created**: 2026-04-01
 **Status**: Implementation-ready
 **Input**: `docs/current-state.md`, `docs/direction.md`,
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`,
 `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`,
 `docs/plans/2026-03-27-runtime-planning-simplification.md`,
 `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`,
@@ -31,6 +32,8 @@ not revision gates.
 
 Current repo truth already includes the foundations this packet must build on rather than reopen:
 
+- packet `019` already owns budget-aware routing profiles and bounded budget-pressure hints that
+  packet `025` can consume without redefining routing ownership
 - packet `020` already owns verifier-gated step decisions, clarification requests, repair
   directives, failure-context checkpoints, and `orchestration_quality`
 - packet `021` already owns `supervision_evidence` on task, autonomy, and operator surfaces, with
