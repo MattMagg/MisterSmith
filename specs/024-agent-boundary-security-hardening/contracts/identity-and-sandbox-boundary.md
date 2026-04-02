@@ -7,9 +7,6 @@
 Freeze one least-privilege identity and sandbox contract across delegation, auth callout, and
 persistent-versus-ephemeral sandbox boundaries without widening into a new IAM program.
 
-This contract is part of draft packet scaffolding and must be refreshed before implementation if
-earlier packet work changes reused identity or continuity seams.
-
 ## Identity Baseline
 
 Packet `024` keeps this current identity baseline:
@@ -27,10 +24,12 @@ SPIFFE remains comparator guidance only for later work.
 Expected behavior from `crates/mister-smith-security/src/auth_callout.rs`:
 
 - permission tiers remain `full`, `standard`, `restricted`, and `quarantined`
-- fallback stays on the minimal quarantined posture
+- fallback stays at or below the minimal quarantined posture
 - `$SYS.>` and `$JS.>` remain denied for narrowed credentials
 - TTL remains bounded by current tier rules
 - delegation references, when present, remain tied to the current validated authority chain
+- broader override defaults may affect primary issuance, but they must not widen fallback beyond the
+  quarantined ceiling
 
 ## Delegation Contract
 

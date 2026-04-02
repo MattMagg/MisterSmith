@@ -8246,11 +8246,31 @@ apps = true
             result["data"]["observed_delegation"]["action"]["action_id"],
             serde_json::json!("tool:describe_external_capabilities#discover")
         );
-        assert!(result["data"]["capabilities"]
+        assert_eq!(
+            result["data"]["discovery_surface"]["capability_descriptor"]["discover_action"]
+                ["action_id"],
+            serde_json::json!("tool:describe_external_capabilities#discover")
+        );
+        assert_eq!(
+            result["data"]["discovery_surface"]["capability_descriptor"]["execute_action"]
+                ["action_id"],
+            serde_json::json!("tool:describe_external_capabilities#execute")
+        );
+        let capabilities = result["data"]["capabilities"]
             .as_array()
-            .unwrap()
+            .expect("capability catalog should be an array");
+        let save_linear_issue = capabilities
             .iter()
-            .any(|entry| entry["tool_name"] == "save_linear_issue"));
+            .find(|entry| entry["tool_name"] == "save_linear_issue")
+            .expect("catalog should include save_linear_issue");
+        assert_eq!(
+            save_linear_issue["capability_descriptor"]["discover_action"]["action_id"],
+            serde_json::json!("tool:save_linear_issue#discover")
+        );
+        assert_eq!(
+            save_linear_issue["capability_descriptor"]["execute_action"]["action_id"],
+            serde_json::json!("tool:save_linear_issue#execute")
+        );
     }
 
     #[tokio::test]

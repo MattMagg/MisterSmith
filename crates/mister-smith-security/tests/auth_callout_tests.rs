@@ -6,7 +6,7 @@ use std::time::Duration;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use futures::StreamExt;
 use mister_smith_security::auth_callout::{
-    AuthCalloutHandler, PermissionTier, TrustProfile, AUTH_CALLOUT_SUBJECT,
+    AuthCalloutHandler, PermissionTier, Permissions, TrustProfile, AUTH_CALLOUT_SUBJECT,
 };
 use mister_smith_security::config::{JwtConfig, KeySource};
 use mister_smith_security::jwt::{AgentClaims, JwtManager};
@@ -179,6 +179,49 @@ fn authorize_unknown_agent_uses_quarantined_fallback() {
     assert_eq!(
         result.permissions.subscribe_allow,
         vec!["system.health".to_string(), "_INBOX.>".to_string()]
+    );
+}
+
+#[test]
+fn authorize_unknown_agent_clamps_overridden_fallback_permissions_to_quarantined_ceiling() {
+    let handler = handler().with_default_permissions(Permissions {
+        publish_allow: vec!["tasks.>".to_string(), "system.health".to_string()],
+        publish_deny: vec!["agents.>".to_string()],
+        subscribe_allow: vec![
+            "_INBOX.>".to_string(),
+            "tasks.>".to_string(),
+            "system.health".to_string(),
+        ],
+        subscribe_deny: vec!["agents.>".to_string()],
+    });
+
+    let result = handler.authorize("missing-agent").unwrap();
+
+    assert_eq!(result.permission_tier, PermissionTier::Quarantined);
+    assert!(result.fallback_applied);
+    assert_eq!(
+        result.permissions.publish_allow,
+        vec!["system.health".to_string()]
+    );
+    assert_eq!(
+        result.permissions.publish_deny,
+        vec![
+            "$SYS.>".to_string(),
+            "$JS.>".to_string(),
+            "agents.>".to_string(),
+        ]
+    );
+    assert_eq!(
+        result.permissions.subscribe_allow,
+        vec!["system.health".to_string(), "_INBOX.>".to_string()]
+    );
+    assert_eq!(
+        result.permissions.subscribe_deny,
+        vec![
+            "$SYS.>".to_string(),
+            "$JS.>".to_string(),
+            "agents.>".to_string(),
+        ]
     );
 }
 

@@ -359,22 +359,26 @@ impl ExposedTool {
 
     fn capability_descriptor(&self) -> ExternalCapabilityDescriptor {
         let external_name = self.external_name();
-        let boundary_action = self.boundary_action();
+        let discover_action = tool_boundary_action(
+            &external_name,
+            &self.namespace,
+            CapabilityActionKind::Discover,
+        );
+        let execute_action = tool_boundary_action(
+            &external_name,
+            &self.namespace,
+            CapabilityActionKind::Execute,
+        );
 
         ExternalCapabilityDescriptor {
             boundary: "mcp.tool".to_string(),
             external_name,
-            descriptor_id: boundary_action.descriptor_id.clone(),
-            action_id: boundary_action.action_id.clone(),
-            required_scope: boundary_action
-                .required_scope
-                .map(|scope| format!("{scope:?}"))
-                .unwrap_or_else(|| "none".to_string()),
+            descriptor_id: execute_action.descriptor_id.clone(),
             delegation_required: self.required_boundary_action.is_some(),
             namespace: self.namespace.clone(),
             resource_id: Some(self.name.clone()),
-            boundary_action: boundary_action.clone(),
-            revocation_key: boundary_action.revocation_key.clone(),
+            discover_action,
+            execute_action,
         }
     }
 
@@ -577,6 +581,29 @@ mod tests {
         ))
     }
 
+    fn sample_descriptorless_external_delegation_for_action(
+        action: DelegatedAction,
+    ) -> (Arc<DelegationService>, ExternalDelegationEnvelope) {
+        let service = Arc::new(DelegationService::new());
+        let recipient = AgentId::from_uuid(uuid::Uuid::new_v4());
+        let (capability, provenance) = service
+            .issue_capability(
+                AuthorityPrincipal::Policy("operator".to_string()),
+                recipient,
+                DelegationScope::InvokeTool,
+                None,
+                Duration::from_secs(300),
+                None,
+                None,
+            )
+            .expect("descriptorless delegation should issue");
+
+        (
+            service,
+            ExternalDelegationEnvelope::new(capability, provenance).with_action(action),
+        )
+    }
+
     #[tokio::test]
     async fn register_and_list_tools() {
         let server = McpServer::new(test_config());
@@ -606,7 +633,11 @@ mod tests {
         assert_eq!(capability.descriptor_id, "tool:agent.greet");
         assert!(!capability.delegation_required);
         assert_eq!(
-            capability.boundary_action.action_id,
+            capability.discover_action.action_id,
+            "tool:agent.greet#discover"
+        );
+        assert_eq!(
+            capability.execute_action.action_id,
             "tool:agent.greet#execute"
         );
         let meta = tools[0]
@@ -615,6 +646,14 @@ mod tests {
         assert_eq!(
             meta.0["mister_smith_capability"]["descriptor_id"],
             serde_json::json!("tool:agent.greet")
+        );
+        assert_eq!(
+            meta.0["mister_smith_capability"]["discover_action"]["action_id"],
+            serde_json::json!("tool:agent.greet#discover")
+        );
+        assert_eq!(
+            meta.0["mister_smith_capability"]["execute_action"]["action_id"],
+            serde_json::json!("tool:agent.greet#execute")
         );
     }
 
@@ -644,10 +683,18 @@ mod tests {
             .as_ref()
             .expect("listed tools should publish bounded capability metadata");
         assert!(capability.delegation_required);
-        assert_eq!(capability.required_scope, "none");
         assert_eq!(
-            capability.boundary_action.action_id,
+            capability.discover_action.action_id,
             "tool:agent.describe#discover"
+        );
+        assert_eq!(capability.discover_action.required_scope, None);
+        assert_eq!(
+            capability.execute_action.action_id,
+            "tool:agent.describe#execute"
+        );
+        assert_eq!(
+            capability.execute_action.required_scope,
+            Some(DelegationScope::InvokeTool)
         );
     }
 
@@ -855,6 +902,44 @@ mod tests {
             err,
             McpError::ToolCallFailed(message)
                 if message.contains("does not authorize MCP tool 'agent.echo' with required action")
+        ));
+    }
+
+    #[tokio::test]
+    async fn descriptorless_delegation_is_rejected_before_handler_execution() {
+        let execute_action =
+            tool_boundary_action("agent.echo", "agent", CapabilityActionKind::Execute);
+        let (service, delegation) =
+            sample_descriptorless_external_delegation_for_action(execute_action);
+        let server = McpServer::new(test_config()).with_delegation_service(service);
+
+        let tool = ExposedTool {
+            name: "echo".into(),
+            description: "Echo back".into(),
+            input_schema: serde_json::json!({}),
+            namespace: "agent".into(),
+            required_boundary_action: None,
+        };
+
+        let handler: ToolHandler =
+            Arc::new(|_| Box::pin(async move { Ok(serde_json::json!({"unexpected": true})) }));
+
+        server.register_tool(tool, handler).await;
+
+        let err = server
+            .handle_tools_call(
+                "agent.echo",
+                ToolCallRequest::new(serde_json::json!({"msg": "hi"}))
+                    .with_delegation(delegation)
+                    .into_wire_params(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            err,
+            McpError::ToolCallFailed(message)
+                if message.contains("missing descriptor binding for action descriptor")
         ));
     }
 

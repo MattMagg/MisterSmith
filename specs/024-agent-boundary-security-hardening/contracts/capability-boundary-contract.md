@@ -7,9 +7,6 @@
 Freeze one least-privilege capability contract across ToolBus and MCP so discovery stays bounded,
 execution stays action-bound, and delegated authority is checked before handler execution.
 
-This contract is part of draft packet scaffolding and must be refreshed before implementation if
-earlier packet work changes reused capability or delegation seams.
-
 ## Canonical Mapping
 
 The contract for packet `024` is:
@@ -51,6 +48,7 @@ Behavior:
 - `discover_action` is for capability inspection only
 - `execute_action` is for invocation only
 - if a caller presents only discover authority and attempts execution, the boundary rejects it
+- if a caller presents execute authority without a descriptor binding, the boundary rejects it
 - if descriptor identifiers match but action identifiers or revocation keys do not, the boundary
   rejects the call before dispatch
 
@@ -59,17 +57,21 @@ Behavior:
 The ToolBus contract remains grounded in:
 
 - `crates/mister-smith-agents/src/tool_bus.rs`
+- `crates/mister-smith-security/src/delegation.rs`
 
 Expected behavior:
 
 - `CapabilityDescriptor` continues to publish separate discover and execute actions
 - the live enforcement path continues to require the exact delegated action needed by the boundary
+- action-bound execute paths reject descriptorless delegated capabilities
 - local and remote tool surfaces use the same least-privilege posture
 
 ## MCP Contract
 
 The MCP contract remains grounded in:
 
+- `crates/mister-smith-mcp/src/client.rs`
+- `crates/mister-smith-mcp/src/bridge.rs`
 - `crates/mister-smith-mcp/src/server.rs`
 - `crates/mister-smith-mcp/src/compatibility.rs`
 
@@ -78,8 +80,9 @@ Expected behavior:
 - `tools/list` and `describe_external_capabilities` stay on discover authority
 - `tools/call` stays on execute authority
 - `handle_tools_call` validates the exact expected boundary action before handler execution
-- `describe_external_capabilities` continues to expose descriptor and action metadata without
-  widening into ambient execute permission
+- `describe_external_capabilities` exposes both `discover_action` and `execute_action`
+- MCP client and bridge preserve the same two-action descriptor shape end to end
+- bounded discovery continues without widening into ambient execute permission
 
 ## Protocol Source Rule
 
