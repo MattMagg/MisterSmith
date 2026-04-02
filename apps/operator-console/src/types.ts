@@ -77,6 +77,35 @@ export interface TaskInterventionRecord {
   emitted_at?: string | null;
 }
 
+export interface RuntimeTruthProofBoundary {
+  graph_execution: string;
+  semantic_completion: string;
+  grounded_tool_execution: string;
+  task_proof: string;
+}
+
+export interface RuntimeTruthRunTrace {
+  trace_root_id: string;
+  workflow_id: string;
+  graph_id?: string | null;
+  branch_id?: string | null;
+  node_id?: string | null;
+  relationships: string[];
+}
+
+export interface RuntimeTruthGroundedEvidenceReference {
+  kind: string;
+  reference: string;
+  label?: string | null;
+}
+
+export interface TaskRuntimeTruth {
+  evidence_class: string;
+  proof_boundary: RuntimeTruthProofBoundary;
+  run_trace: RuntimeTruthRunTrace;
+  grounded_evidence?: RuntimeTruthGroundedEvidenceReference[];
+}
+
 export interface TaskSupervisionEvidence {
   target_scope: TaskSupervisionTargetScope;
   decision_basis?: string | null;
@@ -93,6 +122,7 @@ export interface TaskResultDetail {
   status: string;
   proof_outcome?: string | null;
   orchestration_quality?: Record<string, unknown> | null;
+  runtime_truth?: TaskRuntimeTruth | null;
   supervision_evidence?: TaskSupervisionEvidence | null;
   result: Record<string, unknown>;
 }
@@ -138,6 +168,7 @@ export interface SessionRetainedResult {
   status: string;
   assistant_result: Record<string, unknown>;
   preview?: string | null;
+  runtime_truth?: TaskRuntimeTruth | null;
   provenance: {
     runtime_execution_mode: Record<string, unknown>;
     graph_state?: string | null;

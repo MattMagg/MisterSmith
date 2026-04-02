@@ -938,7 +938,11 @@ pub(crate) fn render_session(view: &ConversationCliSessionView) -> String {
         last_assistant_result,
         view.turn_count,
         view.ended_at.as_deref().unwrap_or("none"),
-        if turns.is_empty() { "none".to_string() } else { turns }
+        if turns.is_empty() {
+            "none".to_string()
+        } else {
+            turns
+        }
     )
 }
 
@@ -999,10 +1003,34 @@ fn render_retained_result(view: &SessionRetainedResultView) -> String {
     } else {
         view.provenance.source_fields.join("|")
     };
+    let runtime_truth = view
+        .runtime_truth
+        .as_ref()
+        .map(|summary| {
+            let relationships = if summary.run_trace.relationships.is_empty() {
+                "none".to_string()
+            } else {
+                summary
+                    .run_trace
+                    .relationships
+                    .iter()
+                    .map(|r| format!("{:?}", r))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
+            format!(
+                "{}:{} trace_root={} relationships=[{}]",
+                summary.evidence_class.as_str(),
+                summary.proof_boundary.task_proof,
+                summary.run_trace.trace_root_id,
+                relationships
+            )
+        })
+        .unwrap_or_else(|| "none".to_string());
 
     format!(
-        "workflow={} status={} proof={} preview={} sources={}",
-        view.workflow_id, view.status, proof_outcome, preview, source_fields
+        "workflow={} status={} proof={} preview={} runtime_truth={} sources={}",
+        view.workflow_id, view.status, proof_outcome, preview, runtime_truth, source_fields
     )
 }
 
@@ -1080,6 +1108,21 @@ mod tests {
                 "workflow_id": workflow_id,
                 "status": "completed",
                 "proof_outcome": "graph_formed_and_completed",
+                "runtime_truth": {
+                    "evidence_class": "placeholder_or_simulated_step_completion",
+                    "proof_boundary": {
+                        "graph_execution": "workflow graph executed successfully",
+                        "semantic_completion": "semantic completion not yet proven",
+                        "grounded_tool_execution": "grounded tool execution: none/minimal",
+                        "task_proof": "result is orchestration proof, not substantive task proof"
+                    },
+                    "run_trace": {
+                        "trace_root_id": workflow_id.to_string(),
+                        "workflow_id": workflow_id.to_string(),
+                        "relationships": ["graph", "tool_boundary"]
+                    },
+                    "grounded_evidence": []
+                },
                 "result": {
                     "workflow_id": workflow_id,
                     "provider_kind": "openai_chatgpt",
@@ -1122,6 +1165,10 @@ mod tests {
         assert_eq!(
             assistant_result["provenance"]["source_fields"],
             json!(["metadata.final_result", "metadata.aggregated_result"])
+        );
+        assert_eq!(
+            assistant_result["runtime_truth"]["proof_boundary"]["task_proof"],
+            json!("result is orchestration proof, not substantive task proof")
         );
         assert!(assistant_result["assistant_result"].get("result").is_none());
     }
@@ -1419,6 +1466,22 @@ mod tests {
                     "proof_outcome": "collapsed_to_sequential"
                 }),
                 preview: Some("bounded answer preview".to_string()),
+                runtime_truth: Some(mister_smith_core::RuntimeTruthView {
+                    evidence_class:
+                        mister_smith_core::ExecutionEvidenceClass::PlaceholderOrSimulatedStepCompletion,
+                    proof_boundary: mister_smith_core::packet_023_placeholder_proof_boundary(),
+                    run_trace: mister_smith_core::RunTraceSummaryView {
+                        trace_root_id: "55555555-5555-5555-5555-555555555555".to_string(),
+                        workflow_id: TaskId::from_uuid(
+                            Uuid::parse_str("55555555-5555-5555-5555-555555555555").unwrap(),
+                        ),
+                        graph_id: None,
+                        branch_id: None,
+                        node_id: None,
+                        relationships: vec![mister_smith_core::RunTraceRelationshipKind::Graph],
+                    },
+                    grounded_evidence: vec![],
+                }),
                 provenance: mister_smith_core::ResultProvenanceSummary {
                     runtime_execution_mode: json!({
                         "execution_boundary": "tool_bus"
@@ -1457,6 +1520,7 @@ mod tests {
                             "workflow interrupted by runtime restart before session sync"
                                 .to_string(),
                         ),
+                        runtime_truth: None,
                         provenance: mister_smith_core::ResultProvenanceSummary {
                             runtime_execution_mode: json!({
                                 "execution_boundary": "tool_bus"
@@ -1501,6 +1565,29 @@ mod tests {
                             "proof_outcome": "collapsed_to_sequential"
                         }),
                         preview: Some("bounded answer preview".to_string()),
+                        runtime_truth: Some(mister_smith_core::RuntimeTruthView {
+                            evidence_class:
+                                mister_smith_core::ExecutionEvidenceClass::PlaceholderOrSimulatedStepCompletion,
+                            proof_boundary: mister_smith_core::packet_023_placeholder_proof_boundary(),
+                            run_trace: mister_smith_core::RunTraceSummaryView {
+                                trace_root_id:
+                                    "55555555-5555-5555-5555-555555555555".to_string(),
+                                workflow_id: TaskId::from_uuid(
+                                    Uuid::parse_str(
+                                        "55555555-5555-5555-5555-555555555555",
+                                    )
+                                    .unwrap(),
+                                ),
+                                graph_id: None,
+                                branch_id: None,
+                                node_id: None,
+                                relationships: vec![
+                                    mister_smith_core::RunTraceRelationshipKind::Graph,
+                                    mister_smith_core::RunTraceRelationshipKind::ToolBoundary,
+                                ],
+                            },
+                            grounded_evidence: vec![],
+                        }),
                         provenance: mister_smith_core::ResultProvenanceSummary {
                             runtime_execution_mode: json!({
                                 "execution_boundary": "tool_bus"
@@ -1538,7 +1625,7 @@ mod tests {
         assert!(rendered.contains("resumed_from_workflow=44444444-4444-4444-4444-444444444444"));
         assert!(rendered
             .contains("last_assistant_result: workflow=55555555-5555-5555-5555-555555555555"));
-        assert!(rendered.contains("result=workflow=55555555-5555-5555-5555-555555555555 status=completed proof=collapsed_to_sequential preview=bounded answer preview"));
+        assert!(rendered.contains("result=workflow=55555555-5555-5555-5555-555555555555 status=completed proof=collapsed_to_sequential preview=bounded answer preview runtime_truth=placeholder_or_simulated_step_completion:result is orchestration proof, not substantive task proof"));
         assert!(rendered.contains("sources=metadata.final_result|metadata.aggregated_result"));
     }
 }

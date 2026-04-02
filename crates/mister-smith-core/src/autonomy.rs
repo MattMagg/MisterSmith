@@ -263,6 +263,170 @@ pub struct HandoffClarificationRequest {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+/// Canonical packet-023 proof-boundary wording for placeholder step runs.
+pub const PACKET_023_GRAPH_EXECUTION_SUCCESS: &str = "workflow graph executed successfully";
+/// Canonical packet-023 semantic-completion wording for placeholder step runs.
+pub const PACKET_023_SEMANTIC_COMPLETION_UNPROVEN: &str = "semantic completion not yet proven";
+/// Canonical packet-023 grounded-tool wording for placeholder step runs.
+pub const PACKET_023_GROUNDED_TOOL_EXECUTION_MINIMAL: &str =
+    "grounded tool execution: none/minimal";
+/// Canonical packet-023 task-proof wording for placeholder step runs.
+pub const PACKET_023_ORCHESTRATION_ONLY: &str =
+    "result is orchestration proof, not substantive task proof";
+
+/// Strongest execution-evidence class the runtime can honestly claim for one run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionEvidenceClass {
+    /// The runtime proved workflow-substrate completion only.
+    #[serde(rename = "orchestration_substrate_completion")]
+    SubstrateCompletion,
+    /// The runtime completed a placeholder or simulated step boundary.
+    PlaceholderOrSimulatedStepCompletion,
+    /// The runtime reached a grounded tool boundary with real external evidence.
+    GroundedToolExecution,
+    /// The runtime proved grounded task completion.
+    GroundedTaskProof,
+}
+
+impl ExecutionEvidenceClass {
+    /// Return the stable contract label for this evidence class.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SubstrateCompletion => "orchestration_substrate_completion",
+            Self::PlaceholderOrSimulatedStepCompletion => {
+                "placeholder_or_simulated_step_completion"
+            }
+            Self::GroundedToolExecution => "grounded_tool_execution",
+            Self::GroundedTaskProof => "grounded_task_proof",
+        }
+    }
+}
+
+/// Bounded relationship kinds surfaced by the packet-023 run-trace taxonomy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunTraceRelationshipKind {
+    /// Graph-level workflow execution exists for the run.
+    Graph,
+    /// Branch-level execution exists for the run.
+    Branch,
+    /// Node-level execution exists for the run.
+    Node,
+    /// A tool boundary was crossed during execution.
+    ToolBoundary,
+    /// A handoff relationship occurred during execution.
+    Handoff,
+    /// A repair relationship occurred during execution.
+    Repair,
+    /// A retry relationship occurred during execution.
+    Retry,
+    /// The run fanned out into multiple execution paths.
+    FanOut,
+    /// The run rejoined after fan-out.
+    Join,
+    /// Supervision state attached to the run.
+    Supervision,
+}
+
+/// Stable reference to real grounded evidence touched during a run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroundedEvidenceReference {
+    /// Stable evidence class such as `file`, `endpoint`, `artifact`, or `checkpoint`.
+    #[serde(rename = "kind", alias = "source")]
+    pub kind: String,
+    /// Stable identifier, path, URL, or artifact key.
+    pub reference: String,
+    /// Short human-readable explanation for the evidence.
+    #[serde(rename = "label", alias = "detail", default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+/// Shared packet-023 run-trace summary anchored to one workflow run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunTraceSummaryView {
+    /// Canonical trace root identifier for the run.
+    pub trace_root_id: String,
+    /// Workflow that owns the run trace.
+    pub workflow_id: TaskId,
+    /// Graph identifier when one exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<ExecutionGraphId>,
+    /// Branch identifier when one exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_id: Option<ExecutionBranchId>,
+    /// Node identifier when one exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_id: Option<ExecutionNodeId>,
+    /// Observed bounded run-trace relationship kinds for the run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<RunTraceRelationshipKind>,
+}
+
+/// Packet-023 proof-boundary projection rendered across operator surfaces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProofBoundaryView {
+    /// Honest statement about workflow-graph execution.
+    pub graph_execution: String,
+    /// Honest statement about semantic task completion.
+    pub semantic_completion: String,
+    /// Honest statement about grounded tool execution.
+    pub grounded_tool_execution: String,
+    /// Honest statement about substantive task proof.
+    pub task_proof: String,
+}
+
+/// Shared packet-023 runtime-truth projection carried across result and status surfaces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeTruthView {
+    /// Strongest evidence class the runtime can honestly claim for the run.
+    pub evidence_class: ExecutionEvidenceClass,
+    /// Shared proof-boundary wording for the run.
+    pub proof_boundary: ProofBoundaryView,
+    /// Bounded run-trace summary for the run.
+    pub run_trace: RunTraceSummaryView,
+    /// Stable grounded evidence refs when real evidence exists.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grounded_evidence: Vec<GroundedEvidenceReference>,
+}
+
+/// Return the canonical packet-023 placeholder-step proof-boundary wording.
+#[must_use]
+pub fn packet_023_placeholder_proof_boundary() -> ProofBoundaryView {
+    ProofBoundaryView {
+        graph_execution: PACKET_023_GRAPH_EXECUTION_SUCCESS.to_string(),
+        semantic_completion: PACKET_023_SEMANTIC_COMPLETION_UNPROVEN.to_string(),
+        grounded_tool_execution: PACKET_023_GROUNDED_TOOL_EXECUTION_MINIMAL.to_string(),
+        task_proof: PACKET_023_ORCHESTRATION_ONLY.to_string(),
+    }
+}
+
+/// Build the canonical packet-023 runtime-truth block for a placeholder-step run.
+#[must_use]
+pub fn packet_023_placeholder_runtime_truth(
+    workflow_id: TaskId,
+    graph_id: Option<ExecutionGraphId>,
+    branch_id: Option<ExecutionBranchId>,
+    node_id: Option<ExecutionNodeId>,
+    relationships: Vec<RunTraceRelationshipKind>,
+    grounded_evidence: Vec<GroundedEvidenceReference>,
+) -> RuntimeTruthView {
+    RuntimeTruthView {
+        evidence_class: ExecutionEvidenceClass::PlaceholderOrSimulatedStepCompletion,
+        proof_boundary: packet_023_placeholder_proof_boundary(),
+        run_trace: RunTraceSummaryView {
+            trace_root_id: workflow_id.to_string(),
+            workflow_id,
+            graph_id,
+            branch_id,
+            node_id,
+            relationships,
+        },
+        grounded_evidence,
+    }
+}
+
 /// Task-facing result envelope exposed through `task.result`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskResultView {
@@ -275,6 +439,9 @@ pub struct TaskResultView {
     /// Bounded verifier and repair provenance when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orchestration_quality: Option<OrchestrationQualityView>,
+    /// Packet-023 runtime-truth projection when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_truth: Option<RuntimeTruthView>,
     /// Bounded packet-021 predictive-supervision evidence when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supervision_evidence: Option<SupervisionEvidenceView>,
@@ -311,6 +478,9 @@ pub struct SessionRetainedResultView {
     /// Compact preview extracted from the canonical result object when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview: Option<String>,
+    /// Packet-023 runtime-truth projection when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_truth: Option<RuntimeTruthView>,
     /// Bounded provenance summary for retained context.
     pub provenance: ResultProvenanceSummary,
 }
@@ -330,6 +500,9 @@ pub struct OperatorResultPreview {
     /// Bounded verifier and repair provenance when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orchestration_quality: Option<OrchestrationQualityView>,
+    /// Packet-023 runtime-truth projection when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_truth: Option<RuntimeTruthView>,
     /// Compact explanation of how the result was produced and classified.
     pub provenance_lines: Vec<String>,
 }
@@ -812,6 +985,19 @@ mod tests {
     #[test]
     fn task_result_view_serde_roundtrip_preserves_supervision_evidence() {
         let workflow_id = TaskId::new();
+        let runtime_truth = packet_023_placeholder_runtime_truth(
+            workflow_id,
+            Some(ExecutionGraphId::new()),
+            Some(ExecutionBranchId::new()),
+            Some(ExecutionNodeId::new()),
+            vec![
+                RunTraceRelationshipKind::Graph,
+                RunTraceRelationshipKind::Branch,
+                RunTraceRelationshipKind::ToolBoundary,
+                RunTraceRelationshipKind::Supervision,
+            ],
+            vec![],
+        );
         let task_result = TaskResultView {
             workflow_id,
             status: "completed".to_string(),
@@ -826,6 +1012,7 @@ mod tests {
                 failure_context_ref: Some("draft-outline/clarify".to_string()),
                 outcome_summary: "accepted_after_clarify_handoff".to_string(),
             }),
+            runtime_truth: Some(runtime_truth),
             supervision_evidence: Some(SupervisionEvidenceView {
                 target_scope: SupervisionTargetScope {
                     kind: SupervisionTargetKind::Branch,
@@ -864,5 +1051,49 @@ mod tests {
         let json = serde_json::to_string(&task_result).unwrap();
         let deserialized: TaskResultView = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, task_result);
+    }
+
+    #[test]
+    fn packet_023_placeholder_runtime_truth_uses_canonical_wording() {
+        let workflow_id = TaskId::new();
+        let graph_id = ExecutionGraphId::new();
+        let runtime_truth = packet_023_placeholder_runtime_truth(
+            workflow_id,
+            Some(graph_id),
+            Some(ExecutionBranchId::new()),
+            Some(ExecutionNodeId::new()),
+            vec![
+                RunTraceRelationshipKind::Graph,
+                RunTraceRelationshipKind::Branch,
+                RunTraceRelationshipKind::Node,
+                RunTraceRelationshipKind::ToolBoundary,
+            ],
+            vec![],
+        );
+
+        assert_eq!(
+            runtime_truth.evidence_class,
+            ExecutionEvidenceClass::PlaceholderOrSimulatedStepCompletion
+        );
+        assert_eq!(
+            runtime_truth.proof_boundary,
+            ProofBoundaryView {
+                graph_execution: PACKET_023_GRAPH_EXECUTION_SUCCESS.to_string(),
+                semantic_completion: PACKET_023_SEMANTIC_COMPLETION_UNPROVEN.to_string(),
+                grounded_tool_execution: PACKET_023_GROUNDED_TOOL_EXECUTION_MINIMAL.to_string(),
+                task_proof: PACKET_023_ORCHESTRATION_ONLY.to_string(),
+            }
+        );
+        assert_eq!(
+            runtime_truth.run_trace.trace_root_id,
+            workflow_id.to_string()
+        );
+        assert_eq!(runtime_truth.run_trace.workflow_id, workflow_id);
+        assert_eq!(runtime_truth.run_trace.graph_id, Some(graph_id));
+        assert!(runtime_truth
+            .run_trace
+            .relationships
+            .contains(&RunTraceRelationshipKind::ToolBoundary));
+        assert!(runtime_truth.grounded_evidence.is_empty());
     }
 }

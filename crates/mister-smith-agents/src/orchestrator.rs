@@ -5,9 +5,10 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use mister_smith_core::{
-    AgentId, BranchRecoveryStrategy, BranchState, CheckpointId, DurableWorkflowLifecycleState,
-    ExecutionBranchId, ExecutionNodeId, GraphState, GuardDecision, GuardTarget, HealthState,
-    InterventionRecord, NodeState, ProfileSnapshot, RepairLineageRef, SupervisionEvidenceView,
+    packet_023_placeholder_runtime_truth, AgentId, BranchRecoveryStrategy, BranchState,
+    CheckpointId, DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionNodeId, GraphState,
+    GuardDecision, GuardTarget, HealthState, InterventionRecord, NodeState, ProfileSnapshot,
+    RepairLineageRef, RunTraceRelationshipKind, RuntimeTruthView, SupervisionEvidenceView,
     SupervisionTargetKind, SupervisionTargetScope, TaskId, TeamSizingDecision,
 };
 use mister_smith_persistence::WorkflowHistoryEventRecord;
@@ -861,7 +862,7 @@ impl Orchestrator {
                 recovery_strategy: branch.recovery_strategy,
             })
             .collect::<Vec<_>>();
-        let result_preview = infer_result_preview_from_projection(
+        let mut result_preview = infer_result_preview_from_projection(
             &graph_summary,
             &topology_summary,
             &branches,
@@ -873,6 +874,18 @@ impl Orchestrator {
             &guard_decisions,
             &interventions,
         );
+        let runtime_truth = build_runtime_truth_view(
+            &graph,
+            &topology_summary,
+            supervision_evidence.as_ref(),
+            &step_routing_history,
+            &guard_decisions,
+        );
+        if let Some(preview) = result_preview.as_mut() {
+            if graph_summary.state == GraphState::Completed {
+                preview.runtime_truth = Some(runtime_truth.clone());
+            }
+        }
 
         Some(AutonomyStatusView {
             session_id: None,
@@ -914,6 +927,7 @@ impl Orchestrator {
             profiles,
             guard_decisions,
             supervision_evidence,
+            runtime_truth: Some(runtime_truth),
             conservative_reasons,
         })
     }
@@ -2296,6 +2310,71 @@ fn build_supervision_evidence_view(
     })
 }
 
+fn build_runtime_truth_view(
+    graph: &ExecutionGraph,
+    topology: &TopologyPlanSummary,
+    supervision_evidence: Option<&SupervisionEvidenceView>,
+    step_routing_history: &[StepRoutingDecisionSummary],
+    guard_decisions: &[GuardDecision],
+) -> RuntimeTruthView {
+    let branch_id = supervision_evidence
+        .and_then(|evidence| evidence.target_scope.branch_id);
+    let node_id = supervision_evidence.and_then(|evidence| evidence.target_scope.node_id);
+    let mut relationships = vec![
+        RunTraceRelationshipKind::Graph,
+        RunTraceRelationshipKind::ToolBoundary,
+    ];
+
+    if !graph.branches.is_empty() {
+        relationships.push(RunTraceRelationshipKind::Branch);
+    }
+    if node_id.is_some() || !graph.nodes.is_empty() {
+        relationships.push(RunTraceRelationshipKind::Node);
+    }
+    if graph.branches.len() > 1 {
+        relationships.push(RunTraceRelationshipKind::FanOut);
+    }
+    if topology.task_shape.has_join {
+        relationships.push(RunTraceRelationshipKind::Join);
+    }
+    if supervision_evidence.is_some() {
+        relationships.push(RunTraceRelationshipKind::Supervision);
+    }
+    if supervision_evidence
+        .and_then(|evidence| evidence.repair_lineage_ref.as_ref())
+        .is_some()
+    {
+        relationships.push(RunTraceRelationshipKind::Repair);
+    }
+    if step_routing_history
+        .iter()
+        .any(|entry| matches!(step_routing_action_label(entry.carryover_signal.action), "retry" | "fallback"))
+    {
+        relationships.push(RunTraceRelationshipKind::Retry);
+    }
+    if guard_decisions.iter().any(|decision| {
+        decision
+            .evidence
+            .notes
+            .iter()
+            .any(|note| note.contains("handoff"))
+    }) {
+        relationships.push(RunTraceRelationshipKind::Handoff);
+    }
+
+    relationships.sort_by_key(|kind| *kind as u8);
+    relationships.dedup();
+
+    packet_023_placeholder_runtime_truth(
+        graph.workflow_id,
+        Some(graph.graph_id),
+        branch_id,
+        node_id,
+        relationships,
+        vec![],
+    )
+}
+
 fn supervision_repair_lineage_ref_from_graph(
     graph: &ExecutionGraph,
     target_scope: &SupervisionTargetScope,
@@ -2896,9 +2975,11 @@ mod tests {
     use super::*;
     use crate::scheduler::{ArrayAggregator, IdentityDecomposer};
     use mister_smith_core::{
-        FailureClass, GuardDecisionId, GuardEvidence, InterventionRecordId, InterventionType,
-        ProfileSnapshotId, ProfileTarget, SemanticSignal, SemanticSignalKind,
-        SupervisionDecisionBasis, SupervisionTargetKind,
+        ExecutionEvidenceClass, FailureClass, GuardDecisionId, GuardEvidence, InterventionRecordId,
+        InterventionType, ProfileSnapshotId, ProfileTarget, SemanticSignal, SemanticSignalKind,
+        SupervisionDecisionBasis, SupervisionTargetKind, PACKET_023_GRAPH_EXECUTION_SUCCESS,
+        PACKET_023_GROUNDED_TOOL_EXECUTION_MINIMAL, PACKET_023_ORCHESTRATION_ONLY,
+        PACKET_023_SEMANTIC_COMPLETION_UNPROVEN,
     };
     use serde_json::json;
 
@@ -2979,6 +3060,121 @@ mod tests {
             scheduler.submit(task);
         }
         scheduler
+    }
+
+    #[test]
+    fn build_runtime_truth_view_uses_packet_023_placeholder_boundary() {
+        let (graph, _task_ids, branch_id, node_id) = node_scoped_supervision_graph();
+        let topology = TopologyPlanSummary {
+            graph_id: graph.graph_id,
+            topology_kind: graph.topology_plan.topology_kind,
+            parallelism_width: graph.topology_plan.parallelism_width,
+            task_shape: graph.topology_plan.task_shape.clone(),
+            coordination_policy: graph.topology_plan.coordination_policy,
+            rationale: graph.topology_plan.rationale.clone(),
+            fallback_topology: graph.topology_plan.fallback_topology,
+        };
+        let guard_decision = GuardDecision {
+            decision_id: GuardDecisionId::new(),
+            failure_class: FailureClass::Semantic,
+            intervention: InterventionType::ContextRefresh,
+            evidence: GuardEvidence {
+                profile_id: None,
+                decision_basis: SupervisionDecisionBasis::LiveSignalsOnly,
+                signal_descriptions: vec!["handoff required".to_string()],
+                checkpoint_ids: vec![],
+                notes: vec!["handoff required before final answer".to_string()],
+            },
+            target_scope: GuardTarget::Node(node_id),
+            operator_visibility: true,
+        };
+        let supervision_evidence = SupervisionEvidenceView {
+            target_scope: SupervisionTargetScope {
+                kind: SupervisionTargetKind::Node,
+                provider: None,
+                graph_id: Some(graph.graph_id),
+                branch_id: Some(branch_id),
+                node_id: Some(node_id),
+            },
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: Some(guard_decision.clone()),
+            intervention_record: None,
+            decision_basis: Some(
+                SupervisionDecisionBasis::LiveSignalsOnly
+                    .as_str()
+                    .to_string(),
+            ),
+            repair_lineage_ref: Some(RepairLineageRef {
+                source: "packet-020".to_string(),
+                checkpoint_ref: Some("checkpoint-1".to_string()),
+            }),
+            proof_boundary: Some("supported task path".to_string()),
+        };
+
+        let runtime_truth = build_runtime_truth_view(
+            &graph,
+            &topology,
+            Some(&supervision_evidence),
+            &[StepRoutingDecisionSummary {
+                step_id: "branch-a.retry".to_string(),
+                step_index: Some(2),
+                step_kind: Some("worker".to_string()),
+                model_id: "gpt-5.4".to_string(),
+                tier: "llm-tier".to_string(),
+                reason: "retry after verification".to_string(),
+                previous_step_id: Some("branch-a.first".to_string()),
+                previous_action: Some("retry".to_string()),
+                previous_tier: Some("llm-tier".to_string()),
+                action: "continue".to_string(),
+                action_changed: true,
+                preferred_tier_after: Some("llm-tier".to_string()),
+                estimated_cost_tokens: Some(42),
+                confidence_score: Some(0.71),
+                triggered_checkpoints: vec![],
+                change_rationale: vec!["retry preserved operator visibility".to_string()],
+            }],
+            &[guard_decision],
+        );
+
+        assert_eq!(
+            runtime_truth.evidence_class,
+            ExecutionEvidenceClass::PlaceholderOrSimulatedStepCompletion
+        );
+        assert_eq!(
+            runtime_truth.proof_boundary.graph_execution,
+            PACKET_023_GRAPH_EXECUTION_SUCCESS
+        );
+        assert_eq!(
+            runtime_truth.proof_boundary.semantic_completion,
+            PACKET_023_SEMANTIC_COMPLETION_UNPROVEN
+        );
+        assert_eq!(
+            runtime_truth.proof_boundary.grounded_tool_execution,
+            PACKET_023_GROUNDED_TOOL_EXECUTION_MINIMAL
+        );
+        assert_eq!(
+            runtime_truth.proof_boundary.task_proof,
+            PACKET_023_ORCHESTRATION_ONLY
+        );
+        assert_eq!(runtime_truth.run_trace.branch_id, Some(branch_id));
+        assert_eq!(runtime_truth.run_trace.node_id, Some(node_id));
+        assert!(runtime_truth
+            .run_trace
+            .relationships
+            .contains(&RunTraceRelationshipKind::Repair));
+        assert!(runtime_truth
+            .run_trace
+            .relationships
+            .contains(&RunTraceRelationshipKind::Retry));
+        assert!(runtime_truth
+            .run_trace
+            .relationships
+            .contains(&RunTraceRelationshipKind::Handoff));
+        assert!(runtime_truth
+            .run_trace
+            .relationships
+            .contains(&RunTraceRelationshipKind::Supervision));
     }
 
     #[tokio::test]
@@ -3379,6 +3575,21 @@ mod tests {
             supervision_evidence.decision_basis.as_deref(),
             Some(SupervisionDecisionBasis::LiveSignalsOnly.as_str())
         );
+        let runtime_truth = status
+            .runtime_truth
+            .expect("runtime truth should be projected");
+        assert_eq!(
+            runtime_truth.evidence_class.as_str(),
+            "placeholder_or_simulated_step_completion"
+        );
+        assert_eq!(
+            runtime_truth.proof_boundary.task_proof,
+            "result is orchestration proof, not substantive task proof"
+        );
+        assert!(runtime_truth
+            .run_trace
+            .relationships
+            .contains(&RunTraceRelationshipKind::Supervision));
         assert!(status.guard_decisions[0]
             .evidence
             .notes

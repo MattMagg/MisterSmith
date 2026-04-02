@@ -410,6 +410,13 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         .as_ref()
         .map(render_supervision_evidence)
         .unwrap_or_else(|| "none".to_string());
+    let runtime_truth_summary = view
+        .result_preview
+        .as_ref()
+        .and_then(|preview| preview.runtime_truth.as_ref())
+        .and_then(|summary| serde_json::to_value(summary).ok())
+        .map(|value| render_runtime_truth_summary(&value))
+        .unwrap_or_else(|| "none".to_string());
     let intervention_summary = view
         .interventions
         .iter()
@@ -472,7 +479,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\nlifecycle: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nresult preview: {}\nsupervision: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\nlifecycle: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nresult preview: {}\nruntime truth: {}\nsupervision: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -488,11 +495,28 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         topology_signals,
         fallback_reason,
         team_sizing_summary,
-        if branch_summary.is_empty() { "none".to_string() } else { branch_summary },
-        if checkpoint_summary.is_empty() { "none".to_string() } else { checkpoint_summary },
-        if routing_summary.is_empty() { "none".to_string() } else { routing_summary },
-        if step_routing_summary.is_empty() { "none".to_string() } else { step_routing_summary },
+        if branch_summary.is_empty() {
+            "none".to_string()
+        } else {
+            branch_summary
+        },
+        if checkpoint_summary.is_empty() {
+            "none".to_string()
+        } else {
+            checkpoint_summary
+        },
+        if routing_summary.is_empty() {
+            "none".to_string()
+        } else {
+            routing_summary
+        },
+        if step_routing_summary.is_empty() {
+            "none".to_string()
+        } else {
+            step_routing_summary
+        },
         result_preview_summary,
+        runtime_truth_summary,
         supervision_summary,
         if intervention_summary.is_empty() {
             "none".to_string()
@@ -815,11 +839,14 @@ pub(crate) fn build_task_result_view(
 ) -> TaskResultView {
     let orchestration_quality =
         orchestration_quality_projection(&canonical_result).map(|projection| projection.view);
+    let runtime_truth = synthesized_runtime_truth_value(&canonical_result)
+        .and_then(|value| serde_json::from_value(value).ok());
     TaskResultView {
         workflow_id: canonical_result.workflow_id,
         status: status.to_string(),
         proof_outcome: canonical_result.proof_outcome,
         orchestration_quality,
+        runtime_truth,
         supervision_evidence,
         result: canonical_result,
     }
@@ -943,6 +970,7 @@ pub(crate) fn synthesize_failed_before_graph_status(
         profiles: vec![],
         guard_decisions: vec![],
         supervision_evidence: None,
+        runtime_truth: None,
         conservative_reasons: vec![
             "workflow failed before graph publication".to_string(),
             "autonomy status reconstructed from persisted canonical result".to_string(),
@@ -975,6 +1003,10 @@ fn build_session_retained_result(
     let canonical_result = canonical_result_from_value(task_result, Some(status))?;
     let preview = preview_text(&canonical_result.aggregated_result);
     let assistant_result = assistant_result_payload(&canonical_result, preview.clone());
+    let runtime_truth = task_result
+        .get("runtime_truth")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok());
 
     Some(SessionRetainedResultView {
         workflow_id: canonical_result.workflow_id,
@@ -982,6 +1014,7 @@ fn build_session_retained_result(
         status: status.to_string(),
         assistant_result,
         preview,
+        runtime_truth,
         provenance: result_provenance(&canonical_result, None, None),
     })
 }
@@ -998,8 +1031,35 @@ fn operator_result_preview(
         payload_location: payload_location.to_string(),
         orchestration_quality: orchestration_quality_projection(canonical_result)
             .map(|projection| projection.view),
+        runtime_truth: synthesized_runtime_truth_value(canonical_result)
+            .and_then(|value| serde_json::from_value(value).ok()),
         provenance_lines: result_preview_provenance(canonical_result, payload_location, view),
     }
+}
+
+fn synthesized_runtime_truth_value(canonical_result: &UnifiedResultEnvelope) -> Option<Value> {
+    if canonical_result.proof_outcome == ProofOutcomeClassification::FailedBeforeGraph {
+        return None;
+    }
+
+    Some(serde_json::json!({
+        "evidence_class": "placeholder_or_simulated_step_completion",
+        "proof_boundary": {
+            "graph_execution": "workflow graph executed successfully",
+            "semantic_completion": "semantic completion not yet proven",
+            "grounded_tool_execution": "grounded tool execution: none/minimal",
+            "task_proof": "result is orchestration proof, not substantive task proof",
+        },
+        "run_trace": {
+            "trace_root_id": canonical_result.workflow_id,
+            "workflow_id": canonical_result.workflow_id,
+            "graph_id": Value::Null,
+            "branch_id": Value::Null,
+            "node_id": Value::Null,
+            "relationships": ["graph", "tool_boundary"],
+        },
+        "grounded_evidence": [],
+    }))
 }
 
 struct FailedBeforeGraphPlanSummary {
@@ -2126,6 +2186,100 @@ fn render_supervision_evidence(summary: &SupervisionEvidenceView) -> String {
     }
 
     rendered
+}
+
+pub(crate) fn render_runtime_truth_summary(summary: &Value) -> String {
+    let relationships = summary
+        .get("run_trace")
+        .and_then(|value| value.get("relationships"))
+        .and_then(Value::as_array)
+        .filter(|relationships| !relationships.is_empty())
+        .map(|relationships| {
+            relationships
+                .iter()
+                .map(|kind| {
+                    kind.as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| kind.to_string().trim_matches('"').to_string())
+                })
+                .collect::<Vec<_>>()
+                .join("|")
+        })
+        .unwrap_or_else(|| "none".to_string());
+    let grounded_evidence = summary
+        .get("grounded_evidence")
+        .and_then(Value::as_array)
+        .filter(|references| !references.is_empty())
+        .map(|references| {
+            references
+                .iter()
+                .map(|reference| {
+                    format!(
+                        "{}:{}",
+                        reference
+                            .get("source")
+                            .and_then(Value::as_str)
+                            .unwrap_or("unknown"),
+                        reference
+                            .get("reference")
+                            .and_then(Value::as_str)
+                            .unwrap_or("unknown")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("|")
+        })
+        .unwrap_or_else(|| "none".to_string());
+
+    format!(
+        "class={} trace_root={} graph={} branch={} node={} relationships={} graph_execution={} semantic_completion={} grounded_tool_execution={} task_proof={} grounded_evidence={}",
+        summary
+            .get("evidence_class")
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+        summary
+            .get("run_trace")
+            .and_then(|value| value.get("trace_root_id"))
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+        summary
+            .get("run_trace")
+            .and_then(|value| value.get("graph_id"))
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+        summary
+            .get("run_trace")
+            .and_then(|value| value.get("branch_id"))
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+        summary
+            .get("run_trace")
+            .and_then(|value| value.get("node_id"))
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+        relationships,
+        summary
+            .get("proof_boundary")
+            .and_then(|value| value.get("graph_execution"))
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+        summary
+            .get("proof_boundary")
+            .and_then(|value| value.get("semantic_completion"))
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+        summary
+            .get("proof_boundary")
+            .and_then(|value| value.get("grounded_tool_execution"))
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+        summary
+            .get("proof_boundary")
+            .and_then(|value| value.get("task_proof"))
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+        grounded_evidence,
+    )
 }
 
 fn render_external_capability_decision(summary: &ExternalCapabilityDecisionSummary) -> String {

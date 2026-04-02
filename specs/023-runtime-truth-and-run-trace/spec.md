@@ -2,83 +2,75 @@
 
 **Feature Branch**: `023-runtime-truth-and-run-trace`
 **Created**: 2026-04-01
-**Status**: Draft
+**Status**: Implementation-ready
 **Input**: `docs/direction.md`, `docs/current-state.md`,
-`docs/research-output/analysis/2026-03-28-dynamic-orchestration-transfer-brief.md`,
+`docs/plans/2026-04-01-packet-022-durable-workflow-core.md`,
 `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`,
 `docs/plans/2026-03-19-session-restart-resume-live-proof.md`, and the current runtime surfaces in
-`crates/mister-smith-app/src/execution.rs`, `crates/mister-smith-core/src/autonomy.rs`,
-`crates/mister-smith-events/src/bus.rs`, and `crates/mister-smith-transport/src/envelope.rs`
-
-## Scaffold Status
-
-This is a scaffold spec written ahead of upstream packet completion to speed later packet work.
-
-- It freezes packet `023` scope, naming, proof-boundary language, and revalidation gates now.
-- It does not claim packet `023` is implementation-ready or already validated for execution.
-- It must be revised against then-current repo truth before any future `/speckit.implement`.
+`crates/mister-smith-agents/src/orchestrator.rs`, `crates/mister-smith-app/src/execution.rs`,
+`crates/mister-smith-core/src/autonomy.rs`, and `crates/mister-smith-events/src/bus.rs`
 
 ## Current Truth & Scope
 
-Current repo truth already includes:
+Current repo truth on `main` already includes:
 
-- packet `019` bounded live proof for the supported path under the documented
-  `openai_chatgpt` / `gpt-5.4` baseline
-- packet `020` live-proof-backed orchestration-quality and repair-lineage surfaces on the
-  supported path
-- packet `021` landed supervision-evidence projection with deterministic validation and explicit
-  proof-boundary notes
-- stable runtime identifiers such as `workflow_id`, `session_id`, and `coordinator_agent_id`
-- transport-level trace and correlation fields on `MessageEnvelope`
+- packet `019` bounded live proof for the supported `openai_chatgpt` / `gpt-5.4` path
+- packet `020` landed orchestration-quality and repair-lineage projection
+- packet `021` landed `supervision_evidence` projection with deterministic validation and no new
+  live rerun claim
+- packet `022` landed durable workflow core with deterministic validation and explicit ownership of
+  lifecycle, event history, compaction, and effect boundaries
+- stable runtime identifiers such as `workflow_id`, `session_id`, `coordinator_agent_id`, and
+  existing transport trace and correlation fields
 
-The remaining gap is narrower than a broad observability or runtime-expansion packet:
+The remaining gap is narrower than generic observability or runtime-expansion work:
 
-- the runtime still allows a run to look successful at the orchestration-substrate layer while
-  leaving semantic task completion unproven
+- the runtime still allows a run to look complete at the orchestration layer while semantic task
+  completion remains unproven
 - the current `workflow.execute_step` boundary still marks payloads as `completed` on the
   `tool_bus` path without proving grounded task work
-- the repo does not yet have one frozen run-trace taxonomy spanning graph, branch, node, tool,
-  repair, retry, fan-out, join, and supervision relationships
-- proof-boundary wording is present in several places, but not yet frozen as one shared packet
-  contract
+- the repo has packet-021 predictive-supervision evidence, but it does not yet have one
+  packet-023-owned runtime-truth contract that cleanly explains what a run actually proved
+- task, session, autonomy, and operator surfaces still lack one shared run-trace summary and proof
+  boundary model that stays separate from predictive supervision
 
-This scaffold packet therefore freezes one bounded slice:
+Packet `023` owns one bounded slice:
 
-1. define one honest run-trace taxonomy rooted at `workflow_id` and one trace root per workflow
-   run
-2. define one explicit proof-boundary contract that separates substrate completion from grounded
-   task proof
-3. define how current task, session, autonomy, and operator surfaces should project truthful
-   execution status without overclaiming grounded work
+1. define one packet-023-owned `runtime_truth` contract rooted at `workflow_id`
+2. define one explicit proof-boundary view that separates substrate completion from grounded task
+   proof
+3. define one bounded run-trace summary that covers graph, branch, node, tool boundary, handoff,
+   repair, retry, fan-out, join, and supervision relationships
+4. project that same runtime-truth story across task, session, autonomy, and operator surfaces
+   without overclaiming grounded work
 
-This is not:
+This packet does **not** own:
 
-- packet `022` durable lifecycle, event-history, compaction, or effect-boundary work
-- UI polish, dashboard redesign, or generic observability-platform work
-- coordinator-runtime, real subagent-runtime, or interoperability work
-- proof that the repo already emits a complete OpenTelemetry-style span model
+- packet `022` durable lifecycle, event-history, compaction, or effect-boundary semantics
+- packet `021` predictive-supervision semantics
+- generic observability-platform or export-pipeline work
+- coordinator-runtime, interoperability, or real subagent-runtime expansion
+- any fresh live runtime proof claim unless a real rerun is explicitly executed
 
-## Before Implementation Revalidation Gate
+## First-Slice Decisions
 
-Before any future implementation starts, the next session must:
+These choices are frozen for the first packet-023 implementation pass.
 
-1. reread `docs/direction.md`
-2. reread `docs/current-state.md`
-3. reread `docs/research-output/analysis/2026-03-28-dynamic-orchestration-transfer-brief.md`
-4. confirm packet `022` and any reused upstream packet work are complete enough to depend on
-5. rerun `/speckit.clarify`, `/speckit.plan`, `/speckit.tasks`, and `/speckit.analyze` if repo
-   truth moved
-
-If those checks fail, this scaffold must be revised before code work begins.
-
-## Deferred Revision Points
-
-- finalize packet `022` lifecycle and durable-history ownership wording before packet `023`
-  implementation starts
-- re-check whether current proof-boundary wording across task, autonomy, session, and operator
-  surfaces has drifted since this scaffold was written
-- re-check whether newer live-proof or deterministic-only evidence changed the packet `019`,
-  `020`, or `021` proof split before this packet is implemented
+- **Runtime truth container**: add one new packet-023-owned `RuntimeTruthView` and keep
+  packet-021 `supervision_evidence` as a separate adjacent field.
+- **Proof-boundary shape**: `RuntimeTruthView` carries a typed `ProofBoundaryView`, one
+  `ExecutionEvidenceClass`, optional grounded evidence references, and a bounded run-trace summary.
+- **Run-trace root**: `workflow_id` is the canonical run anchor. Existing transport `trace_id`
+  remains transport metadata and is reused as input when present. Packet `023` does not widen
+  `MessageEnvelope`.
+- **Placeholder boundary wording**: the default non-grounded case stays:
+  `workflow graph executed successfully`,
+  `semantic completion not yet proven`,
+  `grounded tool execution: none/minimal`, and
+  `result is orchestration proof, not substantive task proof`.
+- **Proof-status split**: packet `019` and packet `020` remain the last fresh live-proof baseline;
+  packet `021` and packet `022` are landed and deterministically validated; packet `023` starts as
+  deterministic projection work unless a new live rerun is actually executed.
 
 ## User Scenarios & Testing
 
@@ -91,44 +83,45 @@ workflow-graph execution or also proved grounded task work.
 blurry, later runtime and operator claims stay misleading.
 
 **Independent Test**: A task, session, or autonomy result that shows graph completion through the
-current placeholder step boundary can be inspected and still clearly states that semantic
+current placeholder-step boundary can be inspected and still clearly states that semantic
 completion is not yet proven.
 
 **Acceptance Scenarios**:
 
 1. **Given** a run completed through `workflow.execute_step` with `execution_boundary=tool_bus`,
-   **When** an operator inspects the result surface, **Then** it can say `workflow graph executed
-   successfully` while also stating `semantic completion not yet proven`.
+   **When** an operator inspects the result surface, **Then** it says
+   `workflow graph executed successfully` while also stating
+   `semantic completion not yet proven`.
 2. **Given** the run produced no grounded external action beyond the placeholder step boundary,
-   **When** the proof-boundary block is rendered, **Then** it states `grounded tool execution:
-   none/minimal`.
+   **When** the proof-boundary block is rendered, **Then** it states
+   `grounded tool execution: none/minimal`.
 3. **Given** packet `019` and packet `020` remain the last fresh live-proof baseline while packet
-   `021` remains deterministic-only for its newer supervision surface, **When** the packet
-   describes current proof status, **Then** it preserves that split explicitly instead of merging
-   them into one vague live-claim.
+   `021` and packet `022` are deterministic-only for their newer claim surfaces, **When** the
+   packet describes current proof status, **Then** it preserves that split explicitly instead of
+   merging them into one vague live claim.
 
 ---
 
 ### User Story 2 - Freeze one canonical run-trace taxonomy (Priority: P1)
 
-A future implementation team can use one packet-owned taxonomy for run traces and proof
-boundaries instead of re-inventing names and relationships per surface.
+The runtime can expose one shared taxonomy for run traces and proof boundaries instead of
+re-inventing names and relationships per surface.
 
 **Why this priority**: Later packets depend on clear truth and trace language. If packet `023`
 does not own this now, later packets will drift.
 
-**Independent Test**: One written contract can classify graph, branch, node, tool, handoff,
+**Independent Test**: One shared contract can classify graph, branch, node, tool, handoff,
 repair, retry, fan-out, join, and supervision relationships without redefining packet `022`
 lifecycle semantics.
 
 **Acceptance Scenarios**:
 
-1. **Given** a workflow run fans out into branches and later joins, **When** the packet describes
-   trace relationships, **Then** it distinguishes parent-child flow from linked reconvergence
-   without claiming the repo already emits a full span graph.
-2. **Given** a run includes repair or retry behavior, **When** the trace taxonomy is applied,
-   **Then** repair and retry edges are represented as explicit trace relationships rather than
-   hidden status noise.
+1. **Given** a workflow run fans out into branches and later joins, **When** the runtime-truth
+   block is built, **Then** it distinguishes parent-child flow from linked reconvergence without
+   claiming the repo already emits a full span graph.
+2. **Given** a run includes repair or retry behavior, **When** the run-trace summary is rendered,
+   **Then** repair and retry edges appear as explicit relationship kinds rather than hidden status
+   noise.
 3. **Given** packet `022` still owns durable lifecycle and event-history semantics, **When**
    packet `023` names trace records and proof boundaries, **Then** it reuses those identifiers and
    ownership boundaries instead of redefining lifecycle behavior.
@@ -137,116 +130,114 @@ lifecycle semantics.
 
 ### User Story 3 - Keep operator surfaces consistent without widening packet scope (Priority: P2)
 
-An operator or future packet author can compare task, session, autonomy, and operator views and
-see the same proof-boundary story without turning packet `023` into a UI or platform packet.
+An operator can compare task, session, autonomy, and operator views and see the same runtime-truth
+story without turning packet `023` into a UI redesign or tracing-platform packet.
 
 **Why this priority**: The packet is about truthful projection, not a redesign. The value is
 consistency across existing surfaces.
 
-**Independent Test**: One written contract describes the same proof-boundary fields and wording
-for task, session, autonomy, and operator run-detail views.
+**Independent Test**: The same run exposes one shared runtime-truth block across task, session,
+autonomy, and operator run-detail views.
 
 **Acceptance Scenarios**:
 
-1. **Given** task, session, autonomy, and operator surfaces all show run results, **When** the
-   packet defines proof-boundary projection, **Then** each surface uses the same bounded truth
-   story rather than drifted wording.
-2. **Given** OpenTelemetry and W3C tracing docs are used as guidance, **When** the packet defines
-   surface language, **Then** it borrows taxonomy carefully without claiming the repo already has a
-   complete emitted span model.
-3. **Given** future implementation packets need this contract later, **When** this scaffold is
-   handed off, **Then** it is clear what must be revised before code work starts and what can be
-   reused as-is.
+1. **Given** task, session, autonomy, and operator surfaces all show run results, **When** packet
+   `023` defines runtime-truth projection, **Then** each surface uses the same bounded truth story
+   rather than drifted wording.
+2. **Given** OpenTelemetry and W3C tracing docs are used as guidance, **When** packet `023`
+   defines surface language, **Then** it borrows taxonomy carefully without claiming the repo
+   already has a complete emitted span model.
+3. **Given** the operator console already renders predictive supervision, **When** packet `023`
+   adds runtime truth, **Then** the new panel stays separate from predictive supervision instead of
+   collapsing both concepts into one block.
 
 ## Edge Cases
 
 - a graph completes successfully while every step still uses the placeholder `workflow.execute_step`
   boundary
-- task and autonomy surfaces use slightly different proof-boundary text for the same run
+- task, session, autonomy, and operator surfaces drift to different proof-boundary wording for the
+  same run
 - a repair or retry edge exists, but the surface only shows final completion state
 - a fan-out or join path is visible in runtime metadata, but no grounded work occurred below the
   step boundary
+- no grounded evidence reference exists and the runtime-truth block must say that explicitly
 - a surface tries to treat OpenTelemetry terms as proof that the repo already emits a complete
   span hierarchy
-- packet `022` later freezes lifecycle or history semantics that change the preferred wording or
-  ownership boundary for packet `023`
+- packet `022` lifecycle or history data is present, but packet `023` must not redefine its
+  semantics
 
 ## Requirements
 
 ### Functional Requirements
 
-- **FR-001**: System documentation for packet `023` MUST define one run-trace taxonomy rooted at
-  `workflow_id` with one trace root per workflow run.
-- **FR-002**: Packet `023` MUST define one proof-boundary contract that keeps substrate
+- **FR-001**: System MUST define one packet-023-owned `RuntimeTruthView` rooted at `workflow_id`.
+- **FR-002**: System MUST define one packet-023-owned `ProofBoundaryView` that keeps substrate
   completion separate from grounded task proof.
-- **FR-003**: Packet `023` MUST preserve the current proof split in its written contract: packet
-  `019` and packet `020` remain the last fresh live-proof baseline on the supported path, while
-  packet `021` supervision evidence is landed and deterministically validated but does not create a
-  new default-path live claim by itself.
-- **FR-004**: Packet `023` MUST state the current placeholder-step limit explicitly: while
+- **FR-003**: System MUST define one bounded `RunTraceSummaryView` that covers graph, branch,
+  node, tool boundary, handoff, repair, retry, fan-out, join, and supervision relationship kinds.
+- **FR-004**: System MUST define one `ExecutionEvidenceClass` that distinguishes substrate
+  completion, placeholder or simulated completion, grounded tool execution, and grounded task
+  proof.
+- **FR-005**: System MUST keep `runtime_truth` separate from packet-021 `supervision_evidence`.
+- **FR-006**: System MUST preserve the current proof split in its written and rendered contract:
+  packet `019` and packet `020` remain the last fresh live-proof baseline on the supported path,
+  while packet `021` and packet `022` are landed and deterministically validated but do not create
+  a new default-path live claim by themselves.
+- **FR-007**: System MUST state the current placeholder-step limit explicitly: while
   `WorkflowStepTool` only echoes payload and marks `workflow.execute_step` as `completed` on the
   `tool_bus` boundary, that boundary does not prove grounded task work.
-- **FR-005**: Packet `023` MUST preserve the exact conservative language below for current
+- **FR-008**: System MUST preserve the exact conservative language below for current
   placeholder-boundary runs:
   `workflow graph executed successfully`,
   `semantic completion not yet proven`,
   `grounded tool execution: none/minimal`, and
   `result is orchestration proof, not substantive task proof`.
-- **FR-006**: Packet `023` MUST define trace-taxonomy coverage for graph, branch, node, tool,
-  handoff, repair, retry, fan-out, join, and supervision relationships.
-- **FR-007**: Packet `023` MUST describe consistent proof-boundary projection expectations for
-  task, session, autonomy, and operator run-detail surfaces.
-- **FR-008**: Packet `023` MUST treat OpenTelemetry and W3C Trace Context as taxonomy guidance
-  only and MUST NOT claim the repo already emits a complete span model.
-- **FR-009**: Packet `023` MUST keep packet `022` as owner of durable lifecycle, event-history,
+- **FR-009**: System MUST project the same `runtime_truth` block across task, session, autonomy,
+  and operator run-detail surfaces.
+- **FR-010**: System MUST keep packet `022` as owner of durable lifecycle, event-history,
   compaction, and effect-boundary semantics.
-- **FR-010**: Packet `023` MUST include a blocking revalidation gate before any future
-  implementation begins.
-- **FR-011**: Packet `023` MUST remain scoped to truthful naming, trace taxonomy, and
-  proof-boundary projection and MUST NOT widen into UI polish, generic observability-platform
-  work, or coordinator-runtime scope.
-- **FR-012**: Packet `023` MUST stay explicitly revision-required until upstream packet work it
-  depends on is complete enough to revalidate the scaffold against then-current repo truth.
+- **FR-011**: System MUST treat OpenTelemetry and W3C Trace Context as taxonomy guidance only and
+  MUST NOT claim the repo already emits a complete span model.
+- **FR-012**: System MUST NOT widen this packet into UI polish, generic observability-platform
+  work, coordinator-runtime, or interoperability work.
+- **FR-013**: System MUST keep deterministic projection proof separate from fresh live runtime
+  proof and MUST NOT claim a new live rerun unless one is actually executed.
+- **FR-014**: System MUST leave `MessageEnvelope` schema unchanged in the first slice and reuse
+  existing `workflow_id`, `trace_id`, graph metadata, repair lineage, and supervision state as
+  synthesis inputs instead.
 
 ### Key Entities
 
-- **Run Trace Record**: the packet-owned description of one workflow run’s trace root,
-  relationships, and proof-boundary story anchored to `workflow_id`
-- **Trace Root**: the canonical top-level identifier for one workflow run’s trace view
-- **Trace Event**: a typed traceable event such as graph formation, branch execution, tool
-  boundary crossing, repair, retry, or supervision
-- **Trace Link**: the relationship record used to describe parent-child execution, fan-out,
-  reconvergence, repair, or retry connections between trace events
-- **Proof Boundary View**: the bounded summary that states what was proven and what was not proven
-  for one run
-- **Grounded Evidence Reference**: the stable reference to files, endpoints, artifacts, or other
-  grounded evidence actually touched during a run when such evidence exists
-- **Execution Evidence Class**: the packet-owned classification that distinguishes substrate
-  completion, placeholder or simulated completion, grounded tool execution, and grounded task proof
+- **RuntimeTruthView**: the packet-owned result and inspection block for one workflow run
+- **ProofBoundaryView**: the bounded summary that states what was proven and what was not proven
+- **RunTraceSummaryView**: the bounded run-trace summary for one workflow run
+- **ExecutionEvidenceClass**: the strongest evidence the run actually produced
+- **GroundedEvidenceReference**: a stable reference to real files, endpoints, artifacts, or other
+  grounded work touched during the run
+- **RunTraceRelationshipKind**: one typed relationship kind such as graph, branch, node, tool
+  boundary, handoff, repair, retry, fan-out, join, or supervision
 
 ## Success Criteria
 
 ### Measurable Outcomes
 
-- **SC-001**: A future reviewer can inspect the packet `023` scaffold and determine in one pass
-  whether a run proves only orchestration-substrate completion or also proves grounded task work.
-- **SC-002**: The packet provides one shared taxonomy that covers all required run-trace
-  relationship types without widening into lifecycle ownership or platform scope.
-- **SC-003**: The packet states the packet `019` and packet `020` live-proof baseline separately
-  from packet `021` deterministic-only supervision proof with no contradictory wording.
-- **SC-004**: The packet gives future implementation work one explicit revalidation gate so no
-  session can honestly treat the scaffold as implementation-ready without rereading current repo
-  truth first.
-- **SC-005**: The packet leaves later implementers with enough contract language to begin a later
-  revision pass without rediscovering the placeholder-step truth gap from scratch.
+- **SC-001**: A reviewer can inspect the packet `023` contract and determine in one pass whether a
+  run proves only orchestration-substrate completion or also proves grounded task work.
+- **SC-002**: Task, session, autonomy, and operator run-detail surfaces expose the same
+  `runtime_truth` contract for the same run in deterministic validation.
+- **SC-003**: The packet states packet `019` and packet `020` live-proof baseline separately from
+  packet `021` and packet `022` deterministic-only proof with no contradictory wording.
+- **SC-004**: The packet and code keep packet `022` lifecycle ownership intact while adding no new
+  `MessageEnvelope` schema fields.
+- **SC-005**: Placeholder-boundary runs render the frozen conservative wording and do not claim
+  grounded task proof without grounded evidence.
 
 ## Assumptions
 
-- Packet `022` is still the owner of durable workflow semantics and will be completed or clarified
-  before packet `023` implementation starts.
-- Upstream packet work may still move repo truth before packet `023` is implemented, so this
-  scaffold will need a revision pass.
+- Packet `022` is landed on `main` and remains the owner of durable workflow semantics.
+- Packet `021` is landed on `main` and deterministically validated, but it still does not carry a
+  fresh live rerun claim.
 - Existing task, session, autonomy, and operator run-detail surfaces remain the intended
-  projection targets; this scaffold does not assume a new surface will be added first.
+  projection targets.
 - OpenTelemetry and W3C Trace Context remain the right external taxonomy references for naming and
-  structure, even if the final repo contract later narrows or renames parts of that taxonomy.
+  relationship shape, even though packet `023` does not claim a full emitted tracing model.

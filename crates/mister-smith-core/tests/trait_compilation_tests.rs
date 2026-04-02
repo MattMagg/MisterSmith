@@ -521,11 +521,27 @@ fn autonomy_ids_enums_and_errors_are_available() {
             "metadata.aggregated_result".to_string(),
         ],
     };
+    let runtime_truth = packet_023_placeholder_runtime_truth(
+        workflow_id,
+        Some(graph_id),
+        Some(ExecutionBranchId::new()),
+        Some(ExecutionNodeId::new()),
+        vec![
+            RunTraceRelationshipKind::Graph,
+            RunTraceRelationshipKind::Branch,
+            RunTraceRelationshipKind::Node,
+            RunTraceRelationshipKind::ToolBoundary,
+            RunTraceRelationshipKind::Repair,
+            RunTraceRelationshipKind::Supervision,
+        ],
+        vec![],
+    );
     let task_result = TaskResultView {
         workflow_id,
         status: "completed".to_string(),
         proof_outcome: canonical_result.proof_outcome,
         orchestration_quality: None,
+        runtime_truth: Some(runtime_truth.clone()),
         supervision_evidence: Some(supervision_evidence.clone()),
         result: canonical_result.clone(),
     };
@@ -538,6 +554,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
             "aggregated_result": canonical_result.aggregated_result.clone(),
         }),
         preview: Some("bounded answer preview".to_string()),
+        runtime_truth: Some(runtime_truth.clone()),
         provenance: provenance.clone(),
     };
     let operator_preview = OperatorResultPreview {
@@ -546,6 +563,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
         preview_text: Some("bounded answer preview".to_string()),
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
+        runtime_truth: Some(runtime_truth),
         provenance_lines: vec![
             "canonical result stored in metadata.final_result".to_string(),
             "aggregated payload nested under metadata.aggregated_result".to_string(),

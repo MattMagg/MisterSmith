@@ -124,6 +124,24 @@ function createSnapshot(
         status: run.status,
         proof_outcome: 'graph_formed_and_completed',
         orchestration_quality: null,
+        runtime_truth: {
+          evidence_class: 'placeholder_or_simulated_step_completion',
+          proof_boundary: {
+            graph_execution: 'workflow graph executed successfully',
+            semantic_completion: 'semantic completion not yet proven',
+            grounded_tool_execution: 'grounded tool execution: none/minimal',
+            task_proof: 'result is orchestration proof, not substantive task proof',
+          },
+          run_trace: {
+            trace_root_id: run.task_id,
+            workflow_id: run.task_id,
+            graph_id: 'graph-7',
+            branch_id: 'branch-7',
+            node_id: null,
+            relationships: ['graph', 'branch', 'tool_boundary', 'supervision'],
+          },
+          grounded_evidence: [],
+        },
         supervision_evidence: {
           target_scope: {
             kind: 'branch',
@@ -334,6 +352,17 @@ describe('App', () => {
 
   it('renders bounded predictive supervision from the selected run detail payload', async () => {
     render(<App services={createServices()} initialSettings={createSettings()} />);
+
+    await screen.findByText('Runtime truth');
+    expect(
+      screen.getByText('workflow graph executed successfully'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('result is orchestration proof, not substantive task proof'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('graph, branch, tool_boundary, supervision'),
+    ).toBeInTheDocument();
 
     await screen.findByText('Predictive supervision');
     expect(screen.getByText('branch: branch-7')).toBeInTheDocument();
