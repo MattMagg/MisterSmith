@@ -5,9 +5,11 @@ Status: Historical
 
 This note remains useful background for the Smith-first control-plane build-out, but it is no
 longer the forward-development authority. Use `docs/current-state.md` for the current repo-wide
-router, `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` for the latest landed
-frontier packet note, and `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for
-the latest bounded live-proof and closure note.
+router, `specs/023-runtime-truth-and-run-trace/` and
+`specs/024-agent-boundary-security-hardening/` for the latest landed packet authorities,
+`specs/025-step-level-intelligence-v2/` for the next draft scaffold, and
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for the latest bounded live-proof
+note.
 
 ## Objective
 
@@ -34,8 +36,9 @@ to build the repo-backed workflow system itself.
 - `WORKFLOW.md`: Symphony runtime contract and issue lifecycle
 - `docs/linear/LINEAR.md`: Linear taxonomy, queue boundary, and project roles
 - `docs/current-state.md`: current repo-wide router
-- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`: latest landed frontier packet
-  note
+- `specs/023-runtime-truth-and-run-trace/` and
+  `specs/024-agent-boundary-security-hardening/`: latest landed packet authorities
+- `specs/025-step-level-intelligence-v2/`: next draft scaffold
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`: latest bounded live-proof and
   closure note
 - `docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md`: recovered Smith workflow design

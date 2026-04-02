@@ -20,8 +20,10 @@ stable repo-wide state summary and document router.
 
 - `docs/direction.md`: single authoritative direction source for where Mister Smith is going and what should be built next
 - `docs/current-state.md`: current repo and OS state
-- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`: latest landed frontier packet
-  and packet-020 closure note
+- `specs/023-runtime-truth-and-run-trace/`: latest landed runtime packet on `main`
+- `specs/024-agent-boundary-security-hardening/`: latest landed security packet on `main`
+- `specs/025-step-level-intelligence-v2/`: next packet draft scaffold
+- `specs/022-durable-workflow-core/`: packet-022 implementation authority
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`: bounded packet-019 proof and
   closure note
 - `WORKFLOW.md` and `docs/linear/LINEAR.md`: development workflow contract
@@ -55,8 +57,10 @@ runtime.
 - Runtime contract: `WORKFLOW.md`
 - Linear operating model: `docs/linear/LINEAR.md`
 - Current overall direction and repo-wide router: `docs/direction.md`, `docs/current-state.md`
-- Latest landed frontier closure notes:
-  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`,
+- Latest landed packet authorities:
+  `specs/023-runtime-truth-and-run-trace/`,
+  `specs/024-agent-boundary-security-hardening/`,
+  `specs/025-step-level-intelligence-v2/`,
   `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - Historical packet-016 closure evidence:
   `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`

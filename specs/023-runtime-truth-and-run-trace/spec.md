@@ -4,7 +4,7 @@
 **Created**: 2026-04-01
 **Status**: Implementation-ready
 **Input**: `docs/direction.md`, `docs/current-state.md`,
-`docs/plans/2026-04-01-packet-022-durable-workflow-core.md`,
+`specs/022-durable-workflow-core/spec.md`,
 `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`,
 `docs/plans/2026-03-19-session-restart-resume-live-proof.md`, and the current runtime surfaces in
 `crates/mister-smith-agents/src/orchestrator.rs`, `crates/mister-smith-app/src/execution.rs`,

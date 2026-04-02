@@ -19,7 +19,7 @@ gaps:
 - clamp auth-callout fallback to the quarantined permission ceiling
 
 The clean packet-024 worktree is based on `origin/main`, but packet authority also uses the newer
-packet-022 current-state and closure notes from the primary checkout because those user-owned docs
+packet-022 current-state and implementation docs from the primary checkout because those docs
 already record the landed durable-workflow baseline and are intentionally outside this packet-024
 write set.
 

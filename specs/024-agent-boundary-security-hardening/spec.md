@@ -41,7 +41,7 @@ not reopen:
   surface.
 - The clean packet-024 worktree is based on `origin/main`, but the primary checkout now carries
   the newer user-owned packet-022 truth in `docs/current-state.md` and
-  `docs/plans/2026-04-01-packet-022-durable-workflow-core.md`; packet `024` uses that durable
+  `specs/022-durable-workflow-core/spec.md`; packet `024` uses that durable
   runtime baseline without rewriting packet `022` in this lane.
 
 The remaining packet `024` gaps are narrow and repo-grounded:

@@ -10,7 +10,10 @@ define each component.
 
 Current scope note: this roadmap remains the architectural build map through the completed
 implementation phases. Phase 10 is now implemented and validated in the repo, and the active
-frontier-autonomy artifact set spans
+frontier-autonomy artifact set now also includes landed packet
+[`023`](specs/023-runtime-truth-and-run-trace/spec.md),
+[`024`](specs/024-agent-boundary-security-hardening/spec.md), and next scaffold
+[`025`](specs/025-step-level-intelligence-v2/spec.md), plus
 [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
 [`WORKFLOW.md`](WORKFLOW.md), [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md), and the dated
 plans under [`docs/plans/`](docs/plans/). Use

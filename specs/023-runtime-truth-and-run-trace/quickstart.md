@@ -14,7 +14,7 @@ cat AGENTS.md
 cat docs/current-state.md
 cat docs/direction.md
 cat docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md
-cat docs/plans/2026-04-01-packet-022-durable-workflow-core.md
+cat specs/022-durable-workflow-core/spec.md
 cat specs/023-runtime-truth-and-run-trace/spec.md
 cat specs/023-runtime-truth-and-run-trace/plan.md
 cat specs/023-runtime-truth-and-run-trace/tasks.md

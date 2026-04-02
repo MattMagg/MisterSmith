@@ -1,6 +1,6 @@
 # Mister Smith Direction
 
-Date: April 1, 2026
+Date: April 2, 2026
 Status: Authoritative
 
 ## Purpose and Authority
@@ -17,7 +17,8 @@ Use this file when you need one clear answer to:
 Source split:
 
 - `docs/current-state.md` is the authority for what is currently true on `main`
-- `docs/research-output/consolidated/` and `docs/research-output/analysis/` provide the research rationale and strategic evidence
+- `docs/research-output/consolidated/` and `docs/research-output/analysis/` provide the research
+  rationale and strategic evidence
 - `spec/` remains the authority for architecture and type contracts
 
 Conflict rules:
@@ -45,19 +46,23 @@ Already landed and proven:
 - ToolBus-backed execution on the default runtime path
 - real local provider-backed runtime proof on the supported `openai_chatgpt` / `gpt-5.4` baseline
 - bounded same-agent sessions and operator-visible provenance
-- bounded runtime routing, budget, verifier-gated orchestration, repair-lineage foundations,
-  deterministic packet-021 predictive-supervision evidence surfaces on `main`, and landed
-  packet-022 durable workflow core ownership on `main`
+- bounded runtime routing, budget, verifier-gated orchestration, and repair-lineage foundations
+- deterministic packet-021 predictive-supervision evidence surfaces on `main`
+- landed packet-022 durable workflow core ownership on `main`
+- landed packet-023 runtime-truth and run-trace projections on `main`
+- landed packet-024 agent-boundary security hardening on `main`
 
 Exists but is still opt-in, partial, or not the default runtime path:
 
 - config-gated multi-provider runtime routing and budget enforcement
 - additive external-agent interoperability surfaces
-- broader orchestration, supervision, and coordination ideas that have repo foundations but are not yet the unqualified default path
+- broader orchestration, supervision, and coordination ideas that have repo foundations but are
+  not yet the unqualified default path
 
 Should not be described as fully live yet:
 
 - any opt-in path without default-path proof
+- any deterministic-only packet result without a fresh live rerun
 - any research idea without repo-grounded implementation and validation
 - any development workflow system as if it were part of the shipped operating system
 
@@ -68,11 +73,15 @@ define the standard that market later converges toward.
 
 That means:
 
-- do not copy the defaults of OpenAI Agents SDK, Google ADK, LangChain, CrewAI, AutoGen, Claude SDK, or similar systems
+- do not copy the defaults of OpenAI Agents SDK, Google ADK, LangChain, CrewAI, AutoGen, Claude
+  SDK, or similar systems
 - benchmark existing systems, learn from them, then exceed them
-- prefer architectures with long-term leverage in coordination, supervision, routing, memory, execution, reliability, observability, state, and distributed behavior
-- reuse correct primitives when they are already strong, but do not normalize on popular weak patterns
-- favor supervised autonomy, strong execution boundaries, and standard-setting design over incremental imitation
+- prefer architectures with long-term leverage in coordination, supervision, routing, memory,
+  execution, reliability, observability, state, and distributed behavior
+- reuse correct primitives when they are already strong, but do not normalize on popular weak
+  patterns
+- favor supervised autonomy, strong execution boundaries, and standard-setting design over
+  incremental imitation
 
 ## Direction Priorities
 
@@ -80,46 +89,39 @@ That means:
 
 The next work should extend the foundations already present on `main`, not restart them from
 scratch. Dynamic orchestration foundations, session continuity, bounded runtime routing, verifier
-gates, provenance, and bounded predictive-supervision evidence already exist in bounded form and
-should be treated as base layers to harden and generalize.
+gates, provenance, predictive-supervision evidence, runtime-truth projections, and agent-boundary
+hardening already exist in bounded form and should be treated as base layers to harden and
+generalize.
 
 ### Now
 
-- **Durable workflow semantics.** This matters because long-running execution needs replay-safe
-  state, idempotent boundaries, and lifecycle control before more autonomy can be trusted. This
-  belongs now because it strengthens the substrate under everything else instead of adding another
-  isolated frontier feature.
-- **Security hardening at agent boundaries.** This matters because inter-agent trust and
-  cross-boundary data flow remain one of the clearest systemic risks. This belongs now because
-  broader federation and autonomy should not expand faster than enforcement, quarantine,
-  validation, and delegation controls.
+- **Stronger step-level intelligence.** This matters because step boundaries, verification,
+  escalation, and token discipline can improve quality and economics at a finer granularity than
+  task-level routing alone. This belongs now because packet `025` is the next bounded scaffold on
+  top of already-landed routing, verifier, and runtime-truth foundations.
 - **Streaming and routing hardening.** This matters because the runtime path already has bounded
   routing, budget, verifier, and provenance foundations that should become more robust and more
   honestly default over time. This belongs now because the system should finish and harden what is
   already partially real before opening new orchestration surfaces.
-- **Runtime truth and run-trace hardening.** This matters because the current runtime can still
-  look successful at the graph layer while grounded task proof is missing. This belongs now
-  because the system should make proof boundaries honest across task, session, autonomy, and
-  operator surfaces before widening observability claims.
 - **Benchmark and observability proof.** This matters because strategic claims need runtime proof,
   comparative evidence, and AI-native observability instead of theory alone. This belongs now
   because Mister Smith should prove its advantages while the substrate is still becoming the stable
   baseline.
-- **Predictive supervision hardening and live proof.** This matters because the bounded
-  packet-021 supervision-evidence surface is now landed on the supported runtime path but still
-  lacks a fresh live rerun. This belongs now because the honest gap is proof and hardening, not
-  another greenfield supervision packet.
+- **Predictive supervision hardening and live proof.** This matters because the packet-021 through
+  packet-024 surfaces are landed on the supported runtime path but still lack a fresher whole-path
+  live rerun. This belongs now because the honest gap is proof and hardening, not another
+  greenfield supervision packet.
 
 ### Next
 
-- **Stronger step-level intelligence.** This matters because step boundaries, verification,
-  escalation, and token discipline can improve quality and economics at a finer granularity than
-  task-level routing alone. This belongs next because bounded routing and verifier work already
-  exist and can be deepened rather than replaced.
 - **Dynamic orchestration and topology extension.** This matters because topology selection and
   adaptive team composition are among the strongest whole-system differentiators in the research
   corpus. This belongs next because Mister Smith already has orchestration foundations, so the
   honest move is extension and compiler-like control, not a greenfield orchestration rewrite.
+- **First real coordinator and subagent runtime.** This matters because the runtime has already
+  proven bounded orchestration and now needs a stronger real multi-branch coordinator surface. This
+  belongs next because packet `026` should build on landed runtime-truth and boundary-hardening
+  work rather than bypass it.
 - **Capability discovery and interoperability.** This matters because external federation and
   capability matching are important future surfaces for a real operating system rather than a
   single-runtime tool. This belongs next because it is more valuable once security boundaries,
@@ -159,13 +161,16 @@ should be treated as base layers to harden and generalize.
 - We will not make packet-centric framing the main story of the system.
 - We will not copy framework defaults just because they are popular or familiar.
 - We will not describe opt-in or partially wired paths as default truth.
-- We will not collapse Linear, Symphony, Ralph, SpecKit, or other development workflow tools into the product architecture.
-- We will not restart already-landed foundations from zero when the honest move is to extend, harden, or generalize them.
+- We will not collapse Linear, Symphony, Ralph, SpecKit, or other development workflow tools into
+  the product architecture.
+- We will not restart already-landed foundations from zero when the honest move is to extend,
+  harden, or generalize them.
 
 ## Source Map
 
 - overall direction -> `docs/direction.md`
 - current truth -> `docs/current-state.md`
-- research basis -> `docs/research-output/consolidated/` and `docs/research-output/analysis/`
+- research basis -> `docs/research-output/consolidated/` and
+  `docs/research-output/analysis/`
 - contracts -> `spec/`
 - workflow control plane -> `WORKFLOW.md` and `docs/linear/LINEAR.md`

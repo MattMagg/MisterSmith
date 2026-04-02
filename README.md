@@ -31,8 +31,14 @@ Document roles in brief:
 
 - `docs/direction.md`: single authoritative direction source for where Mister Smith is going and what should be built next
 - `docs/current-state.md`: current repo and OS state
-- `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`:
-  latest landed frontier packet and packet-020 closure note
+- `specs/023-runtime-truth-and-run-trace/`:
+  latest landed runtime packet on `main`
+- `specs/024-agent-boundary-security-hardening/`:
+  latest landed security packet on `main`
+- `specs/025-step-level-intelligence-v2/`:
+  next packet draft scaffold
+- `specs/022-durable-workflow-core/`:
+  packet-022 implementation authority for current durable workflow ownership
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`:
   bounded packet-019 live-proof and closure note
 - `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`:
@@ -53,10 +59,12 @@ the Mister Smith OS runtime.
 - Live queue contract:
   [`WORKFLOW.md`](WORKFLOW.md) and
   [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md)
-- Current overall direction, repo-wide router, and latest landed frontier closure notes:
+- Current overall direction, repo-wide router, and latest landed packet authorities:
   [`docs/direction.md`](docs/direction.md),
   [`docs/current-state.md`](docs/current-state.md),
-  [`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`](docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md),
+  [`specs/023-runtime-truth-and-run-trace/spec.md`](specs/023-runtime-truth-and-run-trace/spec.md),
+  [`specs/024-agent-boundary-security-hardening/spec.md`](specs/024-agent-boundary-security-hardening/spec.md),
+  [`specs/025-step-level-intelligence-v2/spec.md`](specs/025-step-level-intelligence-v2/spec.md),
   [`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`](docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md)
 - Phase 10 design and gate artifacts:
   [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
@@ -110,9 +118,9 @@ Phase 10 gate evidence on 2026-03-15:
 
 These are OS runtime surfaces, not Symphony or Linear development workflow surfaces.
 
-The repo now has real runtime-backed operator paths plus the packet-019 and packet-020
-routing/provenance extensions landed on `main`; the provider-backed proof baseline remains
-`openai_chatgpt` / `gpt-5.4`:
+The repo now has real runtime-backed operator paths plus packet `019` through packet `024`
+routing, provenance, runtime-truth, and boundary-hardening work landed on `main`; the last
+explicit provider-backed live-proof baseline remains `openai_chatgpt` / `gpt-5.4`:
 
 - one-shot task execution:
   - `mister-smith run`
@@ -147,9 +155,11 @@ Primary notes for the current operator and result-surface baseline:
   [`docs/plans/2026-03-16-multi-turn-same-agent-conversations.md`](docs/plans/2026-03-16-multi-turn-same-agent-conversations.md)
 - local macOS operator cockpit:
   [`apps/operator-console/README.md`](apps/operator-console/README.md)
-- current repo-wide router and latest landed frontier closure notes:
+- current repo-wide router and latest landed packet authorities:
   [`docs/current-state.md`](docs/current-state.md),
-  [`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`](docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md),
+  [`specs/023-runtime-truth-and-run-trace/spec.md`](specs/023-runtime-truth-and-run-trace/spec.md),
+  [`specs/024-agent-boundary-security-hardening/spec.md`](specs/024-agent-boundary-security-hardening/spec.md),
+  [`specs/025-step-level-intelligence-v2/spec.md`](specs/025-step-level-intelligence-v2/spec.md),
   [`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`](docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md)
 
 ## Architecture

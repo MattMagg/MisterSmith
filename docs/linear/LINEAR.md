@@ -19,10 +19,11 @@ Initiative (strategic goal)
 
 Use initiatives as the strategic layer, not as Symphony's dispatch boundary. Historical initiatives
 remain useful for reporting and status updates, but the current repo-wide router is
-`docs/current-state.md`. The latest landed frontier closure notes are
-`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` and
-`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`, and the current frozen
-post-packet-020 phase is `specs/021-profile-aware-predictive-runtime-supervision/`.
+`docs/current-state.md`. The latest landed packet authorities are
+`specs/023-runtime-truth-and-run-trace/` and
+`specs/024-agent-boundary-security-hardening/`, the next scaffold is
+`specs/025-step-level-intelligence-v2/`, and the last explicit bounded live-proof note remains
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`.
 
 ### Current Strategy
 
@@ -30,25 +31,30 @@ post-packet-020 phase is `specs/021-profile-aware-predictive-runtime-supervision
   backlog history rather than current runnable direction.
 - the packet-016 family (`MS-96` parent, `MS-97` through `MS-100` child slices) is complete on
   `main`; treat it as closed backlog history rather than current runnable direction
-- packet `019` and packet `020` are complete on `main`; treat them as the latest landed frontier
-  history unless current repo truth shows a defect
-- packet `021` is now frozen on `main` as the next bounded implementation packet; keep it in
-  validated backlog until one child slice is explicitly staged
+- packets `019` through `024` are complete on `main`; treat them as landed frontier history unless
+  current repo truth shows a defect
+- packet `025` is the next draft scaffold, not the next automatically runnable queue slice; keep
+  it in validated backlog until it is refreshed against current truth and one child slice is
+  explicitly staged
+- packets `026` through `028` are later scaffolds and should stay out of the watched queue unless
+  they are deliberately promoted
 - the historical `Smith MCP Development` project is archived and should not be reopened as a
   separate forward program
 - the next active planning move is not an automatic queue refill; start from `docs/current-state.md`
-  plus the March 26 packet-019 and packet-020 closure notes, confirm current repo truth, and only
-  then create one fresh bounded packet
+  plus `docs/direction.md`, `specs/023-runtime-truth-and-run-trace/`,
+  `specs/024-agent-boundary-security-hardening/`, and
+  `specs/025-step-level-intelligence-v2/`, confirm current repo truth, and only then create one
+  fresh bounded packet slice
 - `MisterSmith Validated Backlog` should hold only genuinely open frontier work in `Backlog` after
   fresh repo-grounded validation and explicit packet framing
 - Do not move these issues into the watched queue just to keep Symphony busy. Stage only the next
   bounded runnable slice.
 - the watched queue should remain empty until that next bounded slice is explicitly staged
-- the current repo-owned direction notes are `docs/current-state.md`,
-  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md`, and
-  `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`, plus
-  `specs/021-profile-aware-predictive-runtime-supervision/`; the March 21 checkpoint and
-  packet-016 closure note remain useful historical support references
+- the current repo-owned direction notes are `docs/current-state.md`, `docs/direction.md`,
+  `specs/023-runtime-truth-and-run-trace/`, `specs/024-agent-boundary-security-hardening/`,
+  `specs/025-step-level-intelligence-v2/`, and
+  `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`; packet-021 and packet-016
+  notes remain useful historical support references
 
 ### Projects
 

@@ -72,8 +72,8 @@ an additional live runtime claim.
   session continuity and supported-path runtime execution.
 - Use `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` for the current
   deterministic supervision-evidence boundary on `main`.
-- Use `docs/plans/2026-04-01-packet-022-durable-workflow-core.md` for packet `022` ownership of
-  durable lifecycle and history semantics.
+- Use `specs/022-durable-workflow-core/spec.md` for packet `022` ownership of durable lifecycle
+  and history semantics.
 - Use `docs/current-state.md` for the explicit live-versus-deterministic split on current `main`.
 
 ## External taxonomy guidance

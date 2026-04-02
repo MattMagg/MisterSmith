@@ -4,7 +4,7 @@
 
 This repository is a Rust workspace implementing the Mister Smith orchestration operating system.
 It contains 20 crates across 10 implemented phases, with the operating-system substrate now
-validated through Phase 10 plus the March 16 runtime and session recovery slices.
+validated through Phase 10 plus the landed frontier packets through `024`.
 
 - `crates/`: Rust workspace — 18 library crates + 1 binary + 1 integration test crate
 - `spec/`: Canonical architecture specifications (the system contract)
@@ -23,11 +23,13 @@ Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the cur
 direction when the task is about proving real end-to-end execution rather than adding another
 implementation phase.
 Treat `docs/current-state.md` as the current forward-direction router. Use
-`docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` and
-`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` as the latest landed frontier
-closure notes. Use `docs/plans/2026-03-27-runtime-planning-simplification.md` for the March 27
-live-runtime follow-up that documents the current smallest-workflow baseline and repair-provenance
-proof surface. No newer post-packet-020 bounded phase is frozen yet.
+`specs/023-runtime-truth-and-run-trace/` and
+`specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
+`specs/025-step-level-intelligence-v2/` as the next draft scaffold,
+`specs/022-durable-workflow-core/` for packet-022 ownership, and
+`docs/plans/2026-03-27-runtime-planning-simplification.md` plus
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for the current live-proof and
+repair-provenance context.
 
 ## Product Boundary
 
@@ -74,9 +76,11 @@ runtime.
 - When a task explicitly calls for Ralph, use `./scripts/ralph` instead of bare `ralph`; rerun
   `./scripts/ralph prompt --packet <packet.json>` before each `./scripts/ralph run`.
 - Treat `docs/current-state.md` as the current repo-wide router,
-  `docs/plans/2026-03-26-verifier-gated-adaptive-orchestration.md` as the most recent landed
-  frontier closure note, `docs/plans/2026-03-16-smith-first-development-system.md` as historical
-  control-plane background, and
+  `specs/023-runtime-truth-and-run-trace/` and
+  `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
+  `specs/025-step-level-intelligence-v2/` as the next draft scaffold,
+  `docs/plans/2026-03-16-smith-first-development-system.md` as historical control-plane background,
+  and
   `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current implemented
   workflow-family surface.
 - For repo development workflow only, keep Linear as the durable source of truth, Symphony as the
