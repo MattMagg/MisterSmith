@@ -1,56 +1,59 @@
 # Implementation Plan: Step-Level Intelligence v2
 
-**Branch**: `025-step-level-intelligence-v2` | **Date**: 2026-04-02 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `/specs/025-step-level-intelligence-v2/spec.md`
+**Branch**: `025-step-level-intelligence-v2` | **Date**: 2026-04-02 |
+**Spec**: [spec.md](spec.md)
+**Input**: Feature specification from
+`/specs/025-step-level-intelligence-v2/spec.md`
 
 ## Summary
 
-Packets `022`, `023`, and `024` are landed on current `main`, and packet `025` should now treat
-them as base layers instead of moving targets. The bounded next slice is to freeze one packet-owned
-step-policy contract that:
+The repo already has packet `019` budget-aware routing signals, packet `020` step evaluation and
+repair lineage, packet `021` supervision evidence, packet `022` durable workflow ownership,
+packet `023` runtime truth, and packet `024` agent-boundary hardening on `main`.
 
-- derives deterministic step difficulty from current runtime inputs
-- chooses one bounded action across `keep`, `retry`, `clarify`, `downgrade`, and `escalate`
-- carries budget-aware hints without reopening packet-022, packet-023, or packet-024 ownership
-- projects the same summary through task, session, autonomy, and operator-facing result surfaces
-- preserves packet-023 placeholder-versus-grounded proof wording on every surface
+The legitimate next slice is to freeze and implement one bounded packet-owned step-policy layer on
+top of those foundations. Packet `025` will define a deterministic difficulty assessment, a
+bounded budget-pressure summary, and one action ladder across `keep`, `retry`, `clarify`,
+`downgrade`, and `escalate`. It will project that summary through existing task inspect,
+autonomy-status, and operator selected-run detail surfaces without claiming grounded task proof.
 
-Packet `025` is now prepared for implementation on current `main`. It is no longer a
-revision-later scaffold.
+This packet is implementation-ready and is the next active `/speckit.implement` packet for
+step-level policy on current `main`.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.88.0 plus existing operator-console TypeScript where current
-result projections already exist
-**Primary Dependencies**: `mister-smith-core`, `mister-smith-events`, `mister-smith-app`,
-`mister-smith-persistence`, current packet `020` through packet `024` seams, and
-`scripts/tests/test_live_runtime_proof_smoke.py`
-**Storage**: existing workflow metadata and result projections only; no new packet-owned durable
-store is required for the first slice
-**Testing**: targeted Rust tests for deterministic scoring and projection, smoke-harness unit
-coverage, bounded operator-console validation if UI files move, markdown lint, and diff hygiene
-**Target Platform**: local macOS development with Linux runtime parity for the shipped app binary
-**Project Type**: Rust workspace packet with bounded result-surface follow-on work
-**Performance Goals**: produce one deterministic bounded action without regressing current fallback
-behavior and expose that summary through current result surfaces
-**Constraints**: packet `020` owns repair lineage, packet `022` owns durable workflow semantics,
-packet `023` owns runtime truth, packet `024` owns boundary security, and the first slice stays
-heuristic and deterministic
-**Scale/Scope**: one bounded step-policy packet on top of current step-evaluation, routing,
-budget-pressure, runtime-truth, and result-summary seams
+**Language/Version**: Rust 1.88.0 plus existing operator-console TypeScript
+**Primary Dependencies**: `mister-smith-core`, `mister-smith-app`, `mister-smith-events`,
+packet `019` budget-aware routing outputs, packet `020` step-evaluation and repair lineage,
+packet `021` supervision evidence, packet `023` runtime truth, and the operator-console selected
+run detail
+**Storage**: existing task-result metadata and autonomy-status projections only; no new
+packet-owned persistence store in the first slice
+**Testing**: targeted Rust tests in `mister-smith-core`, `mister-smith-app`, and
+`mister-smith-events`, smoke-harness assertions, operator-console build and tests, markdown lint,
+and diff hygiene
+**Target Platform**: local macOS development with Linux parity for the shipped app binary
+**Project Type**: Rust workspace packet with bounded result-surface projection
+**Performance Goals**: deterministic step-policy assembly with no regression to current fallback
+behavior and no new endpoint
+**Constraints**: packet `020` keeps verifier and repair ownership; packet `023` keeps
+runtime-truth and proof-boundary ownership; packet `025` stays deterministic; no new live proof
+claim without a separate rerun
+**Scale/Scope**: one bounded step-policy packet layered onto current step-evaluation, routing,
+summary, and operator-detail seams
 
 ## Constitution Check
 
 | Principle | Status | Evidence |
 | --------- | ------ | -------- |
-| I. Canonical Single Source | PASS | Grounded in `docs/current-state.md`, `docs/direction.md`, the landed packet `022` through packet `024` specs, and the current runtime seams. |
-| II. Spec-First Design | PASS | `spec.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`, `tasks.md`, and `analyze.md` are prepared before any packet-025 implementation begins. |
-| III. Phase-And-Packet-Gated Delivery | PASS | Keeps packet `025` bounded to step-policy work on top of landed packet `020` through packet `024` layers. |
-| IV. Model-Agnostic Architecture | PASS | The first slice uses landed internal runtime signals and does not depend on provider-specific stream parsing or judge-heavy control loops. |
-| V. Erlang/OTP-Style Fault Tolerance | PASS | The design composes with existing repair lineage, supervision evidence, durable lifecycle state, and current result-surface recovery flows. |
-| VI. Evidence-Based Validation | PASS | The packet stays deterministic-only unless a later live rerun is actually produced and explicitly scoped. |
-| VII. Explicit Dependency Management | PASS | The packet names the exact packet and code ownership boundaries it consumes and leaves unchanged. |
-| VIII. Clean Closure And Resumability | PASS | The packet is prepared as a durable implementation-ready bundle with explicit validation and bounded follow-on lanes. |
+| I. Canonical Single Source | PASS | Grounded in `docs/current-state.md`, `docs/direction.md`, packet `019` through packet `024` closure notes, and the current code seams named in `spec.md`. |
+| II. Spec-First Design | PASS | Packet `025` has `spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`, `tasks.md`, and `analyze.md` before implementation. |
+| III. Phase-And-Packet-Gated Delivery | PASS | The packet is bounded to stronger step policy on top of landed packet `019` through packet `024` foundations. |
+| IV. Model-Agnostic Architecture | PASS | The first slice uses repo-native deterministic signals first and does not require a provider-specific training stack. |
+| V. Erlang/OTP-Style Fault Tolerance | PASS | Packet `020` repair lineage and current bounded retry or clarify behavior remain the local-correction substrate. |
+| VI. Evidence-Based Validation | PASS | The packet keeps deterministic validation separate from any fresh live rerun claim. |
+| VII. Explicit Dependency Management | PASS | Packet `019`, `020`, `021`, `022`, `023`, and `024` ownership boundaries are explicit in the packet docs and task map. |
+| VIII. Clean Closure And Resumability | PASS | The packet bundle is ready for `/speckit.implement` and keeps the next work bounded to exact write seams and validation gates. |
 
 ## Project Structure
 
@@ -72,13 +75,13 @@ specs/025-step-level-intelligence-v2/
 crates/mister-smith-core/
 └── src/autonomy.rs
 
-crates/mister-smith-events/
-└── src/autonomy.rs
-
 crates/mister-smith-app/
 ├── src/execution.rs
 ├── src/autonomy.rs
 └── tests/autonomy_status_tests.rs
+
+crates/mister-smith-events/
+└── src/autonomy.rs
 
 scripts/tests/
 └── test_live_runtime_proof_smoke.py
@@ -91,93 +94,104 @@ apps/operator-console/
 
 ## Design Decisions
 
-### D1: Step policy derives from landed internal runtime seams
+### D1: Use current repo signals first
 
-The first implementation slice should consume current `StepEvaluationRecord`,
-`StepRoutingDecisionSummary`, budget or context-pressure summaries, supervision evidence, durable
-lifecycle state, and packet-023 runtime truth instead of inventing a new raw event parser.
+Packet `025` should build on the current signals already present on `main`:
+`StepEvaluationRecord`, `StepRoutingDecisionSummary`, packet-021 `supervision_evidence`,
+packet-023 `runtime_truth`, and bounded budget-pressure hints already visible in routing and
+autonomy state.
 
-### D2: Packet `023` remains the owner of runtime truth and proof wording
+### D2: Keep packet ownership clean
 
-Packet `025` can summarize current step posture, but it must not create a competing proof schema
-or stronger wording than the landed packet-023 contract.
+Packet `020` keeps verifier and repair-lineage ownership. Packet `021` keeps supervision-evidence
+ownership. Packet `023` keeps runtime-truth, proof-boundary, and run-trace ownership. Packet
+`025` adds step policy beside those fields instead of replacing them.
 
-### D3: Packet `022` and packet `024` stay upstream ownership layers
+### D3: The first slice is deterministic and bounded
 
-Packet `025` may read durable lifecycle state from packet `022` and boundary decisions from packet
-`024`, but it must not absorb durable-workflow semantics or security-boundary ownership.
+The first useful packet is a deterministic step-policy contract, not a PRM training system or a
+judge-heavy scoring stack. Follow-on learned policy work can happen later only after this bounded
+contract is real.
 
-### D4: Existing result surfaces remain canonical
+### D4: Existing read surfaces stay canonical
 
-`TaskResultView` and autonomy status remain the full canonical packet-owned read surfaces.
-Session-retained and operator-preview surfaces remain bounded compact projections of the same
-packet-owned summary.
+Task inspect, autonomy status, and operator selected-run detail remain the read surfaces for the
+first slice. No new endpoint or trace explorer is introduced.
 
-### D5: The first slice is heuristic and deterministic
+### D5: Proof honesty stays unchanged
 
-The first useful packet-025 implementation is not a PRM or benchmark program. It is one bounded
-deterministic scoring and action ladder that operators and implementers can audit.
+Packet `025` may explain the current step policy, but it may not upgrade placeholder
+`workflow.execute_step` completion into grounded task proof. Packet-023 wording stays authoritative.
 
 ## Minimal Implementation Slice
 
-### Milestone 1: Freeze the shared step-policy contract
+### Milestone 1: Freeze the packet-owned step-policy contract
+
+Deliverables:
+
+- packet-owned `StepDifficultyAssessment`, `StepBudgetPressureSummary`, `StepPolicyDecision`, and
+  `StepPolicySummaryView`
+- one shared surface contract for task inspect, autonomy status, and operator selected-run detail
 
 Validation:
 
 - `spec.md`, `data-model.md`, `contracts/step-policy-contract.md`, and `tasks.md` agree on the
-  action vocabulary, budget summary, projection surfaces, and packet `020` through packet `024`
-  ownership boundaries
-- packet-025 checklists are complete and no scaffold-only wording remains
+  same entities, ownership boundaries, and surface contract
+- packet checklists are complete
 
-### Milestone 2: Add deterministic difficulty assessment and bounded action choice
+### Milestone 2: Add deterministic step assessment and action selection
 
-Validation:
+Deliverables:
 
-- targeted `mister-smith-core` and `mister-smith-app` coverage proves at least one `keep`
-  decision and one non-`keep` decision from bounded deterministic inputs
-- missing or inconclusive inputs preserve current fallback behavior
-
-### Milestone 3: Project honest summaries through current result surfaces
+- core packet-owned value objects and projections
+- runtime assembly of deterministic step difficulty, budget summary, and chosen action
+- clean fallback behavior when inputs are missing or inconclusive
 
 Validation:
 
-- task, session, autonomy, and operator result surfaces show the same packet-owned step-policy
-  summary
-- proof wording remains explicit that placeholder completion is not grounded task proof
+- targeted crate tests prove at least one `keep` decision and one non-`keep` decision
+- packet `020`, `021`, and `023` fields remain separate and intact
 
-### Milestone 4: Finish bounded validation and packet note sync
+### Milestone 3: Project honest summaries through existing surfaces
+
+Deliverables:
+
+- task inspect and autonomy status expose the packet-owned `step_policy` summary
+- operator selected-run detail renders the new summary beside current runtime-truth and
+  supervision-evidence panels
+- smoke-harness assertions keep placeholder-versus-grounded wording honest
 
 Validation:
 
-- packet-owned docs stay aligned with the landed packet `022` through packet `024` truth
-- deterministic test and lint coverage passes for the touched seams
+- task/autonomy/operator surfaces show the same packet-owned fields
+- packet-023 proof wording remains unchanged
 
 ## Parallel Staging Posture
 
-Use only when the packet benefits from bounded parallel work.
+Use bounded parallel work only after the shared contract freeze is complete.
 
-- Blocking freeze before any parallel lanes:
-  - shared packet-025 contract
-  - packet `020` through packet `024` ownership boundaries
+- Blocking freeze before later lanes:
+  - `specs/025-step-level-intelligence-v2/contracts/step-policy-contract.md`
+  - `crates/mister-smith-core/src/autonomy.rs`
 - Allowed disjoint lanes after the freeze:
-  - core type lane: `crates/mister-smith-core/src/autonomy.rs`
-  - event view lane: `crates/mister-smith-events/src/autonomy.rs`
-  - runtime assembly lane: `crates/mister-smith-app/src/execution.rs`
+  - runtime policy lane: `crates/mister-smith-app/src/execution.rs`
   - result projection lane: `crates/mister-smith-app/src/autonomy.rs` and
-    `crates/mister-smith-app/tests/autonomy_status_tests.rs`
-  - optional operator lane: `apps/operator-console/`
+    `crates/mister-smith-events/src/autonomy.rs`
+  - operator detail lane: `apps/operator-console/src/types.ts`,
+    `apps/operator-console/src/views/RunsView.tsx`, and `apps/operator-console/src/App.test.tsx`
+  - validation lane: `crates/mister-smith-app/tests/autonomy_status_tests.rs` and
+    `scripts/tests/test_live_runtime_proof_smoke.py`
 - Single-owner choke points:
   - `crates/mister-smith-core/src/autonomy.rs`
-  - `crates/mister-smith-events/src/autonomy.rs`
   - `crates/mister-smith-app/src/execution.rs`
   - `crates/mister-smith-app/src/autonomy.rs`
-  - any packet-owned note under `docs/plans/`
+  - `crates/mister-smith-events/src/autonomy.rs`
 
 ## Explicitly Deferred
 
-- new raw streaming-event parsing or provider-specific stream contracts
-- packet `022` durable-workflow, packet `023` runtime-truth, or packet `024` boundary-policy
-  changes
-- grounded step execution beyond the current placeholder `workflow.execute_step` seam
-- PRM training, benchmark programs, coordinator runtime, subagent runtime, or interoperability
-  work
+- PRM training or learned step-policy control loops
+- new provider proof or provider expansion
+- packet `023` runtime-truth or run-trace schema changes
+- packet `020` verifier or repair-lineage redesign
+- coordinator runtime, subagent runtime, interoperability, or benchmark work
+- a new endpoint, trace explorer, or broader operator-console redesign

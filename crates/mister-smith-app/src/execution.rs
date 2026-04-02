@@ -4574,7 +4574,6 @@ mod tests {
             policy_resource_id: Some("app.workflow".to_string()),
             revocation_state: Some(RevocationState::Active),
             attestation_source: None,
-            attestation_source: None,
             chain_depth: 1,
             outcome: ExternalCapabilityDecisionOutcome::Allowed,
             observed_at: Some(Utc::now()),

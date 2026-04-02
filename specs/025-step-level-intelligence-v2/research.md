@@ -2,119 +2,141 @@
 
 ## Current repo truth
 
-- packet `020` already landed verifier-gated step decisions, clarification handling, and repair
-  lineage on the runtime-backed task path
-- packet `021` already landed bounded supervision evidence on task, autonomy, and operator-facing
-  surfaces
-- packet `022` already landed durable workflow lifecycle, history, compaction, and effect-boundary
-  ownership on current `main`
-- packet `023` already landed the shared `runtime_truth` contract, run-trace summary, and
-  proof-boundary wording across task, session, autonomy, and operator surfaces
-- packet `024` already landed least-privilege external capability enforcement, quarantine reasons,
-  and auth-callout fallback clamping on current `main`
-- current packet-025 seams already expose the raw inputs needed for a first deterministic slice:
-  `StepEvaluationRecord`, `StepRoutingDecisionSummary`, `ContextPressureSummary`,
-  `TeamSizingDecision`, `RuntimeTruthView`, `SupervisionEvidenceView`, and the existing result
+- packet `019` already landed one bounded budget-aware runtime routing proof and current
+  budget-pressure routing semantics on `main`
+- packet `020` already landed `StepEvaluationRecord`, repair directives, clarification requests,
+  and failure-context lineage on the runtime-backed task path
+- packet `021` already landed `supervision_evidence` on task inspect, autonomy status, and
+  operator selected-run detail, with deterministic validation only unless a fresher live proof is
+  produced
+- packet `022` already landed durable workflow lifecycle, event-history, compaction, and
+  effect-boundary ownership
+- packet `023` already landed `runtime_truth`, proof-boundary wording, and bounded run-trace
   projections
+- packet `024` already landed agent-boundary hardening and does not widen packet `025` scope
+- `MS-72` already landed workflow-visible step-routing history and operator-visible routing
+  rationale on current surfaces
+- the current `workflow.execute_step` boundary still marks placeholder step completion and must
+  stay below grounded task proof in packet wording
 
-## Decision 1: First slice uses landed internal step signals, not a new stream parser
+## Decision 1: Build step policy from current repo signals first
 
-**Decision**: Packet `025` should consume the landed internal step, routing, budget, supervision,
-and runtime-truth seams instead of introducing a new raw streaming-event parser in the first
-implementation slice.
-
-**Rationale**:
-
-- the current runtime already records `StepEvaluationRecord`
-- step-routing history is already projected through workflow-visible state
-- packet `023` already owns the runtime-truth and proof-boundary story
-- a new raw event parser would widen scope before the packet has frozen a useful deterministic
-  policy surface
-
-**Alternatives considered**:
-
-- using OpenAI Responses event taxonomy as the first implementation input: rejected because the
-  landed internal seams are already the current repo authority for step-level decisions
-- inventing repo-local ad hoc step signals outside the landed seams: rejected because it would
-  compete with the current runtime truth
-
-## Decision 2: Keep the first slice heuristic and deterministic
-
-**Decision**: The first packet-025 implementation slice should use deterministic heuristics and
-bounded policy rules rather than PRM, judge-heavy, or training-heavy control loops.
+**Decision**: Packet `025` should use the runtime signals already landed on `main` as its first
+packet-owned inputs.
 
 **Rationale**:
 
-- the current repo already has useful verifier, routing, budget, and supervision seams to build on
-- deterministic policy is easier to audit and keeps the proof boundary honest
-- the external research corpus remains useful directionally, but it is not required for the first
-  bounded implementation
+- current repo truth already exposes step evaluation, repair lineage, routing history, supervision
+  evidence, runtime truth, and bounded budget signals
+- the first missing layer is not more raw telemetry; it is one coherent deterministic policy that
+  uses those existing signals together
+- this keeps the packet grounded in exact current seams instead of pulling in a larger learned
+  policy system too early
 
 **Alternatives considered**:
 
-- PRM-backed scoring from day one: rejected because it widens scope into training or model-program
-  work
-- benchmark-first work: rejected because packet `025` is a policy packet, not a benchmark packet
+- building packet `025` around a new PRM or judge-heavy policy stack first: rejected because it
+  would widen the packet before the deterministic contract exists
+- delaying packet `025` until a new live rerun exists: rejected because the missing gap is a
+  packet-owned contract and summary layer, not a prerequisite live-proof packet
 
-## Decision 3: Packet `023` remains the owner of proof wording
+## Decision 2: Keep packet ownership clean
 
-**Decision**: Packet `025` should consume packet-023 runtime-truth and proof-boundary fields and
-never create a competing proof schema.
+**Decision**: Packet `025` should add one packet-owned `step_policy` summary beside the current
+packet `020`, `021`, and `023` surfaces instead of replacing them.
 
 **Rationale**:
 
-- packet `023` already froze the placeholder-versus-grounded wording
-- packet `025` is about step scoring and action policy, not about redefining run truth
-- keeping ownership boundaries clean prevents proof claims from drifting across packets
+- packet `020` already owns verifier outcomes, clarification requests, repair directives, and
+  repair lineage
+- packet `021` already owns predictive-supervision evidence
+- packet `023` already owns runtime-truth, proof-boundary wording, and run-trace schema
+- packet `025` only needs to explain the current step policy, not take over those adjacent
+  contracts
 
 **Alternatives considered**:
 
-- embedding packet-025-specific proof wording in step policy: rejected because it silently
-  duplicates packet-023 scope
-- treating step-policy summaries as self-sufficient proof: rejected because the repo already
-  records why placeholder completion must stay explicit
+- folding packet `025` into `runtime_truth`: rejected because it would blur packet `023`
+  ownership
+- folding packet `025` into `supervision_evidence`: rejected because packet `021` already owns
+  that contract and packet `025` needs a broader decision summary than supervision alone
 
-## Decision 4: Packet `022` and packet `024` stay upstream ownership layers
+## Decision 3: Keep the first slice deterministic and bounded
 
-**Decision**: Packet `025` may read packet-022 durable lifecycle state and packet-024 boundary
-decisions when they affect step-policy presentation, but it must not absorb those ownership
-domains.
+**Decision**: The first packet-025 implementation slice should be deterministic, heuristic, and
+bounded to current repo signals.
 
 **Rationale**:
 
-- packet `022` already owns lifecycle, history, compaction, and effect-boundary semantics
-- packet `024` already owns capability boundary, quarantine, sandbox, and auth-callout posture
-- packet `025` only needs those upstream layers as policy inputs or scope boundaries
+- the repo already has enough structured current-state input to produce a useful deterministic
+  action ladder
+- deterministic policy is easier to audit and easier to validate honestly against packet `023`
+  proof wording
+- the deeper research prompt and `R6` output remain useful frontier context, but they are not a
+  reason to block a bounded first slice
 
 **Alternatives considered**:
 
-- widening packet `025` into durable lifecycle semantics: rejected because packet `022` already
-  owns that contract
-- widening packet `025` into security-boundary policy: rejected because packet `024` already owns
-  that contract
+- benchmark-first or training-first work: rejected because packet `025` is a packet-owned contract
+  and runtime summary slice, not a benchmark packet
+- provider-specific step intelligence: rejected because the first slice should stay model-agnostic
+  and repo-grounded
 
-## Decision 5: Existing result surfaces stay canonical
+## Decision 4: Existing read surfaces stay canonical
 
-**Decision**: Packet `025` should project step-policy summaries through the existing task,
-session, autonomy, and operator-facing result surfaces rather than a new endpoint.
+**Decision**: Packet `025` should project step-policy summaries through existing task inspect,
+autonomy status, and operator selected-run detail surfaces only.
 
 **Rationale**:
 
-- those are already the current runtime truth surfaces on `main`
-- the packet goal is stronger step policy, not a new observability product
-- using current surfaces reduces scope and keeps router docs honest
+- those are already the current read surfaces on `main`
+- the operator console already renders runtime truth and supervision evidence from the task inspect
+  payload
+- no new endpoint is needed for the first slice
 
 **Alternatives considered**:
 
-- a new packet-owned endpoint: rejected because it widens scope and competes with current
-  result-surface authority
-- task-only projection: rejected because packet `023` and packet `021` already established a
-  multi-surface projection pattern
+- adding a session projection in the first slice: rejected because it is useful but not necessary
+  to deliver the bounded packet value
+- adding a new trace or step-policy endpoint: rejected because it widens scope and competes with
+  existing read surfaces
+
+## Decision 5: Packet-023 proof honesty remains the guardrail
+
+**Decision**: Packet `025` should consume packet-023 proof wording and never use step policy to
+upgrade placeholder completion into grounded task proof.
+
+**Rationale**:
+
+- current repo truth already states that `workflow.execute_step` placeholder completion is
+  orchestration proof only
+- packet `025` adds policy interpretation, not stronger proof
+- keeping proof honesty unchanged prevents later packets from inheriting a false stronger claim
+
+**Alternatives considered**:
+
+- using packet `025` to imply stronger semantic completion from policy confidence alone: rejected
+  because policy confidence is not grounded evidence
+
+## Decision 6: Frontier research stays background guidance, not a freeze blocker
+
+**Decision**: `docs/research-prompts/09-step-level-intelligence.md` and
+`docs/research-output/research/targeted-step-level-intelligence-R6.md` remain useful background
+for follow-on work, but packet `025` should not depend on frontier PRM or speculative-decoding
+features in its first implementation slice.
+
+**Rationale**:
+
+- the research strongly supports step-level intelligence as a frontier direction
+- the current repo does not yet need that full architecture to ship a bounded deterministic packet
+- keeping the research in a guidance role lets packet `025` stay implementation-ready today while
+  leaving room for a stronger later packet if the deterministic contract proves valuable
 
 ## Bounded conclusion
 
-The legitimate packet-025 implementation packet is a deterministic step-policy packet layered on
-landed packet `020` through packet `024` seams. It should freeze one bounded difficulty
-assessment, one bounded action ladder, and one coherent projection through current result surfaces
-without widening into proof ownership, durable-workflow ownership, security ownership, grounded
-execution, PRM training, benchmarks, coordinator runtime, or interoperability.
+The legitimate packet-025 implementation slice is a deterministic step-policy layer on top of
+current packet `019` through packet `024` seams. It should freeze one packet-owned difficulty
+summary, one bounded budget-pressure summary, and one bounded action ladder, then project that
+summary through existing task inspect, autonomy status, and operator selected-run detail surfaces
+without widening into proof ownership, training, benchmarks, coordinator runtime, or
+interoperability work.

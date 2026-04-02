@@ -98,8 +98,8 @@ generalize.
 - **Stronger step-level intelligence.** This matters because step boundaries, verification,
   escalation, and token discipline can improve quality and economics at a finer granularity than
   task-level routing alone. This belongs now because packet `025` is the next implementation-ready
-  packet on top of already-landed routing, verifier, runtime-truth, durable-workflow, and
-  boundary-hardening foundations.
+  packet on top of already-landed routing, verifier, runtime-truth, and boundary-hardening
+  foundations.
 - **Streaming and routing hardening.** This matters because the runtime path already has bounded
   routing, budget, verifier, and provenance foundations that should become more robust and more
   honestly default over time. This belongs now because the system should finish and harden what is

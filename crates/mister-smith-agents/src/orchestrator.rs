@@ -2345,10 +2345,10 @@ fn build_runtime_truth_view(
     {
         relationships.push(RunTraceRelationshipKind::Repair);
     }
-    if step_routing_history
-        .iter()
-        .any(|entry| entry.action == "retry" || entry.action == "fallback")
-    {
+    if step_routing_history.iter().any(|entry| {
+        matches!(entry.action.as_str(), "retry" | "fallback")
+            || matches!(entry.previous_action.as_deref(), Some("retry" | "fallback"))
+    }) {
         relationships.push(RunTraceRelationshipKind::Retry);
     }
     if guard_decisions.iter().any(|decision| {
