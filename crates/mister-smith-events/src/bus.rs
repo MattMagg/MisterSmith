@@ -15,7 +15,7 @@ use tracing;
 
 use mister_smith_core::{
     packet_023_placeholder_runtime_truth, CheckpointId, ContextBudgetId, EventPublisher,
-    ExecutionBranchId, ExecutionGraphId, GuardDecision, GuardDecisionId, GuardTarget,
+    ExecutionBranchId, ExecutionGraphId, GraphState, GuardDecision, GuardDecisionId, GuardTarget,
     InterventionRecord, InterventionRecordId, OperatorResultPreview, ProfileSnapshot,
     ProfileSnapshotId, ProfileTarget, RepairLineageRef, RunTraceRelationshipKind, RuntimeTruthView,
     SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, SystemEvent, TaskId,
@@ -274,7 +274,7 @@ impl AutonomyStatusAccumulator {
             profiles,
             guard_decisions,
             supervision_evidence,
-            runtime_truth: Some(runtime_truth),
+            runtime_truth,
             conservative_reasons: self.conservative_reasons.clone(),
         })
     }
