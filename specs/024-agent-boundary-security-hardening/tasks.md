@@ -163,7 +163,7 @@ honest.
 - [x] T029 Run `cargo test -p mister-smith-persistence`
 - [x] T030 Run `cargo build --workspace`
 - [x] T031 Run `git diff --check`
-- [x] T032 Run `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`
+- [ ] T032 Run `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`
 
 ## Parallel Staging Directive
 
