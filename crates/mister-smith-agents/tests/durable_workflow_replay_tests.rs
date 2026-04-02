@@ -293,3 +293,38 @@ fn compaction_snapshot_replay_restores_bounded_lineage_state() {
         ]
     );
 }
+
+#[test]
+fn lifecycle_terminal_event_preserves_terminal_graph_state_after_recompute() {
+    let workflow_id = TaskId::new();
+    let history = vec![
+        history_event(
+            workflow_id,
+            1,
+            DurableWorkflowEventKind::LifecycleChanged,
+            json!({
+                "lifecycle_state": "failed",
+            }),
+        ),
+        history_event(
+            workflow_id,
+            2,
+            DurableWorkflowEventKind::NodeStateChanged,
+            json!({
+                "step_key": "root",
+                "node_state": NodeState::Completed,
+            }),
+        ),
+    ];
+    let orchestrator = Orchestrator::new(
+        std::sync::Arc::new(IdentityDecomposer),
+        std::sync::Arc::new(ArrayAggregator),
+        std::sync::Arc::new(TaskScheduler::new()),
+    );
+
+    let replayed = orchestrator
+        .replay_execution_graph_from_history(compile_graph(workflow_id), &history)
+        .expect("terminal lifecycle replay should succeed");
+
+    assert_eq!(replayed.state, GraphState::Failed);
+}

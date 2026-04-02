@@ -1615,6 +1615,10 @@ fn task_id_for_node(node_id: ExecutionNodeId) -> TaskId {
 }
 
 fn recompute_replayed_graph_state(graph: &mut ExecutionGraph) {
+    let should_preserve_terminal_state = matches!(
+        graph.state,
+        GraphState::Completed | GraphState::Failed | GraphState::Aborted
+    );
     let checkpointed_branches = graph
         .checkpoint_lineage
         .iter()
@@ -1674,6 +1678,8 @@ fn recompute_replayed_graph_state(graph: &mut ExecutionGraph) {
         || any_failed_branch
     {
         GraphState::Failed
+    } else if should_preserve_terminal_state {
+        graph.state
     } else if !graph.nodes.is_empty()
         && graph
             .nodes

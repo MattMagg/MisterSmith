@@ -1187,6 +1187,13 @@ fn maybe_record_history_compaction(metadata: &mut Value, workflow_id: TaskId) {
     let _ = merge_workflow_history_metadata(metadata, std::slice::from_ref(&snapshot_event));
 }
 
+fn retain_replay_history_after_compaction(
+    history: &mut Vec<WorkflowHistoryEventRecord>,
+    compaction: &HistoryCompactionRecord,
+) {
+    history.retain(|event| event.replay_position > compaction.source_replay_end);
+}
+
 struct TerminalResultViews {
     aggregated_result: Value,
     final_result: Value,
@@ -1429,7 +1436,7 @@ impl RuntimeTaskService {
             return false;
         }
         if let Ok(Some(compaction)) = latest_history_compaction(&record.metadata) {
-            history.retain(|event| event.replay_position >= compaction.replay_start_position);
+            retain_replay_history_after_compaction(&mut history, &compaction);
         }
         if history.is_empty() {
             return false;
@@ -5123,6 +5130,82 @@ mod tests {
         record.started_at = Some(Utc::now() - chrono::Duration::minutes(4));
 
         assert!(!should_recover_orphaned_workflow(&record, Utc::now(), true,));
+    }
+
+    #[test]
+    fn retain_replay_history_after_compaction_keeps_tail_and_snapshot_events() {
+        let workflow_id = TaskId::new();
+        let mut history = vec![
+            WorkflowHistoryEventRecord {
+                workflow_id,
+                event_id: Uuid::new_v4(),
+                replay_position: 8,
+                event_kind: DurableWorkflowEventKind::NodeStateChanged,
+                recorded_at: Utc::now(),
+                actor_agent_id: None,
+                source: Some("test".to_string()),
+                branch_id: None,
+                node_id: None,
+                lifecycle_state: None,
+                effect_boundary_id: None,
+                compaction_id: None,
+                parent_event_id: None,
+                payload: json!({}),
+            },
+            WorkflowHistoryEventRecord {
+                workflow_id,
+                event_id: Uuid::new_v4(),
+                replay_position: 9,
+                event_kind: DurableWorkflowEventKind::NodeStateChanged,
+                recorded_at: Utc::now(),
+                actor_agent_id: None,
+                source: Some("test".to_string()),
+                branch_id: None,
+                node_id: None,
+                lifecycle_state: None,
+                effect_boundary_id: None,
+                compaction_id: None,
+                parent_event_id: None,
+                payload: json!({}),
+            },
+            WorkflowHistoryEventRecord {
+                workflow_id,
+                event_id: Uuid::new_v4(),
+                replay_position: 10,
+                event_kind: DurableWorkflowEventKind::HistoryCompacted,
+                recorded_at: Utc::now(),
+                actor_agent_id: None,
+                source: Some("test".to_string()),
+                branch_id: None,
+                node_id: None,
+                lifecycle_state: None,
+                effect_boundary_id: None,
+                compaction_id: None,
+                parent_event_id: None,
+                payload: json!({}),
+            },
+        ];
+        let compaction = HistoryCompactionRecord {
+            workflow_id,
+            compaction_id: Uuid::new_v4(),
+            mode: HistoryCompactionMode::ReplayPointer,
+            source_replay_start: 1,
+            source_replay_end: 8,
+            replay_start_position: 10,
+            replacement_event_id: None,
+            preserved_lineage_note: "test".to_string(),
+            recorded_at: Utc::now(),
+        };
+
+        retain_replay_history_after_compaction(&mut history, &compaction);
+
+        assert_eq!(
+            history
+                .iter()
+                .map(|event| event.replay_position)
+                .collect::<Vec<_>>(),
+            vec![9, 10]
+        );
     }
 }
 
