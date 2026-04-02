@@ -43,6 +43,7 @@ struct AutonomyStatusAccumulator {
     turn_index: Option<u32>,
     coordinator_agent_id: Option<mister_smith_core::AgentId>,
     resume_provenance: Option<ResumeProvenanceSummary>,
+    lifecycle_state: Option<mister_smith_core::DurableWorkflowLifecycleState>,
     result_preview: Option<OperatorResultPreview>,
     graph: Option<ExecutionGraphSummary>,
     topology: Option<TopologyPlanSummary>,
@@ -235,6 +236,9 @@ impl AutonomyStatusAccumulator {
             turn_index: self.turn_index,
             coordinator_agent_id: self.coordinator_agent_id,
             resume_provenance: self.resume_provenance.clone(),
+            lifecycle_state: self.lifecycle_state.or(Some(
+                crate::autonomy::lifecycle_state_for_graph_state(graph.state),
+            )),
             result_preview,
             graph,
             topology,
@@ -262,6 +266,7 @@ impl AutonomyStatusAccumulator {
             turn_index: view.turn_index,
             coordinator_agent_id: view.coordinator_agent_id,
             resume_provenance: view.resume_provenance,
+            lifecycle_state: view.lifecycle_state,
             result_preview: view.result_preview,
             graph: Some(view.graph),
             topology: Some(view.topology),
@@ -493,10 +498,9 @@ fn merge_supervision_evidence(
     if synthesized.repair_lineage_ref.is_none() {
         synthesized.repair_lineage_ref = preserved.repair_lineage_ref.clone();
     }
-    if synthesized.proof_boundary.is_none() {
-        synthesized.proof_boundary = preserved.proof_boundary.clone();
-    } else if synthesized.proof_boundary.as_deref() == Some("supported task path")
-        && preserved.proof_boundary.is_some()
+    if synthesized.proof_boundary.is_none()
+        || (synthesized.proof_boundary.as_deref() == Some("supported task path")
+            && preserved.proof_boundary.is_some())
     {
         synthesized.proof_boundary = preserved.proof_boundary.clone();
     }

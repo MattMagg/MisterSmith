@@ -170,6 +170,8 @@ projection rule across task, session, and autonomy surfaces.
 **Validation**:
 
 - contract and data model agree on durable entities and lifecycle meanings
+- first-slice lifecycle behavior stays honest about `applied`, `noop`, and `deferred` outcomes and
+  does not overclaim live runner control
 - spec, plan, and tasks stay inside packet `022` scope without drifting into adjacent packets
 
 ### Milestone 2: Freeze effect boundaries and recovery posture
@@ -180,6 +182,8 @@ first bounded operator-facing meaning of repeated effects or repeated lifecycle 
 **Validation**:
 
 - effect-boundary contract stays distinct from exactly-once state-transition claims
+- repeated lifecycle commands keep one durable outcome vocabulary without pretending packet `022`
+  already stops or resumes a live runner
 - replay and retry scenarios remain consistent with the existing restart-resume baseline
 
 ### Milestone 3: Freeze compaction and replay-governance posture

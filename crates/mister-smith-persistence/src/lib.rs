@@ -32,8 +32,9 @@ pub use hybrid::manager::HybridStateManager;
 pub use hybrid::router::{DataRouter, DataType, StorageLayer};
 pub use kv::fingerprints::{profile_fingerprint_key, ProfileFingerprintStore};
 pub use kv::state::{
-    branch_checkpoint_state_key, branch_resume_state_key, ConflictStrategy, Operation, StateChange,
-    StateManager,
+    branch_checkpoint_state_key, branch_resume_state_key, history_compaction_state_key,
+    lifecycle_decision_state_key, workflow_effect_boundary_state_key, workflow_history_state_key,
+    ConflictStrategy, Operation, StateChange, StateManager,
 };
 pub use memory::{
     AccessPolicy, FragmentClass, FragmentFreshness, FragmentProvenance, ManagedMemoryManager,
@@ -43,8 +44,13 @@ pub use memory::{
 };
 pub use repository::session::SessionRepository;
 pub use repository::task::{
-    branch_resume_history, latest_branch_checkpoint, merge_branch_checkpoint_metadata,
-    merge_branch_resume_metadata, BranchCheckpointRecord, BranchResumeRecord,
+    branch_resume_history, effect_boundary_records, history_compaction_records,
+    latest_branch_checkpoint, latest_history_compaction, lifecycle_decision_history,
+    merge_branch_checkpoint_metadata, merge_branch_resume_metadata, merge_effect_boundary_metadata,
+    merge_history_compaction_metadata, merge_lifecycle_decision_metadata,
+    merge_workflow_history_metadata, workflow_history, BranchCheckpointRecord, BranchResumeRecord,
+    EffectBoundaryRecord, HistoryCompactionRecord, LifecycleDecisionRecord,
+    WorkflowHistoryEventRecord,
 };
 pub use repository::Repository;
 

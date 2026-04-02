@@ -8,13 +8,15 @@ use chrono::Utc;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::warn;
+use uuid::Uuid;
 
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, CapabilityId, CheckpointId, DelegationScope,
-    ExecutionBranchId, ExecutionNodeId, PersistenceError, TaskId,
+    DurableWorkflowEventKind, ExecutionBranchId, ExecutionNodeId, MemorySnapshotId,
+    PersistenceError, TaskId,
 };
 use mister_smith_events::CapabilitySummary;
-use mister_smith_persistence::repository::task::TaskRepository;
+use mister_smith_persistence::repository::task::{TaskRepository, WorkflowHistoryEventRecord};
 use mister_smith_persistence::{BranchCheckpointRecord, BranchResumeRecord, HybridStateManager};
 
 use crate::errors::AgentSystemError;
@@ -66,6 +68,33 @@ pub struct BranchRecoveryPlan {
     pub resume_metadata: BranchResumeMetadata,
 }
 
+/// Stable replay payload for branch-scoped durable history.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BranchReplayStatePayload {
+    /// Stable step key used to find the branch after recompilation.
+    pub branch_anchor_step_key: String,
+    /// Branch state projected by this history event.
+    pub branch_state: BranchState,
+    /// Recovery strategy in effect when the event was accepted.
+    pub recovery_strategy: BranchRecoveryStrategy,
+    /// Agents assigned to the branch when the event was accepted.
+    pub assigned_agent_ids: Vec<AgentId>,
+    /// Durable checkpoint reference when the event carries checkpoint lineage.
+    pub checkpoint_id: Option<CheckpointId>,
+    /// Completed step keys covered by the replay-safe checkpoint scope.
+    pub completed_step_keys: Vec<String>,
+    /// Pending step keys covered by the replay-safe checkpoint scope.
+    pub pending_step_keys: Vec<String>,
+    /// Recovery step keys selected by the accepted resume plan.
+    pub recovery_step_keys: Vec<String>,
+    /// Managed-memory snapshot anchored to the checkpoint, when present.
+    pub memory_snapshot_id: Option<MemorySnapshotId>,
+    /// Failure or intervention context captured at the checkpoint boundary, when present.
+    pub failure_context: Option<Value>,
+    /// Timestamp recorded for the accepted checkpoint boundary, when present.
+    pub captured_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct RecoveryPlanRequest {
     strategy: BranchRecoveryStrategy,
@@ -102,6 +131,15 @@ pub trait BranchCheckpointStore: Send + Sync {
         workflow_id: TaskId,
         branch_id: ExecutionBranchId,
     ) -> Result<Vec<BranchResumeMetadata>, PersistenceError>;
+
+    /// Persist one accepted durable-history event related to branch replay.
+    async fn persist_workflow_history_event(
+        &self,
+        _workflow_id: TaskId,
+        _event: WorkflowHistoryEventRecord,
+    ) -> Result<(), PersistenceError> {
+        Ok(())
+    }
 }
 
 /// Repository-backed branch checkpoint persistence with SQL-authoritative metadata
@@ -253,6 +291,44 @@ impl BranchCheckpointStore for RepositoryBranchCheckpointStore {
             }
         }
     }
+
+    async fn persist_workflow_history_event(
+        &self,
+        workflow_id: TaskId,
+        mut event: WorkflowHistoryEventRecord,
+    ) -> Result<(), PersistenceError> {
+        let history = self
+            .task_repository
+            .load_workflow_history(*workflow_id.as_ref())
+            .await?;
+        event.replay_position = history
+            .last()
+            .map(|entry| entry.replay_position.saturating_add(1))
+            .unwrap_or(1);
+
+        self.task_repository
+            .persist_durable_workflow_metadata(*workflow_id.as_ref(), &[event], &[], &[], &[])
+            .await?;
+
+        let refreshed = self
+            .task_repository
+            .load_workflow_history(*workflow_id.as_ref())
+            .await?;
+        let history_value = serialize_value(&refreshed)?;
+        if let Err(error) = self
+            .hybrid
+            .write_workflow_history(*workflow_id.as_ref(), &history_value)
+            .await
+        {
+            warn!(
+                cache = "workflow history",
+                error = %error,
+                "workflow history cache write failed after durable repository persistence"
+            );
+        }
+
+        Ok(())
+    }
 }
 
 /// Coordinator for branch-local checkpoint recording and recovery planning.
@@ -281,7 +357,14 @@ impl BranchCheckpointCoordinator {
             .map_err(map_persistence_error)?;
 
         branch.state = BranchState::Checkpointed;
-        graph.checkpoint_lineage.push(checkpoint);
+        graph.checkpoint_lineage.push(checkpoint.clone());
+        store
+            .persist_workflow_history_event(
+                workflow_id,
+                checkpoint_history_event(workflow_id, graph, &checkpoint),
+            )
+            .await
+            .map_err(map_persistence_error)?;
         Ok(())
     }
 
@@ -452,6 +535,13 @@ impl BranchCheckpointCoordinator {
             .persist_branch_resume(&resume_metadata)
             .await
             .map_err(map_persistence_error)?;
+        store
+            .persist_workflow_history_event(
+                workflow_id,
+                recovery_plan_history_event(workflow_id, graph, &checkpoint, &resume_metadata)?,
+            )
+            .await
+            .map_err(map_persistence_error)?;
 
         Ok(BranchRecoveryPlan {
             checkpoint,
@@ -477,6 +567,168 @@ fn hydrate_checkpoint_lineage(graph: &mut ExecutionGraph, checkpoint: BranchChec
     }
 
     graph.checkpoint_lineage.push(checkpoint);
+}
+
+fn step_keys_for_node_ids(graph: &ExecutionGraph, node_ids: &[ExecutionNodeId]) -> Vec<String> {
+    node_ids
+        .iter()
+        .filter_map(|node_id| {
+            graph
+                .nodes
+                .iter()
+                .find(|node| node.node_id == *node_id)
+                .map(|node| node.step_key.clone())
+        })
+        .collect()
+}
+
+fn node_ids_for_step_keys(graph: &ExecutionGraph, step_keys: &[String]) -> Vec<ExecutionNodeId> {
+    step_keys
+        .iter()
+        .filter_map(|step_key| {
+            graph
+                .nodes
+                .iter()
+                .find(|node| node.step_key == *step_key)
+                .map(|node| node.node_id)
+        })
+        .collect()
+}
+
+/// Build a stable checkpoint replay payload that survives graph recompilation.
+pub fn checkpoint_replay_payload(graph: &ExecutionGraph, checkpoint: &BranchCheckpoint) -> Value {
+    let Some(branch) = graph.branch(&checkpoint.branch_id) else {
+        return Value::Null;
+    };
+    let payload = BranchReplayStatePayload {
+        branch_anchor_step_key: branch
+            .node_ids
+            .first()
+            .and_then(|node_id| {
+                graph
+                    .nodes
+                    .iter()
+                    .find(|node| node.node_id == *node_id)
+                    .map(|node| node.step_key.clone())
+            })
+            .unwrap_or_else(|| checkpoint.checkpoint_id.to_string()),
+        branch_state: BranchState::Checkpointed,
+        recovery_strategy: branch.recovery_strategy,
+        assigned_agent_ids: branch.assigned_agents.clone(),
+        checkpoint_id: Some(checkpoint.checkpoint_id),
+        completed_step_keys: step_keys_for_node_ids(graph, &checkpoint.completed_nodes),
+        pending_step_keys: step_keys_for_node_ids(graph, &checkpoint.pending_nodes),
+        recovery_step_keys: step_keys_for_node_ids(graph, &checkpoint.pending_nodes),
+        memory_snapshot_id: Some(checkpoint.memory_snapshot_id),
+        failure_context: checkpoint.failure_context.clone(),
+        captured_at: Some(checkpoint.created_at),
+    };
+    serde_json::to_value(payload).unwrap_or(Value::Null)
+}
+
+/// Rebuild one branch checkpoint from a stable replay payload and a freshly compiled graph.
+pub fn checkpoint_from_replay_payload(
+    graph: &ExecutionGraph,
+    payload: &Value,
+) -> Option<BranchCheckpoint> {
+    let payload = serde_json::from_value::<BranchReplayStatePayload>(payload.clone()).ok()?;
+    let completed_nodes = node_ids_for_step_keys(graph, &payload.completed_step_keys);
+    let pending_nodes = node_ids_for_step_keys(graph, &payload.pending_step_keys);
+    let branch_id = pending_nodes
+        .first()
+        .copied()
+        .or_else(|| completed_nodes.first().copied())
+        .and_then(|node_id| graph.nodes.iter().find(|node| node.node_id == node_id))
+        .map(|node| node.branch_id)?;
+
+    Some(BranchCheckpoint {
+        checkpoint_id: payload.checkpoint_id?,
+        branch_id,
+        completed_nodes,
+        pending_nodes,
+        memory_snapshot_id: payload.memory_snapshot_id?,
+        failure_context: payload.failure_context.filter(|value| !value.is_null()),
+        created_at: payload.captured_at?,
+    })
+}
+
+fn checkpoint_history_event(
+    workflow_id: TaskId,
+    graph: &ExecutionGraph,
+    checkpoint: &BranchCheckpoint,
+) -> WorkflowHistoryEventRecord {
+    WorkflowHistoryEventRecord {
+        workflow_id,
+        event_id: Uuid::new_v4(),
+        replay_position: 0,
+        event_kind: DurableWorkflowEventKind::BranchStateChanged,
+        recorded_at: Utc::now(),
+        actor_agent_id: None,
+        source: Some("branch_checkpoint_coordinator".to_string()),
+        branch_id: Some(checkpoint.branch_id),
+        node_id: None,
+        lifecycle_state: None,
+        effect_boundary_id: None,
+        compaction_id: None,
+        parent_event_id: None,
+        payload: checkpoint_replay_payload(graph, checkpoint),
+    }
+}
+
+fn recovery_plan_history_event(
+    workflow_id: TaskId,
+    graph: &ExecutionGraph,
+    checkpoint: &BranchCheckpoint,
+    resume_metadata: &BranchResumeMetadata,
+) -> Result<WorkflowHistoryEventRecord, AgentSystemError> {
+    let branch = graph
+        .branch(&resume_metadata.branch_id)
+        .ok_or_else(|| {
+            AgentSystemError::OrchestrationError(format!(
+                "branch {} not found while recording recovery history",
+                resume_metadata.branch_id
+            ))
+        })?;
+    let payload = BranchReplayStatePayload {
+        branch_anchor_step_key: branch
+            .node_ids
+            .first()
+            .and_then(|node_id| {
+                graph
+                    .nodes
+                    .iter()
+                    .find(|node| node.node_id == *node_id)
+                    .map(|node| node.step_key.clone())
+            })
+            .unwrap_or_else(|| resume_metadata.branch_id.to_string()),
+        branch_state: branch.state,
+        recovery_strategy: resume_metadata.recovery_strategy,
+        assigned_agent_ids: branch.assigned_agents.clone(),
+        checkpoint_id: Some(checkpoint.checkpoint_id),
+        completed_step_keys: step_keys_for_node_ids(graph, &resume_metadata.completed_nodes),
+        pending_step_keys: step_keys_for_node_ids(graph, &resume_metadata.pending_nodes),
+        recovery_step_keys: step_keys_for_node_ids(graph, &resume_metadata.recovery_node_ids),
+        memory_snapshot_id: Some(checkpoint.memory_snapshot_id),
+        failure_context: checkpoint.failure_context.clone(),
+        captured_at: Some(checkpoint.created_at),
+    };
+
+    Ok(WorkflowHistoryEventRecord {
+        workflow_id,
+        event_id: Uuid::new_v4(),
+        replay_position: 0,
+        event_kind: DurableWorkflowEventKind::BranchStateChanged,
+        recorded_at: resume_metadata.resumed_at,
+        actor_agent_id: resume_metadata.assigned_agent,
+        source: Some("branch_checkpoint_recovery".to_string()),
+        branch_id: Some(resume_metadata.branch_id),
+        node_id: None,
+        lifecycle_state: None,
+        effect_boundary_id: None,
+        compaction_id: None,
+        parent_event_id: None,
+        payload: serde_json::to_value(payload).unwrap_or(Value::Null),
+    })
 }
 
 fn recovery_node_ids_from_checkpoint(

@@ -8,7 +8,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 use mister_smith_config::FrameworkConfig;
-use mister_smith_core::{AgentId, SessionId, SessionRetainedResultView, SessionStatus, TaskId};
+use mister_smith_core::{
+    AgentId, DurableWorkflowLifecycleState, SessionId, SessionRetainedResultView, SessionStatus,
+    TaskId,
+};
 use mister_smith_http::server::{
     ConversationContinueRequest, ConversationCreateRequest, ConversationEndView,
     ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionService,
@@ -24,7 +27,10 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::autonomy::resume_provenance_from_metadata;
+use crate::autonomy::{
+    durable_lifecycle_state_from_metadata, lifecycle_state_from_status,
+    resume_provenance_from_metadata,
+};
 use crate::execution::RuntimeTaskService;
 
 /// Runtime-backed durable conversation service.
@@ -458,10 +464,15 @@ async fn build_session_view(
                 resumed_from_workflow_id: details.resumed_from_workflow_id,
                 resumed_from_turn_index: details.resumed_from_turn_index,
             });
+        let turn_status = turn.status.clone();
         turn_summaries.push(ConversationTurnSummaryView {
             turn_index: turn.turn_index.max(0) as u32,
             workflow_id,
-            status: turn.status,
+            status: turn_status.clone(),
+            lifecycle_state: lifecycle_state_for_turn(
+                task_metadata_by_workflow.get(&turn.workflow_id),
+                &turn_status,
+            ),
             user_message: turn.user_message,
             assistant_result,
             resume_provenance,
@@ -499,8 +510,17 @@ fn persistence_error(error: mister_smith_core::PersistenceError) -> Conversation
 fn is_terminal_status(status: &str) -> bool {
     matches!(
         status.trim().to_ascii_lowercase().as_str(),
-        "completed" | "failed" | "cancelled"
+        "completed" | "failed" | "cancelled" | "terminated"
     )
+}
+
+pub(crate) fn lifecycle_state_for_turn(
+    metadata: Option<&Value>,
+    status: &str,
+) -> DurableWorkflowLifecycleState {
+    metadata
+        .and_then(durable_lifecycle_state_from_metadata)
+        .unwrap_or_else(|| lifecycle_state_from_status(status))
 }
 
 fn session_status_text(status: SessionStatus) -> &'static str {
@@ -715,6 +735,7 @@ pub(crate) struct ConversationCliTurnSummary {
     pub turn_index: u32,
     pub workflow_id: String,
     pub status: String,
+    pub lifecycle_state: DurableWorkflowLifecycleState,
     pub user_message: String,
     #[serde(default)]
     pub assistant_result: Option<SessionRetainedResultView>,
@@ -887,10 +908,11 @@ pub(crate) fn render_session(view: &ConversationCliSessionView) -> String {
                 .map(render_resume_provenance)
                 .unwrap_or_else(|| "none".to_string());
             format!(
-                "  {} {} {} resume={} result={} {}",
+                "  {} {} {} lifecycle={} resume={} result={} {}",
                 turn.turn_index,
                 turn.workflow_id,
                 turn.status,
+                turn.lifecycle_state.as_str(),
                 resume_provenance,
                 assistant_result,
                 turn.user_message
@@ -1414,6 +1436,7 @@ mod tests {
                     turn_index: 1,
                     workflow_id: "44444444-4444-4444-4444-444444444444".to_string(),
                     status: "failed".to_string(),
+                    lifecycle_state: DurableWorkflowLifecycleState::Failed,
                     user_message: "turn one".to_string(),
                     assistant_result: Some(SessionRetainedResultView {
                         workflow_id: TaskId::from_uuid(
@@ -1462,6 +1485,7 @@ mod tests {
                     turn_index: 2,
                     workflow_id: "55555555-5555-5555-5555-555555555555".to_string(),
                     status: "completed".to_string(),
+                    lifecycle_state: DurableWorkflowLifecycleState::Completed,
                     user_message: "turn two".to_string(),
                     assistant_result: Some(SessionRetainedResultView {
                         workflow_id: TaskId::from_uuid(

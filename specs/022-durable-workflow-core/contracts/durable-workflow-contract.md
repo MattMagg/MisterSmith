@@ -22,6 +22,8 @@ Freeze one bounded contract for:
 - Derived task, session, and autonomy views are projections of that accepted history.
 - Checkpoints, snapshots, and compaction records support recovery, but they do not replace the
   requirement for canonical durable history semantics.
+- The first slice stores canonical accepted history on the SQL-backed workflow record, with KV
+  replay state used only as assistive cache or pointer state.
 
 ### 2. Replay Must Be Deterministic
 
@@ -35,21 +37,26 @@ Freeze one bounded contract for:
 - Accepted state transitions and external side effects are not the same contract.
 - Every effect boundary must support durable intent and durable outcome tracking.
 - Effect-outcome correctness must not be overstated as exactly-once state-transition correctness.
+- The first slice stores effect intent and effect outcome as persistence-owned records keyed by
+  workflow and effect boundary identity plus idempotency or dedup reference.
 
 ### 4. Lifecycle Verbs Need One Meaning
 
-- Pause, resume, cancel, terminate, and reset or rewind posture must have one explicit meaning
-  wherever packet `022` projects them.
+- `pause`, `resume`, `cancel`, and `terminate` must have one explicit meaning wherever packet
+  `022` projects them.
 - Task, session, and autonomy surfaces must not present contradictory lifecycle meanings for the
   same workflow.
-- Any lifecycle verb intentionally deferred in the first slice must be called out plainly.
+- The first slice records lifecycle decisions durably and may return `applied`, `noop`, or
+  `deferred` outcomes. It does not by itself prove live runner pause, resume, cancel, or
+  terminate control.
+- `reset/rewind` is intentionally deferred in the first slice and must be called out plainly.
 
 ### 5. Compaction Must Stay Bounded
 
 - Long-running workflow replay cost must have a bounded strategy.
-- The first compaction mechanism may be minimal, but it must preserve resumability and explainable
-  lineage.
-- The exact first compaction mechanism remains open for the first implementation slice.
+- The first compaction mechanism is a minimal lineage-preserving compaction record with source
+  range, replay start pointer, and preserved lineage note.
+- This packet does not add a broader snapshot platform or storage redesign.
 
 ## Proof Boundary
 

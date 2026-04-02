@@ -26,16 +26,19 @@ use mister_smith_config::{
     FrameworkConfig, RuntimeProviderTier, RuntimeRoutingPolicy, RuntimeRoutingProfile,
 };
 use mister_smith_core::{
-    AgentId, AgentType, BranchState, EscalationPolicy, ExecutionNodeId, ExternalDelegationEnvelope,
-    FailureContextCheckpoint, GraphState, GuardTarget, HandoffClarificationRequest, LlmError,
-    NodeState, ProfileFingerprint, RepairDirective, RepairDirectiveAction, SemanticSignal,
-    SemanticSignalKind, StepEvaluationRecord, SupervisionEvidenceView, SupervisionStrategy, TaskId,
-    Tool, ToolCapabilities, ToolError, ToolId, ToolSchema, VerifierVerdict,
+    AgentId, AgentType, BranchState, DurableWorkflowEventKind, DurableWorkflowLifecycleState,
+    DurableWorkflowLifecycleVerb, EffectBoundaryIntentState, EffectBoundaryOutcomeState,
+    EscalationPolicy, ExecutionBranchId, ExecutionNodeId, ExternalDelegationEnvelope,
+    FailureContextCheckpoint, GraphState, GuardTarget, HandoffClarificationRequest,
+    HistoryCompactionMode, LifecycleDecisionOutcome, LlmError, NodeState, ProfileFingerprint,
+    RepairDirective, RepairDirectiveAction, SemanticSignal, SemanticSignalKind,
+    StepEvaluationRecord, SupervisionEvidenceView, SupervisionStrategy, TaskId, Tool,
+    ToolCapabilities, ToolError, ToolId, ToolSchema, VerifierVerdict,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
-    TaskExecutionService, TaskListRequest, TaskStatusView, TaskSubmissionRequest,
-    TaskSubmissionResponse, TaskSummaryView,
+    TaskExecutionService, TaskLifecycleView, TaskListRequest, TaskStatusView,
+    TaskSubmissionRequest, TaskSubmissionResponse, TaskSummaryView,
 };
 use mister_smith_http::websocket::{broadcast_event, WsEvent};
 use mister_smith_llm::{
@@ -48,8 +51,13 @@ use mister_smith_persistence::postgres::migrations::MigrationRunner;
 use mister_smith_persistence::postgres::queries::{self, TaskRecord};
 use mister_smith_persistence::repository::task::TaskRepository;
 use mister_smith_persistence::{
+    effect_boundary_records,
     kv::buckets::{KvBucketManager, AGENT_STATE},
-    KvConfig, PostgresConnection, ProfileFingerprintStore, Repository,
+    latest_history_compaction, lifecycle_decision_history, merge_effect_boundary_metadata,
+    merge_history_compaction_metadata, merge_lifecycle_decision_metadata,
+    merge_workflow_history_metadata, workflow_history, EffectBoundaryRecord,
+    HistoryCompactionRecord, KvConfig, LifecycleDecisionRecord, PostgresConnection,
+    ProfileFingerprintStore, Repository, WorkflowHistoryEventRecord,
 };
 use mister_smith_supervision::SupervisedSystem;
 use mister_smith_transport::{MessageEnvelope, MessagePriority};
@@ -75,6 +83,8 @@ const TASK_INGRESS_REQUEST_SURFACE: &str = "POST /api/v1/tasks";
 const WORKFLOW_TOOL_NAMESPACE: &str = "workflow";
 const WORKFLOW_EXECUTE_STEP_TOOL: &str = "execute_step";
 const DEFAULT_RUNTIME_CASCADE_THRESHOLD: f32 = 0.5;
+const HISTORY_COMPACTION_THRESHOLD: usize = 12;
+const HISTORY_COMPACTION_REPLAY_TAIL: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RuntimeLlmSelection {
@@ -110,6 +120,15 @@ struct RuntimeExecutionModeContext {
     routing_policy: String,
     registered_provider_count: usize,
     budget_root: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct GraphTransitionSnapshot {
+    step_key: String,
+    branch_id: ExecutionBranchId,
+    node_state: NodeState,
+    branch_state: BranchState,
+    graph_state: GraphState,
 }
 
 #[derive(Debug, Clone)]
@@ -651,6 +670,562 @@ fn persist_step_routing_history(metadata: &mut Value, history: &[StepRoutingDeci
     }
 }
 
+fn append_durable_workflow_history_event(
+    metadata: &mut Value,
+    workflow_id: TaskId,
+    event_kind: DurableWorkflowEventKind,
+    branch_id: Option<ExecutionBranchId>,
+    node_id: Option<ExecutionNodeId>,
+    lifecycle_state: Option<DurableWorkflowLifecycleState>,
+    payload: Value,
+) {
+    let replay_position = workflow_history(metadata)
+        .ok()
+        .and_then(|history| {
+            history
+                .last()
+                .map(|event| event.replay_position.saturating_add(1))
+        })
+        .unwrap_or(1);
+    let history_event = WorkflowHistoryEventRecord {
+        workflow_id,
+        event_id: Uuid::new_v4(),
+        replay_position,
+        event_kind,
+        recorded_at: Utc::now(),
+        actor_agent_id: None,
+        source: Some("runtime_task_service".to_string()),
+        branch_id,
+        node_id,
+        lifecycle_state,
+        effect_boundary_id: None,
+        compaction_id: None,
+        parent_event_id: None,
+        payload,
+    };
+    merge_workflow_history_metadata(metadata, &[history_event])
+        .expect("workflow history metadata merge should succeed");
+    maybe_record_history_compaction(metadata, workflow_id);
+}
+
+fn append_effect_boundary_history_event(
+    metadata: &mut Value,
+    workflow_id: TaskId,
+    event_kind: DurableWorkflowEventKind,
+    effect_boundary_id: Uuid,
+    payload: Value,
+) {
+    let replay_position = workflow_history(metadata)
+        .ok()
+        .and_then(|history| {
+            history
+                .last()
+                .map(|event| event.replay_position.saturating_add(1))
+        })
+        .unwrap_or(1);
+    let history_event = WorkflowHistoryEventRecord {
+        workflow_id,
+        event_id: Uuid::new_v4(),
+        replay_position,
+        event_kind,
+        recorded_at: Utc::now(),
+        actor_agent_id: None,
+        source: Some("runtime_task_service".to_string()),
+        branch_id: None,
+        node_id: None,
+        lifecycle_state: None,
+        effect_boundary_id: Some(effect_boundary_id),
+        compaction_id: None,
+        parent_event_id: None,
+        payload,
+    };
+    merge_workflow_history_metadata(metadata, &[history_event])
+        .expect("workflow history metadata merge should succeed");
+    maybe_record_history_compaction(metadata, workflow_id);
+}
+
+pub(crate) fn effect_boundary_idempotency_key(subject: &str, payload: &Value) -> String {
+    let stable_suffix = payload
+        .get("task_id")
+        .or_else(|| payload.get("workflow_id"))
+        .or_else(|| payload.get("step_id"))
+        .map(|value| match value {
+            Value::String(text) => text.clone(),
+            other => other.to_string(),
+        })
+        .unwrap_or_else(|| "workflow".to_string());
+
+    format!("{subject}:{stable_suffix}")
+}
+
+fn effect_boundary_uuid(workflow_id: TaskId, idempotency_key: &str) -> Uuid {
+    let _ = (workflow_id, idempotency_key);
+    Uuid::new_v4()
+}
+
+pub(crate) fn effect_boundary_projection(
+    metadata: &Value,
+    subject: &str,
+    payload: &Value,
+) -> Option<EffectBoundaryRecord> {
+    let idempotency_key = effect_boundary_idempotency_key(subject, payload);
+    effect_boundary_records(metadata)
+        .ok()?
+        .into_iter()
+        .find(|record| record.idempotency_key == idempotency_key)
+}
+
+pub(crate) fn should_skip_effect_boundary_publish(
+    metadata: &Value,
+    subject: &str,
+    payload: &Value,
+) -> bool {
+    effect_boundary_projection(metadata, subject, payload)
+        .is_some_and(|record| record.outcome_state == EffectBoundaryOutcomeState::Completed)
+}
+
+fn merge_effect_boundary_record(
+    metadata: &mut Value,
+    record: EffectBoundaryRecord,
+) -> Result<(), String> {
+    merge_effect_boundary_metadata(metadata, std::slice::from_ref(&record))
+        .map_err(|error| format!("failed to merge effect boundary metadata: {error}"))
+}
+
+fn lifecycle_state_for_graph_state(graph_state: GraphState) -> DurableWorkflowLifecycleState {
+    match graph_state {
+        GraphState::Pending | GraphState::Running | GraphState::Checkpointed => {
+            DurableWorkflowLifecycleState::Active
+        }
+        GraphState::Completed => DurableWorkflowLifecycleState::Completed,
+        GraphState::Failed | GraphState::Aborted => DurableWorkflowLifecycleState::Failed,
+    }
+}
+
+fn workflow_lifecycle_state_from_metadata(
+    metadata: &Value,
+    status: &str,
+) -> DurableWorkflowLifecycleState {
+    let decision_state_and_time = lifecycle_decision_history(metadata)
+        .ok()
+        .and_then(|history| {
+            history
+                .last()
+                .map(|decision| (decision.resulting_state, decision.decided_at))
+        });
+
+    let workflow_state_and_time = workflow_history(metadata)
+        .ok()
+        .and_then(|history| {
+            history
+                .iter()
+                .rev()
+                .find_map(|event| event.lifecycle_state.map(|state| (state, event.recorded_at)))
+        });
+
+    match (decision_state_and_time, workflow_state_and_time) {
+        (Some((decision_state, decision_time)), Some((workflow_state, workflow_time))) => {
+            if workflow_time > decision_time || workflow_state.is_terminal() {
+                workflow_state
+            } else {
+                decision_state
+            }
+        }
+        (Some((decision_state, _)), None) => decision_state,
+        (None, Some((workflow_state, _))) => workflow_state,
+        (None, None) => DurableWorkflowLifecycleState::from_task_status(status),
+    }
+}
+
+fn workflow_lifecycle_state_for_record(record: &TaskRecord) -> DurableWorkflowLifecycleState {
+    workflow_lifecycle_state_from_metadata(&record.metadata, &record.status)
+}
+
+#[derive(Debug, Clone)]
+struct LifecycleTransitionDecision {
+    outcome: LifecycleDecisionOutcome,
+    resulting_state: DurableWorkflowLifecycleState,
+    persisted_status: String,
+    note: Option<String>,
+}
+
+fn lifecycle_transition_decision(
+    current_state: DurableWorkflowLifecycleState,
+    current_status: &str,
+    verb: DurableWorkflowLifecycleVerb,
+) -> LifecycleTransitionDecision {
+    let current_status = current_status.to_string();
+
+    match verb {
+        DurableWorkflowLifecycleVerb::Pause => {
+            if current_state == DurableWorkflowLifecycleState::Paused {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Noop,
+                    resulting_state: DurableWorkflowLifecycleState::Paused,
+                    persisted_status: current_status,
+                    note: Some("workflow is already paused".to_string()),
+                }
+            } else if current_state.is_terminal() {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Noop,
+                    resulting_state: current_state,
+                    persisted_status: current_status,
+                    note: Some(format!(
+                        "workflow is already terminal ({})",
+                        current_state.as_str()
+                    )),
+                }
+            } else {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Deferred,
+                    resulting_state: current_state,
+                    persisted_status: current_status,
+                    note: Some(
+                        "durable pause command recorded; live pause control is not implemented in packet 022"
+                            .to_string(),
+                    ),
+                }
+            }
+        }
+        DurableWorkflowLifecycleVerb::Resume => {
+            if current_state == DurableWorkflowLifecycleState::Paused {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Deferred,
+                    resulting_state: current_state,
+                    persisted_status: current_status,
+                    note: Some(
+                        "durable resume command recorded; replay-backed resume is not implemented in packet 022"
+                            .to_string(),
+                    ),
+                }
+            } else if current_state == DurableWorkflowLifecycleState::Active {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Noop,
+                    resulting_state: DurableWorkflowLifecycleState::Active,
+                    persisted_status: current_status,
+                    note: Some("workflow is already active".to_string()),
+                }
+            } else if current_state.is_terminal() {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Noop,
+                    resulting_state: current_state,
+                    persisted_status: current_status,
+                    note: Some(format!(
+                        "workflow is already terminal ({})",
+                        current_state.as_str()
+                    )),
+                }
+            } else {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Deferred,
+                    resulting_state: current_state,
+                    persisted_status: current_status,
+                    note: Some(format!(
+                        "workflow cannot resume while in {}",
+                        current_state.as_str()
+                    )),
+                }
+            }
+        }
+        DurableWorkflowLifecycleVerb::Cancel => {
+            if current_state == DurableWorkflowLifecycleState::Cancelled {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Noop,
+                    resulting_state: DurableWorkflowLifecycleState::Cancelled,
+                    persisted_status: "cancelled".to_string(),
+                    note: Some("workflow is already cancelled".to_string()),
+                }
+            } else if current_state.is_terminal() {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Noop,
+                    resulting_state: current_state,
+                    persisted_status: current_status,
+                    note: Some(format!(
+                        "workflow is already terminal ({})",
+                        current_state.as_str()
+                    )),
+                }
+            } else {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Deferred,
+                    resulting_state: current_state,
+                    persisted_status: current_status,
+                    note: Some(
+                        "durable cancel command recorded; live cancellation control is not implemented in packet 022"
+                            .to_string(),
+                    ),
+                }
+            }
+        }
+        DurableWorkflowLifecycleVerb::Terminate => {
+            if current_state == DurableWorkflowLifecycleState::Terminated {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Noop,
+                    resulting_state: DurableWorkflowLifecycleState::Terminated,
+                    persisted_status: current_status,
+                    note: Some("workflow is already terminated".to_string()),
+                }
+            } else if current_state.is_terminal() {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Noop,
+                    resulting_state: current_state,
+                    persisted_status: current_status,
+                    note: Some(format!(
+                        "workflow is already terminal ({})",
+                        current_state.as_str()
+                    )),
+                }
+            } else {
+                LifecycleTransitionDecision {
+                    outcome: LifecycleDecisionOutcome::Deferred,
+                    resulting_state: current_state,
+                    persisted_status: current_status,
+                    note: Some(
+                        "durable terminate command recorded; live termination control is not implemented in packet 022"
+                            .to_string(),
+                    ),
+                }
+            }
+        }
+    }
+}
+
+fn latest_branch_states_from_history(history: &[WorkflowHistoryEventRecord]) -> Vec<Value> {
+    let mut branch_states = BTreeMap::<String, Value>::new();
+    for event in history {
+        let Some(branch_key) = event
+            .branch_id
+            .map(|id| id.to_string())
+            .or_else(|| {
+                event
+                    .payload
+                    .get("branch_id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+            })
+            .or_else(|| {
+                event
+                    .payload
+                    .get("branch_anchor_step_key")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+            })
+        else {
+            continue;
+        };
+
+        let branch_state = event
+            .payload
+            .get("branch_state")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let recovery_strategy = event
+            .payload
+            .get("recovery_strategy")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let assigned_agent_ids = event
+            .payload
+            .get("assigned_agent_ids")
+            .cloned()
+            .unwrap_or_else(|| json!([]));
+
+        branch_states.insert(
+            branch_key.clone(),
+            json!({
+                "branch_key": branch_key,
+                "branch_state": branch_state,
+                "recovery_strategy": recovery_strategy,
+                "assigned_agent_ids": assigned_agent_ids,
+            }),
+        );
+    }
+
+    branch_states.into_values().collect()
+}
+
+fn latest_node_states_from_history(history: &[WorkflowHistoryEventRecord]) -> Vec<Value> {
+    let mut node_states = BTreeMap::<String, Value>::new();
+    for event in history {
+        let Some(step_key) = event
+            .payload
+            .get("step_key")
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+            .or_else(|| {
+                event.node_id.map(|id| id.to_string()).or_else(|| {
+                    event
+                        .payload
+                        .get("node_id")
+                        .and_then(Value::as_str)
+                        .map(ToString::to_string)
+                })
+            })
+        else {
+            continue;
+        };
+
+        let node_state = event
+            .payload
+            .get("node_state")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let branch_id = event
+            .branch_id
+            .map(|id| id.to_string())
+            .or_else(|| {
+                event
+                    .payload
+                    .get("branch_id")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+            })
+            .or_else(|| {
+                event
+                    .payload
+                    .get("branch_anchor_step_key")
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+            });
+
+        node_states.insert(
+            step_key.clone(),
+            json!({
+                "step_key": step_key,
+                "node_state": node_state,
+                "branch_id": branch_id,
+            }),
+        );
+    }
+
+    node_states.into_values().collect()
+}
+
+fn maybe_record_history_compaction(metadata: &mut Value, workflow_id: TaskId) {
+    let Ok(history) = workflow_history(metadata) else {
+        return;
+    };
+    if history.len() <= HISTORY_COMPACTION_THRESHOLD
+        || history.len() <= HISTORY_COMPACTION_REPLAY_TAIL
+    {
+        return;
+    }
+
+    let source_end_index = history
+        .len()
+        .saturating_sub(HISTORY_COMPACTION_REPLAY_TAIL + 1);
+    let Some(source_end_event) = history.get(source_end_index) else {
+        return;
+    };
+    let compacted_history = &history[..=source_end_index];
+    let lifecycle_state = compacted_history
+        .iter()
+        .rev()
+        .find_map(|event| event.lifecycle_state)
+        .unwrap_or_else(|| workflow_lifecycle_state_from_metadata(metadata, "running"));
+    let branch_states = latest_branch_states_from_history(compacted_history);
+    let node_states = latest_node_states_from_history(compacted_history);
+    let graph_state = compacted_history
+        .iter()
+        .rev()
+        .find_map(|event| {
+            event
+                .payload
+                .get("graph_state")
+                .cloned()
+                .and_then(|raw| serde_json::from_value::<GraphState>(raw).ok())
+        })
+        .unwrap_or(match lifecycle_state {
+            DurableWorkflowLifecycleState::Completed => GraphState::Completed,
+            DurableWorkflowLifecycleState::Cancelled => GraphState::Aborted,
+            DurableWorkflowLifecycleState::Terminated | DurableWorkflowLifecycleState::Failed => {
+                GraphState::Failed
+            }
+            DurableWorkflowLifecycleState::Active
+            | DurableWorkflowLifecycleState::Paused
+            | DurableWorkflowLifecycleState::Cancelling => GraphState::Running,
+        });
+
+    let snapshot_event_id = Uuid::new_v4();
+    let replay_position = history
+        .last()
+        .map(|event| event.replay_position.saturating_add(1))
+        .unwrap_or(1);
+
+    // Find earliest tail event position that should not be compacted
+    let tail_events = &history[(source_end_index + 1)..];
+    let earliest_tail_position = tail_events
+        .iter()
+        .filter(|event| event.event_kind == DurableWorkflowEventKind::HistoryCompactedReplayTail)
+        .map(|event| event.replay_position)
+        .min();
+
+    let replay_start_position = earliest_tail_position.unwrap_or(replay_position);
+
+    let note = format!(
+        "compacted replay positions {}-{} into snapshot {}, replay starts at {}",
+        history
+            .first()
+            .map(|event| event.replay_position)
+            .unwrap_or(1),
+        source_end_event.replay_position,
+        replay_position,
+        replay_start_position
+    );
+    let compaction_id = Uuid::new_v4();
+    let compaction = HistoryCompactionRecord {
+        workflow_id,
+        compaction_id,
+        mode: HistoryCompactionMode::ReplayPointer,
+        source_replay_start: history
+            .first()
+            .map(|event| event.replay_position)
+            .unwrap_or(1),
+        source_replay_end: source_end_event.replay_position,
+        replay_start_position,
+        replacement_event_id: Some(snapshot_event_id),
+        preserved_lineage_note: note.clone(),
+        recorded_at: Utc::now(),
+    };
+    let snapshot_event = WorkflowHistoryEventRecord {
+        workflow_id,
+        event_id: snapshot_event_id,
+        replay_position,
+        event_kind: DurableWorkflowEventKind::HistoryCompacted,
+        recorded_at: compaction.recorded_at,
+        actor_agent_id: None,
+        source: Some("runtime_task_service.compaction".to_string()),
+        branch_id: None,
+        node_id: None,
+        lifecycle_state: Some(lifecycle_state),
+        effect_boundary_id: None,
+        compaction_id: Some(compaction_id),
+        parent_event_id: history.last().map(|event| event.event_id),
+        payload: json!({
+            "graph_state": graph_state,
+            "lifecycle_state": lifecycle_state,
+            "branch_states": branch_states,
+            "node_states": node_states,
+            "source_replay_start": compaction.source_replay_start,
+            "source_replay_end": compaction.source_replay_end,
+            "replay_start_position": replay_position,
+            "preserved_lineage_note": note,
+        }),
+    };
+
+    merge_history_compaction_metadata(metadata, std::slice::from_ref(&compaction))
+        .expect("history compaction metadata merge should succeed");
+    merge_workflow_history_metadata(metadata, std::slice::from_ref(&snapshot_event))
+        .expect("workflow history metadata merge should succeed");
+}
+
+fn retain_replay_history_after_compaction(
+    history: &mut Vec<WorkflowHistoryEventRecord>,
+    compaction: &HistoryCompactionRecord,
+) {
+    history.retain(|event| event.replay_position > compaction.source_replay_end);
+}
+
 struct TerminalResultViews {
     aggregated_result: Value,
     final_result: Value,
@@ -833,6 +1408,7 @@ impl RuntimeTaskService {
     pub(crate) async fn autonomy_status(&self, workflow_id: TaskId) -> Option<AutonomyStatusView> {
         if let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id) {
             if let Ok(Some(record)) = queries::find_task(&self.pool, *workflow_id.as_ref()).await {
+                crate::autonomy::enrich_lifecycle_state(&mut view, &record.metadata);
                 crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
                 crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
                 crate::autonomy::enrich_result_preview(
@@ -848,6 +1424,18 @@ impl RuntimeTaskService {
             .await
             .ok()
             .flatten()?;
+        self.restore_execution_graph_from_record(&record);
+        if let Some(mut view) = self.orchestrator.autonomy_status(&workflow_id) {
+            crate::autonomy::enrich_lifecycle_state(&mut view, &record.metadata);
+            crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
+            crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
+            crate::autonomy::enrich_result_preview(
+                &mut view,
+                &record.metadata,
+                record.result.as_ref(),
+            );
+            return Some(view);
+        }
         recover_persisted_autonomy_status(&record)
     }
 
@@ -864,6 +1452,42 @@ impl RuntimeTaskService {
             .collect()
     }
 
+    fn restore_execution_graph_from_record(&self, record: &TaskRecord) -> bool {
+        let workflow_id = TaskId::from_uuid(record.task_id);
+        if self.orchestrator.execution_graph(&workflow_id).is_some() {
+            return false;
+        }
+
+        let Some(execution_plan) = record.metadata.get("execution_plan") else {
+            return false;
+        };
+        let Ok(mut history) = workflow_history(&record.metadata) else {
+            return false;
+        };
+        if history.is_empty() {
+            return false;
+        }
+        if let Ok(Some(compaction)) = latest_history_compaction(&record.metadata) {
+            retain_replay_history_after_compaction(&mut history, &compaction);
+        }
+        if history.is_empty() {
+            return false;
+        }
+
+        let Ok(graph) = compile_execution_plan(workflow_id, execution_plan) else {
+            return false;
+        };
+        let Ok(graph) = self
+            .orchestrator
+            .replay_execution_graph_from_history(graph, &history)
+        else {
+            return false;
+        };
+
+        self.orchestrator.register_execution_graph(graph);
+        true
+    }
+
     pub(crate) async fn recover_orphaned_workflow(
         &self,
         workflow_id: TaskId,
@@ -874,6 +1498,8 @@ impl RuntimeTaskService {
         else {
             return Ok(None);
         };
+
+        self.restore_execution_graph_from_record(&record);
 
         if !should_recover_orphaned_workflow(
             &record,
@@ -948,6 +1574,18 @@ impl RuntimeTaskService {
             &mut metadata,
             "final_result",
             result_views.final_result.clone(),
+        );
+        append_durable_workflow_history_event(
+            &mut metadata,
+            workflow_id,
+            DurableWorkflowEventKind::LifecycleChanged,
+            None,
+            None,
+            Some(DurableWorkflowLifecycleState::Failed),
+            json!({
+                "graph_state": GraphState::Failed,
+                "error": message,
+            }),
         );
         self.capture_autonomy_status_metadata(
             workflow_id,
@@ -1097,6 +1735,19 @@ impl RuntimeTaskService {
         .await?;
         graph.state = GraphState::Running;
         self.orchestrator.register_execution_graph(graph.clone());
+        append_durable_workflow_history_event(
+            &mut metadata,
+            workflow_id,
+            DurableWorkflowEventKind::LifecycleChanged,
+            None,
+            None,
+            Some(DurableWorkflowLifecycleState::Active),
+            json!({
+                "graph_state": GraphState::Running,
+                "node_count": graph.nodes.len(),
+                "branch_count": graph.branches.len(),
+            }),
+        );
         self.capture_autonomy_status_metadata(workflow_id, &mut metadata, None);
         self.update_task_metadata(workflow_id, metadata.clone())
             .await?;
@@ -1188,7 +1839,24 @@ impl RuntimeTaskService {
                         .map_err(|error| {
                             format!("failed to start scheduled task {task_id}: {error}")
                         })?;
-                    self.transition_graph(workflow_id, task_id, NodeState::Running);
+                    if let Some(transition) =
+                        self.transition_graph(workflow_id, task_id, NodeState::Running)
+                    {
+                        append_durable_workflow_history_event(
+                            &mut metadata,
+                            workflow_id,
+                            DurableWorkflowEventKind::NodeStateChanged,
+                            Some(transition.branch_id),
+                            Some(ExecutionNodeId::from_uuid(*task_id.as_ref())),
+                            Some(lifecycle_state_for_graph_state(transition.graph_state)),
+                            json!({
+                                "step_key": transition.step_key,
+                                "node_state": transition.node_state,
+                                "branch_state": transition.branch_state,
+                                "graph_state": transition.graph_state,
+                            }),
+                        );
+                    }
 
                     let task = self.orchestrator.scheduler().get(&task_id).ok_or_else(|| {
                         format!("scheduled task {task_id} disappeared before execution")
@@ -1214,6 +1882,10 @@ impl RuntimeTaskService {
                     });
                 }
             }
+
+            self.capture_autonomy_status_metadata(workflow_id, &mut metadata, None);
+            self.update_task_metadata(workflow_id, metadata.clone())
+                .await?;
 
             let mut join_set = JoinSet::new();
             for prepared in prepared_decisions {
@@ -1340,6 +2012,17 @@ impl RuntimeTaskService {
             result_views.final_result.clone(),
         );
         self.transition_workflow_complete(workflow_id);
+        append_durable_workflow_history_event(
+            &mut metadata,
+            workflow_id,
+            DurableWorkflowEventKind::LifecycleChanged,
+            None,
+            None,
+            Some(DurableWorkflowLifecycleState::Completed),
+            json!({
+                "graph_state": GraphState::Completed,
+            }),
+        );
         self.capture_autonomy_status_metadata(
             workflow_id,
             &mut metadata,
@@ -1354,14 +2037,23 @@ impl RuntimeTaskService {
             Some(Utc::now()),
         )
         .await?;
-        self.publish_event(
-            coordinator_id,
-            "workflow.completed",
-            "workflow.completed",
-            workflow_id,
-            result_views.final_result,
-        )
-        .await?;
+        if let Err(error) = self
+            .publish_effect_boundary_event(
+                coordinator_id,
+                workflow_id,
+                &mut metadata,
+                "workflow.completed",
+                "workflow.completed",
+                result_views.final_result,
+            )
+            .await
+        {
+            warn!(
+                workflow_id = %workflow_id,
+                error = %error,
+                "effect boundary event publish failed after workflow completion; workflow state preserved"
+            );
+        }
 
         info!(
             workflow_id = %workflow_id,
@@ -1743,6 +2435,80 @@ impl RuntimeTaskService {
         self.spawn_workflow_runner(workflow_id, request)
     }
 
+    pub(crate) async fn apply_task_lifecycle(
+        &self,
+        workflow_id: TaskId,
+        verb: DurableWorkflowLifecycleVerb,
+        reason: Option<String>,
+    ) -> Result<Option<TaskLifecycleView>, String> {
+        let Some(record) = self.find_task_record(workflow_id).await? else {
+            return Ok(None);
+        };
+
+        let current_state = workflow_lifecycle_state_for_record(&record);
+        let decision = lifecycle_transition_decision(current_state, &record.status, verb);
+        let decided_at = Utc::now();
+        let mut metadata = record.metadata.clone();
+        let command_id = Uuid::new_v4();
+        let lifecycle_record = LifecycleDecisionRecord {
+            workflow_id,
+            command_id,
+            verb,
+            requested_by_agent_id: None,
+            source: Some("http_task_lifecycle".to_string()),
+            requested_at: decided_at,
+            reason,
+            outcome: decision.outcome,
+            resulting_state: decision.resulting_state,
+            decided_at,
+            note: decision.note.clone(),
+        };
+
+        merge_lifecycle_decision_metadata(&mut metadata, std::slice::from_ref(&lifecycle_record))
+            .map_err(|error| format!("failed to merge lifecycle decision metadata: {error}"))?;
+        append_durable_workflow_history_event(
+            &mut metadata,
+            workflow_id,
+            DurableWorkflowEventKind::LifecycleChanged,
+            None,
+            None,
+            Some(decision.resulting_state),
+            json!({
+                "command_id": command_id,
+                "verb": verb,
+                "outcome": decision.outcome,
+                "status": decision.persisted_status,
+                "note": decision.note,
+            }),
+        );
+        self.capture_autonomy_status_metadata(workflow_id, &mut metadata, record.result.as_ref());
+
+        let completed_at = if decision.resulting_state.is_terminal() {
+            record.completed_at.or(Some(decided_at))
+        } else {
+            record.completed_at
+        };
+        // TODO: Replace whole-document write with DB-level JSONB merge to avoid clobbering concurrent updates
+        // Current implementation performs read-modify-write which can race with concurrent step/effect updates
+        self.update_root_record(
+            workflow_id,
+            &decision.persisted_status,
+            metadata,
+            record.result,
+            record.started_at,
+            completed_at,
+        )
+        .await?;
+
+        Ok(Some(TaskLifecycleView {
+            task_id: workflow_id,
+            status: decision.persisted_status,
+            lifecycle_state: decision.resulting_state,
+            outcome: decision.outcome,
+            note: decision.note,
+        }))
+    }
+
     pub(crate) async fn delete_workflow_record(&self, workflow_id: TaskId) -> Result<(), String> {
         sqlx::query(
             r#"
@@ -1889,11 +2655,12 @@ impl RuntimeTaskService {
             )
             .await;
         let _ = self
-            .publish_event(
+            .publish_effect_boundary_event(
                 coordinator_id,
-                "workflow.failed",
-                "workflow.failed",
                 workflow_id,
+                &mut metadata,
+                "workflow.failed",
+                "workflow.failed",
                 json!({
                     "workflow_id": workflow_id,
                     "provider_kind": self.provider_kind_name(),
@@ -1938,6 +2705,123 @@ impl RuntimeTaskService {
         Ok(())
     }
 
+    async fn publish_effect_boundary_event(
+        &self,
+        source_agent_id: AgentId,
+        workflow_id: TaskId,
+        metadata: &mut Value,
+        subject: &str,
+        message_type: &str,
+        payload: Value,
+    ) -> Result<(), String> {
+        if should_skip_effect_boundary_publish(metadata, subject, &payload) {
+            return Ok(());
+        }
+
+        let idempotency_key = effect_boundary_idempotency_key(subject, &payload);
+        let existing = effect_boundary_projection(metadata, subject, &payload);
+        let effect_boundary_id = existing
+            .as_ref()
+            .map(|record| record.effect_boundary_id)
+            .unwrap_or_else(|| effect_boundary_uuid(workflow_id, &idempotency_key));
+        let intent_recorded_at = existing
+            .as_ref()
+            .map(|record| record.intent_recorded_at)
+            .unwrap_or_else(Utc::now);
+
+        if existing.is_none() {
+            merge_effect_boundary_record(
+                metadata,
+                EffectBoundaryRecord {
+                    workflow_id,
+                    effect_boundary_id,
+                    idempotency_key: idempotency_key.clone(),
+                    intent_state: EffectBoundaryIntentState::Recorded,
+                    outcome_state: EffectBoundaryOutcomeState::CompletionUnknown,
+                    intent_recorded_at,
+                    outcome_recorded_at: None,
+                    history_event_id: None,
+                    note: Some(format!(
+                        "effect intent recorded for {subject}; awaiting durable completion"
+                    )),
+                },
+            )?;
+            append_effect_boundary_history_event(
+                metadata,
+                workflow_id,
+                DurableWorkflowEventKind::EffectIntentRecorded,
+                effect_boundary_id,
+                json!({
+                    "subject": subject,
+                    "message_type": message_type,
+                    "idempotency_key": idempotency_key,
+                    "intent_state": EffectBoundaryIntentState::Recorded,
+                    "outcome_state": EffectBoundaryOutcomeState::CompletionUnknown,
+                }),
+            );
+            self.update_task_metadata(workflow_id, metadata.clone())
+                .await?;
+        }
+
+        match self
+            .publish_event(source_agent_id, subject, message_type, workflow_id, payload)
+            .await
+        {
+            Ok(()) => {
+                merge_effect_boundary_record(
+                    metadata,
+                    EffectBoundaryRecord {
+                        workflow_id,
+                        effect_boundary_id,
+                        idempotency_key: idempotency_key.clone(),
+                        intent_state: EffectBoundaryIntentState::Recorded,
+                        outcome_state: EffectBoundaryOutcomeState::Completed,
+                        intent_recorded_at,
+                        outcome_recorded_at: Some(Utc::now()),
+                        history_event_id: None,
+                        note: Some(format!("effect completion recorded for {subject}")),
+                    },
+                )?;
+                append_effect_boundary_history_event(
+                    metadata,
+                    workflow_id,
+                    DurableWorkflowEventKind::EffectOutcomeRecorded,
+                    effect_boundary_id,
+                    json!({
+                        "subject": subject,
+                        "message_type": message_type,
+                        "idempotency_key": idempotency_key,
+                        "outcome_state": EffectBoundaryOutcomeState::Completed,
+                    }),
+                );
+                self.update_task_metadata(workflow_id, metadata.clone())
+                    .await?;
+                Ok(())
+            }
+            Err(error) => {
+                merge_effect_boundary_record(
+                    metadata,
+                    EffectBoundaryRecord {
+                        workflow_id,
+                        effect_boundary_id,
+                        idempotency_key,
+                        intent_state: EffectBoundaryIntentState::Recorded,
+                        outcome_state: EffectBoundaryOutcomeState::CompletionUnknown,
+                        intent_recorded_at,
+                        outcome_recorded_at: None,
+                        history_event_id: None,
+                        note: Some(format!(
+                            "effect completion still unknown for {subject}: {error}"
+                        )),
+                    },
+                )?;
+                self.update_task_metadata(workflow_id, metadata.clone())
+                    .await?;
+                Err(error)
+            }
+        }
+    }
+
     async fn record_completed_step(
         &self,
         workflow_id: TaskId,
@@ -1955,7 +2839,24 @@ impl RuntimeTaskService {
                     completed_step.task_id
                 )
             })?;
-        self.transition_graph(workflow_id, completed_step.task_id, NodeState::Completed);
+        if let Some(transition) =
+            self.transition_graph(workflow_id, completed_step.task_id, NodeState::Completed)
+        {
+            append_durable_workflow_history_event(
+                metadata,
+                workflow_id,
+                DurableWorkflowEventKind::NodeStateChanged,
+                Some(transition.branch_id),
+                Some(ExecutionNodeId::from_uuid(*completed_step.task_id.as_ref())),
+                Some(lifecycle_state_for_graph_state(transition.graph_state)),
+                json!({
+                    "step_key": transition.step_key,
+                    "node_state": transition.node_state,
+                    "branch_state": transition.branch_state,
+                    "graph_state": transition.graph_state,
+                }),
+            );
+        }
 
         let step_result = build_step_result_payload(
             completed_step.task_id,
@@ -1974,14 +2875,24 @@ impl RuntimeTaskService {
         self.capture_autonomy_status_metadata(workflow_id, metadata, None);
         self.update_task_metadata(workflow_id, metadata.clone())
             .await?;
-        self.publish_event(
-            coordinator_id,
-            "workflow.step.completed",
-            "workflow.step.completed",
-            workflow_id,
-            step_result,
-        )
-        .await
+        if let Err(error) = self
+            .publish_effect_boundary_event(
+                coordinator_id,
+                workflow_id,
+                metadata,
+                "workflow.step.completed",
+                "workflow.step.completed",
+                step_result,
+            )
+            .await
+        {
+            warn!(
+                workflow_id = %workflow_id,
+                error = %error,
+                "effect boundary event publish failed after step completion; step state preserved"
+            );
+        }
+        Ok(())
     }
 
     async fn record_failed_step(
@@ -2018,7 +2929,24 @@ impl RuntimeTaskService {
                     failed_step.task_id
                 )
             })?;
-        self.transition_graph(workflow_id, failed_step.task_id, NodeState::Failed);
+        if let Some(transition) =
+            self.transition_graph(workflow_id, failed_step.task_id, NodeState::Failed)
+        {
+            append_durable_workflow_history_event(
+                metadata,
+                workflow_id,
+                DurableWorkflowEventKind::NodeStateChanged,
+                Some(transition.branch_id),
+                Some(ExecutionNodeId::from_uuid(*failed_step.task_id.as_ref())),
+                Some(lifecycle_state_for_graph_state(transition.graph_state)),
+                json!({
+                    "step_key": transition.step_key,
+                    "node_state": transition.node_state,
+                    "branch_state": transition.branch_state,
+                    "graph_state": transition.graph_state,
+                }),
+            );
+        }
         put_metadata(
             metadata,
             "last_step_failure",
@@ -2044,24 +2972,25 @@ impl RuntimeTaskService {
         .await
     }
 
-    fn transition_graph(&self, workflow_id: TaskId, task_id: TaskId, node_state: NodeState) {
-        let Some(mut graph) = self.orchestrator.execution_graph(&workflow_id) else {
-            return;
-        };
+    fn transition_graph(
+        &self,
+        workflow_id: TaskId,
+        task_id: TaskId,
+        node_state: NodeState,
+    ) -> Option<GraphTransitionSnapshot> {
+        let mut graph = self.orchestrator.execution_graph(&workflow_id)?;
 
         let node_id = mister_smith_core::ExecutionNodeId::from_uuid(*task_id.as_ref());
-        let branch_id = graph
+        let transition = graph
             .nodes
             .iter_mut()
             .find(|node| node.node_id == node_id)
             .map(|node| {
                 node.state = node_state;
-                node.branch_id
+                (node.step_key.clone(), node.branch_id)
             });
 
-        let Some(branch_id) = branch_id else {
-            return;
-        };
+        let (step_key, branch_id) = transition?;
 
         if let Some(branch) = graph
             .branches
@@ -2104,7 +3033,19 @@ impl RuntimeTaskService {
             GraphState::Running
         };
 
+        let snapshot = GraphTransitionSnapshot {
+            step_key,
+            branch_id,
+            node_state,
+            branch_state: graph
+                .branches
+                .iter()
+                .find(|branch| branch.branch_id == branch_id)
+                .map_or(BranchState::Pending, |branch| branch.state),
+            graph_state: graph.state,
+        };
         self.orchestrator.register_execution_graph(graph);
+        Some(snapshot)
     }
 
     fn transition_workflow_complete(&self, workflow_id: TaskId) {
@@ -2133,6 +3074,7 @@ impl RuntimeTaskService {
         }) else {
             return;
         };
+        crate::autonomy::enrich_lifecycle_state(&mut view, metadata);
         crate::autonomy::enrich_session_linkage(&mut view, metadata);
         crate::autonomy::enrich_accepted_task_ingress_continuity(&mut view, metadata);
         crate::autonomy::enrich_step_routing_history(&mut view, metadata);
@@ -2324,9 +3266,19 @@ impl TaskExecutionService for RuntimeTaskService {
         let record = self.find_task_record(task_id).await?;
         Ok(record.map(|record| TaskStatusView {
             task_id: TaskId::from_uuid(record.task_id),
-            status: record.status,
+            status: record.status.clone(),
+            lifecycle_state: workflow_lifecycle_state_for_record(&record),
             result: record.result,
         }))
+    }
+
+    async fn apply_task_lifecycle(
+        &self,
+        task_id: TaskId,
+        verb: DurableWorkflowLifecycleVerb,
+        reason: Option<String>,
+    ) -> Result<Option<TaskLifecycleView>, String> {
+        RuntimeTaskService::apply_task_lifecycle(self, task_id, verb, reason).await
     }
 
     async fn list_tasks(&self, request: TaskListRequest) -> Result<Vec<TaskSummaryView>, String> {
@@ -2347,7 +3299,7 @@ impl TaskExecutionService for RuntimeTaskService {
     }
 }
 
-fn build_task_summary_view(record: &TaskRecord) -> TaskSummaryView {
+pub(crate) fn build_task_summary_view(record: &TaskRecord) -> TaskSummaryView {
     let result_preview =
         recover_persisted_autonomy_status(record).and_then(|view| view.result_preview);
     let proof_outcome = result_preview
@@ -2358,6 +3310,7 @@ fn build_task_summary_view(record: &TaskRecord) -> TaskSummaryView {
     TaskSummaryView {
         task_id: TaskId::from_uuid(record.task_id),
         status: record.status.clone(),
+        lifecycle_state: workflow_lifecycle_state_for_record(record),
         priority: record.priority,
         description: workflow_description(record),
         created_at: record.created_at,
@@ -2511,6 +3464,7 @@ fn recover_persisted_autonomy_status(record: &TaskRecord) -> Option<AutonomyStat
         &record.metadata,
         record.result.as_ref(),
     )?;
+    crate::autonomy::enrich_lifecycle_state(&mut view, &record.metadata);
     crate::autonomy::enrich_session_linkage(&mut view, &record.metadata);
     crate::autonomy::enrich_accepted_task_ingress_continuity(&mut view, &record.metadata);
     crate::autonomy::enrich_step_routing_history(&mut view, &record.metadata);
@@ -2526,6 +3480,7 @@ fn mark_persisted_autonomy_status_failed(metadata: &mut Value) {
         return;
     };
 
+    view.lifecycle_state = Some(DurableWorkflowLifecycleState::Failed);
     view.graph.state = GraphState::Failed;
     for branch in &mut view.branches {
         if !matches!(branch.state, BranchState::Completed | BranchState::Failed) {
@@ -2764,6 +3719,7 @@ mod tests {
             turn_index: None,
             coordinator_agent_id: None,
             resume_provenance: None,
+            lifecycle_state: Some(lifecycle_state_for_graph_state(graph_state)),
             graph: ExecutionGraphSummary {
                 graph_id,
                 workflow_id,
@@ -4225,6 +5181,82 @@ mod tests {
         record.started_at = Some(Utc::now() - chrono::Duration::minutes(4));
 
         assert!(!should_recover_orphaned_workflow(&record, Utc::now(), true,));
+    }
+
+    #[test]
+    fn retain_replay_history_after_compaction_keeps_tail_and_snapshot_events() {
+        let workflow_id = TaskId::new();
+        let mut history = vec![
+            WorkflowHistoryEventRecord {
+                workflow_id,
+                event_id: Uuid::new_v4(),
+                replay_position: 8,
+                event_kind: DurableWorkflowEventKind::NodeStateChanged,
+                recorded_at: Utc::now(),
+                actor_agent_id: None,
+                source: Some("test".to_string()),
+                branch_id: None,
+                node_id: None,
+                lifecycle_state: None,
+                effect_boundary_id: None,
+                compaction_id: None,
+                parent_event_id: None,
+                payload: json!({}),
+            },
+            WorkflowHistoryEventRecord {
+                workflow_id,
+                event_id: Uuid::new_v4(),
+                replay_position: 9,
+                event_kind: DurableWorkflowEventKind::NodeStateChanged,
+                recorded_at: Utc::now(),
+                actor_agent_id: None,
+                source: Some("test".to_string()),
+                branch_id: None,
+                node_id: None,
+                lifecycle_state: None,
+                effect_boundary_id: None,
+                compaction_id: None,
+                parent_event_id: None,
+                payload: json!({}),
+            },
+            WorkflowHistoryEventRecord {
+                workflow_id,
+                event_id: Uuid::new_v4(),
+                replay_position: 10,
+                event_kind: DurableWorkflowEventKind::HistoryCompacted,
+                recorded_at: Utc::now(),
+                actor_agent_id: None,
+                source: Some("test".to_string()),
+                branch_id: None,
+                node_id: None,
+                lifecycle_state: None,
+                effect_boundary_id: None,
+                compaction_id: None,
+                parent_event_id: None,
+                payload: json!({}),
+            },
+        ];
+        let compaction = HistoryCompactionRecord {
+            workflow_id,
+            compaction_id: Uuid::new_v4(),
+            mode: HistoryCompactionMode::ReplayPointer,
+            source_replay_start: 1,
+            source_replay_end: 8,
+            replay_start_position: 10,
+            replacement_event_id: None,
+            preserved_lineage_note: "test".to_string(),
+            recorded_at: Utc::now(),
+        };
+
+        retain_replay_history_after_compaction(&mut history, &compaction);
+
+        assert_eq!(
+            history
+                .iter()
+                .map(|event| event.replay_position)
+                .collect::<Vec<_>>(),
+            vec![9, 10]
+        );
     }
 }
 
@@ -5909,6 +6941,58 @@ mod runtime_plan_tests {
         persist_step_routing_history(&mut metadata, &history);
 
         assert_eq!(metadata["step_routing_history"], json!(history));
+    }
+
+    #[test]
+    fn append_durable_workflow_history_event_tracks_monotonic_replay_positions() {
+        let workflow_id = TaskId::new();
+        let branch_id = ExecutionBranchId::new();
+        let node_id = ExecutionNodeId::new();
+        let mut metadata = json!({});
+
+        append_durable_workflow_history_event(
+            &mut metadata,
+            workflow_id,
+            DurableWorkflowEventKind::LifecycleChanged,
+            None,
+            None,
+            Some(DurableWorkflowLifecycleState::Active),
+            json!({
+                "graph_state": GraphState::Running,
+            }),
+        );
+        append_durable_workflow_history_event(
+            &mut metadata,
+            workflow_id,
+            DurableWorkflowEventKind::NodeStateChanged,
+            Some(branch_id),
+            Some(node_id),
+            Some(DurableWorkflowLifecycleState::Active),
+            json!({
+                "step_key": "draft-outline",
+                "node_state": NodeState::Running,
+                "branch_state": BranchState::Running,
+                "graph_state": GraphState::Running,
+            }),
+        );
+
+        let history = workflow_history(&metadata).expect("history should deserialize");
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].replay_position, 1);
+        assert_eq!(history[1].replay_position, 2);
+        assert_eq!(
+            history[0].event_kind,
+            DurableWorkflowEventKind::LifecycleChanged
+        );
+        assert_eq!(
+            history[1].event_kind,
+            DurableWorkflowEventKind::NodeStateChanged
+        );
+        assert_eq!(
+            history[1].payload["step_key"],
+            json!("draft-outline"),
+            "stable step keys should be persisted for replay"
+        );
     }
 
     #[test]

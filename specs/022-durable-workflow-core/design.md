@@ -32,23 +32,32 @@ This file captures the cross-crate design choices that are too important to leav
 - Canonical durable records should describe accepted workflow progress, lifecycle changes, and
   lineage needed for replay.
 - Derived operator-facing views should stay projections over that history, not rival truth stores.
+- The first packet-022 pass stores canonical accepted history in SQL-backed workflow metadata, with
+  KV used only as replay assist or cache where it adds operator or runtime value.
 
 ### Lifecycle
 
 - Operator-facing lifecycle verbs should map to one durable meaning before any surface-specific
   formatting is applied.
 - Task, session, and autonomy views should project the same durable lifecycle result.
+- The first slice supports `pause`, `resume`, `cancel`, and `terminate`.
+- `reset/rewind` is explicitly deferred and must surface as deferred or unsupported if referenced.
 
 ### Effect Boundary
 
 - Effect intent and effect completion must be durably distinct.
 - Replay can reuse durable completion evidence, but it cannot silently convert missing completion
   into success.
+- The first slice keeps effect intent and outcome in persistence-owned records attached to the
+  workflow record, keyed by workflow plus effect boundary identity and idempotency reference.
+- JetStream stays transport and replay assist, not the effect source of truth.
 
 ### Compaction
 
 - The first compaction slice should bound replay cost without erasing explainable lineage.
-- The exact first mechanism is still an open first-slice decision.
+- The first compaction mechanism is one lineage-preserving compaction record stored with the
+  workflow history, including source range, replay start pointer, and preserved lineage note.
+- This packet does not add a broader snapshot platform or storage redesign.
 
 ## Candidate Write Seams
 
@@ -64,10 +73,22 @@ This file captures the cross-crate design choices that are too important to leav
 
 ## First-Slice Narrowing Decisions
 
-- the exact durable event shape
-- the first compaction mechanism
-- the first placement of the intent/effect boundary across PostgreSQL and JetStream
-- the first replay-regression fixture model
+- Canonical history event shape:
+  `workflow_id`, `event_id`, monotonic replay position, `event_type`, `recorded_at`, optional
+  actor or source identity, replay payload, and optional lineage, lifecycle, effect, or
+  compaction references.
+- Supported lifecycle verbs now:
+  `pause`, `resume`, `cancel`, `terminate`.
+  `reset/rewind` stays deferred.
+- The first slice records lifecycle decisions durably and projects `applied`, `noop`, or
+  `deferred` outcomes. It does not claim live runner pause, resume, cancel, or terminate control
+  just by recording those decisions.
+- Effect boundary placement:
+  SQL-backed persistence-owned intent and outcome records keyed by workflow and effect identity
+  plus idempotency reference, with KV optional as replay assist.
+- Replay-regression fixtures:
+  deterministic crate-level fixtures for raw history replay, repeated lifecycle commands,
+  completed-effect replay, and post-compaction replay.
 
 ## Kickoff Use
 

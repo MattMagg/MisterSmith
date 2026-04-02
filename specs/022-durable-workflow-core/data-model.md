@@ -4,7 +4,8 @@
 
 - This model is the active data-model authority for packet `022`.
 - Entity names and required relationships are intentionally more stable than exact field lists.
-- Any field or enum that is still open gets resolved in the first bounded implementation slice.
+- Packet `022` now freezes the first-slice event shape, lifecycle verbs, effect-boundary
+  placement, and compaction posture.
 
 ## Entities
 
@@ -16,12 +17,16 @@
 
 - workflow identity
 - event identity
+- replay position
 - event type
 - ordering or causality reference
 - recorded time
 - actor or source reference when relevant
 - payload with the minimum durable state needed for replay
 - optional parent or lineage reference
+- optional effect-boundary reference
+- optional lifecycle-decision reference
+- optional compaction reference
 
 **Relationships**:
 
@@ -59,6 +64,7 @@
 - outcome state
 - idempotency or dedup reference
 - operator-visible notes or reason when outcome is unknown
+- recorded time
 
 **Relationships**:
 
@@ -77,6 +83,17 @@
 - requested by
 - requested time
 - optional reason or operator note
+
+**Supported verbs in packet `022`**:
+
+- `pause`
+- `resume`
+- `cancel`
+- `terminate`
+
+**Deferred verbs**:
+
+- `reset/rewind`
 
 ### LifecycleDecision
 
@@ -117,7 +134,7 @@ implementation slice without reopening packet scope.
 - terminated
 - completed
 - failed
-- reset or rewind posture if explicitly supported
+- reset or rewind posture is deferred in the first slice
 
 ### Effect-boundary group
 
@@ -125,13 +142,13 @@ implementation slice without reopening packet scope.
 - completion unknown
 - completed
 - failed
-- compensated or intentionally not retried if that posture is later frozen
+- compensated or intentionally not retried remains out of first-slice scope
 
 ### Compaction group
 
 - not compacted
 - compacted with replay pointer
-- compacted with preserved lineage reference
+- compacted with preserved lineage note
 
 ## Invariants
 

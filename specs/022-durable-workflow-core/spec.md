@@ -56,17 +56,27 @@ This packet stays strictly inside that seam. It does not cover:
 - Q: Which adjacent areas are deliberately deferred out of this packet? → A: Coordinator-runtime
   expansion, interoperability, strong coordination, and any new live-default claim.
 
-## Open Design Questions For The First Slice
+## First-Slice Decisions
 
-These questions are explicit on purpose. They should be resolved in the first bounded
-implementation slice instead of being hidden behind fake certainty.
+These choices are now frozen for the first packet-022 implementation pass on current `main`.
 
-- What is the exact repo-native shape of one durable workflow history event?
-- What is the first bounded compaction mechanism: rollup event, snapshot record, KV pointer, or a
-  hybrid?
-- Where should the first intent/effect boundary live across PostgreSQL, JetStream, and existing
-  runtime ownership seams?
-- What replay-regression fixture model should the repo use to keep history-version changes honest?
+- **Durable history event shape**: one canonical `WorkflowHistoryEvent` carries
+  `workflow_id`, `event_id`, a monotonic replay position, `event_type`, `recorded_at`, optional
+  actor or source identity, the minimum replay payload, and optional lineage, lifecycle, effect,
+  or compaction references.
+- **Lifecycle verbs in scope now**: `pause`, `resume`, `cancel`, and `terminate`.
+  `reset/rewind` stays explicitly deferred in this packet and must surface as deferred or
+  unsupported instead of being implied.
+- **Effect boundary placement**: durable effect intent and durable effect outcome are
+  persistence-owned records attached to the SQL-backed workflow record, keyed by workflow and
+  effect boundary identity plus an idempotency or dedup reference. JetStream may assist replay,
+  but it is not the source of effect truth.
+- **First compaction mechanism**: one lineage-preserving `HistoryCompactionRecord` in durable task
+  metadata defines the compacted source range, a replay start pointer, and a preserved lineage
+  note. This packet does not introduce a broader snapshot or storage redesign.
+- **Replay-regression posture**: packet `022` uses deterministic crate-level fixtures for raw
+  history replay, repeated lifecycle commands, completed-effect replay, and post-compaction replay.
+  No new live proof claim is made unless a real runtime rerun is executed.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -129,9 +139,14 @@ autonomy views with one consistent meaning for the selected lifecycle verb and r
 **Acceptance Scenarios**:
 
 1. **Given** a workflow is in a resumable durable state, **When** an operator applies a lifecycle
-   command, **Then** task, session, and autonomy surfaces agree on the resulting state and meaning.
+   command, **Then** task, session, and autonomy surfaces agree on the resulting state, outcome,
+   and meaning.
 2. **Given** the same lifecycle command is issued more than once, **When** the command is handled,
    **Then** the durable result remains stable instead of oscillating or duplicating state changes.
+
+**First-slice note**: Packet `022` records lifecycle decisions durably and may project
+`applied`, `noop`, or `deferred` outcomes. It does not claim live runner pause, resume, cancel, or
+terminate control just by recording those decisions.
 
 ---
 
@@ -175,8 +190,8 @@ once and still resume correctly from the compacted lineage.
   transitions from external side effects.
 - **FR-005**: System MUST record enough durable effect intent and effect completion state to tell
   the difference between "not started", "completion unknown", and "already completed" outcomes.
-- **FR-006**: System MUST freeze one explicit lifecycle vocabulary for pause, resume, cancel,
-  terminate, and reset or rewind posture, including any verbs that are intentionally deferred.
+- **FR-006**: System MUST freeze one explicit lifecycle vocabulary for `pause`, `resume`,
+  `cancel`, and `terminate`, and MUST call out `reset/rewind` as deferred in the first slice.
 - **FR-007**: System MUST keep lifecycle meanings consistent across task, session, and autonomy
   surfaces.
 - **FR-008**: System MUST define a bounded compaction or rollup rule so replay cost does not grow
@@ -204,7 +219,8 @@ once and still resume correctly from the compacted lineage.
 - **EffectBoundaryRecord**: Durable intent and outcome tracking for one external side effect,
   allowing replay and retry to avoid duplicate outcomes.
 - **LifecycleCommand**: One operator-visible request to change durable workflow state, such as
-  pause, resume, cancel, terminate, or reset-like recovery action.
+  `pause`, `resume`, `cancel`, or `terminate`, with any `reset/rewind` posture deferred out of
+  the first slice.
 - **LifecycleDecision**: The accepted durable result of one lifecycle command, including any
   allowed no-op or deferred outcome.
 - **HistoryCompactionRecord**: Durable lineage that lets a compacted workflow stay resumable and
