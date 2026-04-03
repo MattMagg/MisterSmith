@@ -8,7 +8,8 @@
 - `step_id`: stable step identifier from the current step-evaluation or step-routing seam
 - `difficulty_bucket`: bounded deterministic category such as `low`, `moderate`, `high`, or
   `critical`
-- `confidence_label`: bounded summary for how stable the assessment is
+- `confidence_label`: bounded summary such as `low_confidence`, `moderate_confidence`, or
+  `deterministic`
 - `reason_codes`: ordered short reasons explaining why the current difficulty bucket was chosen
 - `verifier_ref`: bounded reference to the latest packet-020 `StepEvaluationRecord`
 - `routing_ref`: bounded reference to the latest step-routing entry that influenced the assessment
@@ -54,8 +55,10 @@
 - `budget_pressure`: latest packet-owned budget summary when available
 - `policy_decision`: latest packet-owned chosen action
 - `input_refs`: bounded references to the adjacent packet-owned seams that shaped the decision
+- `proof_boundary_ref.owner_packet`: frozen packet owner for the carried proof-boundary wording
+- `proof_boundary_ref.task_proof`: canonical packet-023 task-proof wording carried through
+  unchanged
 - `display_note`: short explanation for human readers
-- `proof_boundary_ref`: packet-023-owned proof-boundary reference carried through unchanged
 
 ## Surface placement
 

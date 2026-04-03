@@ -18,8 +18,8 @@ use mister_smith_core::{
     ExecutionBranchId, ExecutionGraphId, GraphState, GuardDecision, GuardDecisionId, GuardTarget,
     InterventionRecord, InterventionRecordId, OperatorResultPreview, ProfileSnapshot,
     ProfileSnapshotId, ProfileTarget, RepairLineageRef, RunTraceRelationshipKind, RuntimeTruthView,
-    SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope, SystemEvent, TaskId,
-    TeamSizingDecision,
+    StepPolicySummaryView, SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope,
+    SystemEvent, TaskId, TeamSizingDecision,
 };
 
 use crate::autonomy::{
@@ -63,6 +63,7 @@ struct AutonomyStatusAccumulator {
     guard_decision_branch_ids: HashMap<GuardDecisionId, Option<ExecutionBranchId>>,
     runtime_truth: Option<RuntimeTruthView>,
     supervision_evidence: Option<SupervisionEvidenceView>,
+    step_policy: Option<StepPolicySummaryView>,
     conservative_reasons: Vec<String>,
     latest_profile_id: Option<ProfileSnapshotId>,
     latest_guard_decision_id: Option<GuardDecisionId>,
@@ -209,6 +210,7 @@ impl AutonomyStatusAccumulator {
             &topology,
             &branches,
             &self.routing_history,
+            self.step_policy.as_ref(),
         );
         let mut result_preview = match (
             self.result_preview.as_ref(),
@@ -244,9 +246,13 @@ impl AutonomyStatusAccumulator {
             .runtime_truth
             .clone()
             .or(Some(synthesized_runtime_truth.clone()));
+        let step_policy = self.step_policy.clone();
         if let Some(preview) = result_preview.as_mut() {
             if preview.runtime_truth.is_none() && graph.state == GraphState::Completed {
                 preview.runtime_truth = Some(synthesized_runtime_truth.clone());
+            }
+            if preview.step_policy.is_none() {
+                preview.step_policy = step_policy.clone();
             }
         }
 
@@ -275,6 +281,7 @@ impl AutonomyStatusAccumulator {
             guard_decisions,
             supervision_evidence,
             runtime_truth,
+            step_policy,
             conservative_reasons: self.conservative_reasons.clone(),
         })
     }
@@ -282,6 +289,7 @@ impl AutonomyStatusAccumulator {
     fn from_view(view: AutonomyStatusView) -> Self {
         let supervision_evidence = view.supervision_evidence.clone();
         let runtime_truth = view.runtime_truth.clone();
+        let step_policy = view.step_policy.clone();
         let mut accumulator = Self {
             session_id: view.session_id,
             turn_index: view.turn_index,
@@ -294,6 +302,7 @@ impl AutonomyStatusAccumulator {
             team_sizing: view.team_sizing,
             runtime_truth,
             supervision_evidence,
+            step_policy,
             ..Self::default()
         };
 

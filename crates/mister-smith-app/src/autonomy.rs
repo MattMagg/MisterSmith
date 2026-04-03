@@ -14,17 +14,18 @@ use mister_smith_core::{
     AgentId, CapabilityId, CoordinationPolicy, DelegationScope, DurableWorkflowLifecycleState,
     ExecutionGraphId, GraphState, OperatorResultPreview, OrchestrationQualityView,
     ProofOutcomeClassification, RepairDirectiveAction, ResultProvenanceSummary, RevocationState,
-    SessionId, SessionRetainedResultView, StepEvaluationRecord, SupervisionEvidenceView,
-    SupervisionTargetKind, TaskId, TaskResultView, TaskShapeClassification, TaskShapeKind,
-    TopologyKind, TopologyRationale, UnifiedResultEnvelope, VerifierVerdict,
+    SessionId, SessionRetainedResultView, StepEvaluationRecord, StepPolicySummaryView,
+    SupervisionEvidenceView, SupervisionTargetKind, TaskId, TaskResultView,
+    TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale, UnifiedResultEnvelope,
+    VerifierVerdict,
 };
 use mister_smith_events::autonomy::merge_operator_result_preview;
+use mister_smith_events::autonomy::AttestationSource;
 use mister_smith_events::{
     AutonomyStatusView, EventBus, ExternalCapabilityDecisionOutcome,
     ExternalCapabilityDecisionSummary, ExternalCapabilityDecisionSurface, ResumeProvenanceSummary,
     StepRoutingDecisionSummary,
 };
-use mister_smith_events::autonomy::AttestationSource;
 use mister_smith_persistence::postgres::queries;
 use mister_smith_persistence::{lifecycle_decision_history, workflow_history};
 use reqwest::Client;
@@ -406,6 +407,16 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         .as_ref()
         .map(render_result_preview)
         .unwrap_or_else(|| "none".to_string());
+    let step_policy_summary = view
+        .step_policy
+        .as_ref()
+        .or_else(|| {
+            view.result_preview
+                .as_ref()
+                .and_then(|preview| preview.step_policy.as_ref())
+        })
+        .map(render_step_policy_summary)
+        .unwrap_or_else(|| "none".to_string());
     let supervision_summary = view
         .supervision_evidence
         .as_ref()
@@ -480,7 +491,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\nlifecycle: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nresult preview: {}\nruntime truth: {}\nsupervision: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\nlifecycle: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nstep policy: {}\nresult preview: {}\nruntime truth: {}\nsupervision: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -516,6 +527,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         } else {
             step_routing_summary
         },
+        step_policy_summary,
         result_preview_summary,
         runtime_truth_summary,
         supervision_summary,
@@ -871,6 +883,7 @@ pub(crate) fn build_task_result_view(
     status: &str,
     canonical_result: UnifiedResultEnvelope,
     supervision_evidence: Option<SupervisionEvidenceView>,
+    step_policy: Option<StepPolicySummaryView>,
 ) -> TaskResultView {
     let orchestration_quality =
         orchestration_quality_projection(&canonical_result).map(|projection| projection.view);
@@ -883,6 +896,7 @@ pub(crate) fn build_task_result_view(
         orchestration_quality,
         runtime_truth,
         supervision_evidence,
+        step_policy,
         result: canonical_result,
     }
 }
@@ -922,11 +936,16 @@ pub(crate) fn enrich_result_preview(
     let status_hint = status_hint_from_graph_state(&view.graph.state);
     let existing_preview = view.result_preview.clone();
     let workflow_id = view.graph.workflow_id;
+    let task_result_step_policy = task_result.and_then(task_result_step_policy);
     let payload_preview = task_result
         .and_then(|value| {
             canonical_result_from_value(value, Some(status_hint))
                 .filter(|result| result.workflow_id == workflow_id)
-                .map(|result| operator_result_preview(&result, "task.result", view))
+                .map(|result| {
+                    let mut preview = operator_result_preview(&result, "task.result", view);
+                    preview.step_policy = task_result_step_policy.clone();
+                    preview
+                })
         })
         .or_else(|| {
             metadata.get("final_result").and_then(|value| {
@@ -939,6 +958,9 @@ pub(crate) fn enrich_result_preview(
     if let Some(mut preview) = payload_preview {
         if let Some(existing_preview) = existing_preview.as_ref() {
             preview = merge_operator_result_preview(&preview, existing_preview);
+        }
+        if view.step_policy.is_none() {
+            view.step_policy = preview.step_policy.clone();
         }
         view.result_preview = Some(preview);
     }
@@ -1006,6 +1028,7 @@ pub(crate) fn synthesize_failed_before_graph_status(
         guard_decisions: vec![],
         supervision_evidence: None,
         runtime_truth: None,
+        step_policy: None,
         conservative_reasons: vec![
             "workflow failed before graph publication".to_string(),
             "autonomy status reconstructed from persisted canonical result".to_string(),
@@ -1068,8 +1091,16 @@ fn operator_result_preview(
             .map(|projection| projection.view),
         runtime_truth: synthesized_runtime_truth_value(canonical_result)
             .and_then(|value| serde_json::from_value(value).ok()),
+        step_policy: None,
         provenance_lines: result_preview_provenance(canonical_result, payload_location, view),
     }
+}
+
+fn task_result_step_policy(task_result: &Value) -> Option<StepPolicySummaryView> {
+    task_result
+        .get("step_policy")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
 }
 
 fn synthesized_runtime_truth_value(canonical_result: &UnifiedResultEnvelope) -> Option<Value> {
@@ -2114,7 +2145,140 @@ fn render_result_preview(summary: &OperatorResultPreview) -> String {
         rendered.push_str(" outcome=");
         rendered.push_str(&orchestration_quality.outcome_summary);
     }
+    if let Some(step_policy) = summary.step_policy.as_ref() {
+        rendered.push_str("\n  step_policy:");
+        rendered.push_str("\n  - ");
+        rendered.push_str(&render_step_policy_summary(step_policy));
+    }
     rendered
+}
+
+fn render_step_policy_summary(summary: &StepPolicySummaryView) -> String {
+    let reason_codes = if summary.difficulty_assessment.reason_codes.is_empty() {
+        "none".to_string()
+    } else {
+        summary.difficulty_assessment.reason_codes.join("|")
+    };
+    let budget_summary = summary
+        .budget_pressure
+        .as_ref()
+        .map(|pressure| {
+            format!(
+                "{}/{}/{}/{} note={}",
+                step_budget_pressure_level_label(pressure.pressure_level),
+                pressure.pressure_source,
+                pressure.policy_hint,
+                pressure.budget_root.as_deref().unwrap_or("none"),
+                pressure.note.as_deref().unwrap_or("none")
+            )
+        })
+        .unwrap_or_else(|| "none".to_string());
+    let input_refs = [
+        summary
+            .input_refs
+            .latest_step_evaluation
+            .as_deref()
+            .map(|value| format!("evaluation={value}")),
+        summary
+            .input_refs
+            .latest_step_routing
+            .as_deref()
+            .map(|value| format!("routing={value}")),
+        summary
+            .input_refs
+            .supervision_evidence
+            .as_deref()
+            .map(|value| format!("supervision={value}")),
+        summary
+            .input_refs
+            .runtime_truth
+            .as_deref()
+            .map(|value| format!("runtime_truth={value}")),
+        summary
+            .input_refs
+            .boundary_evidence
+            .as_deref()
+            .map(|value| format!("boundary={value}")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    let input_refs = if input_refs.is_empty() {
+        "none".to_string()
+    } else {
+        input_refs.join(" | ")
+    };
+
+    format!(
+        "step={} difficulty={} confidence={} reasons={} action={} action_reason={} budget={} difficulty_ref={} budget_ref={} repair_lineage={} operator_attention={} proof_owner={} task_proof={} note={} inputs={}",
+        summary.difficulty_assessment.step_id,
+        step_difficulty_bucket_label(summary.difficulty_assessment.difficulty_bucket),
+        step_policy_confidence_label(summary.difficulty_assessment.confidence_label),
+        reason_codes,
+        step_policy_action_label(summary.policy_decision.chosen_action),
+        summary.policy_decision.action_reason,
+        budget_summary,
+        summary
+            .policy_decision
+            .difficulty_ref
+            .as_deref()
+            .unwrap_or("none"),
+        summary
+            .policy_decision
+            .budget_ref
+            .as_deref()
+            .unwrap_or("none"),
+        summary
+            .policy_decision
+            .repair_lineage_ref
+            .as_deref()
+            .unwrap_or("none"),
+        summary.policy_decision.requires_operator_attention,
+        summary.proof_boundary_ref.owner_packet,
+        summary.proof_boundary_ref.task_proof,
+        summary.display_note,
+        input_refs
+    )
+}
+
+fn step_difficulty_bucket_label(bucket: mister_smith_core::StepDifficultyBucket) -> &'static str {
+    match bucket {
+        mister_smith_core::StepDifficultyBucket::Low => "low",
+        mister_smith_core::StepDifficultyBucket::Moderate => "moderate",
+        mister_smith_core::StepDifficultyBucket::High => "high",
+        mister_smith_core::StepDifficultyBucket::Critical => "critical",
+    }
+}
+
+fn step_policy_confidence_label(
+    label: mister_smith_core::StepPolicyConfidenceLabel,
+) -> &'static str {
+    match label {
+        mister_smith_core::StepPolicyConfidenceLabel::LowConfidence => "low_confidence",
+        mister_smith_core::StepPolicyConfidenceLabel::ModerateConfidence => "moderate_confidence",
+        mister_smith_core::StepPolicyConfidenceLabel::Deterministic => "deterministic",
+    }
+}
+
+fn step_policy_action_label(action: mister_smith_core::StepPolicyAction) -> &'static str {
+    match action {
+        mister_smith_core::StepPolicyAction::Keep => "keep",
+        mister_smith_core::StepPolicyAction::Retry => "retry",
+        mister_smith_core::StepPolicyAction::Clarify => "clarify",
+        mister_smith_core::StepPolicyAction::Downgrade => "downgrade",
+        mister_smith_core::StepPolicyAction::Escalate => "escalate",
+    }
+}
+
+fn step_budget_pressure_level_label(
+    level: mister_smith_core::StepBudgetPressureLevel,
+) -> &'static str {
+    match level {
+        mister_smith_core::StepBudgetPressureLevel::None => "none",
+        mister_smith_core::StepBudgetPressureLevel::Watch => "watch",
+        mister_smith_core::StepBudgetPressureLevel::Softcap => "softcap",
+        mister_smith_core::StepBudgetPressureLevel::HardStop => "hard_stop",
+    }
 }
 
 fn render_supervision_evidence(summary: &SupervisionEvidenceView) -> String {

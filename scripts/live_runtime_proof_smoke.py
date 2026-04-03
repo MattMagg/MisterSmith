@@ -1144,6 +1144,147 @@ def extract_autonomy_runtime_truth(
     return runtime_truth
 
 
+def extract_task_step_policy(task_status_payload: dict[str, Any]) -> dict[str, Any] | None:
+    result = task_status_payload.get("result")
+    if result is None:
+        return None
+    if not isinstance(result, dict):
+        raise SmokeHarnessError("task result payload was not a JSON object")
+    step_policy = result.get("step_policy")
+    if step_policy is None:
+        return None
+    if not isinstance(step_policy, dict):
+        raise SmokeHarnessError("task result step_policy was not a JSON object")
+    return step_policy
+
+
+def extract_autonomy_step_policy(
+    autonomy_status_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    step_policy = autonomy_status_payload.get("step_policy")
+    if step_policy is None:
+        return None
+    if not isinstance(step_policy, dict):
+        raise SmokeHarnessError("autonomy step_policy was not a JSON object")
+    return step_policy
+
+
+def step_policy_consistency_projection(payload: dict[str, Any]) -> dict[str, Any]:
+    difficulty_assessment = payload.get("difficulty_assessment")
+    if not isinstance(difficulty_assessment, dict):
+        raise SmokeHarnessError("step_policy.difficulty_assessment was not a JSON object")
+    policy_decision = payload.get("policy_decision")
+    if not isinstance(policy_decision, dict):
+        raise SmokeHarnessError("step_policy.policy_decision was not a JSON object")
+    proof_boundary_ref = payload.get("proof_boundary_ref")
+    if not isinstance(proof_boundary_ref, dict):
+        raise SmokeHarnessError("step_policy.proof_boundary_ref was not a JSON object")
+    input_refs = payload.get("input_refs")
+    if input_refs is None:
+        input_refs = {}
+    if not isinstance(input_refs, dict):
+        raise SmokeHarnessError("step_policy.input_refs was not a JSON object")
+    budget_pressure = payload.get("budget_pressure")
+    if budget_pressure is not None and not isinstance(budget_pressure, dict):
+        raise SmokeHarnessError("step_policy.budget_pressure was not a JSON object")
+    reason_codes = difficulty_assessment.get("reason_codes")
+    if not isinstance(reason_codes, list) or not all(
+        isinstance(reason, str) for reason in reason_codes
+    ):
+        raise SmokeHarnessError(
+            "step_policy.difficulty_assessment.reason_codes was not a string list"
+        )
+
+    return {
+        "workflow_id": difficulty_assessment.get("workflow_id"),
+        "step_id": difficulty_assessment.get("step_id"),
+        "difficulty_bucket": difficulty_assessment.get("difficulty_bucket"),
+        "confidence_label": difficulty_assessment.get("confidence_label"),
+        "reason_codes": tuple(reason_codes),
+        "chosen_action": policy_decision.get("chosen_action"),
+        "action_reason": policy_decision.get("action_reason"),
+        "requires_operator_attention": policy_decision.get("requires_operator_attention"),
+        "budget_pressure_level": None
+        if budget_pressure is None
+        else budget_pressure.get("pressure_level"),
+        "budget_policy_hint": None
+        if budget_pressure is None
+        else budget_pressure.get("policy_hint"),
+        "runtime_truth_ref": input_refs.get("runtime_truth"),
+        "proof_owner_packet": proof_boundary_ref.get("owner_packet"),
+        "task_proof": proof_boundary_ref.get("task_proof"),
+        "display_note": payload.get("display_note"),
+    }
+
+
+def assert_step_policy_surfaces(
+    task_status_payload: dict[str, Any],
+    autonomy_status_payload: dict[str, Any],
+    *,
+    require_consistency: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    task_step_policy = extract_task_step_policy(task_status_payload)
+    autonomy_step_policy = extract_autonomy_step_policy(autonomy_status_payload)
+    if task_step_policy is None or autonomy_step_policy is None:
+        raise SmokeHarnessError(
+            "packet-025 step-policy probe expected step_policy on both task result and autonomy status"
+        )
+
+    allowed_buckets = {"low", "moderate", "high", "critical"}
+    allowed_actions = {"keep", "retry", "clarify", "downgrade", "escalate"}
+    allowed_pressure_levels = {None, "watch", "softcap", "hard_stop"}
+    expected_task_proof = "result is orchestration proof, not substantive task proof"
+
+    for surface_name, payload in (
+        ("task result", task_step_policy),
+        ("autonomy status", autonomy_step_policy),
+    ):
+        projection = step_policy_consistency_projection(payload)
+        if projection["difficulty_bucket"] not in allowed_buckets:
+            raise SmokeHarnessError(
+                f"{surface_name} step_policy used unexpected difficulty_bucket {projection['difficulty_bucket']!r}"
+            )
+        if projection["chosen_action"] not in allowed_actions:
+            raise SmokeHarnessError(
+                f"{surface_name} step_policy used unexpected chosen_action {projection['chosen_action']!r}"
+            )
+        if projection["budget_pressure_level"] not in allowed_pressure_levels:
+            raise SmokeHarnessError(
+                f"{surface_name} step_policy used unexpected budget pressure {projection['budget_pressure_level']!r}"
+            )
+        if projection["proof_owner_packet"] != "023":
+            raise SmokeHarnessError(
+                f"{surface_name} step_policy proof owner expected '023', observed {projection['proof_owner_packet']!r}"
+            )
+        if not isinstance(projection["runtime_truth_ref"], str) or not projection[
+            "runtime_truth_ref"
+        ].startswith("packet-023:"):
+            raise SmokeHarnessError(
+                f"{surface_name} step_policy runtime_truth ref did not stay packet-023-owned"
+            )
+        if projection["task_proof"] != expected_task_proof:
+            raise SmokeHarnessError(
+                f"{surface_name} step_policy task_proof expected {expected_task_proof!r}, observed {projection['task_proof']!r}"
+            )
+        if not isinstance(projection["display_note"], str) or (
+            "placeholder" not in projection["display_note"]
+            or "orchestration proof" not in projection["display_note"]
+        ):
+            raise SmokeHarnessError(
+                f"{surface_name} step_policy display_note did not preserve proof-boundary honesty"
+            )
+
+    if require_consistency:
+        task_projection = step_policy_consistency_projection(task_step_policy)
+        autonomy_projection = step_policy_consistency_projection(autonomy_step_policy)
+        if task_projection != autonomy_projection:
+            raise SmokeHarnessError(
+                "task result and autonomy step_policy surfaces did not agree on the packet-025 summary"
+            )
+
+    return task_step_policy, autonomy_step_policy
+
+
 def runtime_truth_consistency_projection(payload: dict[str, Any]) -> dict[str, Any]:
     proof_boundary = payload.get("proof_boundary")
     if not isinstance(proof_boundary, dict):

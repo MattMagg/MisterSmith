@@ -221,6 +221,10 @@ fn is_zero(value: &u32) -> bool {
     *value == 0
 }
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 /// Operator-facing projection of verifier and repair history for one workflow.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OrchestrationQualityView {
@@ -396,6 +400,194 @@ pub struct RuntimeTruthView {
     pub grounded_evidence: Vec<GroundedEvidenceReference>,
 }
 
+/// Bounded difficulty bucket for one step-policy assessment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepDifficultyBucket {
+    /// The current step is low risk to keep on the present path.
+    Low,
+    /// The current step needs attention but does not justify escalation by default.
+    Moderate,
+    /// The current step is high risk and likely needs bounded intervention.
+    High,
+    /// The current step exceeds the bounded local policy envelope.
+    Critical,
+}
+
+/// Bounded confidence label for one deterministic step-policy assessment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepPolicyConfidenceLabel {
+    /// The current inputs are missing or too weak to make a stronger claim.
+    LowConfidence,
+    /// The current inputs are useful but still incomplete.
+    ModerateConfidence,
+    /// The current inputs are deterministic enough for the first packet slice.
+    Deterministic,
+}
+
+/// Packet-owned deterministic difficulty summary for one workflow step.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepDifficultyAssessment {
+    /// Workflow that owns the assessed step.
+    pub workflow_id: TaskId,
+    /// Stable identifier for the assessed step.
+    pub step_id: String,
+    /// Frozen packet-owned difficulty bucket.
+    pub difficulty_bucket: StepDifficultyBucket,
+    /// Frozen packet-owned confidence label.
+    pub confidence_label: StepPolicyConfidenceLabel,
+    /// Ordered short reasons explaining the bucket choice.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reason_codes: Vec<String>,
+    /// Optional bounded packet-020 verifier reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verifier_ref: Option<String>,
+    /// Optional bounded routing reference that informed the assessment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_ref: Option<String>,
+    /// Optional packet-021 supervision evidence reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervision_ref: Option<String>,
+    /// Optional packet-023 grounding-status reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grounding_status_ref: Option<String>,
+}
+
+/// Bounded pressure level used by the packet-025 budget summary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepBudgetPressureLevel {
+    /// No current budget pressure is shaping the decision.
+    None,
+    /// Budget pressure should be watched but does not force a change by itself.
+    Watch,
+    /// Softcap pressure should shape a bounded local correction choice.
+    Softcap,
+    /// Hard-stop pressure should push toward downgrade or escalation.
+    HardStop,
+}
+
+/// Packet-owned budget-aware summary that can influence one step decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepBudgetPressureSummary {
+    /// Workflow that owns the pressure summary.
+    pub workflow_id: TaskId,
+    /// Stable step identifier when the pressure summary is step-specific.
+    pub step_id: String,
+    /// Frozen packet-owned pressure level.
+    pub pressure_level: StepBudgetPressureLevel,
+    /// Short label for the seam that provided the pressure signal.
+    pub pressure_source: String,
+    /// Deterministic hint used by the bounded action ladder.
+    pub policy_hint: String,
+    /// Budget root when the runtime exposed one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_root: Option<String>,
+    /// Short human-readable note for operator-facing surfaces.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// Bounded packet-owned action vocabulary for the first step-policy slice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepPolicyAction {
+    /// Keep the current step on its present path.
+    Keep,
+    /// Retry the current step locally.
+    Retry,
+    /// Ask for clarification before proceeding.
+    Clarify,
+    /// Downgrade to a bounded lower-risk path.
+    Downgrade,
+    /// Escalate for broader intervention.
+    Escalate,
+}
+
+/// Packet-owned deterministic action summary for one assessed step.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepPolicyDecision {
+    /// Workflow that owns the chosen action.
+    pub workflow_id: TaskId,
+    /// Stable step identifier for the chosen action.
+    pub step_id: String,
+    /// Frozen packet-owned chosen action.
+    pub chosen_action: StepPolicyAction,
+    /// Concise explanation for the chosen action.
+    pub action_reason: String,
+    /// Reference to the difficulty assessment that drove the decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub difficulty_ref: Option<String>,
+    /// Reference to the budget summary that shaped the decision.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_ref: Option<String>,
+    /// Optional packet-020 repair-lineage reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repair_lineage_ref: Option<String>,
+    /// Flag for decisions that should remain operator-visible.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub requires_operator_attention: bool,
+}
+
+/// Bounded references to adjacent packet-owned seams that shaped the decision.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepPolicyInputRefs {
+    /// Latest packet-020 step evaluation used as input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_step_evaluation: Option<String>,
+    /// Latest step-routing reference used as input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_step_routing: Option<String>,
+    /// Latest packet-021 supervision evidence reference when used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supervision_evidence: Option<String>,
+    /// Latest packet-023 runtime-truth reference when used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_truth: Option<String>,
+    /// Latest packet-024 boundary evidence reference when relevant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boundary_evidence: Option<String>,
+}
+
+impl StepPolicyInputRefs {
+    fn is_empty(&self) -> bool {
+        self.latest_step_evaluation.is_none()
+            && self.latest_step_routing.is_none()
+            && self.supervision_evidence.is_none()
+            && self.runtime_truth.is_none()
+            && self.boundary_evidence.is_none()
+    }
+}
+
+/// Packet-023 proof-boundary wording carried through the packet-025 summary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepPolicyProofBoundaryRef {
+    /// Owning packet for the proof-boundary wording.
+    pub owner_packet: String,
+    /// Canonical task-proof wording that must remain honest.
+    pub task_proof: String,
+}
+
+/// Packet-owned step-policy summary projected through existing inspect surfaces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepPolicySummaryView {
+    /// Latest deterministic difficulty assessment.
+    pub difficulty_assessment: StepDifficultyAssessment,
+    /// Latest budget-aware pressure summary when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_pressure: Option<StepBudgetPressureSummary>,
+    /// Latest bounded action decision.
+    pub policy_decision: StepPolicyDecision,
+    /// Bounded references to the adjacent packet-owned seams used as input.
+    #[serde(default, skip_serializing_if = "StepPolicyInputRefs::is_empty")]
+    pub input_refs: StepPolicyInputRefs,
+    /// Packet-023 proof-boundary wording carried through unchanged.
+    pub proof_boundary_ref: StepPolicyProofBoundaryRef,
+    /// Short display note for current operator-facing surfaces.
+    pub display_note: String,
+}
+
 /// Return the canonical packet-023 placeholder-step proof-boundary wording.
 #[must_use]
 pub fn packet_023_placeholder_proof_boundary() -> ProofBoundaryView {
@@ -450,6 +642,9 @@ pub struct TaskResultView {
     /// Bounded packet-021 predictive-supervision evidence when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supervision_evidence: Option<SupervisionEvidenceView>,
+    /// Packet-025 step-policy summary when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_policy: Option<StepPolicySummaryView>,
     /// Canonical result envelope exposed by the task surface.
     pub result: UnifiedResultEnvelope,
 }
@@ -508,6 +703,9 @@ pub struct OperatorResultPreview {
     /// Packet-023 runtime-truth projection when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_truth: Option<RuntimeTruthView>,
+    /// Packet-025 step-policy summary when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_policy: Option<StepPolicySummaryView>,
     /// Compact explanation of how the result was produced and classified.
     pub provenance_lines: Vec<String>,
 }
@@ -1036,6 +1234,57 @@ mod tests {
                     checkpoint_ref: Some("checkpoint-clarify".to_string()),
                 }),
                 proof_boundary: Some("deterministic-only".to_string()),
+            }),
+            step_policy: Some(StepPolicySummaryView {
+                difficulty_assessment: StepDifficultyAssessment {
+                    workflow_id,
+                    step_id: "finalize".to_string(),
+                    difficulty_bucket: StepDifficultyBucket::High,
+                    confidence_label: StepPolicyConfidenceLabel::Deterministic,
+                    reason_codes: vec![
+                        "weak_current_evidence".to_string(),
+                        "unstable_recent_step_history".to_string(),
+                    ],
+                    verifier_ref: Some("packet-020:finalize".to_string()),
+                    routing_ref: Some("step-routing:finalize".to_string()),
+                    supervision_ref: Some("packet-021:finalize".to_string()),
+                    grounding_status_ref: Some(
+                        "packet-023:placeholder_or_simulated_step_completion".to_string(),
+                    ),
+                },
+                budget_pressure: Some(StepBudgetPressureSummary {
+                    workflow_id,
+                    step_id: "finalize".to_string(),
+                    pressure_level: StepBudgetPressureLevel::Softcap,
+                    pressure_source: "runtime.task_path".to_string(),
+                    policy_hint: "prefer_local_correction_before_escalation".to_string(),
+                    budget_root: Some("runtime.task_path".to_string()),
+                    note: Some("softcap pressure is active".to_string()),
+                }),
+                policy_decision: StepPolicyDecision {
+                    workflow_id,
+                    step_id: "finalize".to_string(),
+                    chosen_action: StepPolicyAction::Downgrade,
+                    action_reason: "high_difficulty_plus_softcap_budget_pressure".to_string(),
+                    difficulty_ref: Some("assessment:finalize".to_string()),
+                    budget_ref: Some("budget:finalize".to_string()),
+                    repair_lineage_ref: Some("packet-020:last-stable-checkpoint".to_string()),
+                    requires_operator_attention: true,
+                },
+                input_refs: StepPolicyInputRefs {
+                    latest_step_evaluation: Some("packet-020:finalize".to_string()),
+                    latest_step_routing: Some("step-routing:finalize".to_string()),
+                    supervision_evidence: Some("packet-021:finalize".to_string()),
+                    runtime_truth: Some(
+                        "packet-023:placeholder_or_simulated_step_completion".to_string(),
+                    ),
+                    boundary_evidence: Some("packet-024:clean_quarantine_boundary".to_string()),
+                },
+                proof_boundary_ref: StepPolicyProofBoundaryRef {
+                    owner_packet: "023".to_string(),
+                    task_proof: PACKET_023_ORCHESTRATION_ONLY.to_string(),
+                },
+                display_note: "placeholder orchestration proof only".to_string(),
             }),
             result: UnifiedResultEnvelope {
                 workflow_id,

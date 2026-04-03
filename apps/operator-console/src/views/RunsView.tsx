@@ -1,6 +1,7 @@
 import { type FormEvent } from 'react';
 import type {
   RunSummary,
+  StepPolicySummary,
   TaskInspectResponse,
   TaskRuntimeTruth,
   TaskSupervisionEvidence,
@@ -42,6 +43,10 @@ export function RunsView(props: RunsViewProps) {
   } = props;
   const supervision = taskDetail?.result?.supervision_evidence ?? null;
   const runtimeTruth = taskDetail?.result?.runtime_truth ?? null;
+  const stepPolicy =
+    taskDetail?.result?.step_policy ??
+    selectedRunSummary?.result_preview?.step_policy ??
+    null;
 
   return (
     <div className="tab-layout">
@@ -195,6 +200,40 @@ export function RunsView(props: RunsViewProps) {
               </section>
             ) : null}
 
+            {stepPolicy ? (
+              <section className="subpanel">
+                <h3>Step policy</h3>
+                <KeyValueGrid
+                  rows={[
+                    ['Step', stepPolicy.difficulty_assessment.step_id],
+                    ['Difficulty', stepPolicy.difficulty_assessment.difficulty_bucket],
+                    ['Confidence', stepPolicy.difficulty_assessment.confidence_label],
+                    ['Chosen action', stepPolicy.policy_decision.chosen_action],
+                    ['Action reason', stepPolicy.policy_decision.action_reason],
+                    ['Budget pressure', formatStepPolicyBudget(stepPolicy)],
+                    [
+                      'Operator attention',
+                      stepPolicy.policy_decision.requires_operator_attention
+                        ? 'required'
+                        : 'not required',
+                    ],
+                    [
+                      'Runtime truth ref',
+                      stepPolicy.input_refs.runtime_truth ?? 'not recorded',
+                    ],
+                  ]}
+                />
+                <p>Reason codes: {formatStepPolicyReasonCodes(stepPolicy)}</p>
+                <p>Policy refs: {formatStepPolicyRefs(stepPolicy)}</p>
+                <p>Input refs: {formatStepPolicyInputRefs(stepPolicy)}</p>
+                <p>
+                  Proof boundary: packet {stepPolicy.proof_boundary_ref.owner_packet} says{' '}
+                  {stepPolicy.proof_boundary_ref.task_proof}
+                </p>
+                <p>{stepPolicy.display_note}</p>
+              </section>
+            ) : null}
+
             <section className="subpanel">
               <h3>Transcript and evidence</h3>
               <div className="terminal-shell">
@@ -320,4 +359,57 @@ function formatGroundedEvidence(runtimeTruth: TaskRuntimeTruth): string {
         .map((reference) => `${reference.source}: ${reference.reference}`)
         .join(', ')
     : 'none/minimal';
+}
+
+function formatStepPolicyBudget(stepPolicy: StepPolicySummary): string {
+  const pressure = stepPolicy.budget_pressure;
+  if (!pressure) {
+    return 'not recorded';
+  }
+
+  return `${pressure.pressure_level} via ${pressure.pressure_source} (${pressure.policy_hint})`;
+}
+
+function formatStepPolicyReasonCodes(stepPolicy: StepPolicySummary): string {
+  return stepPolicy.difficulty_assessment.reason_codes.length > 0
+    ? stepPolicy.difficulty_assessment.reason_codes.join(', ')
+    : 'none recorded';
+}
+
+function formatStepPolicyRefs(stepPolicy: StepPolicySummary): string {
+  const refs = [
+    stepPolicy.policy_decision.difficulty_ref
+      ? `difficulty=${stepPolicy.policy_decision.difficulty_ref}`
+      : null,
+    stepPolicy.policy_decision.budget_ref
+      ? `budget=${stepPolicy.policy_decision.budget_ref}`
+      : null,
+    stepPolicy.policy_decision.repair_lineage_ref
+      ? `repair=${stepPolicy.policy_decision.repair_lineage_ref}`
+      : null,
+  ].filter(Boolean);
+
+  return refs.length > 0 ? refs.join(', ') : 'not recorded';
+}
+
+function formatStepPolicyInputRefs(stepPolicy: StepPolicySummary): string {
+  const refs = [
+    stepPolicy.input_refs.latest_step_evaluation
+      ? `evaluation=${stepPolicy.input_refs.latest_step_evaluation}`
+      : null,
+    stepPolicy.input_refs.latest_step_routing
+      ? `routing=${stepPolicy.input_refs.latest_step_routing}`
+      : null,
+    stepPolicy.input_refs.supervision_evidence
+      ? `supervision=${stepPolicy.input_refs.supervision_evidence}`
+      : null,
+    stepPolicy.input_refs.runtime_truth
+      ? `runtime_truth=${stepPolicy.input_refs.runtime_truth}`
+      : null,
+    stepPolicy.input_refs.boundary_evidence
+      ? `boundary=${stepPolicy.input_refs.boundary_evidence}`
+      : null,
+  ].filter(Boolean);
+
+  return refs.length > 0 ? refs.join(', ') : 'not recorded';
 }

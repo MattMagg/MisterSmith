@@ -543,6 +543,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
         orchestration_quality: None,
         runtime_truth: Some(runtime_truth.clone()),
         supervision_evidence: Some(supervision_evidence.clone()),
+        step_policy: None,
         result: canonical_result.clone(),
     };
     let session_result = SessionRetainedResultView {
@@ -564,6 +565,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
         runtime_truth: Some(runtime_truth),
+        step_policy: None,
         provenance_lines: vec![
             "canonical result stored in metadata.final_result".to_string(),
             "aggregated payload nested under metadata.aggregated_result".to_string(),
