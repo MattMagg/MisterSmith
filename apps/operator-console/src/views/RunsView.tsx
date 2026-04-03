@@ -226,11 +226,15 @@ export function RunsView(props: RunsViewProps) {
                 <p>Reason codes: {formatStepPolicyReasonCodes(stepPolicy)}</p>
                 <p>Policy refs: {formatStepPolicyRefs(stepPolicy)}</p>
                 <p>Input refs: {formatStepPolicyInputRefs(stepPolicy)}</p>
-                <p>
-                  Proof boundary: packet {stepPolicy.proof_boundary_ref.owner_packet} says{' '}
-                  {stepPolicy.proof_boundary_ref.task_proof}
-                </p>
-                <p>{stepPolicy.display_note}</p>
+                {stepPolicy.proof_boundary_ref ? (
+                  <p>
+                    Proof boundary: packet {stepPolicy.proof_boundary_ref.owner_packet} says{' '}
+                    {stepPolicy.proof_boundary_ref.task_proof}
+                  </p>
+                ) : (
+                  <p>Proof boundary: N/A</p>
+                )}
+                {stepPolicy.display_note?.trim() ? <p>{stepPolicy.display_note}</p> : null}
               </section>
             ) : null}
 

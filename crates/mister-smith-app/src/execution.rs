@@ -1309,7 +1309,6 @@ fn latest_step_routing_for_policy(
         .rev()
         .find(|entry| entry.step_id == step_id)
         .cloned()
-        .or_else(|| history.last().cloned())
 }
 
 fn step_policy_confidence_label(
@@ -1541,9 +1540,17 @@ fn step_policy_decision_for_assessment(
         .map(|summary| summary.pressure_level == StepBudgetPressureLevel::HardStop)
         .unwrap_or(false);
     let chosen_action = match assessment.difficulty_bucket {
-        StepDifficultyBucket::Low => StepPolicyAction::Keep,
+        StepDifficultyBucket::Low => {
+            if hard_stop_budget {
+                StepPolicyAction::Escalate
+            } else {
+                StepPolicyAction::Keep
+            }
+        }
         StepDifficultyBucket::Moderate => {
-            if step_evaluation.clarification_request.is_some() {
+            if hard_stop_budget {
+                StepPolicyAction::Escalate
+            } else if step_evaluation.clarification_request.is_some() {
                 StepPolicyAction::Clarify
             } else {
                 StepPolicyAction::Retry
@@ -4623,6 +4630,127 @@ mod tests {
             summary.policy_decision.chosen_action,
             StepPolicyAction::Downgrade
         );
+    }
+
+    #[test]
+    fn build_step_policy_summary_ignores_unrelated_step_routing_history() {
+        let workflow_id = TaskId::new();
+        let step_id = "draft-outline";
+        let step_evaluation = sample_step_evaluation(
+            workflow_id,
+            step_id,
+            VerifierVerdict::Accepted,
+            Some(0.97),
+            None,
+            false,
+        );
+        let canonical_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: "stable step with unrelated routing history",
+                runtime_execution_mode: json!({
+                    "execution_boundary": "tool_bus",
+                    "workflow_runner": "tokio_task",
+                    "budget_root": "disabled",
+                }),
+                planner_output: json!({ "steps": 2 }),
+                execution_plan: json!({
+                    "steps": [{ "id": "collect-evidence" }, { "id": step_id }]
+                }),
+                step_results: vec![json!({
+                    "step_evaluation": serde_json::to_value(step_evaluation).expect("step evaluation should serialize"),
+                    "result": { "summary": "stable step output" }
+                })],
+                aggregated_result: json!({ "summary": "stable step output" }),
+                status: "completed",
+            },
+        );
+        let metadata = json!({
+            "step_routing_history": [
+                sample_step_policy_routing("collect-evidence", true, Some(0.22), &["budget_policy"])
+            ]
+        });
+
+        let summary =
+            build_step_policy_summary(&canonical_result, &metadata, None).expect("step policy");
+
+        assert_eq!(
+            summary.difficulty_assessment.difficulty_bucket,
+            StepDifficultyBucket::Low
+        );
+        assert_eq!(
+            summary.policy_decision.chosen_action,
+            StepPolicyAction::Keep
+        );
+        assert_eq!(summary.budget_pressure, None);
+        assert_eq!(
+            summary.difficulty_assessment.reason_codes,
+            vec!["stable_verifier_accept".to_string()]
+        );
+    }
+
+    #[test]
+    fn build_step_policy_summary_escalates_moderate_step_under_hard_stop_budget_pressure() {
+        let workflow_id = TaskId::new();
+        let step_id = "planner.step.4";
+        let step_evaluation = sample_step_evaluation(
+            workflow_id,
+            step_id,
+            VerifierVerdict::Rejected,
+            Some(0.91),
+            None,
+            true,
+        );
+        let canonical_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: "moderate step under hard-stop budget pressure",
+                runtime_execution_mode: json!({
+                    "execution_boundary": "tool_bus",
+                    "workflow_runner": "tokio_task",
+                    "budget_root": "runtime.task_path",
+                }),
+                planner_output: json!({ "steps": 2 }),
+                execution_plan: json!({
+                    "steps": [{ "id": "collect-evidence" }, { "id": step_id }]
+                }),
+                step_results: vec![json!({
+                    "step_evaluation": serde_json::to_value(step_evaluation).expect("step evaluation should serialize"),
+                    "result": { "summary": "budget constrained output" }
+                })],
+                aggregated_result: json!({ "summary": "budget constrained output" }),
+                status: "completed",
+            },
+        );
+        let metadata = json!({
+            "step_routing_history": [
+                sample_step_policy_routing(step_id, false, Some(0.91), &["budget_policy"])
+            ]
+        });
+
+        let summary =
+            build_step_policy_summary(&canonical_result, &metadata, None).expect("step policy");
+
+        assert_eq!(
+            summary.difficulty_assessment.difficulty_bucket,
+            StepDifficultyBucket::Moderate
+        );
+        assert_eq!(
+            summary
+                .budget_pressure
+                .as_ref()
+                .map(|pressure| pressure.pressure_level),
+            Some(StepBudgetPressureLevel::HardStop)
+        );
+        assert_eq!(
+            summary.policy_decision.chosen_action,
+            StepPolicyAction::Escalate
+        );
+        assert!(summary.policy_decision.requires_operator_attention);
     }
 
     #[test]
