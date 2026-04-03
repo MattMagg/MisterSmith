@@ -29,11 +29,14 @@ use mister_smith_core::{
     AgentId, AgentType, BranchState, DurableWorkflowEventKind, DurableWorkflowLifecycleState,
     DurableWorkflowLifecycleVerb, EffectBoundaryIntentState, EffectBoundaryOutcomeState,
     EscalationPolicy, ExecutionBranchId, ExecutionNodeId, ExternalDelegationEnvelope,
-    FailureContextCheckpoint, GraphState, GuardTarget, HandoffClarificationRequest,
+    FailureContextCheckpoint, GraphState, GuardTarget, HandoffClarificationRequest, HealthState,
     HistoryCompactionMode, LifecycleDecisionOutcome, LlmError, NodeState, ProfileFingerprint,
     RepairDirective, RepairDirectiveAction, SemanticSignal, SemanticSignalKind,
-    StepEvaluationRecord, SupervisionEvidenceView, SupervisionStrategy, TaskId, Tool,
-    ToolCapabilities, ToolError, ToolId, ToolSchema, VerifierVerdict,
+    StepBudgetPressureLevel, StepBudgetPressureSummary, StepDifficultyAssessment,
+    StepDifficultyBucket, StepEvaluationRecord, StepPolicyAction, StepPolicyConfidenceLabel,
+    StepPolicyDecision, StepPolicyInputRefs, StepPolicyProofBoundaryRef, StepPolicySummaryView,
+    SupervisionEvidenceView, SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError,
+    ToolId, ToolSchema, VerifierVerdict, PACKET_023_ORCHESTRATION_ONLY,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -1231,16 +1234,435 @@ struct TerminalResultViews {
     task_result: Value,
 }
 
+#[derive(Debug, Clone)]
+struct StepPolicyEvaluationCandidate {
+    record: StepEvaluationRecord,
+    plan_index: usize,
+    repair_attempt_count: u32,
+}
+
+fn execution_plan_step_indices_for_policy(execution_plan: &Value) -> BTreeMap<String, usize> {
+    execution_plan
+        .get("steps")
+        .and_then(Value::as_array)
+        .map(|steps| {
+            steps
+                .iter()
+                .enumerate()
+                .filter_map(|(index, step)| {
+                    step.get("id")
+                        .and_then(Value::as_str)
+                        .map(|step_id| (step_id.to_string(), index + 1))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn step_policy_repair_attempt_count(record: &StepEvaluationRecord) -> u32 {
+    record
+        .failure_context_checkpoint
+        .as_ref()
+        .map(|checkpoint| checkpoint.attempt_count)
+        .or_else(|| {
+            record
+                .clarification_request
+                .as_ref()
+                .map(|request| request.attempt_count)
+        })
+        .unwrap_or(0)
+}
+
+fn terminal_step_evaluation_for_policy(
+    canonical_result: &mister_smith_core::UnifiedResultEnvelope,
+) -> Option<StepEvaluationRecord> {
+    let step_indices = execution_plan_step_indices_for_policy(&canonical_result.execution_plan);
+    canonical_result
+        .step_results
+        .iter()
+        .filter_map(|step_result| {
+            let record = step_result
+                .get("step_evaluation")
+                .cloned()
+                .and_then(|value| serde_json::from_value::<StepEvaluationRecord>(value).ok())?;
+            Some(StepPolicyEvaluationCandidate {
+                plan_index: step_indices.get(&record.step_id).copied().unwrap_or(0),
+                repair_attempt_count: step_policy_repair_attempt_count(&record),
+                record,
+            })
+        })
+        .max_by_key(|candidate| (candidate.plan_index, candidate.repair_attempt_count))
+        .map(|candidate| candidate.record)
+}
+
+fn latest_step_routing_for_policy(
+    metadata: &Value,
+    step_id: &str,
+) -> Option<StepRoutingDecisionSummary> {
+    let history = metadata
+        .get("step_routing_history")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<Vec<StepRoutingDecisionSummary>>(value).ok())?;
+
+    history
+        .iter()
+        .rev()
+        .find(|entry| entry.step_id == step_id)
+        .cloned()
+        .or_else(|| history.last().cloned())
+}
+
+fn step_policy_confidence_label(
+    step_evaluation: &StepEvaluationRecord,
+    routing: Option<&StepRoutingDecisionSummary>,
+    supervision_evidence: Option<&SupervisionEvidenceView>,
+) -> StepPolicyConfidenceLabel {
+    if routing.is_some() && supervision_evidence.is_some() {
+        return StepPolicyConfidenceLabel::Deterministic;
+    }
+
+    if step_evaluation.confidence.is_some() || routing.is_some() || supervision_evidence.is_some() {
+        return StepPolicyConfidenceLabel::ModerateConfidence;
+    }
+
+    StepPolicyConfidenceLabel::LowConfidence
+}
+
+fn runtime_truth_ref_for_policy(
+    canonical_result: &mister_smith_core::UnifiedResultEnvelope,
+) -> String {
+    if canonical_result.proof_outcome
+        == mister_smith_core::ProofOutcomeClassification::FailedBeforeGraph
+    {
+        "packet-023:orchestration_substrate_completion".to_string()
+    } else {
+        "packet-023:placeholder_or_simulated_step_completion".to_string()
+    }
+}
+
+fn difficulty_bucket_label(bucket: StepDifficultyBucket) -> &'static str {
+    match bucket {
+        StepDifficultyBucket::Low => "low",
+        StepDifficultyBucket::Moderate => "moderate",
+        StepDifficultyBucket::High => "high",
+        StepDifficultyBucket::Critical => "critical",
+    }
+}
+
+fn pressure_level_label(level: StepBudgetPressureLevel) -> &'static str {
+    match level {
+        StepBudgetPressureLevel::None => "none",
+        StepBudgetPressureLevel::Watch => "watch",
+        StepBudgetPressureLevel::Softcap => "softcap",
+        StepBudgetPressureLevel::HardStop => "hard_stop",
+    }
+}
+
+fn step_budget_pressure_for_policy(
+    canonical_result: &mister_smith_core::UnifiedResultEnvelope,
+    step_evaluation: &StepEvaluationRecord,
+    step_id: &str,
+    routing: Option<&StepRoutingDecisionSummary>,
+) -> Option<StepBudgetPressureSummary> {
+    let budget_root = canonical_result
+        .runtime_execution_mode
+        .get("budget_root")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty() && *value != "disabled")
+        .map(ToOwned::to_owned);
+    let triggered_budget_checkpoint = routing
+        .map(|entry| {
+            entry
+                .triggered_checkpoints
+                .iter()
+                .any(|checkpoint| checkpoint == "budget_policy")
+        })
+        .unwrap_or(false);
+
+    if budget_root.is_none() && !triggered_budget_checkpoint {
+        return None;
+    }
+
+    let pressure_level = if triggered_budget_checkpoint
+        && (step_evaluation.verdict == VerifierVerdict::Rejected
+            || step_policy_repair_attempt_count(step_evaluation) >= 2)
+    {
+        StepBudgetPressureLevel::HardStop
+    } else if triggered_budget_checkpoint {
+        StepBudgetPressureLevel::Softcap
+    } else {
+        StepBudgetPressureLevel::Watch
+    };
+
+    Some(StepBudgetPressureSummary {
+        workflow_id: canonical_result.workflow_id,
+        step_id: step_id.to_string(),
+        pressure_level,
+        pressure_source: if triggered_budget_checkpoint {
+            "step_routing_history".to_string()
+        } else {
+            "runtime_execution_mode".to_string()
+        },
+        policy_hint: "prefer_local_correction_before_escalation".to_string(),
+        budget_root,
+        note: Some(if triggered_budget_checkpoint {
+            if pressure_level == StepBudgetPressureLevel::HardStop {
+                "budget-policy checkpoint exhausted the bounded local correction window".to_string()
+            } else {
+                "budget-policy checkpoint shaped the current step".to_string()
+            }
+        } else {
+            "budget-aware routing profile is active".to_string()
+        }),
+    })
+}
+
+fn step_difficulty_assessment_for_policy(
+    canonical_result: &mister_smith_core::UnifiedResultEnvelope,
+    step_evaluation: &StepEvaluationRecord,
+    routing: Option<&StepRoutingDecisionSummary>,
+    supervision_evidence: Option<&SupervisionEvidenceView>,
+) -> StepDifficultyAssessment {
+    let mut risk_points = 0u8;
+    let mut reason_codes = Vec::new();
+
+    match step_evaluation.verdict {
+        VerifierVerdict::Accepted => {}
+        VerifierVerdict::Rejected => {
+            risk_points += 3;
+            reason_codes.push("verifier_rejected".to_string());
+        }
+    }
+
+    if let Some(confidence) = step_evaluation.confidence {
+        if confidence < 0.55 {
+            risk_points += 2;
+            reason_codes.push("weak_verifier_confidence".to_string());
+        } else if confidence < 0.8 {
+            risk_points += 1;
+            reason_codes.push("moderate_verifier_confidence".to_string());
+        }
+    }
+
+    if step_evaluation.clarification_request.is_some() {
+        risk_points += 2;
+        reason_codes.push("missing_context".to_string());
+    }
+
+    if step_policy_repair_attempt_count(step_evaluation) >= 2 {
+        risk_points += 1;
+        reason_codes.push("repeated_local_repair".to_string());
+    }
+
+    if let Some(routing) = routing {
+        if routing.action_changed {
+            risk_points += 1;
+            reason_codes.push("unstable_recent_step_history".to_string());
+        }
+        if let Some(confidence_score) = routing.confidence_score {
+            if confidence_score < 0.6 {
+                risk_points += 1;
+                reason_codes.push("weak_routing_confidence".to_string());
+            }
+        }
+        if routing
+            .triggered_checkpoints
+            .iter()
+            .any(|checkpoint| checkpoint == "budget_policy")
+        {
+            reason_codes.push("budget_policy_checkpoint".to_string());
+        }
+    }
+
+    if let Some(supervision_evidence) = supervision_evidence {
+        if let Some(profile_snapshot) = supervision_evidence.profile_snapshot.as_ref() {
+            match profile_snapshot.health_state {
+                HealthState::Healthy => {}
+                HealthState::Degraded => {
+                    risk_points += 1;
+                    reason_codes.push("degraded_supervision_health".to_string());
+                }
+                HealthState::Unhealthy => {
+                    risk_points += 2;
+                    reason_codes.push("unhealthy_supervision_health".to_string());
+                }
+                HealthState::Unknown => {
+                    reason_codes.push("unknown_supervision_health".to_string());
+                }
+            }
+        }
+        if supervision_evidence
+            .decision_basis
+            .as_deref()
+            .map(|basis| basis.contains("conservative") || basis.contains("fallback"))
+            .unwrap_or(false)
+        {
+            risk_points += 1;
+            reason_codes.push("conservative_supervision_decision".to_string());
+        }
+    }
+
+    if reason_codes.is_empty() {
+        reason_codes.push("stable_verifier_accept".to_string());
+    }
+
+    let difficulty_bucket = match risk_points {
+        0 | 1 => StepDifficultyBucket::Low,
+        2 | 3 => StepDifficultyBucket::Moderate,
+        4 | 5 => StepDifficultyBucket::High,
+        _ => StepDifficultyBucket::Critical,
+    };
+
+    StepDifficultyAssessment {
+        workflow_id: canonical_result.workflow_id,
+        step_id: step_evaluation.step_id.clone(),
+        difficulty_bucket,
+        confidence_label: step_policy_confidence_label(
+            step_evaluation,
+            routing,
+            supervision_evidence,
+        ),
+        reason_codes,
+        verifier_ref: Some(format!("packet-020:{}", step_evaluation.step_id)),
+        routing_ref: routing.map(|entry| format!("step-routing:{}", entry.step_id)),
+        supervision_ref: supervision_evidence
+            .as_ref()
+            .map(|_| format!("packet-021:{}", step_evaluation.step_id)),
+        grounding_status_ref: Some(runtime_truth_ref_for_policy(canonical_result)),
+    }
+}
+
+fn step_policy_decision_for_assessment(
+    assessment: &StepDifficultyAssessment,
+    budget_pressure: Option<&StepBudgetPressureSummary>,
+    step_evaluation: &StepEvaluationRecord,
+) -> StepPolicyDecision {
+    let hard_stop_budget = budget_pressure
+        .map(|summary| summary.pressure_level == StepBudgetPressureLevel::HardStop)
+        .unwrap_or(false);
+    let chosen_action = match assessment.difficulty_bucket {
+        StepDifficultyBucket::Low => StepPolicyAction::Keep,
+        StepDifficultyBucket::Moderate => {
+            if step_evaluation.clarification_request.is_some() {
+                StepPolicyAction::Clarify
+            } else {
+                StepPolicyAction::Retry
+            }
+        }
+        StepDifficultyBucket::High => {
+            if hard_stop_budget {
+                StepPolicyAction::Downgrade
+            } else if step_evaluation.clarification_request.is_some() {
+                StepPolicyAction::Clarify
+            } else {
+                StepPolicyAction::Retry
+            }
+        }
+        StepDifficultyBucket::Critical => {
+            if step_evaluation.clarification_request.is_some() && !hard_stop_budget {
+                StepPolicyAction::Clarify
+            } else if hard_stop_budget || step_policy_repair_attempt_count(step_evaluation) >= 2 {
+                StepPolicyAction::Escalate
+            } else {
+                StepPolicyAction::Retry
+            }
+        }
+    };
+
+    let mut action_reason_parts = vec![format!(
+        "difficulty={}",
+        difficulty_bucket_label(assessment.difficulty_bucket)
+    )];
+    if let Some(budget_pressure) = budget_pressure {
+        action_reason_parts.push(format!(
+            "budget={}",
+            pressure_level_label(budget_pressure.pressure_level)
+        ));
+    }
+    if step_evaluation.clarification_request.is_some() {
+        action_reason_parts.push("missing_context".to_string());
+    }
+
+    StepPolicyDecision {
+        workflow_id: assessment.workflow_id,
+        step_id: assessment.step_id.clone(),
+        chosen_action,
+        action_reason: action_reason_parts.join(" "),
+        difficulty_ref: Some(format!("assessment:{}", assessment.step_id)),
+        budget_ref: budget_pressure.map(|_| format!("budget:{}", assessment.step_id)),
+        repair_lineage_ref: step_evaluation
+            .failure_context_checkpoint
+            .as_ref()
+            .and_then(|checkpoint| checkpoint.checkpoint_ref.clone())
+            .or_else(|| step_evaluation.checkpoint_ref.clone()),
+        requires_operator_attention: matches!(chosen_action, StepPolicyAction::Escalate),
+    }
+}
+
+fn build_step_policy_summary(
+    canonical_result: &mister_smith_core::UnifiedResultEnvelope,
+    metadata: &Value,
+    supervision_evidence: Option<&SupervisionEvidenceView>,
+) -> Option<StepPolicySummaryView> {
+    let step_evaluation = terminal_step_evaluation_for_policy(canonical_result)?;
+    let routing = latest_step_routing_for_policy(metadata, &step_evaluation.step_id);
+    let budget_pressure = step_budget_pressure_for_policy(
+        canonical_result,
+        &step_evaluation,
+        &step_evaluation.step_id,
+        routing.as_ref(),
+    );
+    let assessment = step_difficulty_assessment_for_policy(
+        canonical_result,
+        &step_evaluation,
+        routing.as_ref(),
+        supervision_evidence,
+    );
+    let policy_decision = step_policy_decision_for_assessment(
+        &assessment,
+        budget_pressure.as_ref(),
+        &step_evaluation,
+    );
+
+    Some(StepPolicySummaryView {
+        difficulty_assessment: assessment,
+        budget_pressure,
+        policy_decision,
+        input_refs: StepPolicyInputRefs {
+            latest_step_evaluation: Some(format!("packet-020:{}", step_evaluation.step_id)),
+            latest_step_routing: routing
+                .as_ref()
+                .map(|entry| format!("step-routing:{}", entry.step_id)),
+            supervision_evidence: supervision_evidence
+                .as_ref()
+                .map(|_| format!("packet-021:{}", step_evaluation.step_id)),
+            runtime_truth: Some(runtime_truth_ref_for_policy(canonical_result)),
+            boundary_evidence: None,
+        },
+        proof_boundary_ref: StepPolicyProofBoundaryRef {
+            owner_packet: "023".to_string(),
+            task_proof: PACKET_023_ORCHESTRATION_ONLY.to_string(),
+        },
+        display_note:
+            "placeholder orchestration proof only; local correction preferred before escalation"
+                .to_string(),
+    })
+}
+
 fn terminal_result_views(
     status: &str,
     canonical_result: mister_smith_core::UnifiedResultEnvelope,
     supervision_evidence: Option<SupervisionEvidenceView>,
+    metadata: &Value,
 ) -> Result<TerminalResultViews, String> {
     let aggregated_result = canonical_result.aggregated_result.clone();
+    let step_policy =
+        build_step_policy_summary(&canonical_result, metadata, supervision_evidence.as_ref());
     let task_result = serde_json::to_value(crate::autonomy::build_task_result_view(
         status,
         canonical_result.clone(),
         supervision_evidence,
+        step_policy,
     ))
     .map_err(|error| format!("failed to serialize task result view: {error}"))?;
     let final_result = serde_json::to_value(canonical_result)
@@ -1558,6 +1980,7 @@ impl RuntimeTaskService {
             "failed",
             final_result.clone(),
             self.current_supervision_evidence(workflow_id, &metadata, None),
+            &metadata,
         )
         .unwrap_or(TerminalResultViews {
             aggregated_result: aggregated_result.clone(),
@@ -1998,6 +2421,7 @@ impl RuntimeTaskService {
             "completed",
             final_result,
             self.current_supervision_evidence(workflow_id, &metadata, None),
+            &metadata,
         )?;
 
         put_metadata(
@@ -2620,6 +3044,7 @@ impl RuntimeTaskService {
             "failed",
             final_result,
             self.current_supervision_evidence(workflow_id, &metadata, None),
+            &metadata,
         )
         .unwrap_or(TerminalResultViews {
             aggregated_result: aggregated_result.clone(),
@@ -3771,6 +4196,7 @@ mod tests {
             guard_decisions: vec![],
             runtime_truth: None,
             supervision_evidence: None,
+            step_policy: None,
             conservative_reasons: vec!["restart-safe recovery".to_string()],
         }
     }
@@ -3830,6 +4256,100 @@ mod tests {
         let mut record = sample_task_with_metadata(metadata);
         record.result = Some(result);
         record
+    }
+
+    fn sample_step_policy_routing(
+        step_id: &str,
+        action_changed: bool,
+        confidence_score: Option<f32>,
+        triggered_checkpoints: &[&str],
+    ) -> StepRoutingDecisionSummary {
+        StepRoutingDecisionSummary {
+            step_id: step_id.to_string(),
+            step_index: Some(1),
+            step_kind: Some("planner".to_string()),
+            model_id: MODEL_ID.to_string(),
+            tier: "llm-tier".to_string(),
+            reason: "deterministic routing summary".to_string(),
+            previous_step_id: None,
+            previous_action: None,
+            previous_tier: None,
+            action: "continue".to_string(),
+            action_changed,
+            preferred_tier_after: Some("llm-tier".to_string()),
+            estimated_cost_tokens: Some(128),
+            confidence_score,
+            triggered_checkpoints: triggered_checkpoints
+                .iter()
+                .map(|checkpoint| checkpoint.to_string())
+                .collect(),
+            change_rationale: vec![],
+        }
+    }
+
+    fn sample_step_evaluation(
+        workflow_id: TaskId,
+        step_id: &str,
+        verdict: VerifierVerdict,
+        confidence: Option<f32>,
+        clarification_attempt_count: Option<u32>,
+        include_retry_repair: bool,
+    ) -> StepEvaluationRecord {
+        StepEvaluationRecord {
+            workflow_id,
+            step_id: step_id.to_string(),
+            verdict,
+            confidence,
+            reason: "deterministic verifier outcome".to_string(),
+            failure_code: (verdict == VerifierVerdict::Rejected)
+                .then_some("policy_conflict".to_string()),
+            checkpoint_ref: clarification_attempt_count.map(|count| format!("checkpoint-{count}")),
+            repair_directive: include_retry_repair.then_some(RepairDirective {
+                action: RepairDirectiveAction::RetryStep,
+                issued_by: "runtime.verifier".to_string(),
+                failure_context_ref: format!("planner:{step_id}/retry"),
+                retry_budget_remaining: 1,
+            }),
+            clarification_request: clarification_attempt_count.map(|attempt_count| {
+                HandoffClarificationRequest {
+                    source_step_id: "collect-evidence".to_string(),
+                    target_step_id: step_id.to_string(),
+                    missing_constraints: vec!["required context".to_string()],
+                    attempt_count,
+                    expires_at: None,
+                }
+            }),
+            failure_context_checkpoint: clarification_attempt_count.map(|attempt_count| {
+                FailureContextCheckpoint {
+                    failed_step_id: step_id.to_string(),
+                    last_stable_step_id: Some("collect-evidence".to_string()),
+                    checkpoint_ref: Some(format!("checkpoint-{attempt_count}")),
+                    failure_context_ref: format!("planner:{step_id}/retry"),
+                    failure_code: Some("policy_conflict".to_string()),
+                    reason: "deterministic verifier outcome".to_string(),
+                    attempt_count,
+                }
+            }),
+        }
+    }
+
+    fn sample_supervision_evidence(decision_basis: &str) -> SupervisionEvidenceView {
+        SupervisionEvidenceView {
+            target_scope: mister_smith_core::SupervisionTargetScope {
+                kind: mister_smith_core::SupervisionTargetKind::Branch,
+                provider: None,
+                graph_id: Some(ExecutionGraphId::new()),
+                branch_id: Some(ExecutionBranchId::new()),
+                node_id: None,
+            },
+            fingerprint_ref: None,
+            profile_snapshot: None,
+            guard_decision: None,
+            intervention_record: None,
+            decision_basis: Some(decision_basis.to_string()),
+            repair_lineage_ref: None,
+            proof_boundary: Some("deterministic-only".to_string()),
+        }
     }
 
     #[test]
@@ -3906,7 +4426,7 @@ mod tests {
                 },
             );
 
-            let result_views = terminal_result_views(status, canonical_result, None)
+            let result_views = terminal_result_views(status, canonical_result, None, &json!({}))
                 .expect("canonical task and final result envelopes should serialize");
 
             assert_eq!(
@@ -3925,6 +4445,216 @@ mod tests {
                 "task.result canonical envelope should retain proof outcome for {label}"
             );
         }
+    }
+
+    #[test]
+    fn build_step_policy_summary_keeps_stable_steps_low_risk() {
+        let workflow_id = TaskId::new();
+        let step_id = "draft-outline";
+        let step_evaluation = sample_step_evaluation(
+            workflow_id,
+            step_id,
+            VerifierVerdict::Accepted,
+            Some(0.97),
+            None,
+            false,
+        );
+        let canonical_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: "stable step",
+                runtime_execution_mode: json!({
+                    "execution_boundary": "tool_bus",
+                    "workflow_runner": "tokio_task",
+                    "budget_root": "disabled",
+                }),
+                planner_output: json!({ "steps": 1 }),
+                execution_plan: json!({
+                    "steps": [{ "id": step_id }]
+                }),
+                step_results: vec![json!({
+                    "step_evaluation": serde_json::to_value(step_evaluation).expect("step evaluation should serialize"),
+                    "result": { "summary": "stable step output" }
+                })],
+                aggregated_result: json!({ "summary": "stable step output" }),
+                status: "completed",
+            },
+        );
+        let metadata = json!({
+            "step_routing_history": [
+                sample_step_policy_routing(step_id, false, Some(0.94), &[])
+            ]
+        });
+
+        let summary =
+            build_step_policy_summary(&canonical_result, &metadata, None).expect("step policy");
+
+        assert_eq!(
+            summary.difficulty_assessment.difficulty_bucket,
+            StepDifficultyBucket::Low
+        );
+        assert_eq!(
+            summary.policy_decision.chosen_action,
+            StepPolicyAction::Keep
+        );
+        assert_eq!(
+            summary.difficulty_assessment.reason_codes,
+            vec!["stable_verifier_accept".to_string()]
+        );
+    }
+
+    #[test]
+    fn build_step_policy_summary_prefers_clarify_for_missing_context() {
+        let workflow_id = TaskId::new();
+        let step_id = "planner.step.2";
+        let step_evaluation = sample_step_evaluation(
+            workflow_id,
+            step_id,
+            VerifierVerdict::Rejected,
+            Some(0.41),
+            Some(2),
+            true,
+        );
+        let canonical_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: "unstable step",
+                runtime_execution_mode: json!({
+                    "execution_boundary": "tool_bus",
+                    "workflow_runner": "tokio_task",
+                    "budget_root": "disabled",
+                }),
+                planner_output: json!({ "steps": 2 }),
+                execution_plan: json!({
+                    "steps": [{ "id": "collect-evidence" }, { "id": step_id }]
+                }),
+                step_results: vec![json!({
+                    "step_evaluation": serde_json::to_value(step_evaluation).expect("step evaluation should serialize"),
+                    "result": { "summary": "unstable step output" }
+                })],
+                aggregated_result: json!({ "summary": "unstable step output" }),
+                status: "completed",
+            },
+        );
+        let metadata = json!({
+            "step_routing_history": [
+                sample_step_policy_routing(step_id, true, Some(0.45), &[])
+            ]
+        });
+
+        let summary = build_step_policy_summary(
+            &canonical_result,
+            &metadata,
+            Some(&sample_supervision_evidence("conservative_fallback")),
+        )
+        .expect("step policy");
+
+        assert!(matches!(
+            summary.difficulty_assessment.difficulty_bucket,
+            StepDifficultyBucket::High | StepDifficultyBucket::Critical
+        ));
+        assert_eq!(
+            summary.policy_decision.chosen_action,
+            StepPolicyAction::Clarify
+        );
+        assert!(summary
+            .difficulty_assessment
+            .reason_codes
+            .contains(&"missing_context".to_string()));
+        assert_eq!(summary.budget_pressure, None);
+    }
+
+    #[test]
+    fn build_step_policy_summary_downgrades_under_hard_stop_budget_pressure() {
+        let workflow_id = TaskId::new();
+        let step_id = "planner.step.3";
+        let step_evaluation = sample_step_evaluation(
+            workflow_id,
+            step_id,
+            VerifierVerdict::Rejected,
+            Some(0.74),
+            None,
+            true,
+        );
+        let canonical_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: "budget constrained step",
+                runtime_execution_mode: json!({
+                    "execution_boundary": "tool_bus",
+                    "workflow_runner": "tokio_task",
+                    "budget_root": "runtime.task_path",
+                }),
+                planner_output: json!({ "steps": 2 }),
+                execution_plan: json!({
+                    "steps": [{ "id": "collect-evidence" }, { "id": step_id }]
+                }),
+                step_results: vec![json!({
+                    "step_evaluation": serde_json::to_value(step_evaluation).expect("step evaluation should serialize"),
+                    "result": { "summary": "budget constrained output" }
+                })],
+                aggregated_result: json!({ "summary": "budget constrained output" }),
+                status: "completed",
+            },
+        );
+        let metadata = json!({
+            "step_routing_history": [
+                sample_step_policy_routing(step_id, true, Some(0.68), &["budget_policy"])
+            ]
+        });
+
+        let summary =
+            build_step_policy_summary(&canonical_result, &metadata, None).expect("step policy");
+
+        assert_eq!(
+            summary
+                .budget_pressure
+                .as_ref()
+                .map(|pressure| pressure.pressure_level),
+            Some(StepBudgetPressureLevel::HardStop)
+        );
+        assert_eq!(
+            summary.policy_decision.chosen_action,
+            StepPolicyAction::Downgrade
+        );
+    }
+
+    #[test]
+    fn terminal_result_views_omit_step_policy_when_terminal_evaluation_is_missing() {
+        let workflow_id = TaskId::new();
+        let canonical_result = crate::autonomy::build_canonical_result_envelope(
+            crate::autonomy::CanonicalResultEnvelopeInput {
+                workflow_id,
+                provider_kind: PROVIDER_KIND_NAME,
+                model_id: MODEL_ID,
+                description: "missing evaluation",
+                runtime_execution_mode: json!({
+                    "execution_boundary": "tool_bus",
+                    "workflow_runner": "tokio_task",
+                    "budget_root": "disabled",
+                }),
+                planner_output: json!({ "steps": 1 }),
+                execution_plan: json!({
+                    "steps": [{ "id": "draft-outline" }]
+                }),
+                step_results: vec![json!({
+                    "result": { "summary": "no verifier output" }
+                })],
+                aggregated_result: json!({ "summary": "no verifier output" }),
+                status: "completed",
+            },
+        );
+
+        let result_views = terminal_result_views("completed", canonical_result, None, &json!({}))
+            .expect("terminal result views");
+
+        assert_eq!(result_views.task_result["step_policy"], Value::Null);
     }
 
     #[test]
@@ -4993,6 +5723,7 @@ mod tests {
             "failed",
             canonical_result.clone(),
             None,
+            None,
         ))
         .expect("task result should serialize");
         let mut record = sample_task_with_result(
@@ -5100,6 +5831,7 @@ mod tests {
                     status: "failed",
                 },
             ),
+            None,
             None,
         ))
         .expect("task result should serialize");

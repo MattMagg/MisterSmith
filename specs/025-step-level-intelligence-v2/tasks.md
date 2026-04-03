@@ -52,14 +52,14 @@ changes start.
 
 **CRITICAL**: No projection or runtime task may begin until this phase is complete.
 
-- [ ] T007 Add packet-025 step-policy value objects in
+- [x] T007 Add packet-025 step-policy value objects in
       `crates/mister-smith-core/src/autonomy.rs`
-- [ ] T008 [P] Add step-policy summary fields to current event and app projections in
+- [x] T008 [P] Add step-policy summary fields to current event and app projections in
       `crates/mister-smith-events/src/autonomy.rs` and
       `crates/mister-smith-app/src/autonomy.rs`
-- [ ] T009 [P] Add shared contract coverage in
+- [x] T009 [P] Add shared contract coverage in
       `crates/mister-smith-app/tests/autonomy_status_tests.rs`
-- [ ] T010 Freeze packet-owned field names and authoritative payload shape in
+- [x] T010 Freeze packet-owned field names and authoritative payload shape in
       `specs/025-step-level-intelligence-v2/contracts/step-policy-contract.md` and
       `specs/025-step-level-intelligence-v2/data-model.md`
 
@@ -77,18 +77,18 @@ low-risk `keep` case and one higher-risk case, without regressing current fallba
 
 ### Tests For User Story 1
 
-- [ ] T011 [P] [US1] Add deterministic step-scoring coverage in
+- [x] T011 [P] [US1] Add deterministic step-scoring coverage in
       `crates/mister-smith-app/src/execution.rs`
-- [ ] T012 [P] [US1] Extend current summary projection coverage for step scores in
+- [x] T012 [P] [US1] Extend current summary projection coverage for step scores in
       `crates/mister-smith-app/tests/autonomy_status_tests.rs`
 
 ### Implementation For User Story 1
 
-- [ ] T013 [P] [US1] Add `StepDifficultyAssessment` fields and exports in
+- [x] T013 [P] [US1] Add `StepDifficultyAssessment` fields and exports in
       `crates/mister-smith-core/src/autonomy.rs`
-- [ ] T014 [US1] Build deterministic score assembly from current runtime inputs in
+- [x] T014 [US1] Build deterministic score assembly from current runtime inputs in
       `crates/mister-smith-app/src/execution.rs`
-- [ ] T015 [US1] Project packet-owned step scores through existing summary surfaces in
+- [x] T015 [US1] Project packet-owned step scores through existing summary surfaces in
       `crates/mister-smith-app/src/autonomy.rs` and
       `crates/mister-smith-events/src/autonomy.rs`
 
@@ -107,18 +107,18 @@ least one downgrade or escalate path without inventing a new trace or routing sc
 
 ### Tests For User Story 2
 
-- [ ] T016 [P] [US2] Add bounded action-ladder tests in
+- [x] T016 [P] [US2] Add bounded action-ladder tests in
       `crates/mister-smith-app/src/execution.rs`
-- [ ] T017 [P] [US2] Add smoke-harness assertions for step-policy wording and proof honesty in
+- [x] T017 [P] [US2] Add smoke-harness assertions for step-policy wording and proof honesty in
       `scripts/tests/test_live_runtime_proof_smoke.py`
 
 ### Implementation For User Story 2
 
-- [ ] T018 [P] [US2] Add `StepBudgetHint` and `StepPolicyDecision` fields in
+- [x] T018 [P] [US2] Add `StepBudgetHint` and `StepPolicyDecision` fields in
       `crates/mister-smith-core/src/autonomy.rs`
-- [ ] T019 [US2] Implement the deterministic action ladder in
+- [x] T019 [US2] Implement the deterministic action ladder in
       `crates/mister-smith-app/src/execution.rs`
-- [ ] T020 [US2] Reconcile packet-020 repair lineage and packet-023 truth references with the
+- [x] T020 [US2] Reconcile packet-020 repair lineage and packet-023 truth references with the
       packet-owned step-policy summary in `crates/mister-smith-app/src/autonomy.rs`
 
 **Checkpoint**: The runtime can choose a bounded step action from deterministic inputs while
@@ -136,20 +136,20 @@ placeholder-versus-grounded wording without raw log archaeology.
 
 ### Tests For User Story 3
 
-- [ ] T021 [P] [US3] Extend summary rendering coverage in
+- [x] T021 [P] [US3] Extend summary rendering coverage in
       `crates/mister-smith-app/tests/autonomy_status_tests.rs`
-- [ ] T022 [P] [US3] Add bounded operator-summary coverage in
+- [x] T022 [P] [US3] Add bounded operator-summary coverage in
       `apps/operator-console/src/App.test.tsx`
 
 ### Implementation For User Story 3
 
-- [ ] T023 [P] [US3] Extend task and autonomy summary assembly in
+- [x] T023 [P] [US3] Extend task and autonomy summary assembly in
       `crates/mister-smith-app/src/autonomy.rs` and
       `crates/mister-smith-events/src/autonomy.rs`
-- [ ] T024 [P] [US3] Render the packet-owned step-policy summary in
+- [x] T024 [P] [US3] Render the packet-owned step-policy summary in
       `apps/operator-console/src/views/RunsView.tsx` and
       `apps/operator-console/src/types.ts`
-- [ ] T025 [US3] Keep packet-023 placeholder-versus-grounded wording explicit in
+- [x] T025 [US3] Keep packet-023 placeholder-versus-grounded wording explicit in
       `scripts/tests/test_live_runtime_proof_smoke.py`
 
 **Checkpoint**: Operators can inspect step-policy summaries without mistaking placeholder
@@ -159,13 +159,13 @@ completion for grounded task proof.
 
 ## Final Validation And Evidence
 
-- [ ] T026 Run `cargo test -p mister-smith-core`
-- [ ] T027 Run `cargo test -p mister-smith-events --test autonomy_event_tests`
-- [ ] T028 Run `cargo test -p mister-smith-app --test autonomy_status_tests`
-- [ ] T029 Run `python3 -m unittest scripts.tests.test_live_runtime_proof_smoke`
-- [ ] T030 Run `npm --prefix apps/operator-console test`
-- [ ] T031 Run `npx markdownlint-cli2 "specs/025-step-level-intelligence-v2/**/*.md" --config .markdownlint.json`
-- [ ] T032 Run `git diff --check`
+- [x] T026 Run `cargo test -p mister-smith-core`
+- [x] T027 Run `cargo test -p mister-smith-events --test autonomy_event_tests`
+- [x] T028 Run `cargo test -p mister-smith-app --test autonomy_status_tests`
+- [x] T029 Run `python3 -m unittest scripts.tests.test_live_runtime_proof_smoke`
+- [x] T030 Run `npm --prefix apps/operator-console test`
+- [x] T031 Run `npx markdownlint-cli2 "specs/025-step-level-intelligence-v2/**/*.md" --config .markdownlint.json`
+- [x] T032 Run `git diff --check`
 
 ## Parallel Staging Directive
 

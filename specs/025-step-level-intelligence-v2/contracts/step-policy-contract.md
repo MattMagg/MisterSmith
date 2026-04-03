@@ -68,14 +68,18 @@ Example authoritative payload shape:
       "pressure_level": "softcap",
       "pressure_source": "runtime.task_path",
       "policy_hint": "prefer_local_correction_before_escalation",
-      "budget_root": "runtime.task_path"
+      "budget_root": "runtime.task_path",
+      "note": "softcap pressure is active"
     },
     "policy_decision": {
       "workflow_id": "workflow-1",
       "step_id": "planner.step.2",
       "chosen_action": "downgrade",
       "action_reason": "high_difficulty_plus_softcap_budget_pressure",
-      "repair_lineage_ref": "packet-020:last-stable-checkpoint"
+      "difficulty_ref": "assessment:planner.step.2",
+      "budget_ref": "budget:planner.step.2",
+      "repair_lineage_ref": "packet-020:last-stable-checkpoint",
+      "requires_operator_attention": true
     },
     "input_refs": {
       "latest_step_evaluation": "packet-020:planner.step.2",
@@ -96,6 +100,8 @@ Example authoritative payload shape:
 Behavior:
 
 - the only bounded action values are `keep`, `retry`, `clarify`, `downgrade`, and `escalate`
+- `difficulty_assessment.confidence_label` is bounded to `low_confidence`,
+  `moderate_confidence`, or `deterministic`
 - `policy_decision.chosen_action` is a new packet-owned summary field and does not replace
   `step_routing_history.action`
 - packet `020` repair lineage may be referenced, but packet `025` does not replace that contract

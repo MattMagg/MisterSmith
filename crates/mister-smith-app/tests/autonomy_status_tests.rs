@@ -14,10 +14,14 @@ use mister_smith_core::{
     ProfileFingerprintId, ProfileFingerprintRef, ProfileSnapshotId, ProfileTarget,
     ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirective,
     RepairDirectiveAction, RepairLineageRef, RevocationState, SemanticSignal, SemanticSignalKind,
-    StepEvaluationRecord, SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
+    StepBudgetPressureLevel, StepBudgetPressureSummary, StepDifficultyAssessment,
+    StepDifficultyBucket, StepEvaluationRecord, StepPolicyAction, StepPolicyConfidenceLabel,
+    StepPolicyDecision, StepPolicyInputRefs, StepPolicyProofBoundaryRef, StepPolicySummaryView,
+    SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
     SupervisionTargetScope, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
     TopologyKind, TopologyRationale, VerifierVerdict,
 };
+use mister_smith_events::autonomy::AttestationSource;
 use mister_smith_events::{
     AutonomyEvent, AutonomyEventEnvelope, AutonomyStatusView, BranchSummary, CapabilitySummary,
     CheckpointRecordSummary, ContextPressureSummary, DelegationAlert, ExecutionGraphSummary,
@@ -25,7 +29,6 @@ use mister_smith_events::{
     ExternalCapabilityDecisionSurface, ResumeProvenanceSummary, RoutingDecisionSummary,
     StepRoutingDecisionSummary, TopologyPlanSummary,
 };
-use mister_smith_events::autonomy::AttestationSource;
 
 fn sample_task_shape(kind: TaskShapeKind) -> TaskShapeClassification {
     TaskShapeClassification {
@@ -61,6 +64,60 @@ fn sample_team_sizing(workflow_id: TaskId, graph_id: ExecutionGraphId) -> TeamSi
             "selected 1 worker from the available pool".to_string(),
         ],
         decided_at: chrono::Utc::now(),
+    }
+}
+
+fn sample_step_policy_summary(workflow_id: TaskId, step_id: &str) -> StepPolicySummaryView {
+    StepPolicySummaryView {
+        difficulty_assessment: StepDifficultyAssessment {
+            workflow_id,
+            step_id: step_id.to_string(),
+            difficulty_bucket: StepDifficultyBucket::High,
+            confidence_label: StepPolicyConfidenceLabel::Deterministic,
+            reason_codes: vec![
+                "weak_current_evidence".to_string(),
+                "unstable_recent_step_history".to_string(),
+            ],
+            verifier_ref: Some(format!("packet-020:{step_id}")),
+            routing_ref: Some(format!("step-routing:{step_id}")),
+            supervision_ref: Some(format!("packet-021:{step_id}")),
+            grounding_status_ref: Some(
+                "packet-023:placeholder_or_simulated_step_completion".to_string(),
+            ),
+        },
+        budget_pressure: Some(StepBudgetPressureSummary {
+            workflow_id,
+            step_id: step_id.to_string(),
+            pressure_level: StepBudgetPressureLevel::Softcap,
+            pressure_source: "runtime.task_path".to_string(),
+            policy_hint: "prefer_local_correction_before_escalation".to_string(),
+            budget_root: Some("runtime.task_path".to_string()),
+            note: Some("softcap pressure is active".to_string()),
+        }),
+        policy_decision: StepPolicyDecision {
+            workflow_id,
+            step_id: step_id.to_string(),
+            chosen_action: StepPolicyAction::Downgrade,
+            action_reason: "high_difficulty_plus_softcap_budget_pressure".to_string(),
+            difficulty_ref: Some(format!("assessment:{step_id}")),
+            budget_ref: Some(format!("budget:{step_id}")),
+            repair_lineage_ref: Some("packet-020:last-stable-checkpoint".to_string()),
+            requires_operator_attention: true,
+        },
+        input_refs: StepPolicyInputRefs {
+            latest_step_evaluation: Some(format!("packet-020:{step_id}")),
+            latest_step_routing: Some(format!("step-routing:{step_id}")),
+            supervision_evidence: Some(format!("packet-021:{step_id}")),
+            runtime_truth: Some("packet-023:placeholder_or_simulated_step_completion".to_string()),
+            boundary_evidence: Some("packet-024:clean_quarantine_boundary".to_string()),
+        },
+        proof_boundary_ref: StepPolicyProofBoundaryRef {
+            owner_packet: "023".to_string(),
+            task_proof: "result is orchestration proof, not substantive task proof".to_string(),
+        },
+        display_note:
+            "placeholder orchestration proof only; local correction preferred before escalation"
+                .to_string(),
     }
 }
 
@@ -254,6 +311,7 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
         }],
         runtime_truth: None,
         supervision_evidence: None,
+        step_policy: None,
         conservative_reasons: vec![
             "conservative fallback: control-plane state unavailable".to_string()
         ],
@@ -972,7 +1030,7 @@ fn build_task_result_view_surfaces_accepted_without_repair_orchestration_quality
         )],
     );
 
-    let summary = autonomy::build_task_result_view("completed", canonical_result, None)
+    let summary = autonomy::build_task_result_view("completed", canonical_result, None, None)
         .orchestration_quality
         .expect("accepted evaluation should surface orchestration quality");
 
@@ -1013,7 +1071,7 @@ fn build_task_result_view_surfaces_rejected_retry_orchestration_quality() {
         )],
     );
 
-    let summary = autonomy::build_task_result_view("failed", canonical_result, None)
+    let summary = autonomy::build_task_result_view("failed", canonical_result, None, None)
         .orchestration_quality
         .expect("rejected evaluation should surface orchestration quality");
 
@@ -1065,7 +1123,7 @@ fn build_task_result_view_infers_planner_repair_orchestration_quality_without_ve
         ],
     );
 
-    let summary = autonomy::build_task_result_view("completed", canonical_result, None)
+    let summary = autonomy::build_task_result_view("completed", canonical_result, None, None)
         .orchestration_quality
         .expect("planner repair step should surface orchestration quality");
 
@@ -1122,9 +1180,46 @@ fn build_task_result_view_preserves_supervision_evidence_projection() {
         "completed",
         canonical_result,
         Some(supervision_evidence.clone()),
+        None,
     );
 
     assert_eq!(summary.supervision_evidence, Some(supervision_evidence));
+}
+
+#[test]
+fn build_task_result_view_defaults_step_policy_to_none_until_policy_is_computed() {
+    let workflow_id = TaskId::new();
+    let canonical_result = sample_canonical_result(
+        workflow_id,
+        "completed",
+        vec![serde_json::json!({ "id": "draft-outline" })],
+        vec![],
+    );
+
+    let summary = autonomy::build_task_result_view("completed", canonical_result, None, None);
+
+    assert_eq!(summary.step_policy, None);
+}
+
+#[test]
+fn build_task_result_view_preserves_step_policy_projection() {
+    let workflow_id = TaskId::new();
+    let canonical_result = sample_canonical_result(
+        workflow_id,
+        "completed",
+        vec![serde_json::json!({ "id": "planner.step.2" })],
+        vec![],
+    );
+    let step_policy = sample_step_policy_summary(workflow_id, "planner.step.2");
+
+    let summary = autonomy::build_task_result_view(
+        "completed",
+        canonical_result,
+        None,
+        Some(step_policy.clone()),
+    );
+
+    assert_eq!(summary.step_policy, Some(step_policy));
 }
 
 #[test]
@@ -1136,7 +1231,7 @@ fn build_task_result_view_preserves_runtime_truth_projection() {
         vec![serde_json::json!({ "id": "draft-outline" })],
         vec![],
     );
-    let summary = autonomy::build_task_result_view("completed", canonical_result, None);
+    let summary = autonomy::build_task_result_view("completed", canonical_result, None, None);
     let runtime_truth = serde_json::to_value(
         summary
             .runtime_truth
@@ -1164,6 +1259,29 @@ fn build_task_result_view_preserves_runtime_truth_projection() {
         runtime_truth["run_trace"]["relationships"],
         serde_json::json!(["graph", "tool_boundary"])
     );
+}
+
+#[test]
+fn enrich_result_preview_promotes_step_policy_summary_from_task_result() {
+    let (mut view, _, _) = sample_view();
+    view.graph.state = GraphState::Completed;
+    let workflow_id = view.graph.workflow_id;
+    let step_policy = sample_step_policy_summary(workflow_id, "planner.step.2");
+    let mut task_result = sample_task_result_view(
+        workflow_id,
+        ProofOutcomeClassification::CollapsedToSequential,
+    );
+    task_result["step_policy"] =
+        serde_json::to_value(step_policy.clone()).expect("step policy should serialize");
+
+    autonomy::enrich_result_preview(&mut view, &serde_json::json!({}), Some(&task_result));
+
+    let preview = view
+        .result_preview
+        .clone()
+        .expect("step policy should be retained on the operator preview");
+    assert_eq!(preview.step_policy, Some(step_policy.clone()));
+    assert_eq!(view.step_policy, Some(step_policy));
 }
 
 #[test]
@@ -1523,6 +1641,7 @@ fn render_status_surfaces_result_preview_block() {
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
         runtime_truth: None,
+        step_policy: None,
         provenance_lines: vec![
             "graph formed and completed before final result publication".to_string(),
             "provider=openai_chatgpt model=gpt-5.4".to_string(),
@@ -1542,6 +1661,46 @@ fn render_status_surfaces_result_preview_block() {
     assert!(rendered.contains("  - provider=openai_chatgpt model=gpt-5.4"));
     assert!(rendered.contains("canonical result stored in metadata.final_result"));
     assert!(rendered.contains("session assistant_result derives from the canonical result object"));
+}
+
+#[test]
+fn render_status_surfaces_step_policy_summary_from_status_and_preview() {
+    let (mut view, _, _) = sample_view();
+    let step_policy = sample_step_policy_summary(view.graph.workflow_id, "planner.step.2");
+    view.step_policy = Some(step_policy.clone());
+    view.result_preview = Some(mister_smith_core::OperatorResultPreview {
+        workflow_id: view.graph.workflow_id,
+        proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+        preview_text: Some("bounded answer preview".to_string()),
+        payload_location: "task.result".to_string(),
+        orchestration_quality: None,
+        runtime_truth: None,
+        step_policy: Some(step_policy),
+        provenance_lines: vec![
+            "canonical result stored in metadata.final_result".to_string(),
+            "packet-025 step policy retained for step planner.step.2 with action downgrade"
+                .to_string(),
+        ],
+    });
+
+    let rendered = autonomy::render_status(&view);
+
+    assert!(rendered.contains("step policy: step=planner.step.2"));
+    assert!(rendered.contains("difficulty=high"));
+    assert!(rendered.contains("action=downgrade"));
+    assert!(rendered
+        .contains("budget=softcap/runtime.task_path/prefer_local_correction_before_escalation"));
+    assert!(rendered.contains("repair_lineage=packet-020:last-stable-checkpoint"));
+    assert!(rendered.contains("proof_owner=023"));
+    assert!(
+        rendered.contains("task_proof=result is orchestration proof, not substantive task proof")
+    );
+    assert!(rendered.contains(
+        "note=placeholder orchestration proof only; local correction preferred before escalation"
+    ));
+    assert!(rendered.contains("step_policy:"));
+    assert!(rendered
+        .contains("packet-025 step policy retained for step planner.step.2 with action downgrade"));
 }
 
 #[test]
@@ -1576,6 +1735,7 @@ fn enrich_result_preview_merges_existing_structural_provenance() {
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
         runtime_truth: None,
+        step_policy: None,
         provenance_lines: vec![
             "projection observed graph state Completed with topology Sequential (1 branch(es), 3 node(s))".to_string(),
             "routing history retained 1 decision(s)".to_string(),

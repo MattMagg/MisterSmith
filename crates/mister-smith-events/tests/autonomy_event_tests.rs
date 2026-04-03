@@ -196,6 +196,7 @@ fn sample_result_preview(
             "aggregated payload nested under metadata.aggregated_result".to_string(),
             "session assistant_result derives from the canonical result object".to_string(),
         ],
+        step_policy: None,
     }
 }
 
@@ -209,6 +210,7 @@ fn merge_operator_result_preview_preserves_orchestration_quality_from_fallback()
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
         runtime_truth: None,
+        step_policy: None,
         provenance_lines: vec!["preferred provenance".to_string()],
     };
     let fallback = OperatorResultPreview {
@@ -239,6 +241,7 @@ fn merge_operator_result_preview_preserves_orchestration_quality_from_fallback()
             ],
             vec![],
         )),
+        step_policy: None,
         provenance_lines: vec!["fallback provenance".to_string()],
     };
 
@@ -716,6 +719,7 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
             ],
             vec![],
         )),
+        step_policy: None,
         conservative_reasons: vec!["control-plane state unavailable".to_string()],
     };
 
@@ -1269,6 +1273,7 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
         guard_decisions: vec![],
         supervision_evidence: None,
         runtime_truth: None,
+        step_policy: None,
         conservative_reasons: vec!["control-plane freshness unavailable".to_string()],
     };
     let event = AutonomyEvent::StatusUpdated(Box::new(AutonomyEventEnvelope {
@@ -1406,6 +1411,7 @@ async fn event_bus_preserves_supervision_evidence_from_status_updated() {
             ],
             vec![],
         )),
+        step_policy: None,
         conservative_reasons: vec![],
     };
 
@@ -2085,6 +2091,7 @@ async fn event_bus_merges_explicit_preview_with_projection_provenance() {
         guard_decisions: vec![],
         supervision_evidence: None,
         runtime_truth: None,
+        step_policy: None,
         conservative_reasons: vec![],
     };
 
@@ -2198,6 +2205,7 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         guard_decisions: vec![],
         supervision_evidence: None,
         runtime_truth: None,
+        step_policy: None,
         conservative_reasons: vec![],
     };
 
@@ -2392,6 +2400,7 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
         guard_decisions: vec![],
         supervision_evidence: None,
         runtime_truth: None,
+        step_policy: None,
         conservative_reasons: vec!["delegation scope suspended".to_string()],
     };
 

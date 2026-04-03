@@ -168,6 +168,45 @@ function createSnapshot(
             emitted_at: '2026-03-21T10:00:50Z',
           },
         },
+        step_policy: {
+          difficulty_assessment: {
+            workflow_id: run.task_id,
+            step_id: 'planner.step.2',
+            difficulty_bucket: 'high',
+            confidence_label: 'deterministic',
+            reason_codes: ['weak_current_evidence', 'unstable_recent_step_history'],
+          },
+          budget_pressure: {
+            workflow_id: run.task_id,
+            step_id: 'planner.step.2',
+            pressure_level: 'softcap',
+            pressure_source: 'runtime.task_path',
+            policy_hint: 'prefer_local_correction_before_escalation',
+          },
+          policy_decision: {
+            workflow_id: run.task_id,
+            step_id: 'planner.step.2',
+            chosen_action: 'downgrade',
+            action_reason: 'high_difficulty_plus_softcap_budget_pressure',
+            difficulty_ref: 'assessment:planner.step.2',
+            budget_ref: 'budget:planner.step.2',
+            repair_lineage_ref: 'packet-020:last-stable-checkpoint',
+            requires_operator_attention: true,
+          },
+          input_refs: {
+            latest_step_evaluation: 'packet-020:planner.step.2',
+            latest_step_routing: 'step-routing:planner.step.2',
+            supervision_evidence: 'packet-021:planner.step.2',
+            runtime_truth: 'packet-023:placeholder_or_simulated_step_completion',
+            boundary_evidence: 'packet-024:clean_quarantine_boundary',
+          },
+          proof_boundary_ref: {
+            owner_packet: '023',
+            task_proof: 'result is orchestration proof, not substantive task proof',
+          },
+          display_note:
+            'placeholder orchestration proof only; local correction preferred before escalation',
+        },
         result: { ok: true },
       },
     },
@@ -371,6 +410,25 @@ describe('App', () => {
     expect(screen.getByText('packet-020 via checkpoint-retry')).toBeInTheDocument();
     expect(
       screen.getByText('deterministic-only until a real rerun is captured'),
+    ).toBeInTheDocument();
+  });
+
+  it('renders the packet-owned step policy summary in the selected run detail', async () => {
+    render(<App services={createServices()} initialSettings={createSettings()} />);
+
+    await screen.findByText('Step policy');
+    expect(screen.getByText('planner.step.2')).toBeInTheDocument();
+    expect(screen.getByText('downgrade')).toBeInTheDocument();
+    expect(
+      screen.getByText('softcap via runtime.task_path (prefer_local_correction_before_escalation)'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('packet-023:placeholder_or_simulated_step_completion'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'placeholder orchestration proof only; local correction preferred before escalation',
+      ),
     ).toBeInTheDocument();
   });
 

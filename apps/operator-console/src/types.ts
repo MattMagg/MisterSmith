@@ -30,6 +30,7 @@ export interface ResultPreview {
   proof_outcome: string;
   preview_text?: string | null;
   payload_location: string;
+  step_policy?: StepPolicySummary | null;
   provenance_lines: string[];
 }
 
@@ -106,6 +107,61 @@ export interface TaskRuntimeTruth {
   grounded_evidence?: RuntimeTruthGroundedEvidenceReference[];
 }
 
+export interface StepPolicyDifficultyAssessment {
+  workflow_id: string;
+  step_id: string;
+  difficulty_bucket: string;
+  confidence_label: string;
+  reason_codes: string[];
+  verifier_ref?: string | null;
+  routing_ref?: string | null;
+  supervision_ref?: string | null;
+  grounding_status_ref?: string | null;
+}
+
+export interface StepPolicyBudgetPressure {
+  workflow_id: string;
+  step_id: string;
+  pressure_level: string;
+  pressure_source: string;
+  policy_hint: string;
+  budget_root?: string | null;
+  note?: string | null;
+}
+
+export interface StepPolicyDecision {
+  workflow_id: string;
+  step_id: string;
+  chosen_action: string;
+  action_reason: string;
+  difficulty_ref?: string | null;
+  budget_ref?: string | null;
+  repair_lineage_ref?: string | null;
+  requires_operator_attention: boolean;
+}
+
+export interface StepPolicyInputRefs {
+  latest_step_evaluation?: string | null;
+  latest_step_routing?: string | null;
+  supervision_evidence?: string | null;
+  runtime_truth?: string | null;
+  boundary_evidence?: string | null;
+}
+
+export interface StepPolicyProofBoundaryRef {
+  owner_packet: string;
+  task_proof: string;
+}
+
+export interface StepPolicySummary {
+  difficulty_assessment: StepPolicyDifficultyAssessment;
+  budget_pressure?: StepPolicyBudgetPressure | null;
+  policy_decision: StepPolicyDecision;
+  input_refs: StepPolicyInputRefs;
+  proof_boundary_ref: StepPolicyProofBoundaryRef;
+  display_note: string;
+}
+
 export interface TaskSupervisionEvidence {
   target_scope: TaskSupervisionTargetScope;
   decision_basis?: string | null;
@@ -124,6 +180,7 @@ export interface TaskResultDetail {
   orchestration_quality?: Record<string, unknown> | null;
   runtime_truth?: TaskRuntimeTruth | null;
   supervision_evidence?: TaskSupervisionEvidence | null;
+  step_policy?: StepPolicySummary | null;
   result: Record<string, unknown>;
 }
 

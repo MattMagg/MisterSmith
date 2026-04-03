@@ -867,6 +867,7 @@ impl Orchestrator {
             &topology_summary,
             &branches,
             &routing_history,
+            None,
         );
         let supervision_evidence = build_supervision_evidence_view(
             &graph,
@@ -928,6 +929,7 @@ impl Orchestrator {
             guard_decisions,
             supervision_evidence,
             runtime_truth: Some(runtime_truth),
+            step_policy: None,
             conservative_reasons,
         })
     }

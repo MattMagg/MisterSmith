@@ -14,8 +14,9 @@ use mister_smith_core::{
     DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionGraphId, ExecutionNodeId,
     GraphState, GuardDecision, HealthState, InterventionRecord, MemorySnapshotId,
     OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProofOutcomeClassification,
-    ProvenanceChain, RevocationState, RuntimeTruthView, SessionId, SupervisionEvidenceView, TaskId,
-    TaskShapeClassification, TaskShapeKind, TeamSizingDecision, TopologyKind, TopologyRationale,
+    ProvenanceChain, RevocationState, RuntimeTruthView, SessionId, StepPolicySummaryView,
+    SupervisionEvidenceView, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
+    TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -423,6 +424,9 @@ pub struct AutonomyStatusView {
     /// Packet-023 runtime-truth projection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_truth: Option<RuntimeTruthView>,
+    /// Packet-025 step-policy summary when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_policy: Option<StepPolicySummaryView>,
     /// Reasons the system narrowed autonomy conservatively.
     pub conservative_reasons: Vec<String>,
 }
@@ -540,6 +544,7 @@ pub fn infer_result_preview_from_projection(
     topology: &TopologyPlanSummary,
     branches: &[BranchSummary],
     routing_history: &[RoutingDecisionSummary],
+    step_policy: Option<&StepPolicySummaryView>,
 ) -> Option<OperatorResultPreview> {
     let proof_outcome =
         infer_proof_outcome_from_projection(graph, topology, branches, routing_history)?;
@@ -588,6 +593,13 @@ pub fn infer_result_preview_from_projection(
             routing_history.len()
         ));
     }
+    if let Some(step_policy) = step_policy {
+        provenance_lines.push(format!(
+            "packet-025 step policy retained for step {} with action {}",
+            step_policy.difficulty_assessment.step_id,
+            step_policy_action_label(step_policy.policy_decision.chosen_action)
+        ));
+    }
 
     Some(OperatorResultPreview {
         workflow_id: graph.workflow_id,
@@ -596,8 +608,19 @@ pub fn infer_result_preview_from_projection(
         payload_location: "task.result".to_string(),
         orchestration_quality: None,
         runtime_truth: None,
+        step_policy: step_policy.cloned(),
         provenance_lines,
     })
+}
+
+fn step_policy_action_label(action: mister_smith_core::StepPolicyAction) -> &'static str {
+    match action {
+        mister_smith_core::StepPolicyAction::Keep => "keep",
+        mister_smith_core::StepPolicyAction::Retry => "retry",
+        mister_smith_core::StepPolicyAction::Clarify => "clarify",
+        mister_smith_core::StepPolicyAction::Downgrade => "downgrade",
+        mister_smith_core::StepPolicyAction::Escalate => "escalate",
+    }
 }
 
 /// Merge two operator-facing previews without dropping bounded provenance lines.
@@ -618,6 +641,9 @@ pub fn merge_operator_result_preview(
     }
     if merged.runtime_truth.is_none() {
         merged.runtime_truth = fallback.runtime_truth.clone();
+    }
+    if merged.step_policy.is_none() {
+        merged.step_policy = fallback.step_policy.clone();
     }
     for line in &fallback.provenance_lines {
         if !merged.provenance_lines.contains(line) {

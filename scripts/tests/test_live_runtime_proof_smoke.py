@@ -332,6 +332,113 @@ class LiveRuntimeProofSmokeTests(unittest.TestCase):
                 require_consistency=True,
             )
 
+    def test_assert_step_policy_surfaces_requires_packet025_fields_and_honest_wording(
+        self,
+    ) -> None:
+        task_status = {
+            "result": {
+                "step_policy": {
+                    "difficulty_assessment": {
+                        "workflow_id": "workflow-1",
+                        "step_id": "planner.step.2",
+                        "difficulty_bucket": "high",
+                        "confidence_label": "deterministic",
+                        "reason_codes": [
+                            "weak_current_evidence",
+                            "unstable_recent_step_history",
+                        ],
+                    },
+                    "budget_pressure": {
+                        "workflow_id": "workflow-1",
+                        "step_id": "planner.step.2",
+                        "pressure_level": "softcap",
+                        "pressure_source": "step_routing_history",
+                        "policy_hint": "prefer_local_correction_before_escalation",
+                    },
+                    "policy_decision": {
+                        "workflow_id": "workflow-1",
+                        "step_id": "planner.step.2",
+                        "chosen_action": "clarify",
+                        "action_reason": "difficulty=high budget=softcap missing_context",
+                        "requires_operator_attention": True,
+                    },
+                    "input_refs": {
+                        "runtime_truth": "packet-023:placeholder_or_simulated_step_completion",
+                    },
+                    "proof_boundary_ref": {
+                        "owner_packet": "023",
+                        "task_proof": "result is orchestration proof, not substantive task proof",
+                    },
+                    "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+                }
+            }
+        }
+        autonomy_status = {
+            "step_policy": {
+                "difficulty_assessment": {
+                    "workflow_id": "workflow-1",
+                    "step_id": "planner.step.2",
+                    "difficulty_bucket": "high",
+                    "confidence_label": "deterministic",
+                    "reason_codes": [
+                        "weak_current_evidence",
+                        "unstable_recent_step_history",
+                    ],
+                },
+                "budget_pressure": {
+                    "workflow_id": "workflow-1",
+                    "step_id": "planner.step.2",
+                    "pressure_level": "softcap",
+                    "pressure_source": "step_routing_history",
+                    "policy_hint": "prefer_local_correction_before_escalation",
+                },
+                "policy_decision": {
+                    "workflow_id": "workflow-1",
+                    "step_id": "planner.step.2",
+                    "chosen_action": "clarify",
+                    "action_reason": "difficulty=high budget=softcap missing_context",
+                    "requires_operator_attention": True,
+                },
+                "input_refs": {
+                    "runtime_truth": "packet-023:placeholder_or_simulated_step_completion",
+                },
+                "proof_boundary_ref": {
+                    "owner_packet": "023",
+                    "task_proof": "result is orchestration proof, not substantive task proof",
+                },
+                "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+            }
+        }
+
+        self.module.assert_step_policy_surfaces(
+            task_status,
+            autonomy_status,
+            require_consistency=True,
+        )
+
+        autonomy_status["step_policy"]["proof_boundary_ref"]["task_proof"] = (
+            "result is grounded task proof"
+        )
+        with self.assertRaises(self.module.SmokeHarnessError):
+            self.module.assert_step_policy_surfaces(
+                task_status,
+                autonomy_status,
+                require_consistency=True,
+            )
+
+        autonomy_status["step_policy"]["proof_boundary_ref"]["task_proof"] = (
+            "result is orchestration proof, not substantive task proof"
+        )
+        autonomy_status["step_policy"]["input_refs"]["runtime_truth"] = (
+            "packet-025:step-policy-upgraded-proof"
+        )
+        with self.assertRaises(self.module.SmokeHarnessError):
+            self.module.assert_step_policy_surfaces(
+                task_status,
+                autonomy_status,
+                require_consistency=True,
+            )
+
     def test_build_config_sets_packet021_probe_expectations(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             namespace = type(
