@@ -1,6 +1,6 @@
 # Mister Smith Direction
 
-Date: April 2, 2026
+Date: April 3, 2026
 Status: Authoritative
 
 ## Purpose and Authority
@@ -51,6 +51,7 @@ Already landed and proven:
 - landed packet-022 durable workflow core ownership on `main`
 - landed packet-023 runtime-truth and run-trace projections on `main`
 - landed packet-024 agent-boundary security hardening on `main`
+- landed packet-025 step-policy summaries on `main`
 
 Exists but is still opt-in, partial, or not the default runtime path:
 
@@ -95,11 +96,11 @@ generalize.
 
 ### Now
 
-- **Stronger step-level intelligence.** This matters because step boundaries, verification,
-  escalation, and token discipline can improve quality and economics at a finer granularity than
-  task-level routing alone. This belongs now because packet `025` is the next implementation-ready
-  packet on top of already-landed routing, verifier, runtime-truth, and boundary-hardening
-  foundations.
+- **First real coordinator and subagent runtime.** This matters because the runtime has already
+  proven bounded orchestration and now needs a stronger real multi-branch coordinator surface with
+  visible delegation, child state, grounded delegated work, and honest proof boundaries. This
+  belongs now because packet `026` is the next implementation-ready packet on top of landed packet
+  `022` through `025` foundations.
 - **Streaming and routing hardening.** This matters because the runtime path already has bounded
   routing, budget, verifier, and provenance foundations that should become more robust and more
   honestly default over time. This belongs now because the system should finish and harden what is
@@ -119,10 +120,6 @@ generalize.
   adaptive team composition are among the strongest whole-system differentiators in the research
   corpus. This belongs next because Mister Smith already has orchestration foundations, so the
   honest move is extension and compiler-like control, not a greenfield orchestration rewrite.
-- **First real coordinator and subagent runtime.** This matters because the runtime has already
-  proven bounded orchestration and now needs a stronger real multi-branch coordinator surface. This
-  belongs next because packet `026` should build on landed runtime-truth and boundary-hardening
-  work rather than bypass it.
 - **Capability discovery and interoperability.** This matters because external federation and
   capability matching are important future surfaces for a real operating system rather than a
   single-runtime tool. This belongs next because it is more valuable once security boundaries,

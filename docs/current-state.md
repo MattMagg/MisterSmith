@@ -1,6 +1,6 @@
 # Mister Smith Current State
 
-Date: April 2, 2026
+Date: April 3, 2026
 Status: Current
 
 ## Purpose
@@ -23,9 +23,10 @@ Use this file when you need one honest answer to:
 | ---- | ---------------- | ---- |
 | Overall direction | `docs/direction.md` | Single authoritative direction source that merges repo truth and strategic priority |
 | Whole-repo overview | `docs/current-state.md` | Current repo and OS state, plus document routing |
-| Latest landed runtime packet | `specs/023-runtime-truth-and-run-trace/` | Packet `023` landed on `main` via `4d1d044` and owns runtime-truth, proof-boundary, and bounded run-trace projections |
-| Latest landed security packet | `specs/024-agent-boundary-security-hardening/` | Packet `024` landed on `main` via `59e4ca2` and owns the current least-privilege agent-boundary hardening slice |
-| Next implementation-ready packet | `specs/025-step-level-intelligence-v2/` | Packet `025` is the next packet for stronger step-level policy and is ready for `/speckit.implement` |
+| Latest landed runtime-truth packet | `specs/023-runtime-truth-and-run-trace/` | Packet `023` owns runtime-truth, proof-boundary, and bounded run-trace projections on `main` |
+| Latest landed security packet | `specs/024-agent-boundary-security-hardening/` | Packet `024` owns the current least-privilege agent-boundary hardening slice on `main` |
+| Latest landed step-policy packet | `specs/025-step-level-intelligence-v2/` | Packet `025` owns the current step-policy summary slice on `main` |
+| Next implementation-ready packet | `specs/026-first-real-coordinator-subagent-runtime/` | Packet `026` is the next `/speckit.implement` packet for real coordinator-subagent runtime |
 | Packet 022 implementation authority | `specs/022-durable-workflow-core/` | Durable workflow lifecycle, event-history, compaction, and effect-boundary ownership on current `main` |
 | Packet 021 closure evidence | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Deterministic packet-021 proof-boundary and supervision-evidence note |
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for packet `019` |
@@ -68,7 +69,7 @@ external workflow services such as Linear or Symphony.
 ## Current Repo-Wide State
 
 - `main` is the durable development branch and is currently synced at
-  `4d1d044b0879a284a07dbe1e549fb9e7c387f0d8`.
+  `9f6e3a79cc12a171bf72a6f0daa3d04a5711e2d7`.
 - The workspace contains 20 crates: 18 library crates, 1 binary crate, and 1 integration-test
   crate.
 - Phases 1 through 10 are landed in the repo as implemented substrate and validation artifacts.
@@ -104,9 +105,13 @@ external workflow services such as Linear or Symphony.
 - packet `024` is landed on `main`: action-bound external capability enforcement, clearer
   quarantine reasons, and auth-callout fallback clamping are part of current ToolBus, MCP, and
   security truth with deterministic validation
-- packet `025` is implementation-ready under `specs/025-step-level-intelligence-v2/` and is the
-  next runnable packet for `/speckit.implement`
-- packets `026`, `027`, and `028` remain later draft scaffolds rather than current runnable work
+- packet `025` is landed on `main`: packet-owned step-policy summaries now project deterministic
+  difficulty, bounded action choice, and honest proof wording through task, autonomy, and operator
+  run-detail surfaces
+- packet `026` is implementation-ready under
+  `specs/026-first-real-coordinator-subagent-runtime/` and is the next runnable packet for
+  `/speckit.implement`
+- packets `027` and `028` remain later draft scaffolds rather than current runnable work
 - the watched Symphony queue can be empty without implying a product problem; that queue is part
   of the development workflow, not the OS runtime
 
@@ -164,6 +169,8 @@ runtime path on `main`, but they do not add a newer live rerun claim by themselv
   autonomy, and operator surfaces
 - packet-024 least-privilege agent-boundary enforcement across ToolBus, MCP metadata and execute
   paths, quarantine reporting, and auth-callout fallback ceilings
+- packet-025 deterministic step-policy summaries across task, autonomy, and operator run-detail
+  surfaces
 
 ## What Exists In The Repo But Is Not Yet The Default Runtime Path
 
@@ -174,8 +181,9 @@ them end to end:
   enforcement that is live-proven for one bounded profile but is still opt-in rather than the
   no-profile default
 - additive external-agent interoperability surfaces and capability discovery adapters
-- later packet scaffolds for first real coordinator/subagent runtime, interoperability, and
-  stronger coordination
+- one implementation-ready packet for first real coordinator-subagent runtime under
+  `specs/026-first-real-coordinator-subagent-runtime/`
+- later packet scaffolds for interoperability and stronger coordination
 
 Current default runtime limitations to keep in mind:
 
@@ -204,9 +212,9 @@ The completed frontier epics are:
 
 Packets `019`, `020`, `021`, `022`, `023`, and `024` are all landed on `main`.
 
-Packet `025` is the next implementation-ready packet. It is the next on-deck packet for stronger
-step-level policy and is now ready for `/speckit.implement`. Packets `026`, `027`, and `028`
-remain later scaffolds.
+Packet `026` is the next implementation-ready packet. It is the next on-deck packet for first
+real coordinator-subagent runtime and is now ready for `/speckit.implement`. Packets `027` and
+`028` remain later scaffolds.
 
 ## Practical Reading Order
 
@@ -217,7 +225,8 @@ If you need to understand the repo quickly:
 3. read `README.md`
 4. read `specs/023-runtime-truth-and-run-trace/` and
    `specs/024-agent-boundary-security-hardening/`
-5. read `specs/025-step-level-intelligence-v2/` for the next implementation-ready packet
+5. read `specs/026-first-real-coordinator-subagent-runtime/` for the next implementation-ready
+   packet
 6. read `WORKFLOW.md` and `docs/linear/LINEAR.md` only if you are working on the development
    control plane
 7. read `ROADMAP.md`, `spec/`, and the rest of `specs/` when you need architectural or
@@ -230,7 +239,9 @@ If you need to understand the repo quickly:
 - Use `specs/023-runtime-truth-and-run-trace/` for the landed packet-023 runtime-truth contract.
 - Use `specs/024-agent-boundary-security-hardening/` for the landed packet-024 agent-boundary
   hardening slice.
-- Use `specs/025-step-level-intelligence-v2/` for the next implementation-ready packet.
+- Use `specs/025-step-level-intelligence-v2/` for the landed packet-025 step-policy contract.
+- Use `specs/026-first-real-coordinator-subagent-runtime/` for the next implementation-ready
+  packet.
 - Use `specs/022-durable-workflow-core/` for packet-022 durable workflow ownership.
 - Use `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` for the landed
   packet-021 closure and deterministic proof-boundary context.
