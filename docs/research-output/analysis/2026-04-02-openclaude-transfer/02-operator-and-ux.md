@@ -1,249 +1,189 @@
 # Operator And UX Transfer Ideas
 
-## 1. Real Plan Mode
+## 1. Live Work Cockpit For Subordinate Runtime State
 
-**OpenClaude feature**
+**Verdict**
 
-Planning is a real session state, not just advice in the prompt. Entering plan mode changes what
-the model is allowed to do and routes the user through dedicated approval UI.
+`KEEP with update`
 
-**OpenClaude evidence**
-
-- `src/commands/plan/plan.tsx`
-- `src/tools/EnterPlanModeTool/EnterPlanModeTool.ts`
-- `src/components/permissions/PermissionDialog.tsx`
-
-**Why it matters**
-
-This turns “plan first” into product behavior. It also matches the repo’s own insistence on
-written plans before non-trivial work.
-
-**Mister Smith fit**
-
-`High fit now`
-
-Mister Smith already has retained sessions, operator surfaces, and plan-first repo posture. A real
-plan mode would tighten those together.
-
-**How to translate into Mister Smith**
-
-- add a `plan_only` or `planning_state` mode to:
-  - CLI session handling in `crates/mister-smith-app/`
-  - session endpoints under `/api/v1/sessions`
-  - `apps/operator-console/`
-- while active:
-  - allow read/explore/planning actions
-  - block normal execution actions
-  - require explicit operator approval before switching to execution
-- persist that state in retained session metadata
-
-**Suggested validation**
-
-- tests proving execution tools are blocked while plan mode is active
-- console coverage for enter, approve, and exit flows
-
-## 2. Live Work Cockpit
-
-**OpenClaude feature**
-
-Background agents, shell jobs, remote sessions, and other long-lived work appear in one live
-control surface with stop, foreground, retry, and status actions.
-
-**OpenClaude evidence**
+**Source files**
 
 - `src/components/tasks/BackgroundTasksDialog.tsx`
-- `src/tools/AgentTool/AgentTool.tsx`
-- `src/keybindings/defaultBindings.ts`
+- `src/tasks/LocalAgentTask/LocalAgentTask.tsx`
+- `src/Task.ts`
 
-**Why it matters**
+**What it is**
 
-Once the system has more than one run in flight, raw logs stop being enough. Operators need a live
-work surface.
+OpenClaude gives one live surface for long-lived work units such as local agents, remote agents,
+shell jobs, and workflow tasks.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`High fit now`
+This is a direct operator-clarity match for packet `026`. If Smith exposes real subordinate runtime
+state, operators need one place to inspect and act on it. The useful idea is not the exact UI. It
+is the unified work-unit visibility.
 
-The current operator console already has separate runs, sessions, agents, and health views. This
-idea is mostly a consolidation and control improvement, not a product-boundary change.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
+- extend `/Users/macmain/MisterSmith/apps/operator-console/` with one subordinate-runtime panel
+- project bounded child work under the parent workflow:
+  - delegated agent work
+  - verifier passes
+  - repair loops
+  - diagnostics runs
+- keep actions narrow:
+  - inspect
+  - cancel
+  - retry where valid
+  - open evidence
 
-- add one operator-console panel for live work across:
-  - runs
-  - retained sessions
-  - subordinate work when Smith grows it
-  - proof or diagnostics jobs
-- support:
-  - stop
-  - foreground or inspect
-  - retry
-  - open output or evidence path
+**Risk and compatibility caveats**
 
-**Suggested validation**
+- do not build a second task system beside packet-022 workflow truth
+- child work must stay clearly attached to parent workflow identity
 
-- console interaction tests
-- integration tests for action wiring against the existing runtime endpoints
+## 2. Real Plan Mode As Permission State
 
-## 3. Unified Command Palette Plus Conditional Helpers
+**Verdict**
 
-**OpenClaude feature**
+`KEEP with update`
 
-Built-in commands, local skills, project skills, and plugin commands all load into one command
-surface. Some helpers only become visible when the current file or path context matches.
+**Source files**
 
-**OpenClaude evidence**
+- `src/tools/EnterPlanModeTool/EnterPlanModeTool.ts`
+- `src/commands/plan/plan.tsx`
+
+**What it is**
+
+OpenClaude turns plan mode into a real permission state. The model can enter it, actions are
+restricted while active, and session state changes when the mode flips.
+
+**Why it is useful for Mister Smith**
+
+This is execution-safety infrastructure, not just UX. It is still lower leverage than packet `026`
+and `027` core coordination work, but it is a reasonable supporting idea for operator clarity and
+safer session control.
+
+**Concrete adaptation path**
+
+- if Smith takes this on, keep it small:
+  - explicit planning state on the session
+  - read-only or planning-safe action subset while active
+  - explicit transition back to execution
+
+**Risk and compatibility caveats**
+
+- do not let plan mode consume packet `026` or `027` scope
+- this should reinforce existing planning posture, not become a large UI project
+
+## 3. Session Notes And Visible Continuity Memory
+
+**Verdict**
+
+`KEEP with update`
+
+**Source files**
+
+- `src/services/SessionMemory/sessionMemory.ts`
+- `src/services/SessionMemory/sessionMemoryUtils.ts`
+- `src/services/SessionMemory/prompts.ts`
+
+**What it is**
+
+OpenClaude maintains durable session memory and updates it during long-lived use.
+
+**Why it is useful for Mister Smith**
+
+The useful transfer is not hidden automatic memory. It is operator-visible continuity notes. Smith
+already has session surfaces. The near-term leverage is explicit resumability, not an opaque memory
+subsystem.
+
+**Concrete adaptation path**
+
+- keep visible session notes with fixed fields:
+  - mission
+  - current state
+  - constraints
+  - last evidence
+  - next likely step
+- only later consider bounded automatic summarization into the same visible structure
+
+**Risk and compatibility caveats**
+
+- do not create hidden continuity claims that operators cannot inspect
+- do not let automatic memory drift from packet-023 proof wording
+
+## 4. Capability Catalog With Trust, Auth, And Validation State
+
+**Verdict**
+
+`KEEP with update`
+
+**Source files**
+
+- `src/services/plugins/PluginInstallationManager.ts`
+- `src/commands/plugin/PluginSettings.tsx`
+- `src/commands/plugin/PluginTrustWarning.tsx`
+- `src/services/mcp/useManageMCPConnections.ts`
+
+**What it is**
+
+OpenClaude exposes optional capability sources with install, trust, failure, and refresh state.
+
+**Why it is useful for Mister Smith**
+
+The first-pass writeup was too close to plugin UX. The real Smith fit is packet `027` operator
+clarity: show where a capability came from, whether it is trusted, whether it is authenticated, and
+whether it is actually executable.
+
+**Concrete adaptation path**
+
+- add one operator capability catalog view for:
+  - local ToolBus capabilities
+  - MCP capabilities
+  - later remote protocol descriptors
+- show:
+  - source
+  - trust state
+  - auth state
+  - validation state
+  - execution availability
+
+**Risk and compatibility caveats**
+
+- do not build a plugin marketplace
+- keep discovery metadata separate from execution permission
+
+## 5. Unified Command Palette And Conditional Helpers
+
+**Verdict**
+
+`REMOVE as misfit`
+
+**Source files**
 
 - `src/commands.ts`
 - `src/skills/loadSkillsDir.ts`
 - `src/utils/plugins/loadPluginCommands.ts`
 
-**Why it matters**
+**Why it is not a strong Smith transfer**
 
-This lowers operator friction. The right helper is available in the same surface instead of spread
-across separate systems.
-
-**Mister Smith fit**
-
-`High fit now`
-
-Mister Smith already has a CLI, operator console, Smith MCP, and repo-local command concepts. A
-unified command surface fits the current posture well.
-
-**How to translate into Mister Smith**
-
-- create one Smith command palette that merges:
-  - runtime verbs
-  - operator actions
-  - MCP-backed controls
-  - packet-local repo helpers where appropriate
-- optionally add path-triggered helpers for:
-  - `specs/025-step-level-intelligence-v2/`
-  - runtime proof notes
-  - operator-console files
-
-**Suggested validation**
-
-- command discovery tests
-- path-trigger tests
-- no accidental exposure of unsafe commands on remote or reduced-authority surfaces
-
-## 4. Durable Session Memory And Notes
-
-**OpenClaude feature**
-
-Sessions have manual memory controls, automatic memory extraction and consolidation, template
-budgets, and shared memory sync patterns.
-
-**OpenClaude evidence**
-
-- `src/commands/memory/memory.tsx`
-- `src/services/SessionMemory/sessionMemoryUtils.ts`
-- `src/services/SessionMemory/prompts.ts`
-
-**Why it matters**
-
-Retained sessions are much more useful when they also keep structured operator notes and bounded
-continuity summaries.
-
-**Mister Smith fit**
-
-`High fit now`
-
-Mister Smith already exposes retained sessions in the operator console. The current gap is better
-operator-visible continuity, not the existence of session storage itself.
-
-**How to translate into Mister Smith**
-
-- add session notes with a fixed structure:
-  - mission
-  - current state
-  - key constraints
-  - last verified evidence
-  - next likely action
-- later, add bounded automatic consolidation when a session crosses thresholds
-- keep this operator-visible and separate from hidden conversation memory claims
-
-**Suggested validation**
-
-- note create/update/read tests
-- size-budget tests if automatic consolidation is added
-
-## 5. Capability Catalog With Trust Labels
-
-**OpenClaude feature**
-
-Optional capability sources have install, refresh, failure, and trust-state UI instead of staying
-hidden in config.
-
-**OpenClaude evidence**
-
-- `src/services/plugins/PluginInstallationManager.ts`
-- `src/commands/plugin/PluginSettings.tsx`
-- `src/commands/plugin/PluginTrustWarning.tsx`
-
-**Why it matters**
-
-As optional capability surfaces grow, hidden configuration drift becomes an operator problem.
-
-**Mister Smith fit**
-
-`Conditional fit next`
-
-Do not copy a plugin marketplace. The useful part is the operator-facing catalog: source, trust,
-validation, and status.
-
-**How to translate into Mister Smith**
-
-- build a Smith capability catalog for:
-  - MCP servers
-  - tool packs
-  - agent profiles
-- show:
-  - source label
-  - trust state
-  - auth state
-  - last validation state
-  - current availability
-
-**Suggested validation**
-
-- catalog state tests
-- auth-expired and disabled-source coverage
+This is useful UX polish, but it is not frontier leverage for Smith right now. It is easy for this
+kind of feature to pull the roadmap toward framework shell parity instead of coordination runtime
+and capability boundary work.
 
 ## 6. IDE Bridge, Keybindings, And Voice
 
-**OpenClaude feature**
+**Verdict**
 
-OpenClaude has a VS Code extension, user-overridable keybindings, and voice-input support.
+`REMOVE as misfit`
 
-**OpenClaude evidence**
+**Source files**
 
 - `vscode-extension/openclaude-vscode/`
 - `src/keybindings/`
 - `src/commands/voice/voice.ts`
-- `src/services/voice.ts`
 
-**Why it matters**
+**Why it is not a strong Smith transfer**
 
-These features improve operator ergonomics, but they are not the main architectural leverage.
-
-**Mister Smith fit**
-
-`Later or do-not-copy`
-
-The most realistic near-term version is a minimal VS Code helper or more console shortcuts. Voice
-input is a later desktop convenience feature, not a current platform priority.
-
-**How to translate into Mister Smith**
-
-- near-term:
-  - add a small shortcut layer in the operator console and CLI
-  - consider a minimal VS Code bridge that opens runtime status or session detail
-- later:
-  - desktop dictation for next session turn or operator note
-
-**Suggested validation**
-
-- shortcut tests
-- extension smoke checks if a VS Code bridge is built
+These are convenience features. They are not where Smith should spend packet `026` or `027` energy.

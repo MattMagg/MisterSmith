@@ -1,67 +1,53 @@
 # OpenClaude To Mister Smith Transfer Analysis
 
-Date: April 2, 2026
-Status: Analysis
+Date: April 3, 2026
+Status: Second-pass review
 Source repo: `/Users/macmain/openclaude`
-Judged against: `docs/current-state.md`, `docs/direction.md`, packet `023`, and packet `024`
+Judged against:
+
+- `/Users/macmain/MisterSmith/docs/current-state.md`
+- `/Users/macmain/MisterSmith/docs/direction.md`
+- `/Users/macmain/MisterSmith/specs/023-runtime-truth-and-run-trace/`
+- `/Users/macmain/MisterSmith/specs/024-agent-boundary-security-hardening/`
+- `/Users/macmain/MisterSmith/specs/026-first-real-coordinator-subagent-runtime/`
+- `/Users/macmain/MisterSmith/specs/027-capability-discovery-and-interoperability/`
 
 ## Purpose
 
-This package captures the parts of `openclaude` that look genuinely useful for Mister Smith.
+This bundle keeps only the OpenClaude ideas that look useful for Mister Smith after a second,
+frontier-focused pass.
 
-It does not treat `openclaude` as an authority. It treats it as external comparative input and
-filters the ideas through current Mister Smith truth and direction.
+It does not treat OpenClaude as a product template. It treats it as a source of specific patterns
+that may improve Mister Smith's coordination runtime, capability boundary, operator proof, and
+execution safety.
 
 ## Bottom Line
 
-The strongest near-term transfer ideas are:
+The strongest OpenClaude transfers for Mister Smith are now clearer than they were in the first
+pass:
 
-1. a cleaner provider adapter and message-translation layer
-2. a schema-sanitizing compatibility pass for tools and MCP
-3. better long-lived MCP lifecycle management and large-result offloading
-4. a real operator-visible plan mode
-5. a stronger live-work cockpit for sessions, runs, and subordinate work
+1. subordinate-runtime event intake inside the main turn loop
+2. stable delegated work units with inspectable state and follow-up messaging
+3. deterministic parallel tool batches with clear cancellation rules
+4. long-lived MCP lifecycle handling with delta refresh, auth-state surfacing, and large-result
+   offload
+5. stricter discovery-versus-execute separation for local, MCP, and remote capability surfaces
+6. surface-specific command and permission gates
 
-The strongest later-stage ideas are:
-
-1. stable child-agent identity with continue-in-place messaging
-2. ordered parallel tool execution with deterministic result ordering
-3. a first-class subordinate execution-unit model under one workflow
-4. resumable remote executors with explicit control channels
-
-## What This Analysis Is Not Recommending
-
-- do not copy `openclaude` provider shims verbatim
-- do not collapse developer-workflow features into Mister Smith product truth
-- do not add a plugin marketplace as a near-term Smith priority
-- do not claim remote child runtime proof from a design note alone
+The first pass gave too much weight to framework convenience items like general command palettes,
+plugin-style capability UX, provider-specific search brokers, and other parity features. Those are
+not the best near-term Smith transfers.
 
 ## Reading Order
 
-1. `01-runtime-and-tooling.md`
-2. `02-operator-and-ux.md`
-3. `03-remote-and-delegated-execution.md`
-4. `04-priority-backlog.md`
-
-## Current Mister Smith Anchors Used In This Package
-
-- runtime and session truth:
-  - `docs/current-state.md`
-  - `specs/023-runtime-truth-and-run-trace/`
-- least-privilege and capability boundary truth:
-  - `specs/024-agent-boundary-security-hardening/`
-- next-direction judgment:
-  - `docs/direction.md`
-- likely implementation surfaces:
-  - `crates/mister-smith-llm/`
-  - `crates/mister-smith-agents/`
-  - `crates/mister-smith-events/`
-  - `crates/mister-smith-app/`
-  - `crates/mister-smith-mcp/`
-  - `apps/operator-console/`
+1. `/Users/macmain/MisterSmith/docs/research-output/analysis/2026-04-02-openclaude-transfer/01-runtime-and-tooling.md`
+2. `/Users/macmain/MisterSmith/docs/research-output/analysis/2026-04-02-openclaude-transfer/02-operator-and-ux.md`
+3. `/Users/macmain/MisterSmith/docs/research-output/analysis/2026-04-02-openclaude-transfer/03-remote-and-delegated-execution.md`
+4. `/Users/macmain/MisterSmith/docs/research-output/analysis/2026-04-02-openclaude-transfer/04-priority-backlog.md`
 
 ## Fit Labels
 
-- `High fit now`: can harden or extend the current shipped path without changing product truth
-- `Conditional fit next`: useful, but better after current runtime hardening or in a later packet
-- `Later or do-not-copy`: interesting, but should not be pulled into the near-term Smith path
+- `KEEP as-is`: still correct and still bounded well
+- `KEEP with update`: keep the idea, but narrow or reframe it
+- `SPLIT or DEFER`: useful, but later or in a different packet
+- `REMOVE as misfit`: not a strong Smith transfer right now

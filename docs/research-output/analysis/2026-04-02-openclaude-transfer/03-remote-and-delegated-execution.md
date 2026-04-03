@@ -1,264 +1,288 @@
 # Remote And Delegated Execution Transfer Ideas
 
-## 1. Turn Loop With Mid-Turn Notification Drain
+## 1. Turn Loop With Scoped Mid-Turn Notification Drain
 
-**OpenClaude feature**
+**Verdict**
 
-One long-lived query loop keeps turn state alive and drains queued task or worker notifications
-into the next model turn instead of treating each turn as a simple request wrapper.
+`KEEP with update`
 
-**OpenClaude evidence**
+**Source files**
 
 - `src/query.ts`
+- `src/tasks/LocalAgentTask/LocalAgentTask.tsx`
 
-**Why it matters**
+**What it is**
 
-This is a strong foundation for a future real coordinator or subagent runtime. It gives the system
-one place to merge tool results, worker completion, and retry logic.
+OpenClaude keeps a long-lived turn loop alive, drains queued subordinate notifications into the
+same turn, and scopes those drains by agent identity so the coordinator and children only consume
+their own event streams.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`Conditional fit next`
+This is one of the best packet `026` inputs. It gives Smith a clean model for subordinate-runtime
+event intake without pretending each child run is a separate unrelated conversation.
 
-Useful for a later stronger coordinator runtime, but it should extend packet-023 run-trace truth
-instead of bypassing it.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
-
-- add a bounded runtime inbox for worker or subordinate events
-- feed those events into:
+- add a bounded subordinate-runtime inbox under the parent workflow
+- scope event intake by parent and child runtime identity
+- project the same events to:
   - task inspect
   - autonomy status
-  - run-trace summaries
-- keep proof-boundary wording conservative until grounded outputs exist
+  - operator run detail
 
-## 2. Stable Child-Agent Identity With Continue-In-Place Messaging
+**Risk and compatibility caveats**
 
-**OpenClaude feature**
+- keep prompt and command streams separate from subordinate notifications
+- do not let mid-turn intake bypass packet-023 truth and proof-boundary wording
 
-Spawned workers keep a stable identity and can receive later follow-up messages instead of being
-respawned from scratch.
+## 2. Stable Child Identity With Continue-In-Place Messaging
 
-**OpenClaude evidence**
+**Verdict**
 
-- `src/tools/SendMessageTool/SendMessageTool.ts`
+`KEEP with update`
+
+**Source files**
+
 - `src/tasks/LocalAgentTask/LocalAgentTask.tsx`
+- `src/tools/SendMessageTool/SendMessageTool.ts`
 - `src/tasks/InProcessTeammateTask/InProcessTeammateTask.tsx`
 
-**Why it matters**
+**What it is**
 
-This avoids repeated rediscovery work, lowers cost, and makes repair loops cleaner.
+OpenClaude gives child work units stable IDs and lets later turns append follow-up messages instead
+of recreating the worker from scratch.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`Conditional fit next`
+This is a real coordination-runtime advantage. It reduces rediscovery cost and makes recovery loops
+inspectable. It belongs in packet `026` more than most of the generic UI findings.
 
-This is one of the best later-stage ideas if Smith grows a first-class child-agent runtime.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
-
-- give each child agent a stable identifier tied to `workflow_id` and, where relevant, `session_id`
-- support:
-  - inbox append
+- add stable delegated-work identity tied to `workflow_id`
+- allow bounded follow-up actions:
+  - append clarification
   - resume
   - stop
   - inspect
-- project child continuity into operator-visible runtime truth
+- keep all of that visible on runtime-truth surfaces
+
+**Risk and compatibility caveats**
+
+- do not confuse child identity with unlimited transcript carry-forward
+- child continuity must stay bounded by explicit runtime records and evidence refs
 
 ## 3. Subagent Context Isolation With Shared Root Channels
 
-**OpenClaude feature**
+**Verdict**
 
-Per-agent mutable state is cloned by default, while only a small set of root channels stay shared
-for lifecycle, task registration, and cancellation.
+`KEEP as-is`
 
-**OpenClaude evidence**
+**Source files**
 
 - `src/utils/forkedAgent.ts`
 - `src/tools/AgentTool/runAgent.ts`
 
-**Why it matters**
+**What it is**
 
-Nested agents are safer when scratch state is private but lifecycle ownership stays centralized.
+OpenClaude clones mutable agent state by default and shares only a small set of root-owned channels
+for lifecycle, cancellation, and limited coordination.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`Conditional fit next`
+This fits packet-024 least-privilege posture cleanly. It is exactly the sort of coordination
+primitive Smith should adapt instead of copying broad framework defaults.
 
-This fits packet-024 style least-privilege thinking and is a good shape for later coordinator work.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
-
-- keep child-agent scratch state private
-- share only root-owned channels such as:
-  - task registration
+- make delegated runtime state private by default
+- share only root-owned channels for:
+  - registration
   - cancellation
-  - runtime-truth projection
+  - operator truth projection
   - capability enforcement
 
-## 4. Unified Subordinate Task Runtime
+**Risk and compatibility caveats**
 
-**OpenClaude feature**
+- do not share mutable scratch context casually
+- merged outputs should be explicit coordinator decisions, not side effects from shared memory
 
-Local shell work, local agents, teammates, remote agents, and other long-lived work all use one
-typed task model with stable IDs, status, output files, and notification envelopes.
+## 4. Unified Subordinate Execution-Unit Model
 
-**OpenClaude evidence**
+**Verdict**
+
+`KEEP with update`
+
+**Source files**
 
 - `src/Task.ts`
 - `src/tasks.ts`
 - `src/tasks/LocalAgentTask/LocalAgentTask.tsx`
 
-**Why it matters**
+**What it is**
 
-This gives operators one mental model for subordinate work and makes resume and inspection much
-easier.
+OpenClaude models shell jobs, local agents, remote agents, teammates, and other long-lived work as
+typed tasks with stable IDs, status, output files, and notification envelopes.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`Conditional fit next`
+Smith already has strong workflow and autonomy surfaces. The useful transfer is not "copy their task
+system." It is to give packet `026` a bounded subordinate execution-unit layer under the existing
+workflow identity.
 
-Smith already has task, session, and autonomy surfaces. The useful next step is a subordinate
-execution-unit layer under one workflow, not a parallel unrelated task system.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
+- define one child execution-unit record under the parent workflow
+- keep typed status, evidence refs, and output pointers
+- reuse packet-022 lifecycle and packet-023 truth vocabulary where possible
 
-- add one bounded subordinate execution-unit view for:
-  - planner branches
-  - verifier passes
-  - delegated tool bundles
-  - later child agents
-- project child status into packet-023 runtime truth
+**Risk and compatibility caveats**
 
-## 5. Secret-Minimized Remote Bridge
+- do not fork a second top-level lifecycle model beside current workflow truth
+- preserve clear parent-child ownership
 
-**OpenClaude feature**
+## 5. Specialist Child Roles With Enforced Tool Subsets
 
-Remote child sessions get a tight environment allowlist, explicit control traffic, permission
-bridges, and remote-session message adaptation instead of inheriting the whole local process
-environment.
+**Verdict**
 
-**OpenClaude evidence**
+`KEEP with update`
 
-- `src/bridge/sessionRunner.ts`
-- `src/remote/RemoteSessionManager.ts`
-- `src/remote/remotePermissionBridge.ts`
-- `src/bridge/remoteBridgeCore.ts`
-- `src/remote/sdkMessageAdapter.ts`
-
-**Why it matters**
-
-If Smith grows remote workers or hosted child executors, secret-minimized bridging is a strong
-default pattern.
-
-**Mister Smith fit**
-
-`Later or do-not-copy`
-
-This is very useful reference material, but it belongs to a later remote-executor lane, not the
-current default local runtime path.
-
-**How to translate into Mister Smith**
-
-- keep worker environments on an allowlist
-- move permission and interrupt traffic over an explicit control protocol
-- avoid no-intercept proxy mistakes
-- persist enough sidecar metadata to resume safely
-
-## 6. Specialist Child Roles With Enforced Tool Subsets
-
-**OpenClaude feature**
-
-Roles like explore, plan, and verification are not just prompts. They also get enforced tool
-subsets.
-
-**OpenClaude evidence**
+**Source files**
 
 - `src/tools/AgentTool/built-in/exploreAgent.ts`
 - `src/tools/AgentTool/built-in/planAgent.ts`
 - `src/tools/AgentTool/built-in/verificationAgent.ts`
 - `src/tools/AgentTool/agentToolUtils.ts`
+- `src/utils/forkedAgent.ts`
 
-**Why it matters**
+**What it is**
 
-Bounded child roles are easier to supervise, safer to authorize, and easier to explain to
-operators.
+OpenClaude pairs child-role prompts with enforced tool subsets and permission shaping.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`Conditional fit next`
+This is a better packet `026` transfer than prompt-only specialist agents. It makes delegated roles
+inspectable and safer.
 
-This fits later coordinator work well and lines up with packet-024 permission discipline.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
-
-- define a small child-role taxonomy:
+- define a small Smith child-role set:
   - explorer
   - planner
   - verifier
-  - maybe repairer
-- bind each role to hard tool subsets instead of prompt-only expectations
+  - repairer only if needed later
+- bind roles to explicit tool or capability subsets
+- keep role grant logic outside prompt text
 
-## 7. Cross-Worker Permission Mailbox
+**Risk and compatibility caveats**
 
-**OpenClaude feature**
+- OpenClaude injects some allowed tools by mutating permission context; Smith should use explicit
+  policy records instead of hidden context mutation
+- role count should stay small
 
-Workers raise structured approval requests to a leader instead of receiving broader default
-permissions.
+## 6. Cross-Worker Permission Mailbox
 
-**OpenClaude evidence**
+**Verdict**
+
+`KEEP with update`
+
+**Source files**
 
 - `src/utils/swarm/permissionSync.ts`
 
-**Why it matters**
+**What it is**
 
-This is a practical approval pattern for delegated actions that preserves least privilege.
+OpenClaude lets workers raise structured permission requests to a leader and receive structured
+responses back instead of holding broad standing permissions.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`Conditional fit next`
+This is a strong later part of the packet `026` and `027` seam because it keeps least privilege
+alive across delegation chains.
 
-This lines up well with packet `024` and could become a future operator or parent-agent approval
-channel.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
+- add a coordinator-owned approval mailbox for delegated execution
+- record:
+  - requested action
+  - source child
+  - approval outcome
+  - modified input if any
+- project approval history into operator-visible proof
 
-- keep baseline capability grants narrow
-- add an approval mailbox on top of:
-  - delegation chains
-  - auth-callout style checks
-  - ToolBus boundary enforcement
+**Risk and compatibility caveats**
 
-## 8. Surface-Specific Command Gating
+- keep this additive on top of packet-024 action-bound enforcement
+- do not let mailbox approval become a vague "allow everything" override
 
-**OpenClaude feature**
+## 7. Surface-Specific Command Gating
 
-Remote or reduced-authority surfaces only get a safe subset of commands, and some background
-command results re-enter the main loop as hidden prompts instead of direct execution.
+**Verdict**
 
-**OpenClaude evidence**
+`KEEP with update`
 
-- `src/commands.ts`
+**Source files**
+
 - `src/utils/processUserInput/processUserInput.ts`
 - `src/utils/processUserInput/processSlashCommand.tsx`
 
-**Why it matters**
+**What it is**
 
-This is a strong model for keeping remote, HTTP, CLI, and console surfaces honest about what they
-are allowed to do.
+OpenClaude does not expose the same command surface everywhere. Remote-control surfaces only get a
+safe subset, and some background results re-enter the main loop as hidden prompts rather than raw
+direct execution.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`High fit now`
+This is a strong packet `027` operator-safety and protocol-boundary pattern. It is also useful now
+for CLI, HTTP, cockpit, and later remote surfaces.
 
-Even before a larger coordinator runtime exists, Smith can benefit from surface-specific action
-allowlists across CLI, HTTP, and operator-console initiated actions.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
-
-- define surface-specific action policy for:
+- define explicit action allowlists by surface:
   - CLI
-  - HTTP operator endpoints
-  - operator console
-  - future delegated or remote clients
-- reject out-of-scope actions explicitly and surface the reason
+  - HTTP API
+  - operator cockpit
+  - later remote protocol bridges
+- keep hidden or synthetic re-entry events clearly tagged as system-generated
+
+**Risk and compatibility caveats**
+
+- do not let hidden re-entry blur proof boundaries
+- surface policy must be operator-visible and testable
+
+## 8. Secret-Minimized Remote Bridge
+
+**Verdict**
+
+`SPLIT or DEFER`
+
+**Source files**
+
+- `src/bridge/sessionRunner.ts`
+- `src/remote/RemoteSessionManager.ts`
+- `src/remote/remotePermissionBridge.ts`
+
+**What it is**
+
+OpenClaude launches remote or bridged child sessions with a strict environment allowlist, a
+session-scoped access token, and an explicit control path for permission and interrupt traffic.
+
+**Why it is useful for Mister Smith**
+
+This is strong reference material, but it is later than packet `026`'s local runtime and later than
+packet `027`'s first discovery or lifecycle mapping slice.
+
+**Concrete adaptation path**
+
+- keep this for a later remote-executor packet
+- preserve the key rules:
+  - explicit env allowlist
+  - session-scoped access token
+  - control protocol for permission and interrupt traffic
+
+**Risk and compatibility caveats**
+
+- do not pull remote bridge complexity into the current local default runtime path
+- this should wait until Smith has a stronger local coordinator-subagent proof baseline

@@ -65,6 +65,30 @@ This scaffold is not implementation-ready until that revision gate is completed.
 - redefining packet `024` boundary-hardening ownership
 - redefining packet `025` step-policy ownership
 
+## Claude Code Inputs To Take
+
+This packet should take a few narrow runtime ideas from the OpenClaude review and ignore the rest
+of the app-shell toolbox.
+
+Take these into packet `026`:
+
+- a coordinator-owned subordinate inbox so child completion, block, clarify, and cancel signals can
+  re-enter the parent run visibly
+- stable child identity so one delegated work unit can be clarified, resumed, stopped, or
+  inspected without inventing a new child each time
+- private child scratch context with only root-owned shared channels for registration,
+  cancellation, runtime-truth projection, and capability enforcement
+- deterministic ordered parallel execution for concurrency-safe child work, including explicit
+  sibling-cancel and user-interrupt outcomes
+- small role-bounded child types instead of prompt-only specialization, starting with explorer,
+  planner, and verifier
+
+Do not take these into packet `026`:
+
+- generic shell, file, web, cron, task-list, or worktree tool parity
+- command-palette or UX-shell features
+- provider-compatibility or interoperability work that belongs to packet `027`
+
 ## Clarifications
 
 ### Session 2026-04-01
@@ -169,6 +193,10 @@ boundary story and the same session carry-forward assumptions for coordinator-le
   before packet `026` implementation begins
 - a coordinator-led follow-up run tries to reuse session context after the upstream revision gate
   changes the contract
+- the coordinator receives multiple child updates in one turn and must project them without losing
+  child identity or ordering
+- sibling cancellation fires during a parallel child batch and the runtime must project a visible
+  abort reason for every affected child
 - operator surfaces show graph completion for a run that still fails the packet `026` proof
   standard
 
@@ -201,9 +229,20 @@ boundary story and the same session carry-forward assumptions for coordinator-le
   packet `022` through `025` landed truth before any coding starts.
 - **FR-013**: System MUST define the session-aware follow-up contract in terms of stable
   identifiers and evidence references, not unlimited transcript reuse.
-- **FR-014**: System MUST keep the scaffold decision-useful enough that future work mainly revises
+- **FR-014**: System MUST define a coordinator-owned subordinate inbox for child completion,
+  block, clarify, and cancel signals that re-enter the parent run visibly.
+- **FR-015**: System MUST keep delegated child identity stable enough that the coordinator can
+  clarify, resume, stop, or inspect the same child work unit across follow-up actions.
+- **FR-016**: System MUST keep child scratch context private by default and MUST restrict shared
+  channels to root-owned registration, cancellation, runtime-truth projection, and capability
+  enforcement.
+- **FR-017**: System MUST define deterministic ordered projection for concurrency-safe parallel
+  child work, including explicit sibling-cancel and user-interrupt outcomes.
+- **FR-018**: System MUST define role-bounded child execution for at least explorer, planner, and
+  verifier instead of leaving child specialization as prompt-only behavior.
+- **FR-019**: System MUST keep the scaffold decision-useful enough that future work mainly revises
   it instead of reauthoring the packet from scratch.
-- **FR-015**: System MUST defer any implementation-ready validation or live runtime proof claims
+- **FR-020**: System MUST defer any implementation-ready validation or live runtime proof claims
   until the revision gate is completed.
 
 ### Key Entities

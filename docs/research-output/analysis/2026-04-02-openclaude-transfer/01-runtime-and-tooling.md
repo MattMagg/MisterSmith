@@ -1,256 +1,215 @@
 # Runtime And Tooling Transfer Ideas
 
-## 1. Provider Request Resolver
+## 1. Schema Sanitizer For Tool And MCP Compatibility
 
-**OpenClaude feature**
+**Verdict**
 
-One resolver decides the outbound transport, model alias, reasoning setting, base URL, and
-credential source before the rest of the runtime touches the provider call.
+`KEEP with update`
 
-**OpenClaude evidence**
-
-- `src/services/api/providerConfig.ts`
-- `src/services/api/client.ts`
-- `src/services/api/openaiShim.ts`
-- `src/services/api/codexShim.ts`
-
-**Why it matters**
-
-This keeps provider churn out of the main agent loop. The runtime talks to one internal request
-shape instead of branching everywhere on provider quirks.
-
-**Mister Smith fit**
-
-`High fit now`
-
-Mister Smith already has provider selection and routing in `crates/mister-smith-llm/`, but the
-repo direction is still to harden the current runtime path rather than widen ad hoc provider
-branches.
-
-**How to translate into Mister Smith**
-
-- add one resolver in `crates/mister-smith-llm/` that turns config plus task intent into a
-  canonical internal request and a target transport enum
-- keep the transport enum explicit, for example:
-  - `AnthropicMessages`
-  - `OpenAIChatCompletions`
-  - `OpenAIResponses`
-  - `VendorCompatible`
-- keep provider credential lookup and model alias logic inside the resolver, not inside the main
-  workflow executor
-
-**Suggested validation**
-
-- targeted unit tests for model alias resolution and transport selection
-- one provider-contract test per shipped provider path
-- no change to current packet-019 live-proof claims unless a real rerun happens
-
-## 2. Canonical Message And Tool Translation Layer
-
-**OpenClaude feature**
-
-One internal conversation shape gets translated into provider-specific payloads and streamed back
-into one internal event shape, including tool calls, tool results, usage, and finish state.
-
-**OpenClaude evidence**
-
-- `src/services/api/openaiShim.ts`
-- `src/services/api/codexShim.ts`
-- `src/services/api/openaiShim.test.ts`
-- `src/services/api/codexShim.test.ts`
-
-**Why it matters**
-
-Provider APIs change. Tool-call wire formats change. The runtime should not have those details
-spread across orchestrator code.
-
-**Mister Smith fit**
-
-`High fit now`
-
-This matches the current direction to harden routing, proof boundaries, and operator-visible truth
-without widening architectural sprawl.
-
-**How to translate into Mister Smith**
-
-- define one Smith-native turn envelope in `crates/mister-smith-llm/` or a small companion module
-  for:
-  - text blocks
-  - image or attachment references where supported
-  - tool calls
-  - tool results
-  - usage and finish reasons
-- keep all provider adapters behind that envelope
-- feed packet-023 runtime-truth and run-trace views from the canonical envelope, not from
-  provider-specific raw events
-
-**Suggested validation**
-
-- adapter round-trip tests for tool-call and tool-result conversion
-- stream-event normalization tests
-- regression tests for usage accounting and finish-reason mapping
-
-## 3. Schema Sanitizer For Tool And MCP Compatibility
-
-**OpenClaude feature**
-
-Tool and MCP schemas go through a compatibility pass that strips unsupported fields, normalizes
-enums and defaults, and fixes provider-specific schema problems before the model sees them.
-
-**OpenClaude evidence**
+**Source files**
 
 - `src/utils/schemaSanitizer.ts`
+- `src/services/api/openaiShim.ts`
 - `src/services/api/codexShim.ts`
-- `src/services/api/codexShim.test.ts`
 
-**Why it matters**
+**What it is**
 
-Tool calling fails for small schema mismatches more often than for major logic bugs. This is a
-hardening layer, not a nice-to-have.
+OpenClaude runs tool schemas through a compatibility pass before exposing them to model providers.
+It strips unsupported keywords, cleans up `type`, and removes enum or const values that no longer
+match the sanitized schema.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`High fit now`
+This fits Smith's existing packet-024 boundary work. It is not a provider-nicety feature. It is a
+hardening seam that reduces brittle tool-call failures across ToolBus, MCP, and future remote
+descriptor normalization.
 
-Packet `024` already hardened capability boundaries. A schema-compat compiler stage is a natural
-next hardening seam for `mister-smith-mcp` plus ToolBus.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
+- add a provider-facing schema compiler stage between capability discovery and model exposure
+- keep both versions:
+  - original schema for operator truth and debugging
+  - sanitized schema for provider-facing execution
+- connect it to packet `027` capability normalization instead of treating it as isolated LLM glue
 
-- add a provider-compat schema pass between:
-  - `crates/mister-smith-mcp/` tool discovery
-  - `crates/mister-smith-agents/` or ToolBus dispatch
-  - `crates/mister-smith-llm/` outbound provider calls
-- track both:
-  - original schema
-  - sanitized provider-facing schema
-- surface sanitizer changes in debug or operator inspection so failures stay explainable
+**Risk and compatibility caveats**
 
-**Suggested validation**
+- do not silently hide semantic loss
+- the sanitizer must emit operator-visible provenance when it drops fields
+- Smith should keep this boundary generic and not lock it to OpenAI-specific quirks only
 
-- unit tests for malformed enums, unsupported URI formats, and invalid defaults
-- integration tests proving the same tool can be exposed to more than one provider format
+## 2. Ordered Parallel Tool Execution With Deterministic Emission
 
-## 4. Ordered Parallel Tool Execution
+**Verdict**
 
-**OpenClaude feature**
+`KEEP with update`
 
-The runtime marks tools as concurrency-safe or serial-only, runs safe batches in parallel, and
-still emits results in a deterministic order.
-
-**OpenClaude evidence**
+**Source files**
 
 - `src/services/tools/toolOrchestration.ts`
 - `src/services/tools/StreamingToolExecutor.ts`
 
-**Why it matters**
+**What it is**
 
-This is a strong pattern for speeding up tool-heavy steps without making result order or operator
-explanations chaotic.
+OpenClaude marks tool calls as concurrency-safe or not, runs safe batches in parallel, preserves
+output order, and cancels sibling work when needed. The important detail is not just concurrency.
+It is deterministic result emission plus explicit interrupt and sibling-abort behavior.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`Conditional fit next`
+This is one of the cleanest runtime ideas to adapt into packet `026`. Smith already has ToolBus,
+runtime-truth, and proof-boundary surfaces. Parallel work only helps if it stays explainable and
+operator-visible.
 
-Mister Smith already has a ToolBus-backed runtime path. This idea fits well, but it should land as
-an explicit extension of the current step/runtime truth contract, not as an invisible execution
-change.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
-
-- add one concurrency flag per ToolBus action class:
+- extend Smith's subordinate runtime with explicit tool-batch policy:
   - `serial`
   - `concurrency_safe`
-- run safe actions in ordered parallel batches inside one workflow step
-- preserve one final ordered event stream for packet-023 run-trace and autonomy status views
+- require deterministic event ordering on the run-trace side even when execution is parallel
+- propagate sibling cancellation as first-class runtime truth instead of leaving it buried in logs
 
-**Suggested validation**
+**Risk and compatibility caveats**
 
-- deterministic ordering tests with mixed serial and safe tools
-- cancellation tests
-- proof that packet-023 runtime-truth summaries stay stable after parallelization
+- do not let parallel execution bypass packet-023 truth surfaces
+- do not make parallelism the default for work that does not justify it
+- cancellation semantics must be explicit before this becomes a default runtime behavior
 
-## 5. Provider-Aware Search And Fetch Brokers
+## 3. Long-Lived MCP Lifecycle Reconciliation
 
-**OpenClaude feature**
+**Verdict**
 
-Search and fetch are brokered across provider-native search, Codex search, Firecrawl, and raw HTTP
-fetch, with permission rules, redirect handling, and second-pass content extraction.
+`KEEP with update`
 
-**OpenClaude evidence**
-
-- `src/tools/WebSearchTool/WebSearchTool.ts`
-- `src/tools/WebFetchTool/WebFetchTool.ts`
-- `src/tools/WebFetchTool/utils.ts`
-
-**Why it matters**
-
-“Web access” is not one thing. Search, scrape, and authenticated retrieval have different cost,
-policy, and reliability profiles.
-
-**Mister Smith fit**
-
-`Conditional fit next`
-
-Useful if Smith broadens web-capability surfaces, but the bigger lesson is architectural: treat
-search and fetch as policy-brokered capabilities, not one hardcoded backend.
-
-**How to translate into Mister Smith**
-
-- model two capability classes:
-  - `search broker`
-  - `fetch broker`
-- let policy choose backend by:
-  - auth requirement
-  - source type
-  - JS-rendering need
-  - cost or quota posture
-- keep boundary decisions visible in packet-024 style capability reporting
-
-**Suggested validation**
-
-- backend-selection tests
-- redirect and domain-policy tests
-- operator-visible provenance showing which broker path was used
-
-## 6. Long-Lived MCP Lifecycle Management
-
-**OpenClaude feature**
-
-OpenClaude reconnects MCP servers, reacts to capability-list changes, inserts auth placeholder
-tools, and avoids re-sending the entire MCP instruction block every turn.
-
-**OpenClaude evidence**
+**Source files**
 
 - `src/services/mcp/client.ts`
 - `src/services/mcp/useManageMCPConnections.ts`
-- `src/services/mcp/InProcessTransport.ts`
 - `src/utils/mcpInstructionsDelta.ts`
 - `src/tools/McpAuthTool/McpAuthTool.ts`
-- `src/tools/ListMcpResourcesTool/ListMcpResourcesTool.ts`
-- `src/tools/ReadMcpResourceTool/ReadMcpResourceTool.ts`
 
-**Why it matters**
+**What it is**
 
-This is the difference between “MCP exists” and “MCP stays healthy in a real long-running session.”
+OpenClaude treats MCP as a changing runtime surface, not a one-time prompt dump. It handles
+reconnects, `listChanged` refresh, auth-needed state, instruction deltas, and large-result offload.
 
-**Mister Smith fit**
+**Why it is useful for Mister Smith**
 
-`High fit now`
+This is a direct fit for packet `027`. Smith already has bounded MCP discovery and packet-024
+capability enforcement. The next leverage is lifecycle health, trust-state clarity, and prompt-size
+discipline.
 
-Mister Smith already ships `mister-smith-mcp` and packet `024` boundary work. Lifecycle
-reconciliation, large-result offload, and incremental instruction deltas are a natural hardening
-next step.
+**Concrete adaptation path**
 
-**How to translate into Mister Smith**
+- track connected, pending, and needs-auth MCP state in Smith capability truth
+- refresh capability lists from server notifications instead of requiring full rediscovery
+- project changed instructions and changed capabilities as deltas, not full prompt rebuilds
+- offload very large MCP results into referenced artifacts and keep operator-visible provenance
 
-- keep live server-state reconciliation in `crates/mister-smith-mcp/`
-- add explicit auth-needed capability placeholders instead of opaque failure states
-- offload large MCP results outside prompt context and project them as references in runtime truth
-- avoid rebuilding the whole capability prompt surface every turn when only a small delta changed
+**Risk and compatibility caveats**
 
-**Suggested validation**
+- delta refresh must not hide capability removal or auth expiry
+- persisted large results need durable references and cleanup rules
+- operator views must show what changed, not just the latest snapshot
 
-- reconnect and capability-list-changed tests
-- large-result offload tests
-- auth-expiry and reauth placeholder tests
+## 4. Remote Tool Placeholder And Unknown-Tool Permission Bridge
+
+**Verdict**
+
+`KEEP with update`
+
+**Source files**
+
+- `src/remote/remotePermissionBridge.ts`
+- `src/remote/RemoteSessionManager.ts`
+
+**What it is**
+
+When a remote session asks for permission on a tool the local client does not know about,
+OpenClaude creates a synthetic assistant message and a minimal tool stub so the operator can still
+approve or deny the request in a structured way.
+
+**Why it is useful for Mister Smith**
+
+This is one of the best missed findings from the first pass. It is a protocol-boundary feature, not
+a UI trick. Smith packet `027` will eventually have to deal with remote or normalized capabilities
+that the local surface does not execute directly.
+
+**Concrete adaptation path**
+
+- define a Smith-side placeholder capability for remote-only or unknown tools
+- let the operator see:
+  - source capability name
+  - raw input preview
+  - trust and auth state
+  - approval options
+- keep approval separate from local execution support
+
+**Risk and compatibility caveats**
+
+- a placeholder must never imply local executability
+- the operator must see that this is a foreign capability and what protocol source it came from
+- this belongs to packet `027` protocol-boundary language, not packet `026` runtime semantics
+
+## 5. Provider Request Resolver And Canonical Translation Layer
+
+**Verdict**
+
+`SPLIT or DEFER`
+
+**Source files**
+
+- `src/services/api/providerConfig.ts`
+- `src/services/api/openaiShim.ts`
+- `src/services/api/codexShim.ts`
+
+**What it is**
+
+OpenClaude centralizes provider request resolution and message or tool translation behind a smaller
+internal shape.
+
+**Why it is useful for Mister Smith**
+
+This is still a reasonable runtime-plumbing idea, but it is not one of the strongest packet `026`
+or `027` transfers. The first pass over-weighted it because it is easy to notice. Smith's current
+frontier leverage is stronger runtime coordination and protocol boundary truth, not more provider
+API breadth.
+
+**Concrete adaptation path**
+
+- treat this as later runtime hardening work inside `crates/mister-smith-llm/`
+- if it lands, keep it narrow:
+  - canonical internal envelopes
+  - explicit transport selection
+  - provider-specific code isolated from orchestrator logic
+
+**Risk and compatibility caveats**
+
+- do not widen packet `026` or `027` around provider churn
+- do not mistake transport normalization for interoperability architecture
+
+## 6. Provider-Aware Search And Fetch Brokers
+
+**Verdict**
+
+`REMOVE as misfit`
+
+**Source files**
+
+- `src/tools/WebSearchTool/WebSearchTool.ts`
+- `src/tools/WebFetchTool/WebFetchTool.ts`
+
+**What it is**
+
+OpenClaude brokers web search and fetch across multiple backends.
+
+**Why it is not a strong Smith transfer**
+
+This is interesting product plumbing, but it is not a durable Mister Smith OS advantage right now.
+It pushes the transfer set back toward framework-feature parity instead of coordination runtime,
+capability boundary, or operator proof.
+
+**Keep only the narrow lesson**
+
+- if Smith broadens web surfaces later, keep search and fetch policy-distinct
+- do not pull this into the current `026` or `027` packet shape
