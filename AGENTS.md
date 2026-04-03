@@ -17,6 +17,7 @@ validated through Phase 10 plus the landed frontier packets through `024`.
 - `scripts/`: Utility scripts for control-plane bootstrap, validation, and local runtime support
 
 Use `docs/current-state.md` as the repo-wide current-state overview and document router.
+Use `docs/direction.md` when you need the merged strategic direction and next-build priority.
 Use `README.md`, `ROADMAP.md`, and `CLAUDE.md` as supporting orientation entry points.
 Treat `WORKFLOW.md` and `docs/linear/LINEAR.md` as the live control-plane contract.
 Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the current runtime-proof
@@ -75,6 +76,9 @@ runtime.
     running the repo-local implement flow.
 - When a task explicitly calls for Ralph, use `./scripts/ralph` instead of bare `ralph`; rerun
   `./scripts/ralph prompt --packet <packet.json>` before each `./scripts/ralph run`.
+- When launching Symphony locally for this repo, use `./scripts/run-symphony.sh`; it loads this
+  repository's `.env`, verifies `LINEAR_API_KEY`, defaults `SYMPHONY_ROOT=$HOME/symphony`, and
+  starts Symphony against this repo's `WORKFLOW.md`.
 - Treat `docs/current-state.md` as the current repo-wide router,
   `specs/023-runtime-truth-and-run-trace/` and
   `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
@@ -122,6 +126,7 @@ python3 -m unittest scripts.tests.test_live_runtime_proof_smoke
 python3 -m py_compile scripts/live_runtime_proof_smoke.py
                                           # Fast syntax check for smoke-harness edits
 ./scripts/ralph --version                  # Check the repo-managed Ralph wrapper
+./scripts/run-symphony.sh                  # Supported local Symphony launcher for this repo
 scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync
                                            # Verify clean synced closure state
 ```
