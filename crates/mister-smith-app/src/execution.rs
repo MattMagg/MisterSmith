@@ -1991,7 +1991,13 @@ impl RuntimeTaskService {
             final_result.clone(),
             self.current_supervision_evidence(workflow_id, &metadata, None),
             &metadata,
-            self.orchestrator.coordinator_runtime_proof_view(&workflow_id),
+            {
+                if let Some(session_id) = metadata_session_id(&metadata) {
+                    self.orchestrator
+                        .register_workflow_session(&workflow_id, session_id);
+                }
+                self.orchestrator.coordinator_runtime_proof_view(&workflow_id)
+            },
         )
         .unwrap_or(TerminalResultViews {
             aggregated_result: aggregated_result.clone(),
@@ -2049,6 +2055,10 @@ impl RuntimeTaskService {
         let coordinator_id = coordinator_id_for_request(&request, self.default_coordinator_id);
         self.orchestrator
             .register_workflow_coordinator(&workflow_id, coordinator_id);
+        if let Some(conversation) = request.conversation.as_ref() {
+            self.orchestrator
+                .register_workflow_session(&workflow_id, conversation.session_id);
+        }
         let mut metadata = initial_metadata(
             &request,
             coordinator_id,
@@ -2433,7 +2443,13 @@ impl RuntimeTaskService {
             final_result,
             self.current_supervision_evidence(workflow_id, &metadata, None),
             &metadata,
-            self.orchestrator.coordinator_runtime_proof_view(&workflow_id),
+            {
+                if let Some(session_id) = metadata_session_id(&metadata) {
+                    self.orchestrator
+                        .register_workflow_session(&workflow_id, session_id);
+                }
+                self.orchestrator.coordinator_runtime_proof_view(&workflow_id)
+            },
         )?;
 
         put_metadata(
@@ -3057,7 +3073,13 @@ impl RuntimeTaskService {
             final_result,
             self.current_supervision_evidence(workflow_id, &metadata, None),
             &metadata,
-            self.orchestrator.coordinator_runtime_proof_view(&workflow_id),
+            {
+                if let Some(session_id) = metadata_session_id(&metadata) {
+                    self.orchestrator
+                        .register_workflow_session(&workflow_id, session_id);
+                }
+                self.orchestrator.coordinator_runtime_proof_view(&workflow_id)
+            },
         )
         .unwrap_or(TerminalResultViews {
             aggregated_result: aggregated_result.clone(),

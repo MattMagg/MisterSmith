@@ -75,6 +75,7 @@ pub struct Orchestrator {
     conservative_reasons: DashMap<TaskId, Vec<String>>,
     adaptive_team_plans: DashMap<TaskId, AdaptiveTeamPlan>,
     workflow_coordinators: DashMap<TaskId, AgentId>,
+    workflow_session_ids: DashMap<TaskId, mister_smith_core::SessionId>,
     autonomy_events: DashMap<TaskId, Vec<AutonomyEvent>>,
     step_routing_histories: DashMap<TaskId, Vec<StepRoutingDecisionSummary>>,
     autonomy_event_tx: Option<mpsc::Sender<Event>>,
@@ -204,6 +205,7 @@ impl Orchestrator {
             conservative_reasons: DashMap::new(),
             adaptive_team_plans: DashMap::new(),
             workflow_coordinators: DashMap::new(),
+            workflow_session_ids: DashMap::new(),
             autonomy_events: DashMap::new(),
             step_routing_histories: DashMap::new(),
             autonomy_event_tx: None,
@@ -244,6 +246,15 @@ impl Orchestrator {
     pub fn register_workflow_coordinator(&self, workflow_id: &TaskId, coordinator_id: AgentId) {
         self.workflow_coordinators
             .insert(*workflow_id, coordinator_id);
+    }
+
+    /// Remember the owning session so delegated proof surfaces retain bounded continuity context.
+    pub fn register_workflow_session(
+        &self,
+        workflow_id: &TaskId,
+        session_id: mister_smith_core::SessionId,
+    ) {
+        self.workflow_session_ids.insert(*workflow_id, session_id);
     }
 
     /// Return the latest adaptive team plan for a workflow, when one has been materialized.
@@ -720,6 +731,7 @@ impl Orchestrator {
     /// Build the operator-visible autonomy status for a workflow.
     pub fn autonomy_status(&self, workflow_id: &TaskId) -> Option<AutonomyStatusView> {
         let graph = self.execution_graph(workflow_id)?;
+        let session_id = self.session_id_for_workflow(workflow_id);
         let profile_assessments = self
             .profiles
             .get(workflow_id)
@@ -897,14 +909,14 @@ impl Orchestrator {
         let packet_026 = synthesize_coordinator_runtime_projection(
             &graph,
             coordinator_agent_id,
-            None,
+            session_id,
         );
         if let Some(preview) = result_preview.as_mut() {
             preview.coordinator_runtime_proof = Some(packet_026.coordinator_runtime_proof.clone());
         }
 
         Some(AutonomyStatusView {
-            session_id: None,
+            session_id,
             turn_index: None,
             coordinator_agent_id: Some(coordinator_agent_id),
             resume_provenance: None,
@@ -966,8 +978,9 @@ impl Orchestrator {
             .get(workflow_id)
             .map(|entry| *entry.value())
             .unwrap_or_else(|| AgentId::from_uuid(*workflow_id.as_ref()));
+        let session_id = self.session_id_for_workflow(workflow_id);
         Some(
-            synthesize_coordinator_runtime_projection(&graph, coordinator_agent_id, None)
+            synthesize_coordinator_runtime_projection(&graph, coordinator_agent_id, session_id)
                 .coordinator_runtime_proof,
         )
     }
@@ -1625,6 +1638,12 @@ impl Orchestrator {
         state.value_mut().apply(message);
     }
 
+    fn session_id_for_workflow(&self, workflow_id: &TaskId) -> Option<mister_smith_core::SessionId> {
+        self.workflow_session_ids
+            .get(workflow_id)
+            .map(|entry| *entry.value())
+    }
+
     fn record_supervisor_message(&self, workflow_id: &TaskId, message: &SupervisorMessage) {
         let mut state = self.supervisor_states.entry(*workflow_id).or_default();
         state.value_mut().apply(message);
@@ -1763,10 +1782,26 @@ fn synthesize_coordinator_runtime_projection(
         .iter()
         .filter(|evidence| evidence.evidence_kind == "grounded")
         .count();
+    let all_delegated_work_grounded = delegated_work_evidence.len() == delegation_records.len()
+        && delegated_work_evidence
+            .iter()
+            .all(|evidence| evidence.evidence_kind == "grounded");
+    let all_subagents_completed = subagent_states
+        .iter()
+        .all(|state| state.current_state == "completed");
+    let accepted_merge_decision = coordinator_decisions.iter().any(|decision| {
+        decision.decision_kind == "merge" && decision.decision_outcome == "accepted"
+    });
     let proof_boundary = if delegation_records.is_empty() {
         "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied"
             .to_string()
-    } else if grounded_count > 0 && !subagent_states.is_empty() && !coordinator_decisions.is_empty() {
+    } else if grounded_count > 0
+        && !subagent_states.is_empty()
+        && !coordinator_decisions.is_empty()
+        && all_delegated_work_grounded
+        && all_subagents_completed
+        && accepted_merge_decision
+    {
         "real coordinator-subagent runtime satisfied for the bounded delegated slice".to_string()
     } else {
         "delegated work remained placeholder-only or partial; packet 026 real coordinator-subagent runtime not yet satisfied"
@@ -3424,6 +3459,66 @@ mod tests {
             scheduler.submit(task);
         }
         scheduler
+    }
+
+    #[test]
+    fn synthesize_coordinator_runtime_projection_propagates_session_ids() {
+        let (mut graph, _, _, _) = node_scoped_supervision_graph();
+        graph.state = GraphState::Completed;
+        for branch in &mut graph.branches {
+            branch.state = BranchState::Completed;
+        }
+        for node in &mut graph.nodes {
+            node.state = NodeState::Completed;
+        }
+        let session_id = mister_smith_core::SessionId::new();
+
+        let packet_026 = synthesize_coordinator_runtime_projection(
+            &graph,
+            AgentId::new(),
+            Some(session_id),
+        );
+
+        assert!(!packet_026.delegation_records.is_empty());
+        assert!(packet_026
+            .delegation_records
+            .iter()
+            .all(|record| record.session_id == Some(session_id)));
+    }
+
+    #[test]
+    fn synthesize_coordinator_runtime_projection_requires_all_delegated_branches_grounded() {
+        let (mut graph, _, _, _) = node_scoped_supervision_graph();
+        graph.state = GraphState::Running;
+        let running_branch = graph.branches.get(1).expect("running branch should exist").branch_id;
+        for branch in &mut graph.branches {
+            branch.state = BranchState::Completed;
+        }
+        graph
+            .branches
+            .iter_mut()
+            .find(|branch| branch.branch_id == running_branch)
+            .expect("running branch should exist")
+            .state = BranchState::Running;
+        for node in &mut graph.nodes {
+            node.state = NodeState::Completed;
+        }
+        for node in graph.nodes.iter_mut().filter(|node| node.branch_id == running_branch) {
+            node.state = NodeState::Pending;
+        }
+
+        let packet_026 = synthesize_coordinator_runtime_projection(&graph, AgentId::new(), None);
+        assert_eq!(packet_026.delegation_records.len(), packet_026.delegated_work_evidence.len());
+        assert!(packet_026
+            .delegated_work_evidence
+            .iter()
+            .any(|evidence| evidence.evidence_kind != "grounded"));
+        assert!(
+            packet_026
+                .coordinator_runtime_proof
+                .proof_boundary
+                .contains("not yet satisfied")
+        );
     }
 
     #[test]
