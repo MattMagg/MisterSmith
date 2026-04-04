@@ -14,12 +14,14 @@ use tokio::sync::{broadcast, RwLock};
 use tracing;
 
 use mister_smith_core::{
-    packet_023_placeholder_runtime_truth, CheckpointId, ContextBudgetId, EventPublisher,
+    packet_023_placeholder_runtime_truth, CheckpointId, ContextBudgetId,
+    CoordinatorDelegationRecord, CoordinatorMergeDecision, CoordinatorRuntimeProofView,
+    CoordinatorSubordinateInboxRecord, DelegatedWorkEvidenceRef, EventPublisher,
     ExecutionBranchId, ExecutionGraphId, GraphState, GuardDecision, GuardDecisionId, GuardTarget,
     InterventionRecord, InterventionRecordId, OperatorResultPreview, ProfileSnapshot,
     ProfileSnapshotId, ProfileTarget, RepairLineageRef, RunTraceRelationshipKind, RuntimeTruthView,
-    StepPolicySummaryView, SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope,
-    SystemEvent, TaskId, TeamSizingDecision,
+    StepPolicySummaryView, SubagentStateRecord, SupervisionEvidenceView,
+    SupervisionTargetKind, SupervisionTargetScope, SystemEvent, TaskId, TeamSizingDecision,
 };
 
 use crate::autonomy::{
@@ -57,6 +59,12 @@ struct AutonomyStatusAccumulator {
     interventions: HashMap<InterventionRecordId, InterventionRecord>,
     delegation_capabilities: HashMap<mister_smith_core::CapabilityId, CapabilitySummary>,
     delegation_alerts: HashMap<String, DelegationAlert>,
+    delegation_records: Vec<CoordinatorDelegationRecord>,
+    subordinate_inbox: Vec<CoordinatorSubordinateInboxRecord>,
+    subagent_states: Vec<SubagentStateRecord>,
+    delegated_work_evidence: Vec<DelegatedWorkEvidenceRef>,
+    coordinator_decisions: Vec<CoordinatorMergeDecision>,
+    coordinator_runtime_proof: Option<CoordinatorRuntimeProofView>,
     external_capability_decisions: Vec<ExternalCapabilityDecisionSummary>,
     profiles: HashMap<ProfileSnapshotId, ProfileSnapshot>,
     guard_decisions: HashMap<GuardDecisionId, GuardDecision>,
@@ -276,6 +284,12 @@ impl AutonomyStatusAccumulator {
             interventions,
             delegation_capabilities,
             delegation_alerts,
+            delegation_records: self.delegation_records.clone(),
+            subordinate_inbox: self.subordinate_inbox.clone(),
+            subagent_states: self.subagent_states.clone(),
+            delegated_work_evidence: self.delegated_work_evidence.clone(),
+            coordinator_decisions: self.coordinator_decisions.clone(),
+            coordinator_runtime_proof: self.coordinator_runtime_proof.clone(),
             external_capability_decisions,
             profiles,
             guard_decisions,
@@ -290,6 +304,12 @@ impl AutonomyStatusAccumulator {
         let supervision_evidence = view.supervision_evidence.clone();
         let runtime_truth = view.runtime_truth.clone();
         let step_policy = view.step_policy.clone();
+        let delegation_records = view.delegation_records.clone();
+        let subordinate_inbox = view.subordinate_inbox.clone();
+        let subagent_states = view.subagent_states.clone();
+        let delegated_work_evidence = view.delegated_work_evidence.clone();
+        let coordinator_decisions = view.coordinator_decisions.clone();
+        let coordinator_runtime_proof = view.coordinator_runtime_proof.clone();
         let mut accumulator = Self {
             session_id: view.session_id,
             turn_index: view.turn_index,
@@ -303,6 +323,12 @@ impl AutonomyStatusAccumulator {
             runtime_truth,
             supervision_evidence,
             step_policy,
+            delegation_records,
+            subordinate_inbox,
+            subagent_states,
+            delegated_work_evidence,
+            coordinator_decisions,
+            coordinator_runtime_proof,
             ..Self::default()
         };
 

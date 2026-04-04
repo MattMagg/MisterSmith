@@ -511,6 +511,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
         step_results: vec![serde_json::json!({"status": "completed"})],
         aggregated_result: serde_json::json!({"summary": "bounded final payload"}),
         proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+        coordinator_runtime_proof: None,
     };
     let provenance = ResultProvenanceSummary {
         runtime_execution_mode: canonical_result.runtime_execution_mode.clone(),
@@ -544,6 +545,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
         runtime_truth: Some(runtime_truth.clone()),
         supervision_evidence: Some(supervision_evidence.clone()),
         step_policy: None,
+        coordinator_runtime_proof: None,
         result: canonical_result.clone(),
     };
     let session_result = SessionRetainedResultView {
@@ -566,6 +568,7 @@ fn autonomy_ids_enums_and_errors_are_available() {
         orchestration_quality: None,
         runtime_truth: Some(runtime_truth),
         step_policy: None,
+        coordinator_runtime_proof: None,
         provenance_lines: vec![
             "canonical result stored in metadata.final_result".to_string(),
             "aggregated payload nested under metadata.aggregated_result".to_string(),

@@ -56,11 +56,11 @@ Example authoritative payload shape:
 ```json
 {
   "workflow_id": "11111111-1111-1111-1111-111111111111",
-  "session_id": "22222222-2222-2222-2222-222222222222",
   "coordinator_agent_id": "agent-coordinator-1",
-  "delegations": [
+  "delegation_records": [
     {
       "delegation_id": "delegation-1",
+      "session_id": "22222222-2222-2222-2222-222222222222",
       "child_role": "explorer",
       "subagent_id": "agent-worker-1",
       "delegated_job_label": "audit backend boundaries",
@@ -97,7 +97,8 @@ Example authoritative payload shape:
       "decision_outcome": "accepted"
     }
   ],
-  "proof_boundary": "real coordinator-subagent runtime satisfied"
+  "proof_boundary": "real coordinator-subagent runtime satisfied",
+  "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay"
 }
 ```
 
@@ -141,6 +142,8 @@ Expected behavior:
 - task result exposes the latest joined `CoordinatorRuntimeProofView`
 - task result explains why a run did or did not satisfy the packet `026` proof standard
 - task result distinguishes graph success from real coordinator-subagent success
+- retained session assistant results may project a bounded `coordinator_runtime_follow_up` object,
+  but that follow-up view must stay limited to stable identifiers, proof text, and evidence refs
 
 ## Autonomy surface contract
 

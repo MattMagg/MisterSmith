@@ -31,6 +31,7 @@ export interface ResultPreview {
   preview_text?: string | null;
   payload_location: string;
   step_policy?: StepPolicySummary | null;
+  coordinator_runtime_proof?: CoordinatorRuntimeProofView | null;
   provenance_lines: string[];
 }
 
@@ -107,6 +108,72 @@ export interface TaskRuntimeTruth {
   grounded_evidence?: RuntimeTruthGroundedEvidenceReference[];
 }
 
+export interface CoordinatorDelegationRecord {
+  delegation_id: string;
+  workflow_id: string;
+  session_id?: string | null;
+  coordinator_agent_id: string;
+  child_role: string;
+  subagent_id: string;
+  delegated_job_label: string;
+  delegated_scope_ref: string;
+  delegation_reason: string;
+  allowed_follow_up_actions: string[];
+  created_at: string;
+  status: string;
+}
+
+export interface CoordinatorSubordinateInboxRecord {
+  delegation_id: string;
+  event_id: string;
+  event_sequence: number;
+  event_kind: string;
+  event_payload_ref: string;
+  recorded_at: string;
+  visible_to: string;
+}
+
+export interface SubagentStateRecord {
+  delegation_id: string;
+  subagent_id: string;
+  current_state: string;
+  previous_state?: string | null;
+  state_reason: string;
+  state_updated_at: string;
+  coordinator_action_ref?: string | null;
+}
+
+export interface DelegatedWorkEvidenceRef {
+  delegation_id: string;
+  evidence_kind: string;
+  evidence_summary: string;
+  artifact_refs: string[];
+  proof_boundary_note: string;
+  recorded_at: string;
+}
+
+export interface CoordinatorMergeDecision {
+  decision_id: string;
+  workflow_id: string;
+  decision_kind: string;
+  input_refs: string[];
+  decision_reason: string;
+  decision_outcome: string;
+  decided_at: string;
+}
+
+export interface CoordinatorRuntimeProofView {
+  workflow_id: string;
+  coordinator_agent_id: string;
+  delegation_records: CoordinatorDelegationRecord[];
+  subordinate_inbox: CoordinatorSubordinateInboxRecord[];
+  subagent_states: SubagentStateRecord[];
+  delegated_work_evidence: DelegatedWorkEvidenceRef[];
+  coordinator_decisions: CoordinatorMergeDecision[];
+  proof_boundary: string;
+  session_follow_up_note: string;
+}
+
 export interface StepPolicyDifficultyAssessment {
   workflow_id: string;
   step_id: string;
@@ -181,6 +248,7 @@ export interface TaskResultDetail {
   runtime_truth?: TaskRuntimeTruth | null;
   supervision_evidence?: TaskSupervisionEvidence | null;
   step_policy?: StepPolicySummary | null;
+  coordinator_runtime_proof?: CoordinatorRuntimeProofView | null;
   result: Record<string, unknown>;
 }
 

@@ -10,13 +10,15 @@ use serde_json::Value;
 
 use mister_smith_core::{
     AgentId, AuthorityPrincipal, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope,
-    CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy, DelegationScope,
+    CapabilityId, CheckpointId, ContextBudgetId, CoordinationPolicy,
+    CoordinatorDelegationRecord, CoordinatorMergeDecision, CoordinatorRuntimeProofView,
+    CoordinatorSubordinateInboxRecord, DelegatedWorkEvidenceRef, DelegationScope,
     DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionGraphId, ExecutionNodeId,
     GraphState, GuardDecision, HealthState, InterventionRecord, MemorySnapshotId,
     OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProofOutcomeClassification,
     ProvenanceChain, RevocationState, RuntimeTruthView, SessionId, StepPolicySummaryView,
-    SupervisionEvidenceView, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
-    TopologyKind, TopologyRationale,
+    SubagentStateRecord, SupervisionEvidenceView, TaskId, TaskShapeClassification, TaskShapeKind,
+    TeamSizingDecision, TopologyKind, TopologyRationale,
 };
 
 use crate::builder::EventBuilder;
@@ -411,6 +413,24 @@ pub struct AutonomyStatusView {
     pub delegation_capabilities: Vec<CapabilitySummary>,
     /// Delegation or provenance warnings.
     pub delegation_alerts: Vec<DelegationAlert>,
+    /// Packet-026 delegation records when available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delegation_records: Vec<CoordinatorDelegationRecord>,
+    /// Packet-026 subordinate inbox events when available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subordinate_inbox: Vec<CoordinatorSubordinateInboxRecord>,
+    /// Packet-026 delegated child state when available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subagent_states: Vec<SubagentStateRecord>,
+    /// Packet-026 delegated-work evidence when available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delegated_work_evidence: Vec<DelegatedWorkEvidenceRef>,
+    /// Packet-026 coordinator decisions when available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coordinator_decisions: Vec<CoordinatorMergeDecision>,
+    /// Packet-026 joined proof view when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator_runtime_proof: Option<CoordinatorRuntimeProofView>,
     /// External capability boundary decisions projected for operator inspection.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub external_capability_decisions: Vec<ExternalCapabilityDecisionSummary>,
@@ -609,6 +629,7 @@ pub fn infer_result_preview_from_projection(
         orchestration_quality: None,
         runtime_truth: None,
         step_policy: step_policy.cloned(),
+        coordinator_runtime_proof: None,
         provenance_lines,
     })
 }
@@ -644,6 +665,9 @@ pub fn merge_operator_result_preview(
     }
     if merged.step_policy.is_none() {
         merged.step_policy = fallback.step_policy.clone();
+    }
+    if merged.coordinator_runtime_proof.is_none() {
+        merged.coordinator_runtime_proof = fallback.coordinator_runtime_proof.clone();
     }
     for line in &fallback.provenance_lines {
         if !merged.provenance_lines.contains(line) {

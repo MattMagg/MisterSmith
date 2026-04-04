@@ -1,5 +1,6 @@
 import { type FormEvent } from 'react';
 import type {
+  CoordinatorRuntimeProofView,
   RunSummary,
   StepPolicySummary,
   TaskInspectResponse,
@@ -46,6 +47,10 @@ export function RunsView(props: RunsViewProps) {
   const stepPolicy =
     taskDetail?.result?.step_policy ??
     selectedRunSummary?.result_preview?.step_policy ??
+    null;
+  const coordinatorRuntimeProof =
+    taskDetail?.result?.coordinator_runtime_proof ??
+    selectedRunSummary?.result_preview?.coordinator_runtime_proof ??
     null;
 
   return (
@@ -238,6 +243,25 @@ export function RunsView(props: RunsViewProps) {
               </section>
             ) : null}
 
+            {coordinatorRuntimeProof ? (
+              <section className="subpanel">
+                <h3>Coordinator runtime proof</h3>
+                <KeyValueGrid
+                  rows={[
+                    ['Workflow', coordinatorRuntimeProof.workflow_id],
+                    ['Coordinator', coordinatorRuntimeProof.coordinator_agent_id],
+                    ['Proof boundary', coordinatorRuntimeProof.proof_boundary],
+                    ['Follow-up', coordinatorRuntimeProof.session_follow_up_note],
+                  ]}
+                />
+                <p>Delegations: {formatDelegations(coordinatorRuntimeProof)}</p>
+                <p>Inbox activity: {formatSubordinateInbox(coordinatorRuntimeProof)}</p>
+                <p>Child states: {formatSubagentStates(coordinatorRuntimeProof)}</p>
+                <p>Delegated evidence: {formatDelegatedEvidence(coordinatorRuntimeProof)}</p>
+                <p>Coordinator decisions: {formatCoordinatorDecisions(coordinatorRuntimeProof)}</p>
+              </section>
+            ) : null}
+
             <section className="subpanel">
               <h3>Transcript and evidence</h3>
               <div className="terminal-shell">
@@ -358,11 +382,69 @@ function formatRelationships(runtimeTruth: TaskRuntimeTruth): string {
 }
 
 function formatGroundedEvidence(runtimeTruth: TaskRuntimeTruth): string {
-  return runtimeTruth.grounded_evidence.length > 0
-    ? runtimeTruth.grounded_evidence
-        .map((reference) => `${reference.source}: ${reference.reference}`)
+  const evidence = runtimeTruth.grounded_evidence ?? [];
+
+  return evidence.length > 0
+    ? evidence
+        .map((reference) => `${reference.kind}: ${reference.reference}`)
         .join(', ')
     : 'none/minimal';
+}
+
+function formatDelegations(proof: CoordinatorRuntimeProofView): string {
+  return proof.delegation_records.length > 0
+    ? proof.delegation_records
+        .map(
+          (record) =>
+            `${record.delegated_job_label} (${record.child_role}, ${record.status}, ${record.subagent_id})`,
+        )
+        .join(', ')
+    : 'none recorded';
+}
+
+function formatSubordinateInbox(proof: CoordinatorRuntimeProofView): string {
+  return proof.subordinate_inbox.length > 0
+    ? proof.subordinate_inbox
+        .map(
+          (record) =>
+            `${record.delegation_id} #${record.event_sequence} ${record.event_kind} via ${record.event_payload_ref}`,
+        )
+        .join(', ')
+    : 'none recorded';
+}
+
+function formatSubagentStates(proof: CoordinatorRuntimeProofView): string {
+  return proof.subagent_states.length > 0
+    ? proof.subagent_states
+        .map((record) => {
+          const previous = record.previous_state ? `${record.previous_state} -> ` : '';
+          return `${record.subagent_id} ${previous}${record.current_state} (${record.state_reason})`;
+        })
+        .join(', ')
+    : 'none recorded';
+}
+
+function formatDelegatedEvidence(proof: CoordinatorRuntimeProofView): string {
+  return proof.delegated_work_evidence.length > 0
+    ? proof.delegated_work_evidence
+        .map((record) => {
+          const refs =
+            record.artifact_refs.length > 0 ? ` refs=${record.artifact_refs.join('|')}` : '';
+          return `${record.delegation_id} ${record.evidence_kind}: ${record.evidence_summary}${refs}`;
+        })
+        .join(', ')
+    : 'none recorded';
+}
+
+function formatCoordinatorDecisions(proof: CoordinatorRuntimeProofView): string {
+  return proof.coordinator_decisions.length > 0
+    ? proof.coordinator_decisions
+        .map(
+          (record) =>
+            `${record.decision_kind} ${record.decision_outcome} (${record.decision_reason})`,
+        )
+        .join(', ')
+    : 'none recorded';
 }
 
 function formatStepPolicyBudget(stepPolicy: StepPolicySummary): string {

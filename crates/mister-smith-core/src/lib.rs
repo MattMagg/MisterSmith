@@ -19,8 +19,10 @@ pub use ids::{
 // Shared autonomy value objects
 pub use autonomy::{
     packet_023_placeholder_proof_boundary, packet_023_placeholder_runtime_truth,
-    AuthorityPrincipal, CapabilityActionKind, ContextBudget, DelegatedAction,
-    DelegatedActionPolicy, DelegationCapability, ExecutionEvidenceClass,
+    AuthorityPrincipal, CapabilityActionKind, ContextBudget, CoordinatorDelegationRecord,
+    CoordinatorMergeDecision, CoordinatorRuntimeProofView,
+    CoordinatorSubordinateInboxRecord, DelegatedAction, DelegatedActionPolicy,
+    DelegatedWorkEvidenceRef, DelegationCapability, ExecutionEvidenceClass,
     ExternalDelegationEnvelope, GroundedEvidenceReference, GuardDecision, GuardEvidence,
     GuardTarget, HandoffClarificationRequest, InterventionRecord, MetricWindow,
     OperatorResultPreview, OrchestrationQualityView, ProfileFingerprint, ProfileFingerprintRef,
@@ -30,9 +32,9 @@ pub use autonomy::{
     StepBudgetPressureLevel, StepBudgetPressureSummary, StepDifficultyAssessment,
     StepDifficultyBucket, StepEvaluationRecord, StepPolicyAction, StepPolicyConfidenceLabel,
     StepPolicyDecision, StepPolicyInputRefs, StepPolicyProofBoundaryRef, StepPolicySummaryView,
-    SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
-    SupervisionTargetScope, TaskResultView, TaskShapeClassification, TaskShapeKind,
-    TeamSizingDecision, TopologyPlan, TopologyRationale, UnifiedResultEnvelope,
+    SubagentStateRecord, SupervisionDecisionBasis, SupervisionEvidenceView,
+    SupervisionTargetKind, SupervisionTargetScope, TaskResultView, TaskShapeClassification,
+    TaskShapeKind, TeamSizingDecision, TopologyPlan, TopologyRationale, UnifiedResultEnvelope,
     PACKET_023_GRAPH_EXECUTION_SUCCESS, PACKET_023_GROUNDED_TOOL_EXECUTION_MINIMAL,
     PACKET_023_ORCHESTRATION_ONLY, PACKET_023_SEMANTIC_COMPLETION_UNPROVEN,
 };

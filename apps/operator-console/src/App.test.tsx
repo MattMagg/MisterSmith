@@ -207,6 +207,72 @@ function createSnapshot(
           display_note:
             'placeholder orchestration proof only; local correction preferred before escalation',
         },
+        coordinator_runtime_proof: {
+          workflow_id: run.task_id,
+          coordinator_agent_id: 'agent-1',
+          delegation_records: [
+            {
+              delegation_id: 'delegation-1',
+              workflow_id: run.task_id,
+              session_id: 'session-1',
+              coordinator_agent_id: 'agent-1',
+              child_role: 'explorer',
+              subagent_id: 'agent-child-1',
+              delegated_job_label: 'audit backend boundaries',
+              delegated_scope_ref: 'branch-7',
+              delegation_reason: 'bounded fan-out justified by independent repo inspection',
+              allowed_follow_up_actions: ['clarify', 'resume', 'stop', 'inspect'],
+              created_at: '2026-03-21T10:00:20Z',
+              status: 'completed',
+            },
+          ],
+          subordinate_inbox: [
+            {
+              delegation_id: 'delegation-1',
+              event_id: 'event-1',
+              event_sequence: 1,
+              event_kind: 'completed',
+              event_payload_ref: 'task:child-1',
+              recorded_at: '2026-03-21T10:00:40Z',
+              visible_to: 'coordinator_and_operator',
+            },
+          ],
+          subagent_states: [
+            {
+              delegation_id: 'delegation-1',
+              subagent_id: 'agent-child-1',
+              previous_state: 'running',
+              current_state: 'completed',
+              state_reason: 'grounded repo inspection finished',
+              state_updated_at: '2026-03-21T10:00:40Z',
+              coordinator_action_ref: 'decision-1',
+            },
+          ],
+          delegated_work_evidence: [
+            {
+              delegation_id: 'delegation-1',
+              evidence_kind: 'grounded',
+              evidence_summary: 'bounded backend audit captured grounded evidence',
+              artifact_refs: ['task:child-1', 'evidence:backend-audit'],
+              proof_boundary_note: 'grounded delegated evidence exists for this child run',
+              recorded_at: '2026-03-21T10:00:41Z',
+            },
+          ],
+          coordinator_decisions: [
+            {
+              decision_id: 'decision-1',
+              workflow_id: run.task_id,
+              decision_kind: 'merge',
+              input_refs: ['delegation-1', 'task:child-1'],
+              decision_reason: 'coordinator merged grounded delegated work',
+              decision_outcome: 'accepted',
+              decided_at: '2026-03-21T10:00:45Z',
+            },
+          ],
+          proof_boundary: 'real coordinator-subagent runtime satisfied for the bounded delegated slice',
+          session_follow_up_note:
+            'preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay',
+        },
         result: { ok: true },
       },
     },
@@ -429,6 +495,30 @@ describe('App', () => {
       screen.getByText(
         'placeholder orchestration proof only; local correction preferred before escalation',
       ),
+    ).toBeInTheDocument();
+  });
+
+  it('renders the packet-026 coordinator runtime proof in the selected run detail', async () => {
+    render(<App services={createServices()} initialSettings={createSettings()} />);
+
+    await screen.findByText('Coordinator runtime proof');
+    expect(screen.getByText('agent-1')).toBeInTheDocument();
+    expect(
+      screen.getByText('real coordinator-subagent runtime satisfied for the bounded delegated slice'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/audit backend boundaries \(explorer, completed, agent-child-1\)/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/delegation-1 grounded: bounded backend audit captured grounded evidence/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/merge accepted \(coordinator merged grounded delegated work\)/),
     ).toBeInTheDocument();
   });
 
