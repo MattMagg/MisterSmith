@@ -7,16 +7,18 @@ mod observability;
 
 use mister_smith_core::{
     AgentId, BranchRecoveryStrategy, BranchState, BudgetPolicy, BudgetScope, CheckpointId,
-    CoordinationPolicy, DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionGraphId,
-    FailureClass, FailureContextCheckpoint, GraphState, GuardDecision, GuardDecisionId,
-    GuardEvidence, HandoffClarificationRequest, HealthState, InterventionRecord,
-    InterventionRecordId, InterventionType, MemorySnapshotId, OrchestrationQualityView,
-    ProfileFingerprintId, ProfileFingerprintRef, ProfileSnapshotId, ProfileTarget,
-    ProofOutcomeClassification, ProvenanceChain, ProvenanceLink, RepairDirective,
-    RepairDirectiveAction, RepairLineageRef, RevocationState, SemanticSignal, SemanticSignalKind,
-    StepBudgetPressureLevel, StepBudgetPressureSummary, StepDifficultyAssessment,
-    StepDifficultyBucket, StepEvaluationRecord, StepPolicyAction, StepPolicyConfidenceLabel,
-    StepPolicyDecision, StepPolicyInputRefs, StepPolicyProofBoundaryRef, StepPolicySummaryView,
+    CoordinationPolicy, CoordinatorDelegationRecord, CoordinatorMergeDecision,
+    CoordinatorRuntimeProofView, CoordinatorSubordinateInboxRecord, DelegatedWorkEvidenceRef,
+    DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionGraphId, FailureClass,
+    FailureContextCheckpoint, GraphState, GuardDecision, GuardDecisionId, GuardEvidence,
+    HandoffClarificationRequest, HealthState, InterventionRecord, InterventionRecordId,
+    InterventionType, MemorySnapshotId, OrchestrationQualityView, ProfileFingerprintId,
+    ProfileFingerprintRef, ProfileSnapshotId, ProfileTarget, ProofOutcomeClassification,
+    ProvenanceChain, ProvenanceLink, RepairDirective, RepairDirectiveAction, RepairLineageRef,
+    RevocationState, SemanticSignal, SemanticSignalKind, SessionId, StepBudgetPressureLevel,
+    StepBudgetPressureSummary, StepDifficultyAssessment, StepDifficultyBucket,
+    StepEvaluationRecord, StepPolicyAction, StepPolicyConfidenceLabel, StepPolicyDecision,
+    StepPolicyInputRefs, StepPolicyProofBoundaryRef, StepPolicySummaryView, SubagentStateRecord,
     SupervisionDecisionBasis, SupervisionEvidenceView, SupervisionTargetKind,
     SupervisionTargetScope, TaskId, TaskShapeClassification, TaskShapeKind, TeamSizingDecision,
     TopologyKind, TopologyRationale, VerifierVerdict,
@@ -261,6 +263,12 @@ fn sample_view() -> (AutonomyStatusView, GuardDecisionId, ExecutionBranchId) {
             rejection_reason: Some("delegation revoked before tool execution".to_string()),
             message: "operator review required".to_string(),
         }],
+        delegation_records: vec![],
+        subordinate_inbox: vec![],
+        subagent_states: vec![],
+        delegated_work_evidence: vec![],
+        coordinator_decisions: vec![],
+        coordinator_runtime_proof: None,
         external_capability_decisions: vec![ExternalCapabilityDecisionSummary {
             boundary_surface: Some(ExternalCapabilityDecisionSurface::ToolBus),
             branch_id: Some(branch_id),
@@ -576,6 +584,76 @@ fn sample_canonical_result(
         }),
         status,
     })
+}
+
+fn sample_coordinator_runtime_proof(workflow_id: TaskId) -> CoordinatorRuntimeProofView {
+    let coordinator_agent_id = AgentId::new();
+    let delegated_agent_id = AgentId::new();
+
+    CoordinatorRuntimeProofView {
+        workflow_id,
+        coordinator_agent_id,
+        delegation_records: vec![CoordinatorDelegationRecord {
+            delegation_id: "delegation-1".to_string(),
+            workflow_id,
+            session_id: Some(SessionId::new()),
+            coordinator_agent_id,
+            child_role: "explorer".to_string(),
+            subagent_id: delegated_agent_id,
+            delegated_job_label: "audit backend boundaries".to_string(),
+            delegated_scope_ref: "branch-7".to_string(),
+            delegation_reason: "bounded repo inspection justified delegation".to_string(),
+            allowed_follow_up_actions: vec![
+                "clarify".to_string(),
+                "resume".to_string(),
+                "stop".to_string(),
+                "inspect".to_string(),
+            ],
+            created_at: chrono::Utc::now(),
+            status: "completed".to_string(),
+        }],
+        subordinate_inbox: vec![CoordinatorSubordinateInboxRecord {
+            delegation_id: "delegation-1".to_string(),
+            event_id: "event-1".to_string(),
+            event_sequence: 1,
+            event_kind: "completed".to_string(),
+            event_payload_ref: "task:child-1".to_string(),
+            recorded_at: chrono::Utc::now(),
+            visible_to: "coordinator_and_operator".to_string(),
+        }],
+        subagent_states: vec![SubagentStateRecord {
+            delegation_id: "delegation-1".to_string(),
+            subagent_id: delegated_agent_id,
+            current_state: "completed".to_string(),
+            previous_state: Some("running".to_string()),
+            state_reason: "grounded repo inspection finished".to_string(),
+            state_updated_at: chrono::Utc::now(),
+            coordinator_action_ref: Some("decision-1".to_string()),
+        }],
+        delegated_work_evidence: vec![DelegatedWorkEvidenceRef {
+            delegation_id: "delegation-1".to_string(),
+            evidence_kind: "grounded".to_string(),
+            evidence_summary: "bounded backend audit captured grounded evidence".to_string(),
+            artifact_refs: vec!["task:child-1".to_string(), "evidence:backend-audit".to_string()],
+            proof_boundary_note: "grounded delegated evidence exists for this child run"
+                .to_string(),
+            recorded_at: chrono::Utc::now(),
+        }],
+        coordinator_decisions: vec![CoordinatorMergeDecision {
+            decision_id: "decision-1".to_string(),
+            workflow_id,
+            decision_kind: "merge".to_string(),
+            input_refs: vec!["delegation-1".to_string(), "task:child-1".to_string()],
+            decision_reason: "coordinator merged grounded delegated work".to_string(),
+            decision_outcome: "accepted".to_string(),
+            decided_at: chrono::Utc::now(),
+        }],
+        proof_boundary: "real coordinator-subagent runtime satisfied for the bounded delegated slice"
+            .to_string(),
+        session_follow_up_note:
+            "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay"
+                .to_string(),
+    }
 }
 
 #[test]
@@ -1262,6 +1340,23 @@ fn build_task_result_view_preserves_runtime_truth_projection() {
 }
 
 #[test]
+fn build_task_result_view_preserves_coordinator_runtime_proof_projection() {
+    let workflow_id = TaskId::new();
+    let mut canonical_result = sample_canonical_result(
+        workflow_id,
+        "completed",
+        vec![serde_json::json!({ "id": "draft-outline" })],
+        vec![],
+    );
+    let proof = sample_coordinator_runtime_proof(workflow_id);
+    canonical_result.coordinator_runtime_proof = Some(proof.clone());
+
+    let summary = autonomy::build_task_result_view("completed", canonical_result, None, None);
+
+    assert_eq!(summary.coordinator_runtime_proof, Some(proof));
+}
+
+#[test]
 fn enrich_result_preview_promotes_step_policy_summary_from_task_result() {
     let (mut view, _, _) = sample_view();
     view.graph.state = GraphState::Completed;
@@ -1642,6 +1737,7 @@ fn render_status_surfaces_result_preview_block() {
         orchestration_quality: None,
         runtime_truth: None,
         step_policy: None,
+        coordinator_runtime_proof: None,
         provenance_lines: vec![
             "graph formed and completed before final result publication".to_string(),
             "provider=openai_chatgpt model=gpt-5.4".to_string(),
@@ -1676,6 +1772,7 @@ fn render_status_surfaces_step_policy_summary_from_status_and_preview() {
         orchestration_quality: None,
         runtime_truth: None,
         step_policy: Some(step_policy),
+        coordinator_runtime_proof: None,
         provenance_lines: vec![
             "canonical result stored in metadata.final_result".to_string(),
             "packet-025 step policy retained for step planner.step.2 with action downgrade"
@@ -1725,6 +1822,23 @@ fn enrich_result_preview_surfaces_runtime_truth_summary() {
 }
 
 #[test]
+fn render_status_surfaces_coordinator_runtime_proof_summary() {
+    let (mut view, _, _) = sample_view();
+    view.coordinator_runtime_proof = Some(sample_coordinator_runtime_proof(view.graph.workflow_id));
+
+    let rendered = autonomy::render_status(&view);
+
+    assert!(rendered.contains("coordinator runtime:"));
+    assert!(rendered.contains(
+        "proof_boundary=real coordinator-subagent runtime satisfied for the bounded delegated slice"
+    ));
+    assert!(rendered.contains("follow_up=preserve session_id, coordinator_agent_id"));
+    assert!(rendered.contains("audit backend boundaries"));
+    assert!(rendered.contains("evidence=delegation-1 kind=grounded"));
+    assert!(rendered.contains("decisions=decision-1 kind=merge"));
+}
+
+#[test]
 fn enrich_result_preview_merges_existing_structural_provenance() {
     let (mut view, _, _) = sample_view();
     view.graph.state = GraphState::Completed;
@@ -1736,6 +1850,7 @@ fn enrich_result_preview_merges_existing_structural_provenance() {
         orchestration_quality: None,
         runtime_truth: None,
         step_policy: None,
+        coordinator_runtime_proof: None,
         provenance_lines: vec![
             "projection observed graph state Completed with topology Sequential (1 branch(es), 3 node(s))".to_string(),
             "routing history retained 1 decision(s)".to_string(),

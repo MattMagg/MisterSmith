@@ -26,17 +26,18 @@ use mister_smith_config::{
     FrameworkConfig, RuntimeProviderTier, RuntimeRoutingPolicy, RuntimeRoutingProfile,
 };
 use mister_smith_core::{
-    AgentId, AgentType, BranchState, DurableWorkflowEventKind, DurableWorkflowLifecycleState,
-    DurableWorkflowLifecycleVerb, EffectBoundaryIntentState, EffectBoundaryOutcomeState,
-    EscalationPolicy, ExecutionBranchId, ExecutionNodeId, ExternalDelegationEnvelope,
-    FailureContextCheckpoint, GraphState, GuardTarget, HandoffClarificationRequest, HealthState,
-    HistoryCompactionMode, LifecycleDecisionOutcome, LlmError, NodeState, ProfileFingerprint,
-    RepairDirective, RepairDirectiveAction, SemanticSignal, SemanticSignalKind,
-    StepBudgetPressureLevel, StepBudgetPressureSummary, StepDifficultyAssessment,
-    StepDifficultyBucket, StepEvaluationRecord, StepPolicyAction, StepPolicyConfidenceLabel,
-    StepPolicyDecision, StepPolicyInputRefs, StepPolicyProofBoundaryRef, StepPolicySummaryView,
-    SupervisionEvidenceView, SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError,
-    ToolId, ToolSchema, VerifierVerdict, PACKET_023_ORCHESTRATION_ONLY,
+    AgentId, AgentType, BranchState, CoordinatorRuntimeProofView, DurableWorkflowEventKind,
+    DurableWorkflowLifecycleState, DurableWorkflowLifecycleVerb, EffectBoundaryIntentState,
+    EffectBoundaryOutcomeState, EscalationPolicy, ExecutionBranchId, ExecutionNodeId,
+    ExternalDelegationEnvelope, FailureContextCheckpoint, GraphState, GuardTarget,
+    HandoffClarificationRequest, HealthState, HistoryCompactionMode, LifecycleDecisionOutcome,
+    LlmError, NodeState, ProfileFingerprint, RepairDirective, RepairDirectiveAction,
+    SemanticSignal, SemanticSignalKind, StepBudgetPressureLevel, StepBudgetPressureSummary,
+    StepDifficultyAssessment, StepDifficultyBucket, StepEvaluationRecord, StepPolicyAction,
+    StepPolicyConfidenceLabel, StepPolicyDecision, StepPolicyInputRefs,
+    StepPolicyProofBoundaryRef, StepPolicySummaryView, SupervisionEvidenceView,
+    SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema,
+    VerifierVerdict, PACKET_023_ORCHESTRATION_ONLY,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -1658,10 +1659,12 @@ fn build_step_policy_summary(
 
 fn terminal_result_views(
     status: &str,
-    canonical_result: mister_smith_core::UnifiedResultEnvelope,
+    mut canonical_result: mister_smith_core::UnifiedResultEnvelope,
     supervision_evidence: Option<SupervisionEvidenceView>,
     metadata: &Value,
+    coordinator_runtime_proof: Option<CoordinatorRuntimeProofView>,
 ) -> Result<TerminalResultViews, String> {
+    canonical_result.coordinator_runtime_proof = coordinator_runtime_proof;
     let aggregated_result = canonical_result.aggregated_result.clone();
     let step_policy =
         build_step_policy_summary(&canonical_result, metadata, supervision_evidence.as_ref());
@@ -1988,6 +1991,13 @@ impl RuntimeTaskService {
             final_result.clone(),
             self.current_supervision_evidence(workflow_id, &metadata, None),
             &metadata,
+            {
+                if let Some(session_id) = metadata_session_id(&metadata) {
+                    self.orchestrator
+                        .register_workflow_session(&workflow_id, session_id);
+                }
+                self.orchestrator.coordinator_runtime_proof_view(&workflow_id)
+            },
         )
         .unwrap_or(TerminalResultViews {
             aggregated_result: aggregated_result.clone(),
@@ -2045,6 +2055,10 @@ impl RuntimeTaskService {
         let coordinator_id = coordinator_id_for_request(&request, self.default_coordinator_id);
         self.orchestrator
             .register_workflow_coordinator(&workflow_id, coordinator_id);
+        if let Some(conversation) = request.conversation.as_ref() {
+            self.orchestrator
+                .register_workflow_session(&workflow_id, conversation.session_id);
+        }
         let mut metadata = initial_metadata(
             &request,
             coordinator_id,
@@ -2429,6 +2443,13 @@ impl RuntimeTaskService {
             final_result,
             self.current_supervision_evidence(workflow_id, &metadata, None),
             &metadata,
+            {
+                if let Some(session_id) = metadata_session_id(&metadata) {
+                    self.orchestrator
+                        .register_workflow_session(&workflow_id, session_id);
+                }
+                self.orchestrator.coordinator_runtime_proof_view(&workflow_id)
+            },
         )?;
 
         put_metadata(
@@ -3052,6 +3073,13 @@ impl RuntimeTaskService {
             final_result,
             self.current_supervision_evidence(workflow_id, &metadata, None),
             &metadata,
+            {
+                if let Some(session_id) = metadata_session_id(&metadata) {
+                    self.orchestrator
+                        .register_workflow_session(&workflow_id, session_id);
+                }
+                self.orchestrator.coordinator_runtime_proof_view(&workflow_id)
+            },
         )
         .unwrap_or(TerminalResultViews {
             aggregated_result: aggregated_result.clone(),
@@ -4198,6 +4226,12 @@ mod tests {
             interventions: vec![],
             delegation_capabilities: vec![],
             delegation_alerts: vec![],
+            delegation_records: vec![],
+            subordinate_inbox: vec![],
+            subagent_states: vec![],
+            delegated_work_evidence: vec![],
+            coordinator_decisions: vec![],
+            coordinator_runtime_proof: None,
             external_capability_decisions: vec![],
             profiles: vec![],
             guard_decisions: vec![],
@@ -4433,7 +4467,8 @@ mod tests {
                 },
             );
 
-            let result_views = terminal_result_views(status, canonical_result, None, &json!({}))
+            let result_views =
+                terminal_result_views(status, canonical_result, None, &json!({}), None)
                 .expect("canonical task and final result envelopes should serialize");
 
             assert_eq!(
@@ -4779,7 +4814,8 @@ mod tests {
             },
         );
 
-        let result_views = terminal_result_views("completed", canonical_result, None, &json!({}))
+        let result_views =
+            terminal_result_views("completed", canonical_result, None, &json!({}), None)
             .expect("terminal result views");
 
         assert_eq!(result_views.task_result["step_policy"], Value::Null);

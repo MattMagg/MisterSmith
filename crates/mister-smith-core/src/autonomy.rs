@@ -17,7 +17,7 @@ use crate::enums::{
 use crate::ids::{
     AgentId, CapabilityId, CheckpointId, ContextBudgetId, ExecutionBranchId, ExecutionGraphId,
     ExecutionNodeId, GuardDecisionId, InterventionRecordId, ProfileFingerprintId,
-    ProfileSnapshotId, TaskId,
+    ProfileSnapshotId, SessionId, TaskId,
 };
 use crate::supervision::{FailureContextCheckpoint, RepairDirective};
 
@@ -184,6 +184,146 @@ pub struct UnifiedResultEnvelope {
     pub aggregated_result: Value,
     /// Proof outcome classification for the run.
     pub proof_outcome: ProofOutcomeClassification,
+    /// Packet-026 coordinator-runtime proof view when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator_runtime_proof: Option<CoordinatorRuntimeProofView>,
+}
+
+/// Coordinator-owned record for one delegated child job.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoordinatorDelegationRecord {
+    /// Stable identifier for one delegation event.
+    pub delegation_id: String,
+    /// Workflow that owns the delegated job.
+    pub workflow_id: TaskId,
+    /// Owning session when the workflow belongs to one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<SessionId>,
+    /// Stable coordinator identity for the run.
+    pub coordinator_agent_id: AgentId,
+    /// Bounded child profile such as `explorer`, `planner`, or `verifier`.
+    pub child_role: String,
+    /// Stable delegated child identity.
+    pub subagent_id: AgentId,
+    /// Plain-English delegated job label.
+    pub delegated_job_label: String,
+    /// Stable reference to the delegated work unit.
+    pub delegated_scope_ref: String,
+    /// Why the coordinator delegated the work.
+    pub delegation_reason: String,
+    /// Follow-up actions the coordinator can take for this child.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_follow_up_actions: Vec<String>,
+    /// When the delegation record was created.
+    pub created_at: DateTime<Utc>,
+    /// Current delegation state.
+    pub status: String,
+}
+
+/// Coordinator-visible intake record for one child event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoordinatorSubordinateInboxRecord {
+    /// Delegation that owns the child event.
+    pub delegation_id: String,
+    /// Stable child event identifier.
+    pub event_id: String,
+    /// Monotonic ordering value for the child stream.
+    pub event_sequence: u64,
+    /// Child event kind such as `completed` or `blocked`.
+    pub event_kind: String,
+    /// Stable payload or evidence reference for the event.
+    pub event_payload_ref: String,
+    /// When the coordinator recorded the event.
+    pub recorded_at: DateTime<Utc>,
+    /// Visibility rule for coordinator and operator surfaces.
+    pub visible_to: String,
+}
+
+/// Visible delegated child state carried across operator surfaces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubagentStateRecord {
+    /// Delegation that owns the child state.
+    pub delegation_id: String,
+    /// Stable delegated child identity.
+    pub subagent_id: AgentId,
+    /// Current child state.
+    pub current_state: String,
+    /// Last visible child state when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_state: Option<String>,
+    /// Human-readable explanation for the current state.
+    pub state_reason: String,
+    /// When the state last changed.
+    pub state_updated_at: DateTime<Utc>,
+    /// Latest coordinator action tied to this state when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator_action_ref: Option<String>,
+}
+
+/// Proof reference for what delegated work actually produced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DelegatedWorkEvidenceRef {
+    /// Delegation that produced the evidence.
+    pub delegation_id: String,
+    /// Coarse evidence class such as `grounded` or `placeholder-only`.
+    pub evidence_kind: String,
+    /// Human-readable summary of the delegated output.
+    pub evidence_summary: String,
+    /// Stable references to bounded delegated artifacts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_refs: Vec<String>,
+    /// Explicit note for what this evidence does and does not prove.
+    pub proof_boundary_note: String,
+    /// When the evidence reference was recorded.
+    pub recorded_at: DateTime<Utc>,
+}
+
+/// Coordinator-owned merge or recovery decision tied to delegated work.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoordinatorMergeDecision {
+    /// Stable coordinator decision identifier.
+    pub decision_id: String,
+    /// Workflow that owns the decision.
+    pub workflow_id: TaskId,
+    /// Decision kind such as `merge` or `clarify`.
+    pub decision_kind: String,
+    /// Stable references the coordinator used to make the decision.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_refs: Vec<String>,
+    /// Human-readable explanation for the decision.
+    pub decision_reason: String,
+    /// Final decision outcome such as `accepted` or `blocked`.
+    pub decision_outcome: String,
+    /// When the decision was made.
+    pub decided_at: DateTime<Utc>,
+}
+
+/// Joined packet-026 proof view projected through existing read surfaces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoordinatorRuntimeProofView {
+    /// Workflow that owns the proof view.
+    pub workflow_id: TaskId,
+    /// Stable coordinator identity for the run.
+    pub coordinator_agent_id: AgentId,
+    /// Ordered delegation records included in the proof view.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delegation_records: Vec<CoordinatorDelegationRecord>,
+    /// Ordered subordinate inbox events included in the proof view.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subordinate_inbox: Vec<CoordinatorSubordinateInboxRecord>,
+    /// Ordered delegated child states included in the proof view.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subagent_states: Vec<SubagentStateRecord>,
+    /// Ordered delegated-work evidence included in the proof view.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delegated_work_evidence: Vec<DelegatedWorkEvidenceRef>,
+    /// Ordered coordinator decisions included in the proof view.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coordinator_decisions: Vec<CoordinatorMergeDecision>,
+    /// Explicit statement of whether packet-026 proof was satisfied.
+    pub proof_boundary: String,
+    /// What session context can legitimately carry into follow-up work.
+    pub session_follow_up_note: String,
 }
 
 /// Execution-owned evaluation of one workflow step.
@@ -645,6 +785,9 @@ pub struct TaskResultView {
     /// Packet-025 step-policy summary when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_policy: Option<StepPolicySummaryView>,
+    /// Packet-026 coordinator-runtime proof view when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator_runtime_proof: Option<CoordinatorRuntimeProofView>,
     /// Canonical result envelope exposed by the task surface.
     pub result: UnifiedResultEnvelope,
 }
@@ -706,6 +849,9 @@ pub struct OperatorResultPreview {
     /// Packet-025 step-policy summary when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_policy: Option<StepPolicySummaryView>,
+    /// Packet-026 coordinator-runtime proof view when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator_runtime_proof: Option<CoordinatorRuntimeProofView>,
     /// Compact explanation of how the result was produced and classified.
     pub provenance_lines: Vec<String>,
 }
@@ -1286,6 +1432,7 @@ mod tests {
                 },
                 display_note: "placeholder orchestration proof only".to_string(),
             }),
+            coordinator_runtime_proof: None,
             result: UnifiedResultEnvelope {
                 workflow_id,
                 provider_kind: "openai_chatgpt".to_string(),
@@ -1299,6 +1446,7 @@ mod tests {
                 step_results: vec![],
                 aggregated_result: json!({"ok": true}),
                 proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+                coordinator_runtime_proof: None,
             },
         };
 

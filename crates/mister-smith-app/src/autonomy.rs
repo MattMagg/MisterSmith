@@ -11,13 +11,13 @@ use axum::Json;
 use chrono::{DateTime, Utc};
 use mister_smith_config::FrameworkConfig;
 use mister_smith_core::{
-    AgentId, CapabilityId, CoordinationPolicy, DelegationScope, DurableWorkflowLifecycleState,
-    ExecutionGraphId, GraphState, OperatorResultPreview, OrchestrationQualityView,
-    ProofOutcomeClassification, RepairDirectiveAction, ResultProvenanceSummary, RevocationState,
-    SessionId, SessionRetainedResultView, StepEvaluationRecord, StepPolicySummaryView,
-    SupervisionEvidenceView, SupervisionTargetKind, TaskId, TaskResultView,
-    TaskShapeClassification, TaskShapeKind, TopologyKind, TopologyRationale, UnifiedResultEnvelope,
-    VerifierVerdict,
+    AgentId, CapabilityId, CoordinationPolicy, CoordinatorRuntimeProofView, DelegationScope,
+    DurableWorkflowLifecycleState, ExecutionGraphId, GraphState, OperatorResultPreview,
+    OrchestrationQualityView, ProofOutcomeClassification, RepairDirectiveAction,
+    ResultProvenanceSummary, RevocationState, SessionId, SessionRetainedResultView,
+    StepEvaluationRecord, StepPolicySummaryView, SupervisionEvidenceView,
+    SupervisionTargetKind, TaskId, TaskResultView, TaskShapeClassification, TaskShapeKind,
+    TopologyKind, TopologyRationale, UnifiedResultEnvelope, VerifierVerdict,
 };
 use mister_smith_events::autonomy::merge_operator_result_preview;
 use mister_smith_events::autonomy::AttestationSource;
@@ -429,6 +429,16 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         .and_then(|summary| serde_json::to_value(summary).ok())
         .map(|value| render_runtime_truth_summary(&value))
         .unwrap_or_else(|| "none".to_string());
+    let coordinator_runtime_summary = view
+        .coordinator_runtime_proof
+        .as_ref()
+        .or_else(|| {
+            view.result_preview
+                .as_ref()
+                .and_then(|preview| preview.coordinator_runtime_proof.as_ref())
+        })
+        .map(render_coordinator_runtime_proof)
+        .unwrap_or_else(|| "none".to_string());
     let intervention_summary = view
         .interventions
         .iter()
@@ -491,7 +501,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
     };
 
     format!(
-        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\nlifecycle: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nstep policy: {}\nresult preview: {}\nruntime truth: {}\nsupervision: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
+        "workflow: {}\ngraph: {} {:?}\nsession: {}\nresume provenance: {}\nlifecycle: {}\ntopology: {:?} width={} shape={} structure={} dependency={} rationale={} signals={}\nfallback: {}\nteam sizing: {}\nbranches:\n{}\ncheckpoints:\n{}\nrouting:\n{}\nstep routing:\n{}\nstep policy: {}\nresult preview: {}\nruntime truth: {}\ncoordinator runtime: {}\nsupervision: {}\ninterventions:\n{}\ndelegation:\n{}\ndelegation alerts:\n{}\nexternal capability decisions:\n{}\nconservative: {}",
         view.graph.workflow_id,
         view.graph.graph_id,
         view.graph.state,
@@ -530,6 +540,7 @@ pub fn render_status(view: &AutonomyStatusView) -> String {
         step_policy_summary,
         result_preview_summary,
         runtime_truth_summary,
+        coordinator_runtime_summary,
         supervision_summary,
         if intervention_summary.is_empty() {
             "none".to_string()
@@ -876,6 +887,7 @@ pub(crate) fn build_canonical_result_envelope(
         step_results,
         aggregated_result,
         proof_outcome,
+        coordinator_runtime_proof: None,
     }
 }
 
@@ -897,6 +909,7 @@ pub(crate) fn build_task_result_view(
         runtime_truth,
         supervision_evidence,
         step_policy,
+        coordinator_runtime_proof: canonical_result.coordinator_runtime_proof.clone(),
         result: canonical_result,
     }
 }
@@ -1023,6 +1036,12 @@ pub(crate) fn synthesize_failed_before_graph_status(
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
+        delegation_records: vec![],
+        subordinate_inbox: vec![],
+        subagent_states: vec![],
+        delegated_work_evidence: vec![],
+        coordinator_decisions: vec![],
+        coordinator_runtime_proof: None,
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
@@ -1092,6 +1111,7 @@ fn operator_result_preview(
         runtime_truth: synthesized_runtime_truth_value(canonical_result)
             .and_then(|value| serde_json::from_value(value).ok()),
         step_policy: None,
+        coordinator_runtime_proof: canonical_result.coordinator_runtime_proof.clone(),
         provenance_lines: result_preview_provenance(canonical_result, payload_location, view),
     }
 }
@@ -1364,6 +1384,48 @@ fn assistant_result_payload(
         );
     }
 
+    if let Some(proof) = canonical_result.coordinator_runtime_proof.as_ref() {
+        let session_id = proof
+            .delegation_records
+            .iter()
+            .find_map(|record| record.session_id)
+            .map(|value| value.to_string());
+        let delegation_ids = proof
+            .delegation_records
+            .iter()
+            .map(|record| record.delegation_id.clone())
+            .collect::<Vec<_>>();
+        let delegated_child_ids = proof
+            .delegation_records
+            .iter()
+            .map(|record| record.subagent_id.to_string())
+            .collect::<Vec<_>>();
+        let decision_ids = proof
+            .coordinator_decisions
+            .iter()
+            .map(|decision| decision.decision_id.clone())
+            .collect::<Vec<_>>();
+        let evidence_refs = proof
+            .delegated_work_evidence
+            .iter()
+            .flat_map(|evidence| evidence.artifact_refs.iter().cloned())
+            .collect::<Vec<_>>();
+
+        payload.insert(
+            "coordinator_runtime_follow_up".to_string(),
+            serde_json::json!({
+                "session_id": session_id,
+                "coordinator_agent_id": proof.coordinator_agent_id,
+                "proof_boundary": proof.proof_boundary,
+                "session_follow_up_note": proof.session_follow_up_note,
+                "delegation_ids": delegation_ids,
+                "delegated_child_ids": delegated_child_ids,
+                "decision_ids": decision_ids,
+                "evidence_refs": evidence_refs,
+            }),
+        );
+    }
+
     Value::Object(payload)
 }
 
@@ -1372,14 +1434,19 @@ fn result_provenance(
     graph_state: Option<String>,
     graph_id: Option<String>,
 ) -> ResultProvenanceSummary {
+    let mut source_fields = vec![
+        "metadata.final_result".to_string(),
+        "metadata.aggregated_result".to_string(),
+    ];
+    if canonical_result.coordinator_runtime_proof.is_some() {
+        source_fields.push("metadata.final_result.coordinator_runtime_proof".to_string());
+    }
+
     ResultProvenanceSummary {
         runtime_execution_mode: canonical_result.runtime_execution_mode.clone(),
         graph_state,
         graph_id,
-        source_fields: vec![
-            "metadata.final_result".to_string(),
-            "metadata.aggregated_result".to_string(),
-        ],
+        source_fields,
     }
 }
 
@@ -1444,6 +1511,16 @@ fn result_preview_provenance(
         format!("full payload remains recoverable from {payload_location}"),
         "session assistant_result derives from the canonical result object".to_string(),
     ]);
+    if let Some(proof) = canonical_result.coordinator_runtime_proof.as_ref() {
+        lines.push(format!(
+            "packet 026 proof boundary: {}",
+            proof.proof_boundary
+        ));
+        lines.push(format!(
+            "packet 026 follow-up stays bounded to IDs and evidence refs: {}",
+            proof.session_follow_up_note
+        ));
+    }
     lines
 }
 
@@ -1934,6 +2011,10 @@ fn canonical_result_from_value(
             .cloned()
             .unwrap_or(Value::Null),
         proof_outcome,
+        coordinator_runtime_proof: object
+            .get("coordinator_runtime_proof")
+            .cloned()
+            .and_then(|raw| serde_json::from_value(raw).ok()),
     })
 }
 
@@ -2103,6 +2184,11 @@ fn render_result_preview(summary: &OperatorResultPreview) -> String {
             rendered.push_str(line);
         }
     }
+    if let Some(proof) = summary.coordinator_runtime_proof.as_ref() {
+        rendered.push_str("\n  coordinator_runtime:");
+        rendered.push_str("\n  - ");
+        rendered.push_str(&render_coordinator_runtime_proof(proof).replace('\n', "\n  "));
+    }
     if let Some(orchestration_quality) = summary.orchestration_quality.as_ref() {
         let repair_action = orchestration_quality
             .repair_action
@@ -2151,6 +2237,116 @@ fn render_result_preview(summary: &OperatorResultPreview) -> String {
         rendered.push_str(&render_step_policy_summary(step_policy));
     }
     rendered
+}
+
+fn render_coordinator_runtime_proof(proof: &CoordinatorRuntimeProofView) -> String {
+    let delegation_summary = if proof.delegation_records.is_empty() {
+        "none".to_string()
+    } else {
+        proof
+            .delegation_records
+            .iter()
+            .map(|record| {
+                format!(
+                    "{} label={} role={} child={} status={} scope={}",
+                    record.delegation_id,
+                    record.delegated_job_label,
+                    record.child_role,
+                    record.subagent_id,
+                    record.status,
+                    record.delegated_scope_ref,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
+    let inbox_summary = if proof.subordinate_inbox.is_empty() {
+        "none".to_string()
+    } else {
+        proof
+            .subordinate_inbox
+            .iter()
+            .map(|record| {
+                format!(
+                    "{}#{} kind={} payload={}",
+                    record.delegation_id,
+                    record.event_sequence,
+                    record.event_kind,
+                    record.event_payload_ref,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
+    let state_summary = if proof.subagent_states.is_empty() {
+        "none".to_string()
+    } else {
+        proof
+            .subagent_states
+            .iter()
+            .map(|record| {
+                format!(
+                    "{} {} -> {} reason={}",
+                    record.subagent_id,
+                    record.previous_state.as_deref().unwrap_or("none"),
+                    record.current_state,
+                    record.state_reason,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
+    let evidence_summary = if proof.delegated_work_evidence.is_empty() {
+        "none".to_string()
+    } else {
+        proof
+            .delegated_work_evidence
+            .iter()
+            .map(|record| {
+                format!(
+                    "{} kind={} refs={} summary={}",
+                    record.delegation_id,
+                    record.evidence_kind,
+                    if record.artifact_refs.is_empty() {
+                        "none".to_string()
+                    } else {
+                        record.artifact_refs.join(",")
+                    },
+                    record.evidence_summary,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
+    let decision_summary = if proof.coordinator_decisions.is_empty() {
+        "none".to_string()
+    } else {
+        proof
+            .coordinator_decisions
+            .iter()
+            .map(|record| {
+                format!(
+                    "{} kind={} outcome={} reason={}",
+                    record.decision_id,
+                    record.decision_kind,
+                    record.decision_outcome,
+                    record.decision_reason,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
+
+    format!(
+        "proof_boundary={}\n  follow_up={}\n  delegations={}\n  inbox={}\n  states={}\n  evidence={}\n  decisions={}",
+        proof.proof_boundary,
+        proof.session_follow_up_note,
+        delegation_summary,
+        inbox_summary,
+        state_summary,
+        evidence_summary,
+        decision_summary,
+    )
 }
 
 fn render_step_policy_summary(summary: &StepPolicySummaryView) -> String {

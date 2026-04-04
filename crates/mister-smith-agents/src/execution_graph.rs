@@ -428,4 +428,38 @@ impl ExecutionGraph {
 
         branch.node_ids.clone()
     }
+
+    /// Return the execution nodes that belong to one branch in graph order.
+    #[must_use]
+    pub fn nodes_for_branch(&self, branch_id: &ExecutionBranchId) -> Vec<&ExecutionNode> {
+        self.nodes
+            .iter()
+            .filter(|node| node.branch_id == *branch_id)
+            .collect()
+    }
+
+    /// Return the first human-readable branch label when available.
+    #[must_use]
+    pub fn branch_label(&self, branch_id: &ExecutionBranchId) -> Option<String> {
+        self.nodes_for_branch(branch_id)
+            .into_iter()
+            .find_map(|node| {
+                if node.description.trim().is_empty() {
+                    None
+                } else {
+                    Some(node.description.clone())
+                }
+            })
+            .or_else(|| {
+                self.nodes_for_branch(branch_id)
+                    .into_iter()
+                    .find_map(|node| {
+                        if node.action.trim().is_empty() {
+                            None
+                        } else {
+                            Some(node.action.clone())
+                        }
+                    })
+            })
+    }
 }

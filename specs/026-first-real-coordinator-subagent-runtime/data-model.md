@@ -63,14 +63,26 @@
 
 - `workflow_id`: stable workflow identifier
 - `coordinator_agent_id`: stable coordinator identity
-- `delegation_refs`: ordered set of delegation records included in the proof view
-- `subordinate_inbox_refs`: ordered set of subordinate inbox events included in the proof view
-- `subagent_state_refs`: ordered set of visible child states
-- `evidence_refs`: ordered set of delegated work evidence references
-- `decision_refs`: ordered set of coordinator merge or recovery decisions
+- `delegation_records`: ordered set of delegation records included in the proof view
+- `subordinate_inbox`: ordered set of subordinate inbox events included in the proof view
+- `subagent_states`: ordered set of visible child states
+- `delegated_work_evidence`: ordered set of delegated work evidence references
+- `coordinator_decisions`: ordered set of coordinator merge or recovery decisions
 - `proof_boundary`: explicit statement of whether the run satisfied the packet `026` proof
   standard
 - `session_follow_up_note`: note describing what session context can legitimately carry forward
+
+### `coordinator_runtime_follow_up` assistant-result projection
+
+- `session_id`: stable session identifier when the delegated run was session-backed
+- `coordinator_agent_id`: stable coordinator identity that may be reused on follow-up
+- `proof_boundary`: packet `026` proof statement copied from the runtime proof view
+- `session_follow_up_note`: explicit bounded carry-forward rule
+- `delegation_ids`: stable delegation identifiers that may be referenced again
+- `delegated_child_ids`: stable child identities that may be clarified, resumed, stopped, or
+  inspected again
+- `decision_ids`: stable coordinator decision identifiers retained for follow-up context
+- `evidence_refs`: stable artifact or task references from delegated work evidence
 
 ## Invariants
 

@@ -197,6 +197,7 @@ fn sample_result_preview(
             "session assistant_result derives from the canonical result object".to_string(),
         ],
         step_policy: None,
+        coordinator_runtime_proof: None,
     }
 }
 
@@ -211,6 +212,7 @@ fn merge_operator_result_preview_preserves_orchestration_quality_from_fallback()
         orchestration_quality: None,
         runtime_truth: None,
         step_policy: None,
+        coordinator_runtime_proof: None,
         provenance_lines: vec!["preferred provenance".to_string()],
     };
     let fallback = OperatorResultPreview {
@@ -242,6 +244,7 @@ fn merge_operator_result_preview_preserves_orchestration_quality_from_fallback()
             vec![],
         )),
         step_policy: None,
+        coordinator_runtime_proof: None,
         provenance_lines: vec!["fallback provenance".to_string()],
     };
 
@@ -257,6 +260,51 @@ fn merge_operator_result_preview_preserves_orchestration_quality_from_fallback()
     assert!(merged
         .provenance_lines
         .contains(&"fallback provenance".to_string()));
+}
+
+#[test]
+fn merge_operator_result_preview_preserves_coordinator_runtime_proof_from_fallback() {
+    let workflow_id = TaskId::new();
+    let proof = mister_smith_core::CoordinatorRuntimeProofView {
+        workflow_id,
+        coordinator_agent_id: AgentId::new(),
+        delegation_records: vec![],
+        subordinate_inbox: vec![],
+        subagent_states: vec![],
+        delegated_work_evidence: vec![],
+        coordinator_decisions: vec![],
+        proof_boundary: "real coordinator-subagent runtime satisfied for the bounded delegated slice"
+            .to_string(),
+        session_follow_up_note:
+            "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay"
+                .to_string(),
+    };
+    let preferred = OperatorResultPreview {
+        workflow_id,
+        proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+        preview_text: Some("preferred preview".to_string()),
+        payload_location: "task.result".to_string(),
+        orchestration_quality: None,
+        runtime_truth: None,
+        step_policy: None,
+        coordinator_runtime_proof: None,
+        provenance_lines: vec!["preferred provenance".to_string()],
+    };
+    let fallback = OperatorResultPreview {
+        workflow_id,
+        proof_outcome: ProofOutcomeClassification::GraphFormedAndCompleted,
+        preview_text: Some("fallback preview".to_string()),
+        payload_location: "task.result".to_string(),
+        orchestration_quality: None,
+        runtime_truth: None,
+        step_policy: None,
+        coordinator_runtime_proof: Some(proof.clone()),
+        provenance_lines: vec!["fallback provenance".to_string()],
+    };
+
+    let merged = merge_operator_result_preview(&preferred, &fallback);
+
+    assert_eq!(merged.coordinator_runtime_proof, Some(proof));
 }
 
 fn sample_graph_summary(
@@ -655,6 +703,12 @@ fn autonomy_status_view_serializes_with_typed_summaries() {
                 message: "operator review required for widened authority".to_string(),
             },
         ],
+        delegation_records: vec![],
+        subordinate_inbox: vec![],
+        subagent_states: vec![],
+        delegated_work_evidence: vec![],
+        coordinator_decisions: vec![],
+        coordinator_runtime_proof: None,
         external_capability_decisions: vec![
             sample_external_capability_decision(CapabilityId::new(), DelegationScope::InvokeTool),
             sample_task_ingress_decision(CapabilityId::new(), DelegationScope::InvokeTool),
@@ -1268,6 +1322,12 @@ fn autonomy_status_updated_event_roundtrips_with_boxed_payload() {
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
+        delegation_records: vec![],
+        subordinate_inbox: vec![],
+        subagent_states: vec![],
+        delegated_work_evidence: vec![],
+        coordinator_decisions: vec![],
+        coordinator_runtime_proof: None,
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
@@ -1394,6 +1454,12 @@ async fn event_bus_preserves_supervision_evidence_from_status_updated() {
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
+        delegation_records: vec![],
+        subordinate_inbox: vec![],
+        subagent_states: vec![],
+        delegated_work_evidence: vec![],
+        coordinator_decisions: vec![],
+        coordinator_runtime_proof: None,
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
@@ -2086,6 +2152,12 @@ async fn event_bus_merges_explicit_preview_with_projection_provenance() {
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
+        delegation_records: vec![],
+        subordinate_inbox: vec![],
+        subagent_states: vec![],
+        delegated_work_evidence: vec![],
+        coordinator_decisions: vec![],
+        coordinator_runtime_proof: None,
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
@@ -2200,6 +2272,12 @@ async fn delegation_decision_projection_preserves_branch_and_retry_history() {
         interventions: vec![],
         delegation_capabilities: vec![],
         delegation_alerts: vec![],
+        delegation_records: vec![],
+        subordinate_inbox: vec![],
+        subagent_states: vec![],
+        delegated_work_evidence: vec![],
+        coordinator_decisions: vec![],
+        coordinator_runtime_proof: None,
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],
@@ -2395,6 +2473,12 @@ async fn delegation_alerts_clear_after_status_snapshot_and_reactivation() {
             rejection_reason: Some("Delegation capability revoked".to_string()),
             message: "delegation suspended pending operator review".to_string(),
         }],
+        delegation_records: vec![],
+        subordinate_inbox: vec![],
+        subagent_states: vec![],
+        delegated_work_evidence: vec![],
+        coordinator_decisions: vec![],
+        coordinator_runtime_proof: None,
         external_capability_decisions: vec![],
         profiles: vec![],
         guard_decisions: vec![],

@@ -6,9 +6,11 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use mister_smith_core::{
     packet_023_placeholder_runtime_truth, AgentId, BranchRecoveryStrategy, BranchState,
-    CheckpointId, DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionNodeId, GraphState,
-    GuardDecision, GuardTarget, HealthState, InterventionRecord, NodeState, ProfileSnapshot,
-    RepairLineageRef, RunTraceRelationshipKind, RuntimeTruthView, SupervisionEvidenceView,
+    CheckpointId, CoordinatorDelegationRecord, CoordinatorMergeDecision,
+    CoordinatorRuntimeProofView, CoordinatorSubordinateInboxRecord, DelegatedWorkEvidenceRef,
+    DurableWorkflowLifecycleState, ExecutionBranchId, ExecutionNodeId, GraphState, GuardDecision,
+    GuardTarget, HealthState, InterventionRecord, NodeState, ProfileSnapshot, RepairLineageRef,
+    RunTraceRelationshipKind, RuntimeTruthView, SubagentStateRecord, SupervisionEvidenceView,
     SupervisionTargetKind, SupervisionTargetScope, TaskId, TeamSizingDecision,
 };
 use mister_smith_persistence::WorkflowHistoryEventRecord;
@@ -73,6 +75,7 @@ pub struct Orchestrator {
     conservative_reasons: DashMap<TaskId, Vec<String>>,
     adaptive_team_plans: DashMap<TaskId, AdaptiveTeamPlan>,
     workflow_coordinators: DashMap<TaskId, AgentId>,
+    workflow_session_ids: DashMap<TaskId, mister_smith_core::SessionId>,
     autonomy_events: DashMap<TaskId, Vec<AutonomyEvent>>,
     step_routing_histories: DashMap<TaskId, Vec<StepRoutingDecisionSummary>>,
     autonomy_event_tx: Option<mpsc::Sender<Event>>,
@@ -202,6 +205,7 @@ impl Orchestrator {
             conservative_reasons: DashMap::new(),
             adaptive_team_plans: DashMap::new(),
             workflow_coordinators: DashMap::new(),
+            workflow_session_ids: DashMap::new(),
             autonomy_events: DashMap::new(),
             step_routing_histories: DashMap::new(),
             autonomy_event_tx: None,
@@ -242,6 +246,15 @@ impl Orchestrator {
     pub fn register_workflow_coordinator(&self, workflow_id: &TaskId, coordinator_id: AgentId) {
         self.workflow_coordinators
             .insert(*workflow_id, coordinator_id);
+    }
+
+    /// Remember the owning session so delegated proof surfaces retain bounded continuity context.
+    pub fn register_workflow_session(
+        &self,
+        workflow_id: &TaskId,
+        session_id: mister_smith_core::SessionId,
+    ) {
+        self.workflow_session_ids.insert(*workflow_id, session_id);
     }
 
     /// Return the latest adaptive team plan for a workflow, when one has been materialized.
@@ -718,6 +731,7 @@ impl Orchestrator {
     /// Build the operator-visible autonomy status for a workflow.
     pub fn autonomy_status(&self, workflow_id: &TaskId) -> Option<AutonomyStatusView> {
         let graph = self.execution_graph(workflow_id)?;
+        let session_id = self.session_id_for_workflow(workflow_id);
         let profile_assessments = self
             .profiles
             .get(workflow_id)
@@ -887,11 +901,24 @@ impl Orchestrator {
                 preview.runtime_truth = Some(runtime_truth.clone());
             }
         }
+        let coordinator_agent_id = self
+            .workflow_coordinators
+            .get(workflow_id)
+            .map(|entry| *entry.value())
+            .unwrap_or_else(|| AgentId::from_uuid(*workflow_id.as_ref()));
+        let packet_026 = synthesize_coordinator_runtime_projection(
+            &graph,
+            coordinator_agent_id,
+            session_id,
+        );
+        if let Some(preview) = result_preview.as_mut() {
+            preview.coordinator_runtime_proof = Some(packet_026.coordinator_runtime_proof.clone());
+        }
 
         Some(AutonomyStatusView {
-            session_id: None,
+            session_id,
             turn_index: None,
-            coordinator_agent_id: None,
+            coordinator_agent_id: Some(coordinator_agent_id),
             resume_provenance: None,
             lifecycle_state: Some(lifecycle_state_for_graph_state(graph_summary.state)),
             result_preview,
@@ -924,6 +951,12 @@ impl Orchestrator {
             interventions,
             delegation_capabilities,
             delegation_alerts,
+            delegation_records: packet_026.delegation_records,
+            subordinate_inbox: packet_026.subordinate_inbox,
+            subagent_states: packet_026.subagent_states,
+            delegated_work_evidence: packet_026.delegated_work_evidence,
+            coordinator_decisions: packet_026.coordinator_decisions,
+            coordinator_runtime_proof: Some(packet_026.coordinator_runtime_proof),
             external_capability_decisions,
             profiles,
             guard_decisions,
@@ -932,6 +965,24 @@ impl Orchestrator {
             step_policy: None,
             conservative_reasons,
         })
+    }
+
+    /// Return the current packet-026 coordinator-runtime proof view for a workflow.
+    pub fn coordinator_runtime_proof_view(
+        &self,
+        workflow_id: &TaskId,
+    ) -> Option<CoordinatorRuntimeProofView> {
+        let graph = self.execution_graph(workflow_id)?;
+        let coordinator_agent_id = self
+            .workflow_coordinators
+            .get(workflow_id)
+            .map(|entry| *entry.value())
+            .unwrap_or_else(|| AgentId::from_uuid(*workflow_id.as_ref()));
+        let session_id = self.session_id_for_workflow(workflow_id);
+        Some(
+            synthesize_coordinator_runtime_projection(&graph, coordinator_agent_id, session_id)
+                .coordinator_runtime_proof,
+        )
     }
 
     /// Return the latest persisted step-routing history even before a graph exists.
@@ -1587,6 +1638,12 @@ impl Orchestrator {
         state.value_mut().apply(message);
     }
 
+    fn session_id_for_workflow(&self, workflow_id: &TaskId) -> Option<mister_smith_core::SessionId> {
+        self.workflow_session_ids
+            .get(workflow_id)
+            .map(|entry| *entry.value())
+    }
+
     fn record_supervisor_message(&self, workflow_id: &TaskId, message: &SupervisorMessage) {
         let mut state = self.supervisor_states.entry(*workflow_id).or_default();
         state.value_mut().apply(message);
@@ -1624,6 +1681,347 @@ impl Orchestrator {
             GuardTarget::Provider(_) => Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+struct Packet026Projection {
+    delegation_records: Vec<CoordinatorDelegationRecord>,
+    subordinate_inbox: Vec<CoordinatorSubordinateInboxRecord>,
+    subagent_states: Vec<SubagentStateRecord>,
+    delegated_work_evidence: Vec<DelegatedWorkEvidenceRef>,
+    coordinator_decisions: Vec<CoordinatorMergeDecision>,
+    coordinator_runtime_proof: CoordinatorRuntimeProofView,
+}
+
+fn synthesize_coordinator_runtime_projection(
+    graph: &ExecutionGraph,
+    coordinator_agent_id: AgentId,
+    session_id: Option<mister_smith_core::SessionId>,
+) -> Packet026Projection {
+    let delegated_branches = packet_026_delegated_branches(graph);
+    let mut delegation_records = Vec::new();
+    let mut subordinate_inbox = Vec::new();
+    let mut subagent_states = Vec::new();
+    let mut delegated_work_evidence = Vec::new();
+
+    for (index, branch) in delegated_branches.iter().enumerate() {
+        let nodes = graph.nodes_for_branch(&branch.branch_id);
+        let subagent_id = branch
+            .assigned_agents
+            .first()
+            .copied()
+            .unwrap_or_else(|| AgentId::from_uuid(*branch.branch_id.as_ref()));
+        let child_role = packet_026_child_role(&nodes);
+        let delegated_job_label = graph
+            .branch_label(&branch.branch_id)
+            .unwrap_or_else(|| format!("delegated branch {}", branch.branch_id));
+        let delegation_id = branch.branch_id.to_string();
+        let branch_state = packet_026_branch_state(branch.state);
+        let state_reason = packet_026_state_reason(branch.state, &nodes);
+        let previous_state = packet_026_previous_state(branch.state);
+        let evidence_kind = packet_026_evidence_kind(&nodes);
+
+        delegation_records.push(CoordinatorDelegationRecord {
+            delegation_id: delegation_id.clone(),
+            workflow_id: graph.workflow_id,
+            session_id,
+            coordinator_agent_id,
+            child_role,
+            subagent_id,
+            delegated_job_label,
+            delegated_scope_ref: branch.branch_id.to_string(),
+            delegation_reason: graph.topology_plan.rationale.selected_for.clone(),
+            allowed_follow_up_actions: vec![
+                "clarify".to_string(),
+                "resume".to_string(),
+                "stop".to_string(),
+                "inspect".to_string(),
+            ],
+            created_at: chrono::Utc::now(),
+            status: branch_state.clone(),
+        });
+
+        subagent_states.push(SubagentStateRecord {
+            delegation_id: delegation_id.clone(),
+            subagent_id,
+            current_state: branch_state.clone(),
+            previous_state,
+            state_reason: state_reason.clone(),
+            state_updated_at: chrono::Utc::now(),
+            coordinator_action_ref: None,
+        });
+
+        delegated_work_evidence.push(DelegatedWorkEvidenceRef {
+            delegation_id: delegation_id.clone(),
+            evidence_kind: evidence_kind.to_string(),
+            evidence_summary: packet_026_evidence_summary(&nodes),
+            artifact_refs: nodes
+                .iter()
+                .map(|node| format!("task:{}", task_id_for_node(node.node_id)))
+                .collect(),
+            proof_boundary_note: packet_026_evidence_note(evidence_kind),
+            recorded_at: chrono::Utc::now(),
+        });
+
+        if let Some(event_kind) = packet_026_inbox_event_kind(branch.state) {
+            subordinate_inbox.push(CoordinatorSubordinateInboxRecord {
+                delegation_id,
+                event_id: format!("{}:{index}", branch.branch_id),
+                event_sequence: (index + 1) as u64,
+                event_kind: event_kind.to_string(),
+                event_payload_ref: format!("branch:{}", branch.branch_id),
+                recorded_at: chrono::Utc::now(),
+                visible_to: "coordinator_and_operator".to_string(),
+            });
+        }
+    }
+
+    let coordinator_decisions =
+        packet_026_coordinator_decisions(graph, &delegation_records, &delegated_work_evidence);
+    let grounded_count = delegated_work_evidence
+        .iter()
+        .filter(|evidence| evidence.evidence_kind == "grounded")
+        .count();
+    let all_delegated_work_grounded = delegated_work_evidence.len() == delegation_records.len()
+        && delegated_work_evidence
+            .iter()
+            .all(|evidence| evidence.evidence_kind == "grounded");
+    let all_subagents_completed = subagent_states
+        .iter()
+        .all(|state| state.current_state == "completed");
+    let accepted_merge_decision = coordinator_decisions.iter().any(|decision| {
+        decision.decision_kind == "merge" && decision.decision_outcome == "accepted"
+    });
+    let proof_boundary = if delegation_records.is_empty() {
+        "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied"
+            .to_string()
+    } else if grounded_count > 0
+        && !subagent_states.is_empty()
+        && !coordinator_decisions.is_empty()
+        && all_delegated_work_grounded
+        && all_subagents_completed
+        && accepted_merge_decision
+    {
+        "real coordinator-subagent runtime satisfied for the bounded delegated slice".to_string()
+    } else {
+        "delegated work remained placeholder-only or partial; packet 026 real coordinator-subagent runtime not yet satisfied"
+            .to_string()
+    };
+
+    let coordinator_runtime_proof = CoordinatorRuntimeProofView {
+        workflow_id: graph.workflow_id,
+        coordinator_agent_id,
+        delegation_records: delegation_records.clone(),
+        subordinate_inbox: subordinate_inbox.clone(),
+        subagent_states: subagent_states.clone(),
+        delegated_work_evidence: delegated_work_evidence.clone(),
+        coordinator_decisions: coordinator_decisions.clone(),
+        proof_boundary,
+        session_follow_up_note:
+            "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay"
+                .to_string(),
+    };
+
+    Packet026Projection {
+        delegation_records,
+        subordinate_inbox,
+        subagent_states,
+        delegated_work_evidence,
+        coordinator_decisions,
+        coordinator_runtime_proof,
+    }
+}
+
+fn packet_026_delegated_branches(graph: &ExecutionGraph) -> Vec<crate::execution_graph::ExecutionBranch> {
+    if graph.branches.len() <= 1 && graph.topology_plan.parallelism_width <= 1 {
+        return Vec::new();
+    }
+
+    graph.branches.clone()
+}
+
+fn packet_026_child_role(
+    nodes: &[&crate::execution_graph::ExecutionNode],
+) -> String {
+    let Some(node) = nodes.first() else {
+        return "explorer".to_string();
+    };
+
+    match node.role {
+        mister_smith_core::AgentType::Planner => "planner".to_string(),
+        mister_smith_core::AgentType::Critic => "verifier".to_string(),
+        _ => {
+            if node.action.contains("verify") || node.action.contains("review") {
+                "verifier".to_string()
+            } else if node.action.contains("plan") {
+                "planner".to_string()
+            } else {
+                "explorer".to_string()
+            }
+        }
+    }
+}
+
+fn packet_026_branch_state(state: BranchState) -> String {
+    match state {
+        BranchState::Pending => "queued",
+        BranchState::Running => "running",
+        BranchState::Checkpointed | BranchState::Isolated => "blocked",
+        BranchState::Completed => "completed",
+        BranchState::Failed => "failed",
+        BranchState::Reassigned => "reassigned",
+    }
+    .to_string()
+}
+
+fn packet_026_previous_state(state: BranchState) -> Option<String> {
+    match state {
+        BranchState::Pending => None,
+        BranchState::Running => Some("delegated".to_string()),
+        BranchState::Checkpointed | BranchState::Isolated => Some("running".to_string()),
+        BranchState::Completed | BranchState::Failed => Some("running".to_string()),
+        BranchState::Reassigned => Some("blocked".to_string()),
+    }
+}
+
+fn packet_026_state_reason(
+    state: BranchState,
+    nodes: &[&crate::execution_graph::ExecutionNode],
+) -> String {
+    let label = nodes
+        .first()
+        .map(|node| node.description.as_str())
+        .filter(|label| !label.trim().is_empty())
+        .unwrap_or("delegated work");
+    match state {
+        BranchState::Pending => format!("{label} is queued for delegated execution"),
+        BranchState::Running => format!("{label} is actively running under delegated ownership"),
+        BranchState::Checkpointed => {
+            format!("{label} paused at a checkpoint and needs coordinator follow-up")
+        }
+        BranchState::Isolated => format!("{label} was isolated for clarification or recovery"),
+        BranchState::Completed => format!("{label} completed delegated execution"),
+        BranchState::Failed => format!("{label} failed and needs coordinator recovery"),
+        BranchState::Reassigned => format!("{label} was reassigned to new delegated capacity"),
+    }
+}
+
+fn packet_026_evidence_kind(nodes: &[&crate::execution_graph::ExecutionNode]) -> &'static str {
+    let completed = nodes
+        .iter()
+        .filter(|node| node.state == NodeState::Completed)
+        .count();
+    if completed == 0 {
+        "placeholder-only"
+    } else if completed == nodes.len() {
+        "grounded"
+    } else {
+        "mixed"
+    }
+}
+
+fn packet_026_evidence_summary(nodes: &[&crate::execution_graph::ExecutionNode]) -> String {
+    let completed = nodes
+        .iter()
+        .filter(|node| node.state == NodeState::Completed)
+        .count();
+    let total = nodes.len();
+    if completed == 0 {
+        format!("no delegated nodes completed yet ({total} node(s) still placeholder-only)")
+    } else {
+        format!("{completed} of {total} delegated node(s) completed with bounded workflow evidence")
+    }
+}
+
+fn packet_026_evidence_note(kind: &str) -> String {
+    match kind {
+        "grounded" => {
+            "delegated work produced bounded workflow evidence for this slice".to_string()
+        }
+        "mixed" => {
+            "delegated work is only partially grounded and still needs coordinator review"
+                .to_string()
+        }
+        _ => {
+            "delegated work has not moved beyond placeholder-only completion yet".to_string()
+        }
+    }
+}
+
+fn packet_026_inbox_event_kind(state: BranchState) -> Option<&'static str> {
+    match state {
+        BranchState::Checkpointed | BranchState::Isolated => Some("blocked"),
+        BranchState::Completed => Some("completed"),
+        BranchState::Failed => Some("cancelled"),
+        BranchState::Reassigned => Some("clarify_requested"),
+        BranchState::Pending | BranchState::Running => None,
+    }
+}
+
+fn packet_026_coordinator_decisions(
+    graph: &ExecutionGraph,
+    delegation_records: &[CoordinatorDelegationRecord],
+    delegated_work_evidence: &[DelegatedWorkEvidenceRef],
+) -> Vec<CoordinatorMergeDecision> {
+    let input_refs = delegation_records
+        .iter()
+        .map(|record| record.delegation_id.clone())
+        .collect::<Vec<_>>();
+    let grounded_count = delegated_work_evidence
+        .iter()
+        .filter(|evidence| evidence.evidence_kind == "grounded")
+        .count();
+    let (decision_kind, decision_reason, decision_outcome) = if delegation_records.is_empty() {
+        (
+            "collapse",
+            "smallest-workflow rule kept execution sequential",
+            "accepted",
+        )
+    } else if graph.branches.iter().any(|branch| branch.state == BranchState::Reassigned) {
+        (
+            "reassign",
+            "coordinator reassigned delegated work after recovery pressure",
+            "accepted",
+        )
+    } else if graph
+        .branches
+        .iter()
+        .any(|branch| matches!(branch.state, BranchState::Checkpointed | BranchState::Isolated))
+    {
+        (
+            "clarify",
+            "coordinator kept delegated work visible while waiting on clarification or recovery",
+            "blocked",
+        )
+    } else if graph.branches.iter().any(|branch| branch.state == BranchState::Failed) {
+        (
+            "stop",
+            "coordinator stopped the delegated slice after a child failure",
+            "terminal",
+        )
+    } else if graph.state == GraphState::Completed && grounded_count > 0 {
+        (
+            "merge",
+            "coordinator merged grounded delegated work into the final result",
+            "accepted",
+        )
+    } else {
+        (
+            "merge",
+            "coordinator is still evaluating delegated child output",
+            "deferred",
+        )
+    };
+
+    vec![CoordinatorMergeDecision {
+        decision_id: format!("decision:{}", graph.workflow_id),
+        workflow_id: graph.workflow_id,
+        decision_kind: decision_kind.to_string(),
+        input_refs,
+        decision_reason: decision_reason.to_string(),
+        decision_outcome: decision_outcome.to_string(),
+        decided_at: chrono::Utc::now(),
+    }]
 }
 
 fn task_id_for_node(node_id: ExecutionNodeId) -> TaskId {
@@ -3061,6 +3459,66 @@ mod tests {
             scheduler.submit(task);
         }
         scheduler
+    }
+
+    #[test]
+    fn synthesize_coordinator_runtime_projection_propagates_session_ids() {
+        let (mut graph, _, _, _) = node_scoped_supervision_graph();
+        graph.state = GraphState::Completed;
+        for branch in &mut graph.branches {
+            branch.state = BranchState::Completed;
+        }
+        for node in &mut graph.nodes {
+            node.state = NodeState::Completed;
+        }
+        let session_id = mister_smith_core::SessionId::new();
+
+        let packet_026 = synthesize_coordinator_runtime_projection(
+            &graph,
+            AgentId::new(),
+            Some(session_id),
+        );
+
+        assert!(!packet_026.delegation_records.is_empty());
+        assert!(packet_026
+            .delegation_records
+            .iter()
+            .all(|record| record.session_id == Some(session_id)));
+    }
+
+    #[test]
+    fn synthesize_coordinator_runtime_projection_requires_all_delegated_branches_grounded() {
+        let (mut graph, _, _, _) = node_scoped_supervision_graph();
+        graph.state = GraphState::Running;
+        let running_branch = graph.branches.get(1).expect("running branch should exist").branch_id;
+        for branch in &mut graph.branches {
+            branch.state = BranchState::Completed;
+        }
+        graph
+            .branches
+            .iter_mut()
+            .find(|branch| branch.branch_id == running_branch)
+            .expect("running branch should exist")
+            .state = BranchState::Running;
+        for node in &mut graph.nodes {
+            node.state = NodeState::Completed;
+        }
+        for node in graph.nodes.iter_mut().filter(|node| node.branch_id == running_branch) {
+            node.state = NodeState::Pending;
+        }
+
+        let packet_026 = synthesize_coordinator_runtime_projection(&graph, AgentId::new(), None);
+        assert_eq!(packet_026.delegation_records.len(), packet_026.delegated_work_evidence.len());
+        assert!(packet_026
+            .delegated_work_evidence
+            .iter()
+            .any(|evidence| evidence.evidence_kind != "grounded"));
+        assert!(
+            packet_026
+                .coordinator_runtime_proof
+                .proof_boundary
+                .contains("not yet satisfied")
+        );
     }
 
     #[test]
