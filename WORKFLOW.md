@@ -39,6 +39,14 @@ codex:
   stall_timeout_ms: 900000
 ---
 
+Legacy note:
+
+- This file documents the older Symphony-driven execution loop.
+- It is not the active Smith MCP route for direct Codex execution.
+- For the current control-plane contract, start from `AGENTS.md`, `docs/current-state.md`,
+  `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`, and the active direct-execution
+  sections of `docs/linear/LINEAR.md`.
+
 You are working on a Linear ticket `{{ issue.identifier }}` in the Mister Smith repository.
 
 {% if attempt %}
@@ -77,12 +85,13 @@ Instructions:
   SpecKit, planning, validation, and review work, read
   `docs/plans/2026-03-16-smith-first-development-system.md`.
 - When the Smith MCP is available in the session, route broad workflow requests through
-  `route_workflow_request` first, then use `get_control_plane_snapshot` or
-  `get_issue_execution_snapshot` before mutating issue state.
+  `route_workflow_request` first, use its `response_only` / `plan_only` / `tracked_execution`
+  classification to keep analysis, planning, and execution distinct, and then use
+  `get_control_plane_snapshot` or `get_issue_execution_snapshot` before mutating issue state.
 - Use `save_linear_issue` and `save_issue_workpad` as the only Smith-owned write path for Linear
   issue and workpad updates.
-- Use `materialize_backlog_slices`, `plan_queue_stage`, `apply_queue_stage`, and
-  `resolve_issue_lifecycle` for backlog, watched-queue, and execution-state control.
+- Use `materialize_backlog_slices` and `resolve_issue_lifecycle` for backlog and execution-state
+  control on the active Smith MCP route.
 - Use `prepare_ralph_packet` and `record_ralph_outcome` for Ralph-assisted flows.
 - Use `prepare_speckit_context` and `translate_speckit_tasks` for SpecKit routing and task-pack
   translation.

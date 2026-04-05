@@ -32,7 +32,7 @@ Use this file when you need one honest answer to:
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Bounded live-proof and proof-boundary note for packet `019` |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final validation artifact for the completed packet-016 epic |
 | Packet 015 closure evidence | `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md` | Historical live-proof and validation artifact for the completed packet-015 epic |
-| Development workflow and direct Codex control plane | `AGENTS.md`, `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`, `.codex/commands/implement.md` | Active Smith-first development contract |
+| Development workflow and direct Codex control plane | `AGENTS.md`, `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`, `.codex/commands/implement.md` | Active Smith-first development contract with explicit request-class routing and internal gate-aware execution prep |
 | Historical workflow automation background | `WORKFLOW.md`, `docs/linear/LINEAR.md` | Legacy Linear and Symphony operating context; not the active Smith MCP route |
 | Architectural build map | `ROADMAP.md` | Phase dependency map and build order |
 | Broad repo orientation | `README.md` | High-level repo surface and operator entry points |

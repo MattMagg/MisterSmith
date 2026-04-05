@@ -12,6 +12,9 @@ control plane.
 
 - remove Symphony and watched-queue concepts from the active Smith MCP tool surface
 - add one direct execution preparation tool for issue-grounded Codex work
+- add explicit request-class routing so response-only and plan-only asks do not fall through into
+  execution-prep by accident
+- enrich direct execution prep and review status with small structured gate and resume metadata
 - keep Smith-owned direct lifecycle helpers for issue context, workpad mutation, backlog slicing,
   SpecKit prep, Ralph packets, and review or merge guidance
 - update active repo guidance so the default Smith-first flow matches the new MCP surface
@@ -65,6 +68,23 @@ Validation:
 Validation:
 
 - `cargo test -p mister-smith-mcp`
+- `git diff --check`
+
+### Milestone 4: Internal gate and handoff clarity
+
+- add explicit `response_only`, `plan_only`, and `tracked_execution` request classes to the Smith
+  router
+- keep direct Codex execution autonomous by surfacing internal gates and execution eligibility in
+  tool responses rather than requiring extra user review hops
+- enrich the direct execution handoff shape with objective, assumptions, risks, pending gates, and
+  resume or rollback notes that improve cold-start continuation without introducing a parallel
+  file-state system
+- clean active docs so legacy Symphony references do not outrank the direct-execution route
+
+Validation:
+
+- `cargo test -p mister-smith-mcp`
+- targeted doc grep for removed queue-stage tool names in active guidance
 - `git diff --check`
 
 ## Stop Conditions
