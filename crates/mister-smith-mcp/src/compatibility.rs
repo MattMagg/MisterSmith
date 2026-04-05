@@ -1467,31 +1467,6 @@ impl SmithCompatibilityServer {
         } else if contains_any(
             &normalized,
             &[
-                "implement",
-                "execution",
-                "direct execution",
-                "continue execution",
-                "fix issue",
-                "packet",
-                "spec",
-                "task pack",
-                "tasks.md",
-                "speckit",
-            ],
-        ) {
-            (
-                "direct_execution".to_string(),
-                "request targets direct Codex execution preparation".to_string(),
-                "prepare_direct_execution".to_string(),
-                vec![
-                    "prepare_direct_execution".to_string(),
-                    "get_issue_execution_snapshot".to_string(),
-                    "prepare_speckit_context".to_string(),
-                ],
-            )
-        } else if contains_any(
-            &normalized,
-            &[
                 "backlog slice",
                 "backlog slicing",
                 "child issue creation",
@@ -1518,6 +1493,31 @@ impl SmithCompatibilityServer {
                     "materialize_backlog_slices".to_string(),
                     "translate_speckit_tasks".to_string(),
                     "prepare_direct_execution".to_string(),
+                ],
+            )
+        } else if contains_any(
+            &normalized,
+            &[
+                "implement",
+                "execution",
+                "direct execution",
+                "continue execution",
+                "fix issue",
+                "packet",
+                "spec",
+                "task pack",
+                "tasks.md",
+                "speckit",
+            ],
+        ) {
+            (
+                "direct_execution".to_string(),
+                "request targets direct Codex execution preparation".to_string(),
+                "prepare_direct_execution".to_string(),
+                vec![
+                    "prepare_direct_execution".to_string(),
+                    "get_issue_execution_snapshot".to_string(),
+                    "prepare_speckit_context".to_string(),
                 ],
             )
         } else if contains_any(
@@ -1571,7 +1571,7 @@ impl SmithCompatibilityServer {
             )
         } else if contains_any(
             &normalized,
-            &["review", "merge", "pull request", "github pr", "pr"],
+            &["review", "merge", "pull request", "github pr"],
         ) {
             (
                 "review_merge".to_string(),
@@ -6236,6 +6236,44 @@ apps = true
     }
 
     #[tokio::test]
+    async fn route_workflow_request_does_not_treat_prepare_requests_as_review_merge() {
+        let repo_root = temp_path("route-prepare-direct-execution");
+        write_fixture_repo(&repo_root);
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Prepare the direct execution plan for MS-90"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("direct_execution".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("prepare_direct_execution".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn route_workflow_request_keeps_pull_request_requests_in_review_dispatch() {
         let repo_root = temp_path("route-review-dispatch");
         write_fixture_repo(&repo_root);
@@ -6427,6 +6465,44 @@ apps = true
         assert!(!recommended_next_tools
             .iter()
             .any(|value| matches!(value.as_str(), Some("plan_queue_stage" | "apply_queue_stage"))));
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_routes_speckit_translation_requests_to_backlog_slicing() {
+        let repo_root = temp_path("route-speckit-translation");
+        write_fixture_repo(&repo_root);
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Translate SpecKit tasks from specs/013-multi-turn-same-agent-conversations/tasks.md into backlog slices"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("backlog_slicing".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("translate_speckit_tasks".to_string())
+        );
     }
 
     #[tokio::test]
