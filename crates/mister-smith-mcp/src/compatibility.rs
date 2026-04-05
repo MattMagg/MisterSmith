@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::future::Future;
@@ -21,7 +21,6 @@ use crate::server::{
 
 const DEFAULT_SERVER_NAME: &str = "smith";
 const DEFAULT_LINEAR_ENDPOINT: &str = "https://api.linear.app/graphql";
-const DEFAULT_SYMPHONY_CHECKOUT: &str = "~/symphony";
 const DEFAULT_CODEX_CONFIG: &str = "~/.codex/config.toml";
 
 const LINEAR_WORKSPACE_QUERY: &str = r#"
@@ -310,24 +309,12 @@ pub struct ReadinessCheck {
     pub detail: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct WorkflowSummary {
-    pub project_slug: Option<String>,
-    pub active_states: Vec<String>,
-    pub terminal_states: Vec<String>,
-    pub workspace_root: Option<String>,
-    pub codex_command: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadinessAudit {
     pub repo_root: String,
     pub codex_config_path: String,
-    pub workflow_path: String,
-    pub symphony_checkout: String,
-    pub workspace_root: Option<String>,
+    pub env_file_path: String,
     pub checks: Vec<ReadinessCheck>,
-    pub workflow: WorkflowSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -338,9 +325,7 @@ pub struct ServerRuntimeInfo {
     pub last_reload_at: String,
     pub reload_nonce: u64,
     pub repo_root: String,
-    pub workflow_path: String,
     pub codex_config_path: String,
-    pub symphony_checkout: String,
     pub tool_names: Vec<String>,
 }
 
@@ -447,38 +432,19 @@ pub struct LinearWorkpadSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct LinearRuntimeSync {
-    pub configured_project_slug: Option<String>,
-    pub queue_issue_count: usize,
-    pub active_issue_count: usize,
+pub struct LinearWorkspaceSummary {
+    pub issue_count: usize,
+    pub project_count: usize,
+    pub team_count: usize,
     pub issues_by_state: BTreeMap<String, usize>,
-    pub discrepancies: Vec<String>,
-    pub suggested_actions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ControlPlaneSnapshot {
     pub repo: RepoSnapshot,
-    pub workflow: WorkflowSummary,
     pub readiness: ReadinessAudit,
-    pub symphony: SymphonyCheckoutSnapshot,
     pub github: GitHubSnapshot,
-    pub linear: Option<LinearRuntimeSync>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SymphonyCheckoutSnapshot {
-    pub checkout_path: String,
-    pub exists: bool,
-    pub is_git_repo: bool,
-    pub git_branch: Option<String>,
-    pub head_sha: Option<String>,
-    pub workspace_root: Option<String>,
-    pub workspace_root_exists: bool,
-    pub repo_env_present: bool,
-    pub linear_api_key_available: bool,
-    pub run_script_present: bool,
-    pub blockers: Vec<String>,
+    pub linear: Option<LinearWorkspaceSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -500,42 +466,12 @@ pub struct WorkspaceAdjustmentPlan {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReviewDispatchCycle {
-    pub active_issue_count: usize,
-    pub human_review_count: usize,
-    pub merging_count: usize,
+pub struct ReviewMergeStatus {
     pub open_pull_request_count: usize,
-    pub refill_candidates: Vec<String>,
+    pub review_blockers: Vec<String>,
+    pub merge_ready_pull_requests: Vec<String>,
     pub stale_pull_requests: Vec<String>,
     pub recommended_actions: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PhaseSlice {
-    pub name: String,
-    pub description: String,
-    pub status: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlannedLinearAction {
-    pub action: String,
-    pub issue_identifier: Option<String>,
-    pub target_project_slug: Option<String>,
-    pub target_state: Option<String>,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PhaseExecutionPlan {
-    pub phase: String,
-    pub tasks_document: Option<String>,
-    pub completed_work: Vec<String>,
-    pub outstanding_work: Vec<String>,
-    pub runnable_slices: Vec<PhaseSlice>,
-    pub blocked_slices: Vec<PhaseSlice>,
-    pub prep_slices: Vec<PhaseSlice>,
-    pub recommended_linear_actions: Vec<PlannedLinearAction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -546,9 +482,21 @@ pub struct IssueExecutionSnapshot {
     pub execution_state: String,
     pub blocker_summaries: Vec<String>,
     pub workpad_status: String,
-    pub queue_project_role: String,
     pub next_step_hint: String,
     pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DirectExecutionPlan {
+    pub issue: Option<LinearIssueSnapshot>,
+    pub workpad: Option<LinearWorkpadSnapshot>,
+    pub feature_dir: Option<String>,
+    pub tasks_path: Option<String>,
+    pub should_use_speckit: bool,
+    pub docs_to_read: Vec<String>,
+    pub validation_commands: Vec<String>,
+    pub next_recommended_action: String,
+    pub blocking_reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -573,7 +521,6 @@ pub struct MaterializedBacklogSlice {
     pub issue_identifier: String,
     pub action: String,
     pub blocker_identifiers: Vec<String>,
-    pub symphony_candidate: bool,
     pub workpad_action: Option<String>,
     pub issue: LinearIssueSnapshot,
 }
@@ -586,27 +533,6 @@ pub struct BacklogSliceMaterialization {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueueStagePlan {
-    pub issue_identifier: Option<String>,
-    pub recommended_issue_identifier: Option<String>,
-    pub stageable: bool,
-    pub blocked: bool,
-    pub queue_conflicts: Vec<String>,
-    pub required_fixes: Vec<String>,
-    pub queue_project_role: Option<String>,
-    pub target_project: Option<String>,
-    pub target_state: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueueStageApplyResult {
-    pub action: String,
-    pub issue_identifier: Option<String>,
-    pub planned: QueueStagePlan,
-    pub issue: Option<LinearIssueSnapshot>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IssueLifecycleResolution {
     pub issue: Option<LinearIssueSnapshot>,
     pub issue_identifier: String,
@@ -614,7 +540,6 @@ pub struct IssueLifecycleResolution {
     pub required_mutations: Vec<String>,
     pub blocking_reasons: Vec<String>,
     pub review_state: String,
-    pub queue_role: String,
     pub pr_correlation: Vec<String>,
 }
 
@@ -658,7 +583,6 @@ pub struct TranslatedSpecKitSlice {
     pub description: String,
     pub blocked_by: Vec<String>,
     pub workpad_body: Option<String>,
-    pub symphony_candidate: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -695,7 +619,6 @@ pub struct FollowUpClassification {
     pub suggested_project: String,
     pub suggested_state: String,
     pub suggested_labels: Vec<String>,
-    pub should_stage: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -703,10 +626,7 @@ pub struct SmithCompatibilityOptions {
     pub server_name: String,
     pub repo_root: PathBuf,
     pub codex_config_path: PathBuf,
-    pub workflow_path: PathBuf,
-    pub symphony_checkout: PathBuf,
     pub env_file_path: PathBuf,
-    pub workspace_root_override: Option<PathBuf>,
     pub linear_endpoint: String,
 }
 
@@ -718,23 +638,13 @@ impl SmithCompatibilityOptions {
         let codex_config_path = env::var("MISTER_SMITH_CODEX_CONFIG_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(|_| expand_home(DEFAULT_CODEX_CONFIG));
-        let symphony_checkout = env::var("MISTER_SMITH_SYMPHONY_CHECKOUT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| expand_home(DEFAULT_SYMPHONY_CHECKOUT));
-        let workflow_path = repo_root.join("WORKFLOW.md");
         let env_file_path = repo_root.join(".env");
-        let workspace_root_override = env::var("MISTER_SMITH_SYMPHONY_WORKSPACE_ROOT")
-            .ok()
-            .map(PathBuf::from);
 
         Self {
             server_name: DEFAULT_SERVER_NAME.to_string(),
             repo_root,
             codex_config_path,
-            workflow_path,
-            symphony_checkout,
             env_file_path,
-            workspace_root_override,
             linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
         }
     }
@@ -764,7 +674,6 @@ impl Default for SmithRuntimeState {
 
 #[derive(Debug, Clone, Default)]
 struct CompatibilityCaches {
-    workflow: Option<WorkflowSummary>,
     linear_workspace: Option<LinearWorkspaceData>,
 }
 
@@ -781,7 +690,6 @@ struct IssueExecutionContext {
     issue: Option<LinearIssueSnapshot>,
     workpad: Option<LinearWorkpadSnapshot>,
     matching_pull_requests: Vec<GitHubPullRequest>,
-    workflow: WorkflowSummary,
 }
 
 #[derive(Debug)]
@@ -817,25 +725,13 @@ impl SmithCompatibilityServer {
             last_reload_at: runtime.last_reload_at.to_rfc3339(),
             reload_nonce: runtime.reload_nonce,
             repo_root: self.options.repo_root.display().to_string(),
-            workflow_path: self.options.workflow_path.display().to_string(),
             codex_config_path: self.options.codex_config_path.display().to_string(),
-            symphony_checkout: self.options.symphony_checkout.display().to_string(),
             tool_names: runtime.registered_tool_names.clone(),
         }
     }
 
     async fn clear_caches(&self) {
         *self.caches.write().await = CompatibilityCaches::default();
-    }
-
-    async fn workflow_summary(&self) -> WorkflowSummary {
-        if let Some(summary) = self.caches.read().await.workflow.clone() {
-            return summary;
-        }
-
-        let summary = parse_workflow_summary(&self.options.workflow_path);
-        self.caches.write().await.workflow = Some(summary.clone());
-        summary
     }
 
     async fn linear_workspace(&self) -> Result<LinearWorkspaceData, String> {
@@ -849,6 +745,26 @@ impl SmithCompatibilityServer {
         let workspace = parse_linear_workspace(&data);
         self.caches.write().await.linear_workspace = Some(workspace.clone());
         Ok(workspace)
+    }
+
+    async fn linear_workspace_summary(&self) -> Result<LinearWorkspaceSummary, String> {
+        let workspace = self.linear_workspace().await?;
+        let mut issues_by_state = BTreeMap::new();
+        for issue in &workspace.issues {
+            let key = issue
+                .state
+                .as_ref()
+                .map(|state| state.name.clone())
+                .unwrap_or_else(|| "Unknown".to_string());
+            *issues_by_state.entry(key).or_insert(0) += 1;
+        }
+
+        Ok(LinearWorkspaceSummary {
+            issue_count: workspace.issues.len(),
+            project_count: workspace.projects.len(),
+            team_count: workspace.teams.len(),
+            issues_by_state,
+        })
     }
 
     async fn linear_graphql(
@@ -1070,7 +986,6 @@ impl SmithCompatibilityServer {
         &self,
         issue_identifier: &str,
     ) -> Result<IssueExecutionContext, McpError> {
-        let workflow = self.workflow_summary().await;
         let issue = self
             .linear_issue_snapshot(issue_identifier)
             .await
@@ -1104,7 +1019,6 @@ impl SmithCompatibilityServer {
             issue,
             workpad,
             matching_pull_requests,
-            workflow,
         })
     }
 
@@ -1170,11 +1084,7 @@ impl SmithCompatibilityServer {
     }
 
     async fn collect_readiness_audit(&self) -> ToolResponse<ReadinessAudit> {
-        let workflow = self.workflow_summary().await;
         let config_status = inspect_codex_smith_config(&self.options.codex_config_path);
-        let workspace_root = self
-            .resolved_workspace_root(Some(&workflow))
-            .map(|path| path.display().to_string());
         let linear_key_available = self.linear_api_key().is_some();
 
         let mut checks = Vec::new();
@@ -1185,10 +1095,6 @@ impl SmithCompatibilityServer {
                 label: "repo_root".to_string(),
                 detail: self.options.repo_root.display().to_string(),
             },
-            EvidenceItem {
-                label: "workflow_path".to_string(),
-                detail: self.options.workflow_path.display().to_string(),
-            },
         ];
 
         checks.push(file_check(
@@ -1196,12 +1102,6 @@ impl SmithCompatibilityServer {
             self.options.repo_root.exists(),
             "blocker",
             format!("repo root {}", self.options.repo_root.display()),
-        ));
-        checks.push(file_check(
-            "workflow_file",
-            self.options.workflow_path.exists(),
-            "blocker",
-            format!("workflow file {}", self.options.workflow_path.display()),
         ));
         checks.push(file_check(
             "codex_config",
@@ -1307,32 +1207,6 @@ impl SmithCompatibilityServer {
             },
         });
 
-        let symphony_snapshot = self.collect_symphony_checkout_snapshot().await;
-        checks.push(ReadinessCheck {
-            name: "symphony_checkout".to_string(),
-            status: if symphony_snapshot.data.exists && symphony_snapshot.data.is_git_repo {
-                CompatibilityStatus::Ok
-            } else {
-                CompatibilityStatus::Blocked
-            },
-            severity: "blocker".to_string(),
-            detail: symphony_snapshot.summary.clone(),
-        });
-        checks.push(ReadinessCheck {
-            name: "symphony_workspace_root".to_string(),
-            status: if symphony_snapshot.data.workspace_root_exists {
-                CompatibilityStatus::Ok
-            } else {
-                CompatibilityStatus::Blocked
-            },
-            severity: "blocker".to_string(),
-            detail: symphony_snapshot
-                .data
-                .workspace_root
-                .clone()
-                .unwrap_or_else(|| "workspace root is not configured".to_string()),
-        });
-
         for check in &checks {
             if matches!(check.status, CompatibilityStatus::Blocked) && check.severity == "blocker" {
                 blockers.push(check.detail.clone());
@@ -1365,12 +1239,6 @@ impl SmithCompatibilityServer {
                 detail: config_status.args.join(" "),
             });
         }
-        if let Some(root) = &workspace_root {
-            evidence.push(EvidenceItem {
-                label: "workspace_root".to_string(),
-                detail: root.clone(),
-            });
-        }
 
         let status = summarize_status(&checks);
         let summary = match status {
@@ -1399,11 +1267,8 @@ impl SmithCompatibilityServer {
             data: ReadinessAudit {
                 repo_root: self.options.repo_root.display().to_string(),
                 codex_config_path: self.options.codex_config_path.display().to_string(),
-                workflow_path: self.options.workflow_path.display().to_string(),
-                symphony_checkout: self.options.symphony_checkout.display().to_string(),
-                workspace_root,
+                env_file_path: self.options.env_file_path.display().to_string(),
                 checks,
-                workflow,
             },
         }
     }
@@ -1532,7 +1397,7 @@ impl SmithCompatibilityServer {
                 recommended_next_tools: vec!["get_control_plane_snapshot".to_string()],
                 blocking_issues: vec!["request parameter is required".to_string()],
                 data: WorkflowRoute {
-                    route: "snapshot".to_string(),
+                    route: "direct_execution".to_string(),
                     reason: "missing request input".to_string(),
                     normalized_request: request,
                     preferred_tool: "get_control_plane_snapshot".to_string(),
@@ -1557,20 +1422,6 @@ impl SmithCompatibilityServer {
                 vec![
                     "audit_workflow_readiness".to_string(),
                     "plan_workspace_adjustments".to_string(),
-                ],
-            )
-        } else if contains_any(
-            &normalized,
-            &["symphony", "workspace", "checkout", "dispatch"],
-        ) {
-            (
-                "symphony_runtime".to_string(),
-                "request targets Symphony checkout or workspace hygiene".to_string(),
-                "get_symphony_checkout_snapshot".to_string(),
-                vec![
-                    "get_symphony_checkout_snapshot".to_string(),
-                    "plan_workspace_adjustments".to_string(),
-                    "refresh_symphony".to_string(),
                 ],
             )
         } else if contains_any(
@@ -1616,6 +1467,31 @@ impl SmithCompatibilityServer {
         } else if contains_any(
             &normalized,
             &[
+                "implement",
+                "execution",
+                "direct execution",
+                "continue execution",
+                "fix issue",
+                "packet",
+                "spec",
+                "task pack",
+                "tasks.md",
+                "speckit",
+            ],
+        ) {
+            (
+                "direct_execution".to_string(),
+                "request targets direct Codex execution preparation".to_string(),
+                "prepare_direct_execution".to_string(),
+                vec![
+                    "prepare_direct_execution".to_string(),
+                    "get_issue_execution_snapshot".to_string(),
+                    "prepare_speckit_context".to_string(),
+                ],
+            )
+        } else if contains_any(
+            &normalized,
+            &[
                 "backlog slice",
                 "backlog slicing",
                 "child issue creation",
@@ -1641,7 +1517,7 @@ impl SmithCompatibilityServer {
                 vec![
                     "materialize_backlog_slices".to_string(),
                     "translate_speckit_tasks".to_string(),
-                    "plan_queue_stage".to_string(),
+                    "prepare_direct_execution".to_string(),
                 ],
             )
         } else if contains_any(
@@ -1650,9 +1526,8 @@ impl SmithCompatibilityServer {
                 "issue lifecycle",
                 "next action for issue",
                 "execution recovery",
-                "queue role",
                 "review state",
-                "merge dispatch control",
+                "next step",
             ],
         ) {
             (
@@ -1662,17 +1537,7 @@ impl SmithCompatibilityServer {
                 vec![
                     "resolve_issue_lifecycle".to_string(),
                     "get_issue_execution_snapshot".to_string(),
-                    "plan_queue_stage".to_string(),
-                ],
-            )
-        } else if contains_any(&normalized, &["phase", "slice", "stage", "milestone"]) {
-            (
-                "phase_execution".to_string(),
-                "request targets phase planning or queue staging".to_string(),
-                "plan_phase_execution".to_string(),
-                vec![
-                    "plan_phase_execution".to_string(),
-                    "apply_phase_execution_plan".to_string(),
+                    "prepare_direct_execution".to_string(),
                 ],
             )
         } else if contains_any(
@@ -1695,26 +1560,25 @@ impl SmithCompatibilityServer {
             ],
         ) {
             (
-                "development_workflow".to_string(),
-                "request targets Smith-first development workflow design or chaining".to_string(),
-                "get_control_plane_snapshot".to_string(),
+                "direct_execution".to_string(),
+                "request targets Smith-first direct execution design or chaining".to_string(),
+                "prepare_direct_execution".to_string(),
                 vec![
+                    "prepare_direct_execution".to_string(),
                     "get_control_plane_snapshot".to_string(),
-                    "sync_linear_with_runtime".to_string(),
-                    "evaluate_issue_legitimacy".to_string(),
+                    "prepare_speckit_context".to_string(),
                 ],
             )
         } else if contains_any(
             &normalized,
-            &["review", "merge", "queue", "pull request", "github pr"],
+            &["review", "merge", "pull request", "github pr", "pr"],
         ) {
             (
-                "review_dispatch".to_string(),
-                "request targets review/merge/dispatch reconciliation".to_string(),
-                "review_merge_dispatch_cycle".to_string(),
+                "review_merge".to_string(),
+                "request targets direct review or merge reconciliation".to_string(),
+                "review_merge_status".to_string(),
                 vec![
-                    "review_merge_dispatch_cycle".to_string(),
-                    "sync_linear_with_runtime".to_string(),
+                    "review_merge_status".to_string(),
                     "get_control_plane_snapshot".to_string(),
                 ],
             )
@@ -1730,20 +1594,23 @@ impl SmithCompatibilityServer {
             )
         } else if contains_any(&normalized, &["issue", "linear", "ticket", "backlog"]) {
             (
-                "linear_runtime".to_string(),
-                "request targets Linear issue state or backlog routing".to_string(),
-                "get_issue_execution_snapshot".to_string(),
+                "direct_execution".to_string(),
+                "request targets direct issue state or execution routing".to_string(),
+                "prepare_direct_execution".to_string(),
                 vec![
+                    "prepare_direct_execution".to_string(),
                     "get_issue_execution_snapshot".to_string(),
-                    "sync_linear_with_runtime".to_string(),
                 ],
             )
         } else {
             (
-                "snapshot".to_string(),
+                "direct_execution".to_string(),
                 "request needs a broad control-plane snapshot first".to_string(),
                 "get_control_plane_snapshot".to_string(),
-                vec!["get_control_plane_snapshot".to_string()],
+                vec![
+                    "get_control_plane_snapshot".to_string(),
+                    "prepare_direct_execution".to_string(),
+                ],
             )
         };
 
@@ -1771,31 +1638,19 @@ impl SmithCompatibilityServer {
         _params: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
         let readiness = self.collect_readiness_audit().await;
-        let workflow = self.workflow_summary().await;
-        let symphony = self.collect_symphony_checkout_snapshot().await;
         let github = self.github_snapshot().await;
-        let linear = self.linear_runtime_sync().await.ok();
+        let linear = self.linear_workspace_summary().await.ok();
         let repo = self.repo_snapshot().await;
 
         let mut warnings = readiness.warnings.clone();
-        warnings.extend(symphony.warnings.clone());
         if linear.is_none() {
             warnings
                 .push("Linear snapshot unavailable; returning repo/runtime state only".to_string());
         }
 
-        let mut blocking_issues = readiness.blocking_issues.clone();
-        blocking_issues.extend(symphony.blocking_issues.clone());
-        blocking_issues.sort();
-        blocking_issues.dedup();
-
-        let status = if matches!(readiness.status, CompatibilityStatus::Blocked)
-            || matches!(symphony.status, CompatibilityStatus::Blocked)
-        {
+        let status = if matches!(readiness.status, CompatibilityStatus::Blocked) {
             CompatibilityStatus::Blocked
-        } else if matches!(readiness.status, CompatibilityStatus::Ok)
-            && matches!(symphony.status, CompatibilityStatus::Ok)
-        {
+        } else if matches!(readiness.status, CompatibilityStatus::Ok) {
             CompatibilityStatus::Ok
         } else {
             CompatibilityStatus::Degraded
@@ -1813,155 +1668,24 @@ impl SmithCompatibilityServer {
                         .unwrap_or_else(|| "unknown".to_string()),
                 },
                 EvidenceItem {
-                    label: "project_slug".to_string(),
-                    detail: workflow
-                        .project_slug
-                        .clone()
-                        .unwrap_or_else(|| "unconfigured".to_string()),
+                    label: "open_pull_requests".to_string(),
+                    detail: github.open_pull_requests.len().to_string(),
                 },
             ],
             warnings,
             recommended_next_tools: vec![
                 "audit_workflow_readiness".to_string(),
-                "get_symphony_checkout_snapshot".to_string(),
-                "sync_linear_with_runtime".to_string(),
+                "prepare_direct_execution".to_string(),
+                "get_issue_execution_snapshot".to_string(),
             ],
-            blocking_issues,
+            blocking_issues: readiness.blocking_issues.clone(),
             data: ControlPlaneSnapshot {
                 repo,
-                workflow,
                 readiness: readiness.data,
-                symphony: symphony.data,
                 github,
-                linear: linear.map(|response| response.data),
+                linear,
             },
         })
-    }
-
-    async fn get_symphony_checkout_snapshot(
-        &self,
-        _params: serde_json::Value,
-    ) -> Result<serde_json::Value, McpError> {
-        json_response(self.collect_symphony_checkout_snapshot().await)
-    }
-
-    async fn collect_symphony_checkout_snapshot(&self) -> ToolResponse<SymphonyCheckoutSnapshot> {
-        let workflow = self.workflow_summary().await;
-        let workspace_root = self.resolved_workspace_root(Some(&workflow));
-        let checkout_path = self.options.symphony_checkout.clone();
-        let exists = checkout_path.exists();
-        let is_git_repo = checkout_path.join(".git").exists();
-        let repo_env_present = self.options.env_file_path.exists();
-        let linear_api_key_available = self.linear_api_key().is_some();
-        let run_script_present = self
-            .options
-            .repo_root
-            .join("scripts/run-symphony.sh")
-            .exists();
-
-        let git_branch = if exists && is_git_repo {
-            trimmed_output(
-                run_command_in_dir(
-                    "git",
-                    &["rev-parse", "--abbrev-ref", "HEAD"],
-                    &checkout_path,
-                )
-                .await,
-            )
-        } else {
-            None
-        };
-        let head_sha = if exists && is_git_repo {
-            trimmed_output(
-                run_command_in_dir("git", &["rev-parse", "--short", "HEAD"], &checkout_path).await,
-            )
-        } else {
-            None
-        };
-
-        let workspace_root_exists = workspace_root
-            .as_ref()
-            .map(|path| path.exists())
-            .unwrap_or(false);
-        let mut blockers = Vec::new();
-        if !exists {
-            blockers.push(format!(
-                "Symphony checkout is missing at {}",
-                checkout_path.display()
-            ));
-        } else if !is_git_repo {
-            blockers.push(format!(
-                "Symphony checkout exists but is not a git repository at {}",
-                checkout_path.display()
-            ));
-        }
-        if !workspace_root_exists {
-            blockers.push(
-                workspace_root
-                    .as_ref()
-                    .map(|path| format!("Symphony workspace root is missing at {}", path.display()))
-                    .unwrap_or_else(|| "Symphony workspace root is not configured".to_string()),
-            );
-        }
-        if !repo_env_present {
-            blockers.push(format!(
-                "Repo .env is missing at {}",
-                self.options.env_file_path.display()
-            ));
-        }
-
-        let status = if blockers.is_empty() {
-            CompatibilityStatus::Ok
-        } else {
-            CompatibilityStatus::Blocked
-        };
-        let summary = if blockers.is_empty() {
-            "Symphony checkout and workspace root are present".to_string()
-        } else {
-            "Symphony checkout prerequisites are incomplete".to_string()
-        };
-
-        ToolResponse {
-            status,
-            summary,
-            evidence: vec![
-                EvidenceItem {
-                    label: "checkout_path".to_string(),
-                    detail: checkout_path.display().to_string(),
-                },
-                EvidenceItem {
-                    label: "workspace_root".to_string(),
-                    detail: workspace_root
-                        .as_ref()
-                        .map(|path| path.display().to_string())
-                        .unwrap_or_else(|| "unset".to_string()),
-                },
-            ],
-            warnings: if linear_api_key_available {
-                Vec::new()
-            } else {
-                vec!["LINEAR_API_KEY is unavailable for Symphony launch".to_string()]
-            },
-            recommended_next_tools: vec![
-                "plan_workspace_adjustments".to_string(),
-                "refresh_symphony".to_string(),
-                "sync_symphony_main".to_string(),
-            ],
-            blocking_issues: blockers.clone(),
-            data: SymphonyCheckoutSnapshot {
-                checkout_path: checkout_path.display().to_string(),
-                exists,
-                is_git_repo,
-                git_branch,
-                head_sha,
-                workspace_root: workspace_root.map(|path| path.display().to_string()),
-                workspace_root_exists,
-                repo_env_present,
-                linear_api_key_available,
-                run_script_present,
-                blockers,
-            },
-        }
     }
 
     async fn plan_workspace_adjustments(
@@ -1971,8 +1695,6 @@ impl SmithCompatibilityServer {
         let apply = bool_param(&params, "apply");
         let readiness = self.collect_readiness_audit().await;
         let mut adjustments = Vec::new();
-        let workflow = readiness.data.workflow.clone();
-        let workspace_root = self.resolved_workspace_root(Some(&workflow));
         let codex_config = inspect_codex_smith_config(&self.options.codex_config_path);
         let smith_snippet = self.codex_config_snippet();
 
@@ -1987,53 +1709,6 @@ impl SmithCompatibilityServer {
                 manually_required: true,
                 applied: false,
                 detail: Some(smith_snippet),
-            });
-        }
-
-        if let Some(root) = workspace_root {
-            let exists = root.exists();
-            adjustments.push(WorkspaceAdjustment {
-                id: "ensure-symphony-workspace-root".to_string(),
-                action: "create_directory".to_string(),
-                description: "Create the Symphony workspace root used by WORKFLOW.md".to_string(),
-                path: Some(root.display().to_string()),
-                requires_apply: true,
-                manually_required: false,
-                applied: false,
-                detail: Some("safe local directory creation".to_string()),
-            });
-
-            if apply && !exists {
-                if let Err(err) = fs::create_dir_all(&root) {
-                    adjustments.push(WorkspaceAdjustment {
-                        id: "ensure-symphony-workspace-root-error".to_string(),
-                        action: "create_directory".to_string(),
-                        description: "Failed to create the Symphony workspace root".to_string(),
-                        path: Some(root.display().to_string()),
-                        requires_apply: true,
-                        manually_required: false,
-                        applied: false,
-                        detail: Some(err.to_string()),
-                    });
-                } else if let Some(existing) = adjustments.last_mut() {
-                    existing.applied = true;
-                }
-            }
-        }
-
-        if !self.options.symphony_checkout.exists() {
-            adjustments.push(WorkspaceAdjustment {
-                id: "restore-symphony-checkout".to_string(),
-                action: "checkout_repository".to_string(),
-                description: "Restore the expected Symphony checkout at the configured path"
-                    .to_string(),
-                path: Some(self.options.symphony_checkout.display().to_string()),
-                requires_apply: false,
-                manually_required: true,
-                applied: false,
-                detail: Some(
-                    "expected path from repo workflow: ~/Repos/symphony/elixir".to_string(),
-                ),
             });
         }
         if which("cargo").is_none() {
@@ -2053,7 +1728,7 @@ impl SmithCompatibilityServer {
             adjustments.push(WorkspaceAdjustment {
                 id: "restore-repo-env".to_string(),
                 action: "restore_env_file".to_string(),
-                description: "Restore repo .env with LINEAR_API_KEY for Symphony launches"
+                description: "Restore repo .env with LINEAR_API_KEY for Smith MCP Linear access"
                     .to_string(),
                 path: Some(self.options.env_file_path.display().to_string()),
                 requires_apply: false,
@@ -2082,361 +1757,11 @@ impl SmithCompatibilityServer {
                 detail: adjustments.len().to_string(),
             }],
             warnings: readiness.warnings,
-            recommended_next_tools: vec![
-                "audit_workflow_readiness".to_string(),
-                "get_symphony_checkout_snapshot".to_string(),
-            ],
+            recommended_next_tools: vec!["audit_workflow_readiness".to_string()],
             blocking_issues: readiness.blocking_issues,
             data: WorkspaceAdjustmentPlan {
                 apply_requested: apply,
                 adjustments,
-            },
-        })
-    }
-
-    async fn refresh_symphony(
-        &self,
-        params: serde_json::Value,
-    ) -> Result<serde_json::Value, McpError> {
-        let apply = bool_param(&params, "apply");
-        if !self.options.symphony_checkout.exists() {
-            return json_response(blocked_response(
-                "Symphony checkout is missing; refresh_symphony cannot run",
-                vec!["plan_workspace_adjustments".to_string()],
-                vec![format!(
-                    "missing checkout at {}",
-                    self.options.symphony_checkout.display()
-                )],
-                SymphonyCheckoutSnapshot {
-                    checkout_path: self.options.symphony_checkout.display().to_string(),
-                    exists: false,
-                    is_git_repo: false,
-                    git_branch: None,
-                    head_sha: None,
-                    workspace_root: self
-                        .resolved_workspace_root(None)
-                        .map(|path| path.display().to_string()),
-                    workspace_root_exists: false,
-                    repo_env_present: self.options.env_file_path.exists(),
-                    linear_api_key_available: self.linear_api_key().is_some(),
-                    run_script_present: self
-                        .options
-                        .repo_root
-                        .join("scripts/run-symphony.sh")
-                        .exists(),
-                    blockers: vec!["missing Symphony checkout".to_string()],
-                },
-            ));
-        }
-
-        let fetch_command = "git -C <checkout> fetch --all --prune".to_string();
-        let result = if apply {
-            run_command_in_dir(
-                "git",
-                &["fetch", "--all", "--prune"],
-                &self.options.symphony_checkout,
-            )
-            .await
-        } else {
-            CommandResult::dry_run(fetch_command.clone())
-        };
-
-        let snapshot = self.collect_symphony_checkout_snapshot().await;
-        json_response(ToolResponse {
-            status: if apply {
-                if result.success {
-                    CompatibilityStatus::Applied
-                } else {
-                    CompatibilityStatus::Blocked
-                }
-            } else {
-                CompatibilityStatus::DryRun
-            },
-            summary: if apply {
-                "Symphony fetch completed".to_string()
-            } else {
-                "Symphony fetch preview generated".to_string()
-            },
-            evidence: vec![EvidenceItem {
-                label: "command".to_string(),
-                detail: if apply {
-                    format!(
-                        "git -C {} fetch --all --prune",
-                        self.options.symphony_checkout.display()
-                    )
-                } else {
-                    fetch_command
-                },
-            }],
-            warnings: if result.success {
-                Vec::new()
-            } else {
-                vec![result.stderr]
-            },
-            recommended_next_tools: vec![
-                "get_symphony_checkout_snapshot".to_string(),
-                "sync_symphony_main".to_string(),
-            ],
-            blocking_issues: if result.success {
-                Vec::new()
-            } else {
-                vec!["git fetch failed in Symphony checkout".to_string()]
-            },
-            data: snapshot.data,
-        })
-    }
-
-    async fn sync_symphony_main(
-        &self,
-        params: serde_json::Value,
-    ) -> Result<serde_json::Value, McpError> {
-        let apply = bool_param(&params, "apply");
-        if !self.options.symphony_checkout.exists() {
-            return json_response(blocked_response(
-                "Symphony checkout is missing; sync_symphony_main cannot run",
-                vec!["plan_workspace_adjustments".to_string()],
-                vec!["missing Symphony checkout".to_string()],
-                self.collect_symphony_checkout_snapshot().await.data,
-            ));
-        }
-
-        let branch = trimmed_output(
-            run_command_in_dir(
-                "git",
-                &["rev-parse", "--abbrev-ref", "HEAD"],
-                &self.options.symphony_checkout,
-            )
-            .await,
-        );
-        let status = run_command_in_dir(
-            "git",
-            &["status", "--short"],
-            &self.options.symphony_checkout,
-        )
-        .await;
-        let clean = status.stdout.trim().is_empty();
-
-        if apply && (branch.as_deref() != Some("main") || !clean) {
-            return json_response(blocked_response(
-                "sync_symphony_main requires a clean main branch checkout",
-                vec!["refresh_symphony".to_string()],
-                vec![
-                    format!(
-                        "current branch: {}",
-                        branch.unwrap_or_else(|| "unknown".to_string())
-                    ),
-                    if clean {
-                        "working tree is clean".to_string()
-                    } else {
-                        "working tree is dirty".to_string()
-                    },
-                ],
-                self.collect_symphony_checkout_snapshot().await.data,
-            ));
-        }
-
-        let preview = format!(
-            "git -C {} pull --ff-only origin main",
-            self.options.symphony_checkout.display()
-        );
-        let result = if apply {
-            run_command_in_dir(
-                "git",
-                &["pull", "--ff-only", "origin", "main"],
-                &self.options.symphony_checkout,
-            )
-            .await
-        } else {
-            CommandResult::dry_run(preview.clone())
-        };
-
-        let snapshot = self.collect_symphony_checkout_snapshot().await;
-        json_response(ToolResponse {
-            status: if apply {
-                if result.success {
-                    CompatibilityStatus::Applied
-                } else {
-                    CompatibilityStatus::Blocked
-                }
-            } else {
-                CompatibilityStatus::DryRun
-            },
-            summary: if apply {
-                "Symphony main synchronization completed".to_string()
-            } else {
-                "Symphony main synchronization preview generated".to_string()
-            },
-            evidence: vec![EvidenceItem {
-                label: "command".to_string(),
-                detail: preview,
-            }],
-            warnings: if result.success {
-                Vec::new()
-            } else {
-                vec![result.stderr]
-            },
-            recommended_next_tools: vec!["get_symphony_checkout_snapshot".to_string()],
-            blocking_issues: if result.success {
-                Vec::new()
-            } else {
-                vec!["failed to fast-forward Symphony main".to_string()]
-            },
-            data: snapshot.data,
-        })
-    }
-
-    async fn sync_linear_with_runtime(
-        &self,
-        _params: serde_json::Value,
-    ) -> Result<serde_json::Value, McpError> {
-        json_response(self.linear_runtime_sync().await?)
-    }
-
-    async fn linear_runtime_sync(&self) -> Result<ToolResponse<LinearRuntimeSync>, McpError> {
-        let workflow = self.workflow_summary().await;
-        let workspace = match self.linear_workspace().await {
-            Ok(workspace) => workspace,
-            Err(err) => {
-                return Ok(blocked_response(
-                    format!("Linear workspace unavailable: {err}"),
-                    vec!["audit_workflow_readiness".to_string()],
-                    vec![err],
-                    LinearRuntimeSync {
-                        configured_project_slug: workflow.project_slug,
-                        queue_issue_count: 0,
-                        active_issue_count: 0,
-                        issues_by_state: BTreeMap::new(),
-                        discrepancies: Vec::new(),
-                        suggested_actions: vec!["restore LINEAR_API_KEY and rerun".to_string()],
-                    },
-                ))
-            }
-        };
-
-        let mut issues_by_state = BTreeMap::new();
-        let configured_slug = workflow.project_slug.clone();
-        let queue_issues: Vec<&LinearIssueSnapshot> = workspace
-            .issues
-            .iter()
-            .filter(|issue| issue_in_watched_project(issue, configured_slug.as_deref()))
-            .collect();
-        let active_issue_count = queue_issues
-            .iter()
-            .filter_map(|issue| state_name(issue))
-            .filter(|state| is_active_state(state, &workflow))
-            .count();
-
-        for issue in &queue_issues {
-            let key = issue
-                .state
-                .as_ref()
-                .map(|state| state.name.clone())
-                .unwrap_or_else(|| "Unknown".to_string());
-            *issues_by_state.entry(key).or_insert(0usize) += 1;
-        }
-
-        let mut discrepancies = Vec::new();
-        let mut suggested_actions = Vec::new();
-        if queue_issues.is_empty() {
-            discrepancies
-                .push("Execution queue has no issues in the configured project".to_string());
-            suggested_actions.push(
-                "Use plan_queue_stage and apply_queue_stage to stage the next runnable slice"
-                    .to_string(),
-            );
-        } else if active_issue_count == 0 {
-            discrepancies.push(
-                "Watched project has historical issues but no active issues in active workflow states"
-                    .to_string(),
-            );
-            suggested_actions.push(
-                "Stage the next runnable slice instead of relying on historical issues in the watched project".to_string(),
-            );
-        }
-
-        let active_state_set: BTreeSet<_> = workflow.active_states.iter().cloned().collect();
-        for issue in &queue_issues {
-            if let Some(state) = &issue.state {
-                if !active_state_set.contains(&state.name)
-                    && !workflow.terminal_states.contains(&state.name)
-                {
-                    discrepancies.push(format!(
-                        "{} is in unexpected state {} for the watched queue",
-                        issue.identifier, state.name
-                    ));
-                }
-            }
-            if let Some(detail) = blocked_todo_detail(issue, &workflow) {
-                discrepancies.push(detail);
-                suggested_actions.push(format!(
-                    "Remove {} from Todo or resolve its blockers before treating it as runnable capacity",
-                    issue.identifier
-                ));
-            }
-        }
-
-        if let Some(candidate) = workspace
-            .issues
-            .iter()
-            .find(|issue| issue_is_honest_refill_candidate(issue))
-        {
-            let candidate_context = self
-                .load_issue_execution_context(&candidate.identifier)
-                .await?;
-            let candidate_plan = build_queue_stage_plan(
-                candidate_context.issue.as_ref(),
-                candidate_context.workpad.as_ref(),
-                &workspace,
-                &workflow,
-                configured_slug.as_deref(),
-                Some(&candidate.identifier),
-            );
-            if candidate_plan.stageable {
-                suggested_actions.push(format!(
-                    "Smith can honestly stage {} through apply_queue_stage",
-                    candidate.identifier
-                ));
-            } else {
-                suggested_actions.extend(candidate_plan.required_fixes.iter().map(|fix| {
-                    format!(
-                        "{} must be fixed before honest staging: {fix}",
-                        candidate.identifier
-                    )
-                }));
-            }
-        }
-
-        let status = if discrepancies.is_empty() {
-            CompatibilityStatus::Ok
-        } else {
-            CompatibilityStatus::Degraded
-        };
-
-        Ok(ToolResponse {
-            status,
-            summary: "Linear/runtime synchronization snapshot generated".to_string(),
-            evidence: vec![EvidenceItem {
-                label: "queue_issue_count".to_string(),
-                detail: queue_issues.len().to_string(),
-            }],
-            warnings: Vec::new(),
-            recommended_next_tools: vec![
-                "get_issue_execution_snapshot".to_string(),
-                "review_merge_dispatch_cycle".to_string(),
-                "plan_queue_stage".to_string(),
-            ],
-            blocking_issues: if matches!(status, CompatibilityStatus::Blocked) {
-                discrepancies.clone()
-            } else {
-                Vec::new()
-            },
-            data: LinearRuntimeSync {
-                configured_project_slug: configured_slug,
-                queue_issue_count: queue_issues.len(),
-                active_issue_count,
-                issues_by_state,
-                discrepancies,
-                suggested_actions,
             },
         })
     }
@@ -2516,7 +1841,7 @@ impl SmithCompatibilityServer {
                     "could not resolve Linear project {}",
                     project_name.unwrap_or_default()
                 ),
-                vec!["sync_linear_with_runtime".to_string()],
+                vec!["get_control_plane_snapshot".to_string()],
                 vec!["project parameter did not match a cached Linear project".to_string()],
                 LinearIssueSaveResult {
                     action: "blocked".to_string(),
@@ -2544,7 +1869,7 @@ impl SmithCompatibilityServer {
                     state_name.unwrap_or_default(),
                     team_key
                 ),
-                vec!["sync_linear_with_runtime".to_string()],
+                vec!["get_control_plane_snapshot".to_string()],
                 vec!["state parameter did not match a cached Linear team state".to_string()],
                 LinearIssueSaveResult {
                     action: "blocked".to_string(),
@@ -2579,7 +1904,7 @@ impl SmithCompatibilityServer {
             let Some(team) = team.as_ref() else {
                 return json_response(blocked_response(
                     format!("could not resolve team {} for label mutation", team_key),
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["team resolution is required before mutating labels".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -2592,7 +1917,7 @@ impl SmithCompatibilityServer {
             if !missing_labels.is_empty() {
                 return json_response(blocked_response(
                     format!("could not resolve label(s): {}", missing_labels.join(", ")),
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["labels parameter included unknown Linear labels".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -2618,7 +1943,7 @@ impl SmithCompatibilityServer {
             let Some(project) = milestone_project.as_ref() else {
                 return json_response(blocked_response(
                     "milestone resolution requires a project",
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["provide project when setting milestone".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -2630,7 +1955,7 @@ impl SmithCompatibilityServer {
             let Some(project_id) = project.id.as_deref() else {
                 return json_response(blocked_response(
                     "resolved project is missing an id",
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["project id is required to resolve a milestone".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -2665,7 +1990,7 @@ impl SmithCompatibilityServer {
             let Some(resolved) = resolved else {
                 return json_response(blocked_response(
                     format!("could not resolve milestone {}", name),
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["milestone parameter did not match a project milestone".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -2694,7 +2019,7 @@ impl SmithCompatibilityServer {
             let Some(team) = team.as_ref() else {
                 return json_response(blocked_response(
                     format!("could not resolve team {}", team_key),
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["team_key did not match a cached Linear team".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -2706,7 +2031,7 @@ impl SmithCompatibilityServer {
             let Some(team_id) = team.id.clone() else {
                 return json_response(blocked_response(
                     "resolved team is missing an id",
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["team id is required for Linear issue mutation".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -2722,7 +2047,7 @@ impl SmithCompatibilityServer {
             let Some(project_id) = project.id.clone() else {
                 return json_response(blocked_response(
                     "resolved project is missing an id",
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["project id is required for Linear issue mutation".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -2738,7 +2063,7 @@ impl SmithCompatibilityServer {
             let Some(state_id) = state.id.clone() else {
                 return json_response(blocked_response(
                     "resolved state is missing an id",
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["state id is required for Linear issue mutation".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -2778,7 +2103,7 @@ impl SmithCompatibilityServer {
             let Some(milestone_id) = milestone.id.clone() else {
                 return json_response(blocked_response(
                     "resolved milestone is missing an id",
-                    vec!["sync_linear_with_runtime".to_string()],
+                    vec!["get_control_plane_snapshot".to_string()],
                     vec!["milestone id is required for Linear issue mutation".to_string()],
                     LinearIssueSaveResult {
                         action: "blocked".to_string(),
@@ -3218,14 +2543,6 @@ impl SmithCompatibilityServer {
                 .unwrap_or_default();
             let mut labels = default_labels.clone();
             labels.extend(slice_labels);
-            if slice
-                .get("symphony_candidate")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false)
-                && !labels.iter().any(|label| label == "Symphony Candidate")
-            {
-                labels.push("Symphony Candidate".to_string());
-            }
             labels.sort();
             labels.dedup();
 
@@ -3334,10 +2651,6 @@ impl SmithCompatibilityServer {
                 issue_identifier: issue_response.data.issue.identifier.clone(),
                 action: issue_response.data.action,
                 blocker_identifiers: blocked_by,
-                symphony_candidate: slice
-                    .get("symphony_candidate")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false),
                 workpad_action,
                 issue: issue_response.data.issue,
             });
@@ -3356,7 +2669,7 @@ impl SmithCompatibilityServer {
             }],
             warnings: Vec::new(),
             recommended_next_tools: vec![
-                "plan_queue_stage".to_string(),
+                "prepare_direct_execution".to_string(),
                 "get_issue_execution_snapshot".to_string(),
             ],
             blocking_issues: Vec::new(),
@@ -3364,247 +2677,6 @@ impl SmithCompatibilityServer {
                 parent_issue_identifier,
                 milestone,
                 results,
-            },
-        })
-    }
-
-    async fn plan_queue_stage(
-        &self,
-        params: serde_json::Value,
-    ) -> Result<serde_json::Value, McpError> {
-        let requested_identifier = string_param(&params, "issue_identifier")
-            .or_else(|| string_param(&params, "identifier"));
-        let workspace = match self.linear_workspace().await {
-            Ok(workspace) => workspace,
-            Err(err) => {
-                return json_response(blocked_response(
-                    format!("cannot plan queue staging without Linear access: {err}"),
-                    vec!["audit_workflow_readiness".to_string()],
-                    vec![err],
-                    QueueStagePlan {
-                        issue_identifier: requested_identifier,
-                        recommended_issue_identifier: None,
-                        stageable: false,
-                        blocked: true,
-                        queue_conflicts: Vec::new(),
-                        required_fixes: vec!["restore Linear access first".to_string()],
-                        queue_project_role: None,
-                        target_project: None,
-                        target_state: Some("Todo".to_string()),
-                    },
-                ))
-            }
-        };
-        let workflow = self.workflow_summary().await;
-        let configured_slug = workflow.project_slug.clone();
-
-        let plan = if let Some(identifier) = requested_identifier.clone() {
-            let context = self.load_issue_execution_context(&identifier).await?;
-            build_queue_stage_plan(
-                context.issue.as_ref(),
-                context.workpad.as_ref(),
-                &workspace,
-                &workflow,
-                configured_slug.as_deref(),
-                Some(&identifier),
-            )
-        } else {
-            let candidate_identifiers = workspace
-                .issues
-                .iter()
-                .filter(|issue| issue_is_honest_refill_candidate(issue))
-                .map(|issue| issue.identifier.clone())
-                .collect::<Vec<_>>();
-
-            let mut chosen_plan = build_queue_stage_plan(
-                None,
-                None,
-                &workspace,
-                &workflow,
-                configured_slug.as_deref(),
-                None,
-            );
-            for identifier in candidate_identifiers {
-                let context = self.load_issue_execution_context(&identifier).await?;
-                let candidate_plan = build_queue_stage_plan(
-                    context.issue.as_ref(),
-                    context.workpad.as_ref(),
-                    &workspace,
-                    &workflow,
-                    configured_slug.as_deref(),
-                    Some(&identifier),
-                );
-                if chosen_plan.recommended_issue_identifier.is_none() {
-                    chosen_plan.recommended_issue_identifier =
-                        candidate_plan.recommended_issue_identifier.clone();
-                }
-                if candidate_plan.stageable {
-                    chosen_plan = candidate_plan;
-                    break;
-                }
-                if chosen_plan.issue_identifier.is_none() {
-                    chosen_plan = candidate_plan;
-                }
-            }
-            chosen_plan
-        };
-
-        json_response(ToolResponse {
-            status: if plan.stageable {
-                CompatibilityStatus::Ok
-            } else {
-                CompatibilityStatus::Degraded
-            },
-            summary: if plan.stageable {
-                format!(
-                    "queue staging is honest for {}",
-                    plan.issue_identifier
-                        .clone()
-                        .unwrap_or_else(|| "the recommended issue".to_string())
-                )
-            } else {
-                "queue staging requires fixes before Smith can move work into Todo".to_string()
-            },
-            evidence: plan
-                .issue_identifier
-                .clone()
-                .into_iter()
-                .map(|issue_identifier| EvidenceItem {
-                    label: "issue_identifier".to_string(),
-                    detail: issue_identifier,
-                })
-                .collect(),
-            warnings: Vec::new(),
-            recommended_next_tools: if plan.stageable {
-                vec!["apply_queue_stage".to_string()]
-            } else {
-                vec![
-                    "save_issue_workpad".to_string(),
-                    "resolve_issue_lifecycle".to_string(),
-                ]
-            },
-            blocking_issues: if plan.stageable {
-                Vec::new()
-            } else {
-                plan.required_fixes
-                    .iter()
-                    .chain(plan.queue_conflicts.iter())
-                    .cloned()
-                    .collect()
-            },
-            data: plan,
-        })
-    }
-
-    async fn apply_queue_stage(
-        &self,
-        params: serde_json::Value,
-    ) -> Result<serde_json::Value, McpError> {
-        let planned = parse_tool_response::<QueueStagePlan>(self.plan_queue_stage(params).await?)?;
-        let issue_identifier = planned
-            .data
-            .recommended_issue_identifier
-            .clone()
-            .or_else(|| planned.data.issue_identifier.clone());
-        let Some(issue_identifier) = issue_identifier else {
-            return json_response(blocked_response(
-                "no queue-stage candidate is available",
-                vec!["plan_queue_stage".to_string()],
-                planned
-                    .data
-                    .required_fixes
-                    .iter()
-                    .chain(planned.data.queue_conflicts.iter())
-                    .cloned()
-                    .collect(),
-                QueueStageApplyResult {
-                    action: "blocked".to_string(),
-                    issue_identifier: None,
-                    planned: planned.data,
-                    issue: None,
-                },
-            ));
-        };
-        if !planned.data.stageable {
-            return json_response(blocked_response(
-                format!("{} is not stageable yet", issue_identifier),
-                vec!["plan_queue_stage".to_string()],
-                planned
-                    .data
-                    .required_fixes
-                    .iter()
-                    .chain(planned.data.queue_conflicts.iter())
-                    .cloned()
-                    .collect(),
-                QueueStageApplyResult {
-                    action: "blocked".to_string(),
-                    issue_identifier: Some(issue_identifier),
-                    planned: planned.data,
-                    issue: None,
-                },
-            ));
-        }
-
-        let workflow = self.workflow_summary().await;
-        let workspace = self
-            .linear_workspace()
-            .await
-            .map_err(McpError::ToolCallFailed)?;
-        let watched_project = workspace
-            .projects
-            .iter()
-            .find(|project| project_slug_matches(workflow.project_slug.as_deref(), &project.slug))
-            .map(|project| project.slug.clone())
-            .ok_or_else(|| {
-                McpError::ToolCallFailed("watched Linear project could not be resolved".to_string())
-            })?;
-
-        let saved_issue = parse_tool_response::<LinearIssueSaveResult>(
-            self.save_linear_issue(serde_json::json!({
-                "issue_identifier": issue_identifier,
-                "project": watched_project,
-                "state": "Todo",
-            }))
-            .await?,
-        )?;
-        if !matches!(saved_issue.status, CompatibilityStatus::Applied) {
-            return json_response(ToolResponse {
-                status: saved_issue.status,
-                summary: saved_issue.summary,
-                evidence: saved_issue.evidence,
-                warnings: saved_issue.warnings,
-                recommended_next_tools: saved_issue.recommended_next_tools,
-                blocking_issues: saved_issue.blocking_issues,
-                data: QueueStageApplyResult {
-                    action: "blocked".to_string(),
-                    issue_identifier: Some(issue_identifier),
-                    planned: planned.data,
-                    issue: None,
-                },
-            });
-        }
-
-        json_response(ToolResponse {
-            status: CompatibilityStatus::Applied,
-            summary: format!(
-                "Smith staged {} into the watched queue",
-                saved_issue.data.issue.identifier
-            ),
-            evidence: vec![EvidenceItem {
-                label: "issue_identifier".to_string(),
-                detail: saved_issue.data.issue.identifier.clone(),
-            }],
-            warnings: Vec::new(),
-            recommended_next_tools: vec![
-                "sync_linear_with_runtime".to_string(),
-                "resolve_issue_lifecycle".to_string(),
-            ],
-            blocking_issues: Vec::new(),
-            data: QueueStageApplyResult {
-                action: "staged".to_string(),
-                issue_identifier: Some(saved_issue.data.issue.identifier.clone()),
-                planned: planned.data,
-                issue: Some(saved_issue.data.issue),
             },
         })
     }
@@ -3627,19 +2699,16 @@ impl SmithCompatibilityServer {
                     required_mutations: Vec::new(),
                     blocking_reasons: vec!["provide an issue identifier such as MS-51".to_string()],
                     review_state: "unknown".to_string(),
-                    queue_role: "unknown".to_string(),
                     pr_correlation: Vec::new(),
                 },
             ));
         };
 
         let context = self.load_issue_execution_context(&identifier).await?;
-        let resolution = build_issue_lifecycle_resolution(
+        let resolution = build_direct_issue_lifecycle_resolution(
             context.issue.clone(),
             context.workpad.as_ref(),
             &context.matching_pull_requests,
-            &context.workflow,
-            context.workflow.project_slug.as_deref(),
             &identifier,
         );
 
@@ -3663,9 +2732,12 @@ impl SmithCompatibilityServer {
             }],
             warnings: Vec::new(),
             recommended_next_tools: match resolution.next_recommended_action.as_str() {
-                "plan_queue_stage" => vec!["plan_queue_stage".to_string()],
-                "save_issue_workpad" => vec!["save_issue_workpad".to_string()],
-                "land_merge" => vec!["review_merge_dispatch_cycle".to_string()],
+                "reconcile_workpad" => vec!["save_issue_workpad".to_string()],
+                "merge_ready_pr" => vec!["review_merge_status".to_string()],
+                "run_speckit_implement" => vec![
+                    "prepare_direct_execution".to_string(),
+                    "prepare_speckit_context".to_string(),
+                ],
                 _ => vec!["get_issue_execution_snapshot".to_string()],
             },
             blocking_issues: resolution.blocking_reasons.clone(),
@@ -3739,7 +2811,7 @@ impl SmithCompatibilityServer {
         .to_string();
         let source_docs = {
             let mut docs = vec![
-                self.options.workflow_path.display().to_string(),
+                self.options.repo_root.join("AGENTS.md").display().to_string(),
                 self.options
                     .repo_root
                     .join("docs/linear/LINEAR.md")
@@ -3762,7 +2834,7 @@ impl SmithCompatibilityServer {
             docs
         };
         let workflow_requirements = vec![
-            "Use Smith-first control-plane boundaries; do not replace Linear, Symphony, Ralph, or SpecKit.".to_string(),
+            "Use Smith-first control-plane boundaries; do not replace Linear, Ralph, or SpecKit.".to_string(),
             "Generate the current issue/workpad packet, run ./scripts/ralph prompt --packet <packet.json>, and only then run Ralph.".to_string(),
             "Keep execution grounded in the active issue, the durable workpad, and current repo contracts.".to_string(),
         ];
@@ -3770,8 +2842,7 @@ impl SmithCompatibilityServer {
             "Run the narrowest deterministic validation that proves the touched behavior."
                 .to_string(),
             "Record concrete commands and outcomes back into the durable workpad path.".to_string(),
-            "Escalate to real queue proof only when the slice is safe for unattended execution."
-                .to_string(),
+            "Keep proof boundaries explicit when direct Codex execution is not the same as live runtime proof.".to_string(),
         ];
         let stop_conditions = vec![
             "Stop for missing auth, missing required tooling, or a true repo contract conflict.".to_string(),
@@ -3869,7 +2940,7 @@ impl SmithCompatibilityServer {
         let evidence = string_array_param(&params, "evidence").unwrap_or_default();
         let validation = string_array_param(&params, "validation").unwrap_or_default();
         let next_recommended_action = string_param(&params, "next_recommended_action")
-            .unwrap_or_else(|| "review_merge_dispatch_cycle".to_string());
+            .unwrap_or_else(|| "review_merge_status".to_string());
         let target_state =
             string_param(&params, "target_state").or_else(|| string_param(&params, "state"));
 
@@ -4028,7 +3099,7 @@ impl SmithCompatibilityServer {
                 "Resolve the feature directory before running the SpecKit tasks flow".to_string()
             }
         } else {
-            "Continue on the normal Smith workflow path without entering SpecKit".to_string()
+            "Continue on the direct Smith execution path without entering SpecKit".to_string()
         };
 
         json_response(ToolResponse {
@@ -4046,7 +3117,7 @@ impl SmithCompatibilityServer {
             recommended_next_tools: if should_use_speckit {
                 vec!["translate_speckit_tasks".to_string()]
             } else {
-                vec!["route_workflow_request".to_string()]
+                vec!["prepare_direct_execution".to_string()]
             },
             blocking_issues: Vec::new(),
             data: SpecKitContext {
@@ -4163,7 +3234,6 @@ impl SmithCompatibilityServer {
                             "description": slice.description,
                             "blocked_by": blocked_by,
                             "workpad_body": slice.workpad_body,
-                            "symphony_candidate": slice.symphony_candidate,
                         }]
                     }))
                     .await?,
@@ -4219,7 +3289,7 @@ impl SmithCompatibilityServer {
             }],
             warnings: Vec::new(),
             recommended_next_tools: if apply_requested {
-                vec!["plan_queue_stage".to_string()]
+                vec!["prepare_direct_execution".to_string()]
             } else {
                 vec!["materialize_backlog_slices".to_string()]
             },
@@ -4244,7 +3314,7 @@ impl SmithCompatibilityServer {
         let Some(identifier) = identifier else {
             return json_response(blocked_response(
                 "issue identifier is required",
-                vec!["sync_linear_with_runtime".to_string()],
+                vec!["prepare_direct_execution".to_string()],
                 vec!["issue_identifier parameter is required".to_string()],
                 IssueExecutionSnapshot {
                     issue: None,
@@ -4253,7 +3323,6 @@ impl SmithCompatibilityServer {
                     execution_state: "missing_input".to_string(),
                     blocker_summaries: Vec::new(),
                     workpad_status: "missing".to_string(),
-                    queue_project_role: "unknown".to_string(),
                     next_step_hint: "verify_issue_identifier".to_string(),
                     notes: vec!["provide an issue identifier such as MS-33".to_string()],
                 },
@@ -4261,12 +3330,10 @@ impl SmithCompatibilityServer {
         };
 
         let context = self.load_issue_execution_context(&identifier).await?;
-        let resolution = build_issue_lifecycle_resolution(
+        let resolution = build_direct_issue_lifecycle_resolution(
             context.issue.clone(),
             context.workpad.as_ref(),
             &context.matching_pull_requests,
-            &context.workflow,
-            context.workflow.project_slug.as_deref(),
             &identifier,
         );
 
@@ -4296,7 +3363,8 @@ impl SmithCompatibilityServer {
             warnings: Vec::new(),
             recommended_next_tools: vec![
                 "resolve_issue_lifecycle".to_string(),
-                "review_merge_dispatch_cycle".to_string(),
+                "review_merge_status".to_string(),
+                "prepare_direct_execution".to_string(),
             ],
             blocking_issues,
             data: IssueExecutionSnapshot {
@@ -4308,13 +3376,9 @@ impl SmithCompatibilityServer {
                 blocker_summaries: context
                     .issue
                     .as_ref()
-                    .map(|issue| blocker_summaries(issue, &context.workflow))
+                    .map(direct_blocker_summaries)
                     .unwrap_or_default(),
                 workpad_status: workpad_status(context.workpad.as_ref()),
-                queue_project_role: queue_project_role(
-                    context.issue.as_ref(),
-                    context.workflow.project_slug.as_deref(),
-                ),
                 next_step_hint: resolution.next_recommended_action,
                 notes: if context.issue.is_some() {
                     context
@@ -4341,141 +3405,90 @@ impl SmithCompatibilityServer {
         })
     }
 
-    async fn review_merge_dispatch_cycle(
+    async fn prepare_direct_execution(
         &self,
-        _params: serde_json::Value,
+        params: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
-        let linear = self.linear_runtime_sync().await?;
-        let workflow = self.workflow_summary().await;
-        let workspace = self.linear_workspace().await.ok();
-        let github = self.github_snapshot().await;
-        let configured_slug = workflow.project_slug.clone();
-
-        let human_review_count = workspace
-            .as_ref()
-            .map(|workspace| {
-                workspace
-                    .issues
-                    .iter()
-                    .filter(|issue| {
-                        issue_in_watched_project(issue, configured_slug.as_deref())
-                            && state_name(issue) == Some("Human Review")
-                    })
-                    .count()
-            })
-            .unwrap_or(0);
-        let merging_count = workspace
-            .as_ref()
-            .map(|workspace| {
-                workspace
-                    .issues
-                    .iter()
-                    .filter(|issue| {
-                        issue_in_watched_project(issue, configured_slug.as_deref())
-                            && state_name(issue) == Some("Merging")
-                    })
-                    .count()
-            })
-            .unwrap_or(0);
-        let blocked_todo_issues = workspace
-            .as_ref()
-            .map(|workspace| {
-                workspace
-                    .issues
-                    .iter()
-                    .filter(|issue| issue_in_watched_project(issue, configured_slug.as_deref()))
-                    .filter_map(|issue| blocked_todo_detail(issue, &workflow))
-                    .collect::<Vec<_>>()
-            })
+        let issue_identifier = string_param(&params, "issue_identifier")
+            .or_else(|| string_param(&params, "identifier"));
+        let request_text = string_param(&params, "request_text")
+            .or_else(|| string_param(&params, "request"))
             .unwrap_or_default();
+        let feature_dir = string_param(&params, "feature_dir")
+            .or_else(|| string_param(&params, "feature_directory"))
+            .map(|raw| resolve_repo_path(&self.options.repo_root, &raw));
 
-        let refill_candidates = workspace
-            .as_ref()
-            .map(|workspace| {
-                workspace
-                    .issues
-                    .iter()
-                    .filter(|issue| issue_is_honest_refill_candidate(issue))
-                    .map(|issue| issue.identifier.clone())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        let lifecycle_actions = if let Some(workspace) = workspace.as_ref() {
-            let watched_issue_identifiers = workspace
-                .issues
-                .iter()
-                .filter(|issue| issue_in_watched_project(issue, configured_slug.as_deref()))
-                .map(|issue| issue.identifier.clone())
-                .collect::<Vec<_>>();
-            let mut actions = Vec::new();
-            for identifier in watched_issue_identifiers {
-                let context = self.load_issue_execution_context(&identifier).await?;
-                let resolution = build_issue_lifecycle_resolution(
-                    context.issue.clone(),
-                    context.workpad.as_ref(),
-                    &context.matching_pull_requests,
-                    &context.workflow,
-                    configured_slug.as_deref(),
-                    &identifier,
-                );
-                if resolution.next_recommended_action != "no_further_action" {
-                    actions.push(format!(
-                        "{} -> {}",
-                        resolution.issue_identifier, resolution.next_recommended_action
-                    ));
-                }
-            }
-            actions
+        let context = if let Some(identifier) = issue_identifier.as_deref() {
+            Some(self.load_issue_execution_context(identifier).await?)
         } else {
-            Vec::new()
+            None
         };
-
-        let stale_pull_requests = if linear.data.active_issue_count == 0 {
-            github
-                .open_pull_requests
-                .iter()
-                .map(|pr| format!("#{} {}", pr.number, pr.title))
-                .collect()
-        } else {
-            Vec::new()
-        };
-
-        let mut recommended_actions = linear.data.suggested_actions.clone();
-        if human_review_count > 0 {
-            recommended_actions.push(
-                "inspect Human Review issues, complete delegated review when authorized, and land merge-ready PRs"
-                    .to_string(),
-            );
-        }
-        if merging_count > 0 {
-            recommended_actions
-                .push("prioritize Merging issues before refilling the queue".to_string());
-        }
-        recommended_actions.extend(
-            blocked_todo_issues.iter().map(|detail| {
-                format!("remove blocked Todo noise from the watched queue: {detail}")
-            }),
+        let combined_text = format!(
+            "{}\n{}",
+            request_text,
+            context
+                .as_ref()
+                .and_then(|context| context.issue.as_ref())
+                .and_then(|issue| issue.description.clone())
+                .unwrap_or_default()
         );
-        if linear.data.active_issue_count < 2 && !refill_candidates.is_empty() {
-            recommended_actions.push(format!(
-                "stage the next validated backlog issue: {}",
-                refill_candidates[0]
-            ));
-        }
-        if linear.data.active_issue_count < 2 && refill_candidates.is_empty() {
-            recommended_actions.push(
-                "validated backlog has no honest refill candidates; slice or validate more independent work to increase Symphony concurrency".to_string(),
-            );
-        }
-        recommended_actions.extend(lifecycle_actions);
+        let resolved_feature_dir = feature_dir
+            .or_else(|| extract_feature_dir_from_text(&combined_text).map(PathBuf::from));
+        let issue = context.as_ref().and_then(|context| context.issue.clone());
+        let workpad = context.as_ref().and_then(|context| context.workpad.clone());
+        let matching_pull_requests = context
+            .as_ref()
+            .map(|context| context.matching_pull_requests.clone())
+            .unwrap_or_default();
+        let plan = build_direct_execution_plan(
+            &self.options.repo_root,
+            issue_identifier,
+            &combined_text,
+            issue,
+            workpad,
+            &matching_pull_requests,
+            resolved_feature_dir,
+        );
 
         json_response(ToolResponse {
-            status: if recommended_actions.is_empty() {
+            status: if plan.blocking_reasons.is_empty() {
                 CompatibilityStatus::Ok
             } else {
                 CompatibilityStatus::Degraded
             },
-            summary: "review/merge/dispatch cycle snapshot generated".to_string(),
+            summary: "prepared direct Codex execution context".to_string(),
+            evidence: plan
+                .issue
+                .as_ref()
+                .map(|issue| {
+                    vec![EvidenceItem {
+                        label: "issue_identifier".to_string(),
+                        detail: issue.identifier.clone(),
+                    }]
+                })
+                .unwrap_or_default(),
+            warnings: Vec::new(),
+            recommended_next_tools: direct_execution_recommended_next_tools(&plan),
+            blocking_issues: plan.blocking_reasons.clone(),
+            data: plan,
+        })
+    }
+
+    async fn review_merge_status(
+        &self,
+        _params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let github = self.github_snapshot().await;
+        let workspace = self.linear_workspace().await.ok();
+        let status = build_review_merge_status(&github.open_pull_requests, workspace.as_ref());
+
+        json_response(ToolResponse {
+            status: if status.review_blockers.is_empty() {
+                CompatibilityStatus::Ok
+            } else {
+                CompatibilityStatus::Degraded
+            },
+            summary: "direct review and merge status generated".to_string(),
             evidence: vec![EvidenceItem {
                 label: "open_pull_request_count".to_string(),
                 detail: github.open_pull_requests.len().to_string(),
@@ -4483,455 +3496,10 @@ impl SmithCompatibilityServer {
             warnings: Vec::new(),
             recommended_next_tools: vec![
                 "get_issue_execution_snapshot".to_string(),
-                "plan_queue_stage".to_string(),
+                "prepare_direct_execution".to_string(),
             ],
-            blocking_issues: Vec::new(),
-            data: ReviewDispatchCycle {
-                active_issue_count: linear.data.active_issue_count,
-                human_review_count,
-                merging_count,
-                open_pull_request_count: github.open_pull_requests.len(),
-                refill_candidates,
-                stale_pull_requests,
-                recommended_actions,
-            },
-        })
-    }
-
-    async fn plan_phase_execution(
-        &self,
-        params: serde_json::Value,
-    ) -> Result<serde_json::Value, McpError> {
-        let phase = string_param(&params, "phase").unwrap_or_else(|| "phase10".to_string());
-        json_response(self.collect_phase_execution_plan(&phase).await)
-    }
-
-    async fn collect_phase_execution_plan(&self, phase: &str) -> ToolResponse<PhaseExecutionPlan> {
-        let normalized = phase.to_lowercase();
-        if normalized.contains("10") || normalized.contains("frontier") {
-            let workspace = self.linear_workspace().await.ok();
-            let workflow = self.workflow_summary().await;
-            let issue_by_title = |needle: &str| {
-                workspace.as_ref().and_then(|workspace| {
-                    workspace
-                        .issues
-                        .iter()
-                        .find(|issue| issue.title.contains(needle))
-                        .cloned()
-                })
-            };
-
-            let completed_work = vec![
-                phase_marker(
-                    &self
-                        .options
-                        .repo_root
-                        .join("crates/mister-smith-agents/src/execution_graph.rs"),
-                    "Phase 10.0 execution graph and topology compiler landed",
-                ),
-                phase_marker(
-                    &self
-                        .options
-                        .repo_root
-                        .join("crates/mister-smith-agents/src/branch_checkpoint.rs"),
-                    "Phase 10.1 branch checkpoints landed",
-                ),
-                phase_marker(
-                    &self
-                        .options
-                        .repo_root
-                        .join("crates/mister-smith-agents/src/context_manager.rs"),
-                    "Phase 10.2 managed memory and context snapshots landed",
-                ),
-                phase_marker(
-                    &self
-                        .options
-                        .repo_root
-                        .join("crates/mister-smith-agents/src/guard.rs"),
-                    "Phase 10.3 predictive guard and intervention landed",
-                ),
-                phase_marker(
-                    &self
-                        .options
-                        .repo_root
-                        .join("crates/mister-smith-agents/src/orchestrator.rs"),
-                    "Phase 10.4 autonomy status assembly exists in orchestrator",
-                ),
-            ]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
-
-            let mut outstanding_work = Vec::new();
-            if !self
-                .options
-                .repo_root
-                .join("crates/mister-smith-app/src/autonomy.rs")
-                .exists()
-            {
-                outstanding_work
-                    .push("Phase 10.5 app-level autonomy view is still missing".to_string());
-            }
-            if !self
-                .options
-                .repo_root
-                .join("crates/mister-smith-app/tests/autonomy_status_tests.rs")
-                .exists()
-            {
-                outstanding_work
-                    .push("Phase 10.5 autonomy status tests are still missing".to_string());
-            }
-            if !self
-                .options
-                .repo_root
-                .join("crates/mister-smith-security/src/delegation.rs")
-                .exists()
-            {
-                outstanding_work.push(
-                    "Phase 10.6 bounded delegation and provenance module is still missing"
-                        .to_string(),
-                );
-            }
-            outstanding_work.push("Phase 10 final verification/docs gate remains open".to_string());
-
-            let ms33 = issue_by_title("Phase 10.5").or_else(|| issue_by_title("operator autonomy"));
-            let ms34 =
-                issue_by_title("Phase 10.6").or_else(|| issue_by_title("bounded delegation"));
-            let ms35 =
-                issue_by_title("Phase 10 gate").or_else(|| issue_by_title("verification and docs"));
-
-            let mut runnable_slices = Vec::new();
-            let mut blocked_slices = Vec::new();
-            let mut recommended_linear_actions = Vec::new();
-
-            if let Some(issue) = &ms33 {
-                if !state_name(issue)
-                    .map(|state| is_terminal_state(state, &workflow))
-                    .unwrap_or(false)
-                {
-                    let slice = PhaseSlice {
-                        name: issue.identifier.clone(),
-                        description:
-                            "Finish the operator autonomy view and alerts before later Phase 10 work"
-                                .to_string(),
-                        status: phase_slice_status(issue, &workflow),
-                    };
-                    if todo_issue_blocked_by_non_terminal(issue, &workflow) {
-                        blocked_slices.push(PhaseSlice {
-                            status: "blocked_by_non_terminal_dependencies".to_string(),
-                            ..slice
-                        });
-                    } else {
-                        if state_name(issue) == Some("Backlog") {
-                            recommended_linear_actions.push(PlannedLinearAction {
-                                action: "stage_issue".to_string(),
-                                issue_identifier: Some(issue.identifier.clone()),
-                                target_project_slug: workflow.project_slug.clone(),
-                                target_state: Some("Todo".to_string()),
-                                reason: "Phase 10.5 is the next unblocked slice".to_string(),
-                            });
-                        }
-                        runnable_slices.push(slice);
-                    }
-                }
-            }
-
-            if let Some(issue) = &ms34 {
-                let slice = PhaseSlice {
-                    name: issue.identifier.clone(),
-                    description:
-                        "Bounded delegation and provenance should follow the autonomy view"
-                            .to_string(),
-                    status: phase_slice_status(issue, &workflow),
-                };
-                let blocked = todo_issue_blocked_by_non_terminal(issue, &workflow)
-                    || ms33
-                        .as_ref()
-                        .and_then(state_name)
-                        .map(|state| !is_terminal_state(state, &workflow))
-                        .unwrap_or(false);
-                if blocked {
-                    blocked_slices.push(PhaseSlice {
-                        status: "blocked_by_ms33".to_string(),
-                        ..slice
-                    });
-                } else if !state_name(issue)
-                    .map(|state| is_terminal_state(state, &workflow))
-                    .unwrap_or(false)
-                {
-                    if state_name(issue) == Some("Backlog") {
-                        recommended_linear_actions.push(PlannedLinearAction {
-                            action: "stage_issue".to_string(),
-                            issue_identifier: Some(issue.identifier.clone()),
-                            target_project_slug: workflow.project_slug.clone(),
-                            target_state: Some("Todo".to_string()),
-                            reason: "Phase 10.6 is the next unblocked slice".to_string(),
-                        });
-                    }
-                    runnable_slices.push(slice);
-                }
-            }
-
-            if let Some(issue) = &ms35 {
-                let slice = PhaseSlice {
-                    name: issue.identifier.clone(),
-                    description: "Final Phase 10 gate should run only after 10.6 lands".to_string(),
-                    status: phase_slice_status(issue, &workflow),
-                };
-                let blocked = todo_issue_blocked_by_non_terminal(issue, &workflow)
-                    || ms34
-                        .as_ref()
-                        .and_then(state_name)
-                        .map(|state| !is_terminal_state(state, &workflow))
-                        .unwrap_or(false);
-                if blocked {
-                    blocked_slices.push(PhaseSlice {
-                        status: "blocked_by_ms34".to_string(),
-                        ..slice
-                    });
-                } else if !state_name(issue)
-                    .map(|state| is_terminal_state(state, &workflow))
-                    .unwrap_or(false)
-                {
-                    if state_name(issue) == Some("Backlog") {
-                        recommended_linear_actions.push(PlannedLinearAction {
-                            action: "stage_issue".to_string(),
-                            issue_identifier: Some(issue.identifier.clone()),
-                            target_project_slug: workflow.project_slug.clone(),
-                            target_state: Some("Todo".to_string()),
-                            reason: "Phase 10 final gate is now unblocked".to_string(),
-                        });
-                    }
-                    runnable_slices.push(slice);
-                }
-            }
-
-            return ToolResponse {
-                status: CompatibilityStatus::Ok,
-                summary: "Phase 10 execution plan generated from repo and backlog state"
-                    .to_string(),
-                evidence: vec![EvidenceItem {
-                    label: "tasks_document".to_string(),
-                    detail: self
-                        .options
-                        .repo_root
-                        .join("specs/012-phase10-frontier-autonomy/tasks.md")
-                        .display()
-                        .to_string(),
-                }],
-                warnings: vec![
-                    "tasks.md remains stale and does not reflect landed 10.0-10.4 work".to_string(),
-                ],
-                recommended_next_tools: vec![
-                    "apply_phase_execution_plan".to_string(),
-                    "sync_linear_with_runtime".to_string(),
-                ],
-                blocking_issues: Vec::new(),
-                data: PhaseExecutionPlan {
-                    phase: "Phase 10 Frontier Autonomy".to_string(),
-                    tasks_document: Some(
-                        self.options
-                            .repo_root
-                            .join("specs/012-phase10-frontier-autonomy/tasks.md")
-                            .display()
-                            .to_string(),
-                    ),
-                    completed_work,
-                    outstanding_work,
-                    runnable_slices,
-                    blocked_slices,
-                    prep_slices: Vec::new(),
-                    recommended_linear_actions,
-                },
-            };
-        }
-
-        let spec_dir = find_phase_spec_dir(&self.options.repo_root.join("specs"), &normalized);
-        let tasks_document = spec_dir.as_ref().map(|dir| dir.join("tasks.md"));
-        let (completed_count, outstanding_count) = tasks_document
-            .as_ref()
-            .map(|path| count_markdown_checkboxes(path))
-            .unwrap_or((0, 0));
-
-        ToolResponse {
-            status: if spec_dir.is_some() {
-                CompatibilityStatus::Ok
-            } else {
-                CompatibilityStatus::Blocked
-            },
-            summary: if spec_dir.is_some() {
-                format!("generic phase execution plan generated for {phase}")
-            } else {
-                format!("could not resolve a spec directory for {phase}")
-            },
-            evidence: tasks_document
-                .as_ref()
-                .map(|path| {
-                    vec![EvidenceItem {
-                        label: "tasks_document".to_string(),
-                        detail: path.display().to_string(),
-                    }]
-                })
-                .unwrap_or_default(),
-            warnings: Vec::new(),
-            recommended_next_tools: vec!["get_control_plane_snapshot".to_string()],
-            blocking_issues: if spec_dir.is_some() {
-                Vec::new()
-            } else {
-                vec![format!("no matching spec directory for {phase}")]
-            },
-            data: PhaseExecutionPlan {
-                phase: phase.to_string(),
-                tasks_document: tasks_document.map(|path| path.display().to_string()),
-                completed_work: vec![format!("checked tasks: {completed_count}")],
-                outstanding_work: vec![format!("unchecked tasks: {outstanding_count}")],
-                runnable_slices: Vec::new(),
-                blocked_slices: Vec::new(),
-                prep_slices: Vec::new(),
-                recommended_linear_actions: Vec::new(),
-            },
-        }
-    }
-
-    async fn apply_phase_execution_plan(
-        &self,
-        params: serde_json::Value,
-    ) -> Result<serde_json::Value, McpError> {
-        let apply = bool_param(&params, "apply");
-        let phase = string_param(&params, "phase").unwrap_or_else(|| "phase10".to_string());
-        let plan = self.collect_phase_execution_plan(&phase).await;
-        if !apply {
-            return json_response(ToolResponse {
-                status: CompatibilityStatus::DryRun,
-                summary: "phase execution plan preview generated".to_string(),
-                evidence: plan.evidence.clone(),
-                warnings: plan.warnings.clone(),
-                recommended_next_tools: vec!["sync_linear_with_runtime".to_string()],
-                blocking_issues: plan.blocking_issues.clone(),
-                data: plan.data,
-            });
-        }
-
-        let workspace = match self.linear_workspace().await {
-            Ok(workspace) => workspace,
-            Err(err) => {
-                return json_response(blocked_response(
-                    format!("cannot apply phase plan without Linear: {err}"),
-                    vec!["audit_workflow_readiness".to_string()],
-                    vec![err],
-                    plan.data,
-                ))
-            }
-        };
-
-        let mut applied = Vec::new();
-        let mut warnings = Vec::new();
-        for action in &plan.data.recommended_linear_actions {
-            if action.action != "stage_issue" {
-                continue;
-            }
-
-            let Some(issue_identifier) = &action.issue_identifier else {
-                warnings.push("skipped stage_issue action with no issue identifier".to_string());
-                continue;
-            };
-            let issue = workspace
-                .issues
-                .iter()
-                .find(|issue| issue.identifier == *issue_identifier)
-                .cloned();
-            let project = action.target_project_slug.as_ref().and_then(|slug| {
-                workspace
-                    .projects
-                    .iter()
-                    .find(|project| project_slug_matches(Some(slug.as_str()), &project.slug))
-                    .cloned()
-            });
-            let state = issue.as_ref().and_then(|issue| {
-                let team_key = issue.team_key.clone().unwrap_or_else(|| "MS".to_string());
-                workspace.states_by_team.get(&team_key).and_then(|states| {
-                    states
-                        .iter()
-                        .find(|state| {
-                            action
-                                .target_state
-                                .as_ref()
-                                .map(|name| name == &state.name)
-                                .unwrap_or(false)
-                        })
-                        .cloned()
-                })
-            });
-
-            let Some(issue) = issue else {
-                warnings.push(format!("issue {} was not found", issue_identifier));
-                continue;
-            };
-            let Some(project) = project else {
-                warnings.push(format!(
-                    "target project {} was not found",
-                    action.target_project_slug.clone().unwrap_or_default()
-                ));
-                continue;
-            };
-            let Some(state) = state else {
-                warnings.push(format!(
-                    "target state {} was not found for {}",
-                    action.target_state.clone().unwrap_or_default(),
-                    issue_identifier
-                ));
-                continue;
-            };
-
-            if let Err(err) = self
-                .linear_issue_update(
-                    issue.id.clone(),
-                    serde_json::json!({
-                        "projectId": project.id.clone(),
-                        "stateId": state.id.clone(),
-                    }),
-                )
-                .await
-            {
-                warnings.push(format!("failed to stage {}: {}", issue_identifier, err));
-            } else {
-                applied.push(format!(
-                    "staged {} into {} / {}",
-                    issue_identifier, project.slug, state.name
-                ));
-            }
-        }
-
-        if !applied.is_empty() {
-            self.clear_caches().await;
-        }
-
-        json_response(ToolResponse {
-            status: if applied.is_empty() {
-                CompatibilityStatus::Blocked
-            } else {
-                CompatibilityStatus::Applied
-            },
-            summary: if applied.is_empty() {
-                "phase execution plan did not apply any Linear changes".to_string()
-            } else {
-                format!("applied {} phase execution action(s)", applied.len())
-            },
-            evidence: applied
-                .iter()
-                .map(|detail| EvidenceItem {
-                    label: "applied".to_string(),
-                    detail: detail.clone(),
-                })
-                .collect(),
-            warnings,
-            recommended_next_tools: vec!["sync_linear_with_runtime".to_string()],
-            blocking_issues: if applied.is_empty() {
-                vec!["no phase actions were applied".to_string()]
-            } else {
-                Vec::new()
-            },
-            data: plan.data,
+            blocking_issues: status.review_blockers.clone(),
+            data: status,
         })
     }
 
@@ -4965,34 +3533,17 @@ impl SmithCompatibilityServer {
                 "autonomy",
                 "delegation",
                 "control-plane",
-                "symphony",
-                "queue",
                 "routing",
                 "supervision",
                 "provenance",
             ],
         );
-        let watched_project = self.workflow_summary().await.project_slug;
-        let currently_in_queue = issue
-            .as_ref()
-            .and_then(|issue| issue.project.as_ref().map(|project| project.slug.clone()))
-            .map(|project_slug| project_slug_matches(watched_project.as_deref(), &project_slug))
-            .unwrap_or(false);
-
         let (verdict, suggested_project, suggested_state) = if frontier_aligned {
-            if currently_in_queue {
-                (
-                    "legitimate".to_string(),
-                    "watched_queue".to_string(),
-                    "Todo".to_string(),
-                )
-            } else {
-                (
-                    "legitimate_but_unstaged".to_string(),
-                    "validated_backlog".to_string(),
-                    "Backlog".to_string(),
-                )
-            }
+            (
+                "legitimate".to_string(),
+                "validated_backlog".to_string(),
+                "Backlog".to_string(),
+            )
         } else if description.contains("doc") || description.contains("readme") {
             (
                 "docs_follow_up".to_string(),
@@ -5016,11 +3567,15 @@ impl SmithCompatibilityServer {
                 "work does not clearly map to the current frontier-autonomy mandate".to_string(),
             );
         }
-        if currently_in_queue {
-            rationale.push("issue is already in the watched execution queue".to_string());
-        } else {
-            rationale
-                .push("issue is not currently staged in the watched execution queue".to_string());
+        if let Some(issue) = issue.as_ref() {
+            rationale.push(format!(
+                "issue currently lives in {}",
+                issue
+                    .project
+                    .as_ref()
+                    .map(|project| project.name.as_str())
+                    .unwrap_or("no assigned project")
+            ));
         }
 
         json_response(ToolResponse {
@@ -5039,7 +3594,7 @@ impl SmithCompatibilityServer {
                 suggested_project,
                 suggested_state,
                 suggested_labels: if frontier_aligned {
-                    vec!["Validated".to_string(), "Symphony Candidate".to_string()]
+                    vec!["Validated".to_string()]
                 } else {
                     vec!["Research".to_string()]
                 },
@@ -5057,7 +3612,7 @@ impl SmithCompatibilityServer {
         let summary = string_param(&params, "summary").unwrap_or_default();
         let normalized = format!("{title} {summary}").to_lowercase();
 
-        let (classification, project, state, labels, should_stage, reason) = if contains_any(
+        let (classification, project, state, labels, reason) = if contains_any(
             &normalized,
             &[
                 "phase 10",
@@ -5065,16 +3620,15 @@ impl SmithCompatibilityServer {
                 "delegation",
                 "provenance",
                 "control-plane",
-                "queue",
             ],
         ) {
             (
                 "validated_backlog".to_string(),
                 "MisterSmith Validated Backlog".to_string(),
                 "Backlog".to_string(),
-                vec!["Validated".to_string(), "Symphony Candidate".to_string()],
-                false,
-                "frontier/control-plane work should be validated before it enters the watched queue".to_string(),
+                vec!["Validated".to_string()],
+                "frontier/control-plane work should be validated before direct execution"
+                    .to_string(),
             )
         } else if contains_any(&normalized, &["readme", "docs", "workflow", "guide"]) {
             (
@@ -5082,8 +3636,7 @@ impl SmithCompatibilityServer {
                 "MisterSmith Workspace Docs".to_string(),
                 "Backlog".to_string(),
                 vec!["Docs".to_string()],
-                false,
-                "documentation follow-up belongs in the docs hub, not the watched queue"
+                "documentation follow-up belongs in the docs hub, not the direct execution lane"
                     .to_string(),
             )
         } else {
@@ -5092,7 +3645,6 @@ impl SmithCompatibilityServer {
                 "Triage".to_string(),
                 "Triage".to_string(),
                 vec!["Research".to_string()],
-                false,
                 "follow-up needs validation before it becomes runnable work".to_string(),
             )
         };
@@ -5114,7 +3666,6 @@ impl SmithCompatibilityServer {
                 suggested_project: project,
                 suggested_state: state,
                 suggested_labels: labels,
-                should_stage,
             },
         })
     }
@@ -5253,14 +3804,6 @@ impl SmithCompatibilityServer {
         }
     }
 
-    fn resolved_workspace_root(&self, workflow: Option<&WorkflowSummary>) -> Option<PathBuf> {
-        self.options.workspace_root_override.clone().or_else(|| {
-            workflow
-                .and_then(|workflow| workflow.workspace_root.clone())
-                .map(expand_home_from_string)
-        })
-    }
-
     fn codex_config_snippet(&self) -> String {
         format!(
             "[mcp_servers.smith]\ncommand = \"{}\"\ncwd = \"{}\"\nrequired = true\nstartup_timeout_sec = 30\ntool_timeout_sec = 120\nenv_vars = [\"LINEAR_API_KEY\"]\n",
@@ -5289,7 +3832,7 @@ pub async fn build_smith_compatibility_server(
         &server,
         &compatibility,
         "audit_workflow_readiness",
-        "Audit Mister Smith workflow readiness across repo, Codex config, Rust, Symphony, and Linear prerequisites.",
+        "Audit Mister Smith workflow readiness across repo, Codex config, Rust, and Linear prerequisites.",
         object_schema(&[], &[]),
         |state, params| async move { state.audit_workflow_readiness(params).await },
     )
@@ -5338,7 +3881,7 @@ pub async fn build_smith_compatibility_server(
         &server,
         &compatibility,
         "get_control_plane_snapshot",
-        "Collect repo, workflow, Symphony, GitHub, and Linear control-plane state in one response.",
+        "Collect repo, GitHub, Linear, and readiness state in one response.",
         object_schema(&[], &[]),
         |state, params| async move { state.get_control_plane_snapshot(params).await },
     )
@@ -5346,17 +3889,8 @@ pub async fn build_smith_compatibility_server(
     register_compatibility_tool(
         &server,
         &compatibility,
-        "get_symphony_checkout_snapshot",
-        "Inspect the configured Symphony checkout and workspace root.",
-        object_schema(&[], &[]),
-        |state, params| async move { state.get_symphony_checkout_snapshot(params).await },
-    )
-    .await;
-    register_compatibility_tool(
-        &server,
-        &compatibility,
         "plan_workspace_adjustments",
-        "Plan safe local workspace adjustments needed for Codex, Symphony, and repo readiness.",
+        "Plan safe local workspace adjustments needed for Codex and repo readiness.",
         object_schema(
             &[("apply", bool_schema("Apply safe local adjustments"))],
             &[],
@@ -5367,70 +3901,29 @@ pub async fn build_smith_compatibility_server(
     register_compatibility_tool(
         &server,
         &compatibility,
-        "sync_linear_with_runtime",
-        "Compare watched Linear queue state to current runtime expectations.",
-        object_schema(&[], &[]),
-        |state, params| async move { state.sync_linear_with_runtime(params).await },
-    )
-    .await;
-    register_compatibility_tool(
-        &server,
-        &compatibility,
-        "refresh_symphony",
-        "Refresh the configured Symphony checkout by fetching its remote state.",
-        object_schema(
-            &[(
-                "apply",
-                bool_schema("Run git fetch in the Symphony checkout"),
-            )],
-            &[],
-        ),
-        |state, params| async move { state.refresh_symphony(params).await },
-    )
-    .await;
-    register_compatibility_tool(
-        &server,
-        &compatibility,
-        "sync_symphony_main",
-        "Fast-forward the configured Symphony main checkout when it is safe to do so.",
-        object_schema(
-            &[("apply", bool_schema("Run git pull --ff-only origin main"))],
-            &[],
-        ),
-        |state, params| async move { state.sync_symphony_main(params).await },
-    )
-    .await;
-    register_compatibility_tool(
-        &server,
-        &compatibility,
-        "plan_phase_execution",
-        "Generate a deterministic phase execution plan from repo state and backlog context.",
-        object_schema(&[("phase", string_schema("Phase identifier or name"))], &[]),
-        |state, params| async move { state.plan_phase_execution(params).await },
-    )
-    .await;
-    register_compatibility_tool(
-        &server,
-        &compatibility,
-        "apply_phase_execution_plan",
-        "Apply the deterministic phase execution plan to Linear when explicitly requested.",
+        "prepare_direct_execution",
+        "Prepare direct Codex execution context for an issue, request, or SpecKit packet.",
         object_schema(
             &[
-                ("phase", string_schema("Phase identifier or name")),
-                ("apply", bool_schema("Apply the planned Linear changes")),
+                ("issue_identifier", string_schema("Optional issue identifier such as MS-33")),
+                ("identifier", string_schema("Alias for issue_identifier")),
+                ("request_text", string_schema("Optional request text describing the work")),
+                ("request", string_schema("Alias for request_text")),
+                ("feature_dir", string_schema("Optional absolute or repo-relative feature directory")),
+                ("feature_directory", string_schema("Alias for feature_dir")),
             ],
             &[],
         ),
-        |state, params| async move { state.apply_phase_execution_plan(params).await },
+        |state, params| async move { state.prepare_direct_execution(params).await },
     )
     .await;
     register_compatibility_tool(
         &server,
         &compatibility,
-        "review_merge_dispatch_cycle",
-        "Inspect review, merge, PR, and queue state to recommend the next dispatch action.",
+        "review_merge_status",
+        "Inspect direct review and merge status for open pull requests.",
         object_schema(&[], &[]),
-        |state, params| async move { state.review_merge_dispatch_cycle(params).await },
+        |state, params| async move { state.review_merge_status(params).await },
     )
     .await;
     register_compatibility_tool(
@@ -5519,7 +4012,6 @@ pub async fn build_smith_compatibility_server(
                                 ("priority", integer_schema("Optional slice-specific priority")),
                                 ("labels", string_array_schema("Optional slice-specific labels")),
                                 ("blocked_by", string_array_schema("Blocking issue identifiers")),
-                                ("symphony_candidate", bool_schema("Whether to apply the Symphony Candidate label")),
                                 ("workpad_body", string_schema("Optional initial Codex workpad body"))
                             ],
                             &["title", "description"]
@@ -5530,42 +4022,6 @@ pub async fn build_smith_compatibility_server(
             &["parent_issue_identifier", "slices"],
         ),
         |state, params| async move { state.materialize_backlog_slices(params).await },
-    )
-    .await;
-    register_compatibility_tool(
-        &server,
-        &compatibility,
-        "plan_queue_stage",
-        "Evaluate whether a validated backlog issue can be honestly staged into the watched queue.",
-        object_schema(
-            &[
-                (
-                    "issue_identifier",
-                    string_schema("Optional issue identifier to evaluate"),
-                ),
-                ("identifier", string_schema("Alias for issue_identifier")),
-            ],
-            &[],
-        ),
-        |state, params| async move { state.plan_queue_stage(params).await },
-    )
-    .await;
-    register_compatibility_tool(
-        &server,
-        &compatibility,
-        "apply_queue_stage",
-        "Move exactly one honest validated backlog issue into the watched queue and Todo state.",
-        object_schema(
-            &[
-                (
-                    "issue_identifier",
-                    string_schema("Optional issue identifier to stage"),
-                ),
-                ("identifier", string_schema("Alias for issue_identifier")),
-            ],
-            &[],
-        ),
-        |state, params| async move { state.apply_queue_stage(params).await },
     )
     .await;
     register_compatibility_tool(
@@ -5590,7 +4046,7 @@ pub async fn build_smith_compatibility_server(
         &server,
         &compatibility,
         "resolve_issue_lifecycle",
-        "Resolve the next recommended Smith action for a specific issue based on queue role, workpad state, blockers, and PR correlation.",
+        "Resolve the next recommended Smith action for a specific issue based on workpad state, blockers, and PR correlation.",
         object_schema(
             &[
                 (
@@ -6086,92 +4542,7 @@ fn parse_toml_string_array(raw: &str) -> Vec<String> {
         .collect()
 }
 
-fn parse_workflow_summary(path: &Path) -> WorkflowSummary {
-    let Ok(raw) = fs::read_to_string(path) else {
-        return WorkflowSummary::default();
-    };
-    let mut in_front_matter = false;
-    let mut list_key: Option<String> = None;
-    let mut summary = WorkflowSummary::default();
-
-    for line in raw.lines() {
-        let trimmed = line.trim();
-        if trimmed == "---" {
-            if !in_front_matter {
-                in_front_matter = true;
-                continue;
-            }
-            break;
-        }
-        if !in_front_matter || trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        if let Some(item) = trimmed.strip_prefix("- ") {
-            match list_key.as_deref() {
-                Some("active_states") => summary.active_states.push(strip_yaml_string(item)),
-                Some("terminal_states") => summary.terminal_states.push(strip_yaml_string(item)),
-                _ => {}
-            }
-            continue;
-        }
-        if trimmed.starts_with("active_states:") {
-            list_key = Some("active_states".to_string());
-            continue;
-        }
-        if trimmed.starts_with("terminal_states:") {
-            list_key = Some("terminal_states".to_string());
-            continue;
-        }
-        list_key = None;
-
-        if let Some(value) = trimmed.strip_prefix("project_slug:") {
-            summary.project_slug = Some(strip_yaml_string(value));
-        } else if let Some(value) = trimmed.strip_prefix("root:") {
-            if line.starts_with("workspace:") || !line.starts_with("  root:") {
-                continue;
-            }
-            summary.workspace_root = Some(strip_yaml_string(value));
-        } else if line.starts_with("  root:") {
-            summary.workspace_root = Some(strip_yaml_string(line.trim_start_matches("  root:")));
-        } else if line.starts_with("  command:") {
-            summary.codex_command = Some(strip_yaml_string(line.trim_start_matches("  command:")));
-        }
-    }
-
-    summary
-}
-
-fn strip_yaml_string(input: &str) -> String {
-    input
-        .trim()
-        .trim_matches('"')
-        .trim_matches('\'')
-        .to_string()
-}
-
-fn project_slug_matches(configured: Option<&str>, actual: &str) -> bool {
-    let Some(configured) = configured.map(str::trim).filter(|value| !value.is_empty()) else {
-        return false;
-    };
-    let actual = actual.trim();
-    if actual.is_empty() {
-        return false;
-    }
-    if configured == actual {
-        return true;
-    }
-
-    configured.ends_with(actual)
-        || actual.ends_with(configured)
-        || configured.rsplit('-').next() == Some(actual)
-        || actual.rsplit('-').next() == Some(configured)
-}
-
 fn expand_home(path: &str) -> PathBuf {
-    expand_home_from_string(path.to_string())
-}
-
-fn expand_home_from_string(path: String) -> PathBuf {
     if let Some(stripped) = path.strip_prefix("~/") {
         if let Some(home) = env::var_os("HOME") {
             return PathBuf::from(home).join(stripped);
@@ -6243,17 +4614,6 @@ where
 struct CommandResult {
     success: bool,
     stdout: String,
-    stderr: String,
-}
-
-impl CommandResult {
-    fn dry_run(command: String) -> Self {
-        Self {
-            success: true,
-            stdout: command,
-            stderr: String::new(),
-        }
-    }
 }
 
 async fn run_command(program: &str, args: &[&str]) -> CommandResult {
@@ -6263,12 +4623,10 @@ async fn run_command(program: &str, args: &[&str]) -> CommandResult {
         Ok(output) => CommandResult {
             success: output.status.success(),
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
         },
         Err(err) => CommandResult {
             success: false,
-            stdout: String::new(),
-            stderr: err.to_string(),
+            stdout: err.to_string(),
         },
     }
 }
@@ -6280,12 +4638,10 @@ async fn run_command_in_dir(program: &str, args: &[&str], cwd: &Path) -> Command
         Ok(output) => CommandResult {
             success: output.status.success(),
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
         },
         Err(err) => CommandResult {
             success: false,
-            stdout: String::new(),
-            stderr: err.to_string(),
+            stdout: err.to_string(),
         },
     }
 }
@@ -6724,81 +5080,23 @@ fn state_name(issue: &LinearIssueSnapshot) -> Option<&str> {
     issue.state.as_ref().map(|state| state.name.as_str())
 }
 
-fn issue_in_watched_project(issue: &LinearIssueSnapshot, configured_slug: Option<&str>) -> bool {
-    issue
-        .project
-        .as_ref()
-        .map(|project| project_slug_matches(configured_slug, &project.slug))
+fn state_type_name(issue: &LinearIssueSnapshot) -> Option<&str> {
+    issue.state.as_ref().and_then(|state| state.state_type.as_deref())
+}
+
+fn is_terminal_state_name(state_name: &str) -> bool {
+    matches!(
+        state_name,
+        "Done" | "Canceled" | "Cancelled" | "Duplicate" | "Complete" | "Completed"
+    )
+}
+
+fn is_terminal_issue_state(issue: &LinearIssueSnapshot) -> bool {
+    state_type_name(issue)
+        .map(|state_type| state_type.eq_ignore_ascii_case("completed"))
         .unwrap_or(false)
-}
-
-fn is_active_state(state_name: &str, workflow: &WorkflowSummary) -> bool {
-    workflow
-        .active_states
-        .iter()
-        .any(|state| state == state_name)
-}
-
-fn is_terminal_state(state_name: &str, workflow: &WorkflowSummary) -> bool {
-    workflow
-        .terminal_states
-        .iter()
-        .any(|state| state == state_name)
-}
-
-fn todo_issue_blocked_by_non_terminal(
-    issue: &LinearIssueSnapshot,
-    workflow: &WorkflowSummary,
-) -> bool {
-    state_name(issue) == Some("Todo")
-        && issue.blocked_by.iter().any(|blocker| {
-            blocker
-                .state
-                .as_deref()
-                .map(|state| !is_terminal_state(state, workflow))
-                .unwrap_or(false)
-        })
-}
-
-fn blocked_todo_detail(issue: &LinearIssueSnapshot, workflow: &WorkflowSummary) -> Option<String> {
-    if !todo_issue_blocked_by_non_terminal(issue, workflow) {
-        return None;
-    }
-
-    let blockers = issue
-        .blocked_by
-        .iter()
-        .filter(|blocker| {
-            blocker
-                .state
-                .as_deref()
-                .map(|state| !is_terminal_state(state, workflow))
-                .unwrap_or(false)
-        })
-        .map(|blocker| match blocker.state.as_deref() {
-            Some(state) if !state.is_empty() => format!("{} ({state})", blocker.identifier),
-            _ => blocker.identifier.clone(),
-        })
-        .collect::<Vec<_>>();
-
-    Some(format!(
-        "{} is in Todo but blocked by non-terminal issues: {}",
-        issue.identifier,
-        blockers.join(", ")
-    ))
-}
-
-fn issue_is_honest_refill_candidate(issue: &LinearIssueSnapshot) -> bool {
-    state_name(issue) == Some("Backlog")
-        && issue.labels.iter().any(|label| label == "Validated")
-        && issue
-            .labels
-            .iter()
-            .any(|label| label == "Symphony Candidate")
-        && issue
-            .project
-            .as_ref()
-            .map(|project| project.name == "MisterSmith Validated Backlog")
+        || state_name(issue)
+            .map(is_terminal_state_name)
             .unwrap_or(false)
 }
 
@@ -6825,63 +5123,57 @@ fn workpad_status(workpad: Option<&LinearWorkpadSnapshot>) -> String {
     }
 }
 
-fn queue_project_role(
-    issue: Option<&LinearIssueSnapshot>,
-    configured_slug: Option<&str>,
+fn lifecycle_review_state(
+    issue: &LinearIssueSnapshot,
+    matching_pull_requests: &[GitHubPullRequest],
 ) -> String {
-    let Some(issue) = issue else {
-        return "unknown".to_string();
-    };
-    if issue_in_watched_project(issue, configured_slug) {
-        return "watched_queue".to_string();
-    }
-    if issue
-        .project
-        .as_ref()
-        .map(|project| project.name == "MisterSmith Validated Backlog")
-        .unwrap_or(false)
-    {
-        return "validated_backlog".to_string();
-    }
-    if issue.project.is_some() {
-        "other_project".to_string()
-    } else {
-        "unassigned".to_string()
+    let has_requested_changes = matching_pull_requests.iter().any(|pr| {
+        pr.review_decision
+            .as_deref()
+            .map(|decision| decision.eq_ignore_ascii_case("CHANGES_REQUESTED"))
+            .unwrap_or(false)
+    });
+    let has_approved_pr = matching_pull_requests.iter().any(|pr| {
+        !pr.is_draft
+            && pr
+                .review_decision
+                .as_deref()
+                .map(|decision| decision.eq_ignore_ascii_case("APPROVED"))
+                .unwrap_or(false)
+    });
+
+    match state_name(issue) {
+        Some("Human Review") if has_requested_changes => "changes_requested".to_string(),
+        Some("Human Review") if has_approved_pr => "merge_ready".to_string(),
+        Some("Human Review") => "review_pending".to_string(),
+        Some("Rework") => "changes_requested".to_string(),
+        Some("Merging") => "merge_ready".to_string(),
+        Some("In Progress") if has_requested_changes => "changes_requested".to_string(),
+        Some("In Progress") if has_approved_pr => "merge_ready".to_string(),
+        Some("In Progress") if !matching_pull_requests.is_empty() => {
+            "pull_request_open".to_string()
+        }
+        Some("In Progress") => "active_execution".to_string(),
+        Some("Todo") => "ready_to_start".to_string(),
+        Some("Backlog") => "backlog".to_string(),
+        Some(state) => state.to_ascii_lowercase().replace(' ', "_"),
+        None => "unknown".to_string(),
     }
 }
 
-fn blocker_summaries(issue: &LinearIssueSnapshot, workflow: &WorkflowSummary) -> Vec<String> {
+fn direct_blocker_summaries(issue: &LinearIssueSnapshot) -> Vec<String> {
     issue
         .blocked_by
         .iter()
         .filter_map(|blocker| {
             let state = blocker.state.as_deref().unwrap_or("unknown");
-            if is_terminal_state(state, workflow) {
+            if is_terminal_state_name(state) {
                 None
             } else {
                 Some(format!("{} ({state})", blocker.identifier))
             }
         })
         .collect()
-}
-
-fn lifecycle_review_state(
-    issue: &LinearIssueSnapshot,
-    matching_pull_requests: &[GitHubPullRequest],
-) -> String {
-    match state_name(issue) {
-        Some("Human Review") => "review_pending".to_string(),
-        Some("Rework") => "rework".to_string(),
-        Some("Merging") => "merge_ready".to_string(),
-        Some("In Progress") if !matching_pull_requests.is_empty() => {
-            "pull_request_open".to_string()
-        }
-        Some("In Progress") => "active_execution".to_string(),
-        Some("Todo") => "ready_for_dispatch".to_string(),
-        Some("Backlog") => "backlog".to_string(),
-        Some(state) => state.to_ascii_lowercase().replace(' ', "_"),
-        None => "unknown".to_string(),
-    }
 }
 
 fn pr_correlation(matching_pull_requests: &[GitHubPullRequest]) -> Vec<String> {
@@ -6891,12 +5183,10 @@ fn pr_correlation(matching_pull_requests: &[GitHubPullRequest]) -> Vec<String> {
         .collect()
 }
 
-fn build_issue_lifecycle_resolution(
+fn build_direct_issue_lifecycle_resolution(
     issue: Option<LinearIssueSnapshot>,
     workpad: Option<&LinearWorkpadSnapshot>,
     matching_pull_requests: &[GitHubPullRequest],
-    workflow: &WorkflowSummary,
-    configured_slug: Option<&str>,
     issue_identifier: &str,
 ) -> IssueLifecycleResolution {
     let Some(issue_value) = issue.clone() else {
@@ -6909,14 +5199,13 @@ fn build_issue_lifecycle_resolution(
                 "issue {issue_identifier} was not found in the current Linear snapshot"
             )],
             review_state: "unknown".to_string(),
-            queue_role: "unknown".to_string(),
             pr_correlation: Vec::new(),
         };
     };
 
-    let queue_role = queue_project_role(Some(&issue_value), configured_slug);
     let workpad_status_value = workpad_status(workpad);
-    let blocker_details = blocker_summaries(&issue_value, workflow);
+    let blocker_details = direct_blocker_summaries(&issue_value);
+    let review_state = lifecycle_review_state(&issue_value, matching_pull_requests);
     let mut required_mutations = Vec::new();
 
     if workpad_status_value == "missing" {
@@ -6925,34 +5214,32 @@ fn build_issue_lifecycle_resolution(
     if workpad_status_value == "duplicate" {
         required_mutations.push("consolidate_duplicate_codex_workpads".to_string());
     }
-    if queue_role == "validated_backlog"
-        && !issue_value.labels.iter().any(|label| label == "Validated")
+    if !issue_value.labels.iter().any(|label| label == "Validated")
+        && state_name(&issue_value) == Some("Backlog")
     {
         required_mutations.push("apply_validated_label".to_string());
     }
-    if queue_role == "validated_backlog"
-        && !issue_value
-            .labels
-            .iter()
-            .any(|label| label == "Symphony Candidate")
-    {
-        required_mutations.push("apply_symphony_candidate_label".to_string());
-    }
 
-    let next_recommended_action = match state_name(&issue_value) {
-        Some("Backlog") if workpad_status_value != "present" => "save_issue_workpad".to_string(),
-        Some("Backlog") if !blocker_details.is_empty() => {
-            "resolve_blockers_before_staging".to_string()
-        }
-        Some("Backlog") if queue_role == "validated_backlog" => "plan_queue_stage".to_string(),
-        Some("Todo") => "move_issue_to_in_progress".to_string(),
-        Some("In Progress") => "continue_execution".to_string(),
-        Some("Human Review") => "review_or_route_to_rework".to_string(),
-        Some("Rework") => "restart_execution_with_fresh_plan".to_string(),
-        Some("Merging") => "land_merge".to_string(),
-        Some(state) if is_terminal_state(state, workflow) => "no_further_action".to_string(),
-        Some(_) => "sync_linear_with_runtime".to_string(),
-        None => "sync_linear_with_runtime".to_string(),
+    let next_recommended_action = if workpad_status_value != "present" {
+        "reconcile_workpad".to_string()
+    } else if !blocker_details.is_empty() {
+        "resolve_blockers".to_string()
+    } else if review_state == "changes_requested" {
+        "address_review_feedback".to_string()
+    } else if review_state == "merge_ready"
+        || matches!(state_name(&issue_value), Some("Merging"))
+    {
+        "merge_ready_pr".to_string()
+    } else if state_name(&issue_value) == Some("Todo") {
+        "update_issue_state".to_string()
+    } else if state_name(&issue_value) == Some("Backlog") {
+        "run_speckit_implement".to_string()
+    } else if matches!(state_name(&issue_value), Some("Human Review") | Some("Rework")) {
+        "address_review_feedback".to_string()
+    } else if is_terminal_issue_state(&issue_value) {
+        "no_further_action".to_string()
+    } else {
+        "continue_execution".to_string()
     };
 
     IssueLifecycleResolution {
@@ -6961,95 +5248,190 @@ fn build_issue_lifecycle_resolution(
         next_recommended_action,
         required_mutations,
         blocking_reasons: blocker_details,
-        review_state: lifecycle_review_state(&issue_value, matching_pull_requests),
-        queue_role,
+        review_state,
         pr_correlation: pr_correlation(matching_pull_requests),
     }
 }
 
-fn build_queue_stage_plan(
-    issue: Option<&LinearIssueSnapshot>,
-    workpad: Option<&LinearWorkpadSnapshot>,
-    workspace: &LinearWorkspaceData,
-    workflow: &WorkflowSummary,
-    configured_slug: Option<&str>,
-    requested_identifier: Option<&str>,
-) -> QueueStagePlan {
-    let watched_project = workspace
-        .projects
-        .iter()
-        .find(|project| project_slug_matches(configured_slug, &project.slug));
-    let blocked_todo_issues = workspace
-        .issues
-        .iter()
-        .filter(|candidate| issue_in_watched_project(candidate, configured_slug))
-        .filter_map(|candidate| blocked_todo_detail(candidate, workflow))
-        .collect::<Vec<_>>();
-    let queue_conflicts = blocked_todo_issues;
+fn build_direct_execution_plan(
+    repo_root: &Path,
+    requested_issue_identifier: Option<String>,
+    request_text: &str,
+    issue: Option<LinearIssueSnapshot>,
+    workpad: Option<LinearWorkpadSnapshot>,
+    matching_pull_requests: &[GitHubPullRequest],
+    resolved_feature_dir: Option<PathBuf>,
+) -> DirectExecutionPlan {
+    let tasks_path = resolved_feature_dir
+        .as_ref()
+        .map(|path| path.join("tasks.md"))
+        .filter(|path| path.exists());
+    let should_use_speckit = tasks_path.is_some()
+        || contains_any(
+            &request_text.to_lowercase(),
+            &["speckit", "packet", "spec", "tasks.md", "task pack"],
+        );
+    let issue_identifier_for_resolution = requested_issue_identifier
+        .or_else(|| issue.as_ref().map(|issue| issue.identifier.clone()))
+        .unwrap_or_default();
+    let resolution = build_direct_issue_lifecycle_resolution(
+        issue.clone(),
+        workpad.as_ref(),
+        matching_pull_requests,
+        &issue_identifier_for_resolution,
+    );
+    let mut blocking_reasons = resolution.blocking_reasons.clone();
+    if should_use_speckit && tasks_path.is_none() {
+        blocking_reasons
+            .push("SpecKit execution was requested but no tasks.md path could be resolved".to_string());
+    }
+    if issue.is_none() && request_text.trim().is_empty() && resolved_feature_dir.is_none() {
+        blocking_reasons.push(
+            "provide an issue identifier, request text, or feature directory to prepare direct execution".to_string(),
+        );
+    }
 
-    let Some(issue) = issue else {
-        return QueueStagePlan {
-            issue_identifier: requested_identifier.map(ToOwned::to_owned),
-            recommended_issue_identifier: workspace
-                .issues
-                .iter()
-                .find(|candidate| issue_is_honest_refill_candidate(candidate))
-                .map(|candidate| candidate.identifier.clone()),
-            stageable: false,
-            blocked: true,
-            queue_conflicts,
-            required_fixes: vec!["issue must resolve to a current Linear issue".to_string()],
-            queue_project_role: Some("unknown".to_string()),
-            target_project: watched_project.map(|project| project.name.clone()),
-            target_state: Some("Todo".to_string()),
-        };
+    let mut docs_to_read = vec![
+        repo_root.join("AGENTS.md").display().to_string(),
+        repo_root.join("docs/current-state.md").display().to_string(),
+    ];
+    if should_use_speckit {
+        docs_to_read.push(
+            repo_root
+                .join(".codex/commands/implement.md")
+                .display()
+                .to_string(),
+        );
+        docs_to_read.push(
+            repo_root
+                .join(".codex/prompts/speckit.implement.md")
+                .display()
+                .to_string(),
+        );
+    }
+    if let Some(feature_dir) = resolved_feature_dir.as_ref() {
+        for path in ["spec.md", "plan.md", "tasks.md"] {
+            let candidate = feature_dir.join(path);
+            if candidate.exists() {
+                docs_to_read.push(candidate.display().to_string());
+            }
+        }
+    }
+
+    let validation_commands = vec![
+        "cargo build -p mister-smith-mcp".to_string(),
+        "cargo test -p mister-smith-mcp".to_string(),
+        "git diff --check".to_string(),
+    ];
+    let next_recommended_action = if should_use_speckit && tasks_path.is_some() {
+        "run_speckit_implement".to_string()
+    } else {
+        resolution.next_recommended_action.clone()
     };
 
-    let queue_role = queue_project_role(Some(issue), configured_slug);
-    let workpad_status_value = workpad_status(workpad);
-    let blocker_details = blocker_summaries(issue, workflow);
-    let mut required_fixes = Vec::new();
-    if queue_role != "validated_backlog" {
-        required_fixes
-            .push("issue must be in MisterSmith Validated Backlog before staging".to_string());
+    DirectExecutionPlan {
+        issue,
+        workpad,
+        feature_dir: resolved_feature_dir.map(|path| path.display().to_string()),
+        tasks_path: tasks_path.map(|path| path.display().to_string()),
+        should_use_speckit,
+        docs_to_read,
+        validation_commands,
+        next_recommended_action,
+        blocking_reasons,
     }
-    if state_name(issue) != Some("Backlog") {
-        required_fixes.push("issue must be in Backlog before staging".to_string());
+}
+
+fn direct_execution_recommended_next_tools(plan: &DirectExecutionPlan) -> Vec<String> {
+    if plan.should_use_speckit {
+        vec![
+            "prepare_speckit_context".to_string(),
+            "get_issue_execution_snapshot".to_string(),
+        ]
+    } else {
+        vec![
+            "get_issue_execution_snapshot".to_string(),
+            "save_issue_workpad".to_string(),
+        ]
     }
-    if !issue.labels.iter().any(|label| label == "Validated") {
-        required_fixes.push("issue must carry the Validated label".to_string());
-    }
-    if !issue
-        .labels
+}
+
+fn build_review_merge_status(
+    pull_requests: &[GitHubPullRequest],
+    workspace: Option<&LinearWorkspaceData>,
+) -> ReviewMergeStatus {
+    let review_blockers = pull_requests
         .iter()
-        .any(|label| label == "Symphony Candidate")
-    {
-        required_fixes.push("issue must carry the Symphony Candidate label".to_string());
+        .filter_map(|pr| {
+            if pr.is_draft {
+                Some(format!("#{} {} is still a draft PR", pr.number, pr.title))
+            } else if pr
+                .review_decision
+                .as_deref()
+                .map(|decision| decision.eq_ignore_ascii_case("CHANGES_REQUESTED"))
+                .unwrap_or(false)
+            {
+                Some(format!("#{} {} has requested changes", pr.number, pr.title))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    let merge_ready_pull_requests = pull_requests
+        .iter()
+        .filter(|pr| {
+            !pr.is_draft
+                && pr
+                    .review_decision
+                    .as_deref()
+                    .map(|decision| decision.eq_ignore_ascii_case("APPROVED"))
+                    .unwrap_or(false)
+        })
+        .map(|pr| format!("#{} {}", pr.number, pr.title))
+        .collect::<Vec<_>>();
+    let stale_pull_requests = pull_requests
+        .iter()
+        .filter(|pr| {
+            let identifiers = collect_issue_identifiers(&format!("{} {}", pr.title, pr.head_ref_name));
+            if identifiers.is_empty() {
+                return true;
+            }
+            workspace
+                .map(|workspace| {
+                    !identifiers.iter().any(|identifier| {
+                        workspace
+                            .issues
+                            .iter()
+                            .any(|issue| issue.identifier.eq_ignore_ascii_case(identifier))
+                    })
+                })
+                .unwrap_or(false)
+        })
+        .map(|pr| format!("#{} {}", pr.number, pr.title))
+        .collect::<Vec<_>>();
+
+    let mut recommended_actions = Vec::new();
+    if !review_blockers.is_empty() {
+        recommended_actions
+            .push("address requested changes or finish draft PRs before attempting merge".to_string());
     }
-    if workpad_status_value == "missing" {
-        required_fixes.push("issue needs a durable ## Codex Workpad before staging".to_string());
+    if !merge_ready_pull_requests.is_empty() {
+        recommended_actions
+            .push("inspect merge-ready PRs and land the ones that pass final validation".to_string());
     }
-    if workpad_status_value == "duplicate" {
-        required_fixes
-            .push("issue has duplicate top-level Codex workpads to reconcile".to_string());
+    if !stale_pull_requests.is_empty() {
+        recommended_actions.push("inspect stale PRs and close or relink them to active issues".to_string());
     }
-    if !blocker_details.is_empty() {
-        required_fixes.push(format!(
-            "issue is blocked by non-terminal dependencies: {}",
-            blocker_details.join(", ")
-        ));
+    if recommended_actions.is_empty() {
+        recommended_actions.push("no immediate review or merge action is required".to_string());
     }
 
-    QueueStagePlan {
-        issue_identifier: Some(issue.identifier.clone()),
-        recommended_issue_identifier: Some(issue.identifier.clone()),
-        stageable: queue_conflicts.is_empty() && required_fixes.is_empty(),
-        blocked: !queue_conflicts.is_empty(),
-        queue_conflicts,
-        required_fixes,
-        queue_project_role: Some(queue_role),
-        target_project: watched_project.map(|project| project.name.clone()),
-        target_state: Some("Todo".to_string()),
+    ReviewMergeStatus {
+        open_pull_request_count: pull_requests.len(),
+        review_blockers,
+        merge_ready_pull_requests,
+        stale_pull_requests,
+        recommended_actions,
     }
 }
 
@@ -7162,6 +5544,29 @@ fn extract_feature_dir_from_text(text: &str) -> Option<String> {
         })
 }
 
+fn collect_issue_identifiers(text: &str) -> Vec<String> {
+    let mut identifiers = text
+        .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '-'))
+        .filter(|token| !token.is_empty())
+        .filter(|token| token.contains('-'))
+        .filter_map(|token| {
+            let mut parts = token.splitn(2, '-');
+            let prefix = parts.next()?;
+            let suffix = parts.next()?;
+            if prefix.chars().all(|ch| ch.is_ascii_uppercase())
+                && suffix.chars().all(|ch| ch.is_ascii_digit())
+            {
+                Some(format!("{prefix}-{suffix}"))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    identifiers.sort();
+    identifiers.dedup();
+    identifiers
+}
+
 fn translate_speckit_task_markdown(markdown: &str) -> Vec<TranslatedSpecKitSlice> {
     let mut sections = Vec::<(String, Vec<String>)>::new();
     let mut current_heading: Option<String> = None;
@@ -7236,55 +5641,11 @@ fn translate_speckit_task_markdown(markdown: &str) -> Vec<TranslatedSpecKitSlice
             description,
             blocked_by: prior_titles.last().cloned().into_iter().collect(),
             workpad_body: Some(workpad_body),
-            symphony_candidate: false,
         });
         prior_titles.push(title);
     }
 
     translated
-}
-
-fn phase_slice_status(issue: &LinearIssueSnapshot, workflow: &WorkflowSummary) -> String {
-    match state_name(issue) {
-        Some(state) if is_terminal_state(state, workflow) => "done".to_string(),
-        Some("In Progress") => "in_progress".to_string(),
-        Some("Todo") => "todo".to_string(),
-        Some("Human Review") => "human_review".to_string(),
-        Some("Merging") => "merging".to_string(),
-        Some("Rework") => "rework".to_string(),
-        Some(state) => state.to_ascii_lowercase().replace(' ', "_"),
-        None => "unknown".to_string(),
-    }
-}
-
-fn phase_marker(path: &Path, description: &str) -> Option<String> {
-    if path.exists() {
-        Some(description.to_string())
-    } else {
-        None
-    }
-}
-
-fn count_markdown_checkboxes(path: &Path) -> (usize, usize) {
-    let Ok(raw) = fs::read_to_string(path) else {
-        return (0, 0);
-    };
-    let checked = raw.matches("- [X]").count();
-    let unchecked = raw.matches("- [ ]").count();
-    (checked, unchecked)
-}
-
-fn find_phase_spec_dir(specs_root: &Path, phase: &str) -> Option<PathBuf> {
-    let mut entries = fs::read_dir(specs_root).ok()?;
-    entries.find_map(|entry| {
-        let path = entry.ok()?.path();
-        let name = path.file_name()?.to_string_lossy().to_lowercase();
-        if name.contains(phase) {
-            Some(path)
-        } else {
-            None
-        }
-    })
 }
 
 #[cfg(test)]
@@ -7351,27 +5712,10 @@ mod tests {
 
     fn write_fixture_repo(root: &Path) {
         fs::create_dir_all(root).unwrap();
-        fs::write(
-            root.join("WORKFLOW.md"),
-            r#"---
-tracker:
-  kind: linear
-  project_slug: "320a0741920c"
-  active_states:
-    - Todo
-    - In Progress
-workspace:
-  root: ~/.local/share/symphony-workspaces
-codex:
-  command: codex app-server
----
-"#,
-        )
-        .unwrap();
         fs::write(root.join(".env"), "LINEAR_API_KEY=dummy\n").unwrap();
         fs::create_dir_all(root.join("scripts")).unwrap();
         fs::write(
-            root.join("scripts/run-symphony.sh"),
+            root.join("scripts/run-smith-mcp.sh"),
             "#!/usr/bin/env bash\n",
         )
         .unwrap();
@@ -7399,6 +5743,16 @@ apps = true
 "#,
             repo = repo_root.display()
         )
+    }
+
+    fn test_options(repo_root: &Path, config_path: PathBuf) -> SmithCompatibilityOptions {
+        SmithCompatibilityOptions {
+            server_name: "smith".to_string(),
+            repo_root: repo_root.to_path_buf(),
+            codex_config_path: config_path,
+            env_file_path: repo_root.join(".env"),
+            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
+        }
     }
 
     #[test]
@@ -7450,35 +5804,6 @@ apps = true
     }
 
     #[test]
-    fn fixture_workflow_uses_slug_id_and_local_workspace_root() {
-        let repo_root = temp_path("fixture-workflow");
-        write_fixture_repo(&repo_root);
-
-        let summary = parse_workflow_summary(&repo_root.join("WORKFLOW.md"));
-
-        assert_eq!(summary.project_slug.as_deref(), Some("320a0741920c"));
-        assert_eq!(
-            summary.workspace_root.as_deref(),
-            Some("~/.local/share/symphony-workspaces")
-        );
-        assert_eq!(summary.codex_command.as_deref(), Some("codex app-server"));
-    }
-
-    #[test]
-    fn project_slug_matching_accepts_slug_id_and_legacy_slug() {
-        assert!(project_slug_matches(Some("320a0741920c"), "320a0741920c"));
-        assert!(project_slug_matches(
-            Some("mistersmith-execution-queue-320a0741920c"),
-            "320a0741920c"
-        ));
-        assert!(project_slug_matches(
-            Some("320a0741920c"),
-            "mistersmith-execution-queue-320a0741920c"
-        ));
-        assert!(!project_slug_matches(Some("a179384f32b2"), "320a0741920c"));
-    }
-
-    #[test]
     fn github_pull_request_deserializes_gh_json_fields() {
         let pull_request: GitHubPullRequest = serde_json::from_value(serde_json::json!({
             "number": 186,
@@ -7503,9 +5828,9 @@ apps = true
             "title": "Phase 10 gate",
             "priority": 3,
             "state": {"name": "Todo", "type": "unstarted"},
-            "project": {"id": "project-1", "name": "MisterSmith Execution Queue", "slugId": "320a0741920c"},
+            "project": {"id": "project-1", "name": "MisterSmith Validated Backlog", "slugId": "validated-backlog"},
             "team": {"key": "MS", "name": "MisterSmith"},
-            "labels": {"nodes": [{"name": "Validated"}, {"name": "Symphony Candidate"}]},
+            "labels": {"nodes": [{"name": "Validated"}]},
             "inverseRelations": {"nodes": [
                 {
                     "type": "blocks",
@@ -7526,47 +5851,17 @@ apps = true
             ]}
         }));
 
-        assert_eq!(issue.labels, vec!["Validated", "Symphony Candidate"]);
+        assert_eq!(issue.labels, vec!["Validated"]);
         assert_eq!(issue.blocked_by.len(), 1);
         assert_eq!(issue.blocked_by[0].identifier, "MS-34");
         assert_eq!(issue.blocked_by[0].state.as_deref(), Some("In Progress"));
     }
 
     #[test]
-    fn helper_logic_distinguishes_blocked_todo_and_refill_candidates() {
-        let workflow = WorkflowSummary {
-            project_slug: Some("320a0741920c".to_string()),
-            active_states: vec!["Todo".to_string(), "In Progress".to_string()],
-            terminal_states: vec![
-                "Done".to_string(),
-                "Canceled".to_string(),
-                "Duplicate".to_string(),
-            ],
-            workspace_root: None,
-            codex_command: None,
-        };
-        let blocked_todo = LinearIssueSnapshot {
-            identifier: "MS-35".to_string(),
-            title: "Phase 10 gate".to_string(),
-            state: Some(LinearStateSnapshot {
-                name: "Todo".to_string(),
-                ..LinearStateSnapshot::default()
-            }),
-            project: Some(LinearProjectSnapshot {
-                name: "MisterSmith Execution Queue".to_string(),
-                slug: "320a0741920c".to_string(),
-                ..LinearProjectSnapshot::default()
-            }),
-            blocked_by: vec![LinearIssueBlockerSnapshot {
-                identifier: "MS-34".to_string(),
-                state: Some("In Progress".to_string()),
-                ..LinearIssueBlockerSnapshot::default()
-            }],
-            ..LinearIssueSnapshot::default()
-        };
-        let refill_candidate = LinearIssueSnapshot {
-            identifier: "MS-90".to_string(),
-            title: "Validated candidate".to_string(),
+    fn build_direct_issue_lifecycle_resolution_requires_workpad_for_backlog_issue() {
+        let issue = LinearIssueSnapshot {
+            identifier: "MS-51".to_string(),
+            title: "Backlog slicing".to_string(),
             state: Some(LinearStateSnapshot {
                 name: "Backlog".to_string(),
                 ..LinearStateSnapshot::default()
@@ -7576,30 +5871,247 @@ apps = true
                 slug: "validated-backlog".to_string(),
                 ..LinearProjectSnapshot::default()
             }),
-            labels: vec!["Validated".to_string(), "Symphony Candidate".to_string()],
-            ..LinearIssueSnapshot::default()
-        };
-        let questionable_backlog = LinearIssueSnapshot {
-            identifier: "MS-37".to_string(),
-            title: "Questionable backlog item".to_string(),
-            state: Some(LinearStateSnapshot {
-                name: "Backlog".to_string(),
-                ..LinearStateSnapshot::default()
-            }),
-            project: Some(LinearProjectSnapshot {
-                name: "MisterSmith Validated Backlog".to_string(),
-                slug: "validated-backlog".to_string(),
-                ..LinearProjectSnapshot::default()
-            }),
+            labels: vec!["Validated".to_string()],
             ..LinearIssueSnapshot::default()
         };
 
-        assert!(todo_issue_blocked_by_non_terminal(&blocked_todo, &workflow));
-        assert!(blocked_todo_detail(&blocked_todo, &workflow)
-            .unwrap()
-            .contains("MS-34 (In Progress)"));
-        assert!(issue_is_honest_refill_candidate(&refill_candidate));
-        assert!(!issue_is_honest_refill_candidate(&questionable_backlog));
+        let resolution = build_direct_issue_lifecycle_resolution(
+            Some(issue),
+            None,
+            &[],
+            "MS-51",
+        );
+
+        assert_eq!(resolution.next_recommended_action, "reconcile_workpad");
+        assert!(resolution
+            .required_mutations
+            .iter()
+            .any(|item| item == "create_or_reconcile_codex_workpad"));
+        assert!(!resolution
+            .required_mutations
+            .iter()
+            .any(|item| item.contains("symphony")));
+    }
+
+    #[test]
+    fn build_direct_issue_lifecycle_resolution_marks_changes_requested_prs() {
+        let issue = LinearIssueSnapshot {
+            identifier: "MS-61".to_string(),
+            title: "Review follow-up".to_string(),
+            state: Some(LinearStateSnapshot {
+                name: "Human Review".to_string(),
+                ..LinearStateSnapshot::default()
+            }),
+            ..LinearIssueSnapshot::default()
+        };
+        let workpad = LinearWorkpadSnapshot {
+            comment_id: "c1".to_string(),
+            updated_at: Some("2026-04-05T12:00:00Z".to_string()),
+            body: "## Codex Workpad\n\n- [x] ready".to_string(),
+            duplicate_count: 0,
+        };
+        let prs = vec![GitHubPullRequest {
+            number: 210,
+            title: "MS-61 tighten direct lifecycle".to_string(),
+            head_ref_name: "codex/ms-61-direct-lifecycle".to_string(),
+            url: "https://example.invalid/pr/210".to_string(),
+            review_decision: Some("CHANGES_REQUESTED".to_string()),
+            is_draft: false,
+        }];
+
+        let resolution = build_direct_issue_lifecycle_resolution(
+            Some(issue),
+            Some(&workpad),
+            &prs,
+            "MS-61",
+        );
+
+        assert_eq!(resolution.review_state, "changes_requested");
+        assert_eq!(resolution.next_recommended_action, "address_review_feedback");
+    }
+
+    #[test]
+    fn build_direct_issue_lifecycle_resolution_marks_merge_ready_prs() {
+        let issue = LinearIssueSnapshot {
+            identifier: "MS-62".to_string(),
+            title: "Merge ready".to_string(),
+            state: Some(LinearStateSnapshot {
+                name: "Human Review".to_string(),
+                ..LinearStateSnapshot::default()
+            }),
+            ..LinearIssueSnapshot::default()
+        };
+        let workpad = LinearWorkpadSnapshot {
+            comment_id: "c2".to_string(),
+            updated_at: Some("2026-04-05T12:00:00Z".to_string()),
+            body: "## Codex Workpad\n\n- [x] ready".to_string(),
+            duplicate_count: 0,
+        };
+        let prs = vec![GitHubPullRequest {
+            number: 211,
+            title: "MS-62 merge ready".to_string(),
+            head_ref_name: "codex/ms-62-merge-ready".to_string(),
+            url: "https://example.invalid/pr/211".to_string(),
+            review_decision: Some("APPROVED".to_string()),
+            is_draft: false,
+        }];
+
+        let resolution = build_direct_issue_lifecycle_resolution(
+            Some(issue),
+            Some(&workpad),
+            &prs,
+            "MS-62",
+        );
+
+        assert_eq!(resolution.review_state, "merge_ready");
+        assert_eq!(resolution.next_recommended_action, "merge_ready_pr");
+    }
+
+    #[test]
+    fn build_review_merge_status_categorizes_prs() {
+        let workspace = LinearWorkspaceData {
+            issues: vec![LinearIssueSnapshot {
+                identifier: "MS-80".to_string(),
+                title: "Existing issue".to_string(),
+                ..LinearIssueSnapshot::default()
+            }],
+            ..LinearWorkspaceData::default()
+        };
+        let pull_requests = vec![
+            GitHubPullRequest {
+                number: 1,
+                title: "MS-80 tighten routing".to_string(),
+                head_ref_name: "codex/ms-80-routing".to_string(),
+                url: "https://example.invalid/pr/1".to_string(),
+                review_decision: Some("APPROVED".to_string()),
+                is_draft: false,
+            },
+            GitHubPullRequest {
+                number: 2,
+                title: "MS-81 follow-up".to_string(),
+                head_ref_name: "codex/ms-81-follow-up".to_string(),
+                url: "https://example.invalid/pr/2".to_string(),
+                review_decision: Some("CHANGES_REQUESTED".to_string()),
+                is_draft: false,
+            },
+            GitHubPullRequest {
+                number: 3,
+                title: "No linked issue".to_string(),
+                head_ref_name: "codex/orphan-branch".to_string(),
+                url: "https://example.invalid/pr/3".to_string(),
+                review_decision: None,
+                is_draft: true,
+            },
+        ];
+
+        let status = build_review_merge_status(&pull_requests, Some(&workspace));
+
+        assert_eq!(status.open_pull_request_count, 3);
+        assert_eq!(status.merge_ready_pull_requests, vec!["#1 MS-80 tighten routing"]);
+        assert!(status
+            .review_blockers
+            .iter()
+            .any(|item| item.contains("#2 MS-81 follow-up has requested changes")));
+        assert!(status
+            .review_blockers
+            .iter()
+            .any(|item| item.contains("#3 No linked issue is still a draft PR")));
+        assert!(status
+            .stale_pull_requests
+            .iter()
+            .any(|item| item.contains("#3 No linked issue")));
+    }
+
+    #[test]
+    fn build_direct_execution_plan_includes_packet_docs_and_existing_workpad() {
+        let repo_root = temp_path("direct-execution-plan");
+        write_fixture_repo(&repo_root);
+        let feature_dir = repo_root.join("specs/999-direct-execution");
+        fs::create_dir_all(&feature_dir).unwrap();
+        for name in ["spec.md", "plan.md", "tasks.md"] {
+            fs::write(feature_dir.join(name), format!("# {name}\n")).unwrap();
+        }
+
+        let issue = LinearIssueSnapshot {
+            identifier: "MS-90".to_string(),
+            title: "Direct execution packet".to_string(),
+            description: Some("Implement specs/999-direct-execution/tasks.md".to_string()),
+            state: Some(LinearStateSnapshot {
+                name: "Backlog".to_string(),
+                ..LinearStateSnapshot::default()
+            }),
+            labels: vec!["Validated".to_string()],
+            ..LinearIssueSnapshot::default()
+        };
+        let workpad = LinearWorkpadSnapshot {
+            comment_id: "c1".to_string(),
+            updated_at: Some("2026-04-05T12:00:00Z".to_string()),
+            body: "## Codex Workpad\n\n- [ ] implement".to_string(),
+            duplicate_count: 0,
+        };
+
+        let plan = build_direct_execution_plan(
+            &repo_root,
+            Some("MS-90".to_string()),
+            "Implement specs/999-direct-execution/tasks.md",
+            Some(issue),
+            Some(workpad.clone()),
+            &[],
+            Some(feature_dir.clone()),
+        );
+
+        let expected_tasks_path = feature_dir.join("tasks.md").display().to_string();
+        let plan_workpad = plan.workpad.as_ref().expect("expected existing workpad");
+        assert_eq!(plan_workpad.comment_id, workpad.comment_id);
+        assert_eq!(plan_workpad.body, workpad.body);
+        assert!(plan.should_use_speckit);
+        assert_eq!(plan.tasks_path.as_deref(), Some(expected_tasks_path.as_str()));
+        assert!(plan
+            .docs_to_read
+            .iter()
+            .any(|path| path.ends_with(".codex/commands/implement.md")));
+        assert!(plan
+            .docs_to_read
+            .iter()
+            .any(|path| path.ends_with("specs/999-direct-execution/tasks.md")));
+        assert_eq!(plan.next_recommended_action, "run_speckit_implement");
+    }
+
+    #[test]
+    fn build_direct_execution_plan_blocks_when_speckit_path_is_missing() {
+        let repo_root = temp_path("direct-execution-missing-tasks");
+        write_fixture_repo(&repo_root);
+
+        let plan = build_direct_execution_plan(
+            &repo_root,
+            None,
+            "Implement the SpecKit packet for specs/999-missing/tasks.md",
+            None,
+            None,
+            &[],
+            None,
+        );
+
+        assert!(plan.should_use_speckit);
+        assert!(plan.tasks_path.is_none());
+        assert!(plan
+            .blocking_reasons
+            .iter()
+            .any(|reason| reason.contains("no tasks.md path could be resolved")));
+    }
+
+    #[test]
+    fn build_direct_execution_plan_blocks_without_any_context() {
+        let repo_root = temp_path("direct-execution-missing-context");
+        write_fixture_repo(&repo_root);
+
+        let plan = build_direct_execution_plan(&repo_root, None, "", None, None, &[], None);
+
+        assert!(!plan.should_use_speckit);
+        assert!(plan
+            .blocking_reasons
+            .iter()
+            .any(|reason| reason.contains("provide an issue identifier")));
     }
 
     #[test]
@@ -7676,78 +6188,14 @@ apps = true
         assert_eq!(translated[1].blocked_by, vec![translated[0].title.clone()]);
         assert!(translated[0].description.contains("T001"));
         assert!(translated[0].description.contains("### Tasks"));
-    }
-
-    #[test]
-    fn build_queue_stage_plan_requires_workpad_before_staging() {
-        let workflow = WorkflowSummary {
-            project_slug: Some("320a0741920c".to_string()),
-            active_states: vec!["Todo".to_string(), "In Progress".to_string()],
-            terminal_states: vec![
-                "Done".to_string(),
-                "Canceled".to_string(),
-                "Duplicate".to_string(),
-            ],
-            workspace_root: None,
-            codex_command: None,
-        };
-        let workspace = LinearWorkspaceData {
-            projects: vec![
-                LinearProjectSnapshot {
-                    name: "MisterSmith Execution Queue".to_string(),
-                    slug: "320a0741920c".to_string(),
-                    ..LinearProjectSnapshot::default()
-                },
-                LinearProjectSnapshot {
-                    name: "MisterSmith Validated Backlog".to_string(),
-                    slug: "validated-backlog".to_string(),
-                    ..LinearProjectSnapshot::default()
-                },
-            ],
-            issues: Vec::new(),
-            teams: Vec::new(),
-            states_by_team: BTreeMap::new(),
-        };
-        let issue = LinearIssueSnapshot {
-            identifier: "MS-51".to_string(),
-            title: "Backlog slicing".to_string(),
-            state: Some(LinearStateSnapshot {
-                name: "Backlog".to_string(),
-                ..LinearStateSnapshot::default()
-            }),
-            project: Some(LinearProjectSnapshot {
-                name: "MisterSmith Validated Backlog".to_string(),
-                slug: "validated-backlog".to_string(),
-                ..LinearProjectSnapshot::default()
-            }),
-            labels: vec!["Validated".to_string(), "Symphony Candidate".to_string()],
-            ..LinearIssueSnapshot::default()
-        };
-
-        let plan = build_queue_stage_plan(
-            Some(&issue),
-            None,
-            &workspace,
-            &workflow,
-            workflow.project_slug.as_deref(),
-            Some("MS-51"),
-        );
-
-        assert!(!plan.stageable);
-        assert!(plan
-            .required_fixes
-            .iter()
-            .any(|fix| fix.contains("Codex Workpad")));
+        let serialized = serde_json::to_value(&translated[0]).unwrap();
+        assert!(serialized.get("symphony_candidate").is_none());
     }
 
     #[tokio::test]
     async fn route_workflow_request_recognizes_development_workflow_requests() {
         let repo_root = temp_path("route-development-workflow");
         write_fixture_repo(&repo_root);
-        let symphony_checkout = temp_path("symphony-route-development-workflow");
-        let workspace_root = temp_path("workspaces-route-development-workflow");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = repo_root.join("config.toml");
         fs::write(
             &config_path,
@@ -7758,16 +6206,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -7783,27 +6222,23 @@ apps = true
 
         assert_eq!(
             result["data"]["route"],
-            serde_json::Value::String("development_workflow".to_string())
+            serde_json::Value::String("direct_execution".to_string())
         );
         assert_eq!(
             result["data"]["preferred_tool"],
-            serde_json::Value::String("get_control_plane_snapshot".to_string())
+            serde_json::Value::String("prepare_direct_execution".to_string())
         );
         assert!(result["recommended_next_tools"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|value| value == "sync_linear_with_runtime"));
+            .any(|value| value == "prepare_direct_execution"));
     }
 
     #[tokio::test]
     async fn route_workflow_request_keeps_pull_request_requests_in_review_dispatch() {
         let repo_root = temp_path("route-review-dispatch");
         write_fixture_repo(&repo_root);
-        let symphony_checkout = temp_path("symphony-route-review-dispatch");
-        let workspace_root = temp_path("workspaces-route-review-dispatch");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = repo_root.join("config.toml");
         fs::write(
             &config_path,
@@ -7814,16 +6249,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -7839,11 +6265,11 @@ apps = true
 
         assert_eq!(
             result["data"]["route"],
-            serde_json::Value::String("review_dispatch".to_string())
+            serde_json::Value::String("review_merge".to_string())
         );
         assert_eq!(
             result["data"]["preferred_tool"],
-            serde_json::Value::String("review_merge_dispatch_cycle".to_string())
+            serde_json::Value::String("review_merge_status".to_string())
         );
     }
 
@@ -7851,10 +6277,6 @@ apps = true
     async fn compatibility_server_accepts_valid_delegated_request() {
         let repo_root = temp_path("delegated-route-request");
         write_fixture_repo(&repo_root);
-        let symphony_checkout = temp_path("symphony-delegated-route-request");
-        let workspace_root = temp_path("workspaces-delegated-route-request");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = repo_root.join("config.toml");
         fs::write(
             &config_path,
@@ -7865,16 +6287,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -7892,7 +6305,7 @@ apps = true
 
         assert_eq!(
             result["data"]["route"],
-            serde_json::Value::String("development_workflow".to_string())
+            serde_json::Value::String("direct_execution".to_string())
         );
     }
 
@@ -7900,10 +6313,6 @@ apps = true
     async fn route_workflow_request_routes_workpad_mutations_to_linear_workflow() {
         let repo_root = temp_path("route-workpad-mutations");
         write_fixture_repo(&repo_root);
-        let symphony_checkout = temp_path("symphony-route-workpad-mutations");
-        let workspace_root = temp_path("workspaces-route-workpad-mutations");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = repo_root.join("config.toml");
         fs::write(
             &config_path,
@@ -7914,16 +6323,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -7951,10 +6351,6 @@ apps = true
     async fn route_workflow_request_routes_child_issue_creation_to_linear_workflow() {
         let repo_root = temp_path("route-child-issue");
         write_fixture_repo(&repo_root);
-        let symphony_checkout = temp_path("symphony-route-child-issue");
-        let workspace_root = temp_path("workspaces-route-child-issue");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = repo_root.join("config.toml");
         fs::write(
             &config_path,
@@ -7965,16 +6361,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8002,10 +6389,6 @@ apps = true
     async fn route_workflow_request_routes_backlog_slicing_requests() {
         let repo_root = temp_path("route-backlog-slicing");
         write_fixture_repo(&repo_root);
-        let symphony_checkout = temp_path("symphony-route-backlog-slicing");
-        let workspace_root = temp_path("workspaces-route-backlog-slicing");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = repo_root.join("config.toml");
         fs::write(
             &config_path,
@@ -8016,16 +6399,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8033,7 +6407,7 @@ apps = true
             .handle_tools_call(
                 "route_workflow_request",
                 serde_json::json!({
-                    "request": "Translate the SpecKit tasks packet into backlog slicing work"
+                    "request": "Materialize backlog slices for this validated issue"
                 }),
             )
             .await
@@ -8045,18 +6419,20 @@ apps = true
         );
         assert_eq!(
             result["data"]["preferred_tool"],
-            serde_json::Value::String("translate_speckit_tasks".to_string())
+            serde_json::Value::String("materialize_backlog_slices".to_string())
         );
+        let recommended_next_tools = result["recommended_next_tools"]
+            .as_array()
+            .expect("router should return next tools");
+        assert!(!recommended_next_tools
+            .iter()
+            .any(|value| matches!(value.as_str(), Some("plan_queue_stage" | "apply_queue_stage"))));
     }
 
     #[tokio::test]
     async fn route_workflow_request_routes_issue_lifecycle_requests() {
         let repo_root = temp_path("route-issue-lifecycle");
         write_fixture_repo(&repo_root);
-        let symphony_checkout = temp_path("symphony-route-issue-lifecycle");
-        let workspace_root = temp_path("workspaces-route-issue-lifecycle");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = repo_root.join("config.toml");
         fs::write(
             &config_path,
@@ -8067,16 +6443,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8114,16 +6481,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout: temp_path("symphony"),
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(temp_path("workspaces")),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8142,11 +6500,15 @@ apps = true
         assert!(tools
             .iter()
             .any(|tool| tool.name == "materialize_backlog_slices"));
-        assert!(tools.iter().any(|tool| tool.name == "plan_queue_stage"));
-        assert!(tools.iter().any(|tool| tool.name == "apply_queue_stage"));
         assert!(tools
             .iter()
             .any(|tool| tool.name == "resolve_issue_lifecycle"));
+        assert!(tools
+            .iter()
+            .any(|tool| tool.name == "prepare_direct_execution"));
+        assert!(tools
+            .iter()
+            .any(|tool| tool.name == "review_merge_status"));
         assert!(tools.iter().any(|tool| tool.name == "prepare_ralph_packet"));
         assert!(tools.iter().any(|tool| tool.name == "record_ralph_outcome"));
         assert!(tools
@@ -8155,6 +6517,14 @@ apps = true
         assert!(tools
             .iter()
             .any(|tool| tool.name == "translate_speckit_tasks"));
+        assert!(!tools.iter().any(|tool| tool.name == "plan_queue_stage"));
+        assert!(!tools.iter().any(|tool| tool.name == "apply_queue_stage"));
+        assert!(!tools
+            .iter()
+            .any(|tool| tool.name == "sync_linear_with_runtime"));
+        assert!(!tools
+            .iter()
+            .any(|tool| tool.name == "review_merge_dispatch_cycle"));
         assert!(!tools.iter().any(|tool| tool.name.contains("smith.")));
     }
 
@@ -8172,16 +6542,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout: temp_path("symphony-capability-discovery"),
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(temp_path("workspaces-capability-discovery")),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8210,16 +6571,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout: temp_path("symphony-capability-discovery-ok"),
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(temp_path("workspaces-capability-discovery-ok")),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8287,16 +6639,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout: temp_path("symphony"),
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(temp_path("workspaces")),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8324,23 +6667,10 @@ apps = true
     async fn readiness_audit_accepts_rich_codex_config() {
         let repo_root = temp_path("readiness-rich-config");
         write_fixture_repo(&repo_root);
-        let symphony_checkout = temp_path("symphony-ready");
-        let workspace_root = temp_path("workspaces-ready");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = repo_root.join("config.toml");
         fs::write(&config_path, rich_codex_config(&repo_root)).unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8369,10 +6699,6 @@ apps = true
     async fn rmcp_round_trip_supports_core_tools() {
         let repo_root = temp_path("rmcp");
         write_fixture_repo(&repo_root);
-        let symphony_checkout = temp_path("symphony");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        let workspace_root = temp_path("workspaces");
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = repo_root.join("config.toml");
         fs::write(
             &config_path,
@@ -8383,16 +6709,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8437,10 +6754,6 @@ apps = true
             .join("../..")
             .canonicalize()
             .unwrap();
-        let symphony_checkout = temp_path("symphony-workflow-tools");
-        fs::create_dir_all(symphony_checkout.join(".git")).unwrap();
-        let workspace_root = temp_path("workspaces-workflow-tools");
-        fs::create_dir_all(&workspace_root).unwrap();
         let config_path = temp_path("workflow-tools-config.toml");
         fs::write(
             &config_path,
@@ -8451,16 +6764,7 @@ apps = true
         )
         .unwrap();
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: Some(workspace_root),
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8478,6 +6782,26 @@ apps = true
 
         let session = TestClient.serve(client_transport).await.unwrap();
         let peer = session.peer().clone();
+
+        let direct_execution = peer
+            .call_tool(
+                CallToolRequestParams::new("prepare_direct_execution".to_string()).with_arguments(
+                    serde_json::json!({
+                        "request_text": "Implement specs/013-multi-turn-same-agent-conversations/tasks.md"
+                    })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+                ),
+            )
+            .await
+            .unwrap();
+        assert!(!direct_execution.is_error.unwrap_or(false));
+        assert!(
+            direct_execution.structured_content.as_ref().unwrap()["data"]["should_use_speckit"]
+                .as_bool()
+                .unwrap()
+        );
 
         let speckit_context = peer
             .call_tool(CallToolRequestParams::new(
@@ -8533,18 +6857,8 @@ apps = true
         let target_issue =
             env::var("SMITH_LIVE_LINEAR_PROOF_ISSUE").unwrap_or_else(|_| "MS-50".to_string());
         let config_path = expand_home(DEFAULT_CODEX_CONFIG);
-        let symphony_checkout = expand_home(DEFAULT_SYMPHONY_CHECKOUT);
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: None,
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 
@@ -8609,46 +6923,6 @@ apps = true
     }
 
     #[tokio::test]
-    #[ignore = "manual live Linear read proof for queue-stage planning"]
-    async fn live_plan_queue_stage_reads_real_issue_state() {
-        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .canonicalize()
-            .unwrap();
-        let target_issue =
-            env::var("SMITH_LIVE_QUEUE_PLAN_ISSUE").unwrap_or_else(|_| "MS-51".to_string());
-        let config_path = expand_home(DEFAULT_CODEX_CONFIG);
-        let symphony_checkout = expand_home(DEFAULT_SYMPHONY_CHECKOUT);
-
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: None,
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
-        .await
-        .unwrap();
-
-        let result = server
-            .handle_tools_call(
-                "plan_queue_stage",
-                serde_json::json!({ "issue_identifier": target_issue }),
-            )
-            .await
-            .unwrap();
-
-        assert!(matches!(result["status"].as_str(), Some("ok" | "degraded")));
-        assert!(!result["data"]["issue_identifier"]
-            .as_str()
-            .unwrap_or_default()
-            .is_empty());
-    }
-
-    #[tokio::test]
     #[ignore = "manual live Linear read proof for Ralph packet preparation"]
     async fn live_prepare_ralph_packet_reads_real_issue_context() {
         let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -8658,18 +6932,8 @@ apps = true
         let target_issue =
             env::var("SMITH_LIVE_RALPH_PACKET_ISSUE").unwrap_or_else(|_| "MS-54".to_string());
         let config_path = expand_home(DEFAULT_CODEX_CONFIG);
-        let symphony_checkout = expand_home(DEFAULT_SYMPHONY_CHECKOUT);
 
-        let server = build_smith_compatibility_server(SmithCompatibilityOptions {
-            server_name: "smith".to_string(),
-            repo_root: repo_root.clone(),
-            codex_config_path: config_path,
-            workflow_path: repo_root.join("WORKFLOW.md"),
-            symphony_checkout,
-            env_file_path: repo_root.join(".env"),
-            workspace_root_override: None,
-            linear_endpoint: DEFAULT_LINEAR_ENDPOINT.to_string(),
-        })
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
         .await
         .unwrap();
 

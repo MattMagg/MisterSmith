@@ -59,11 +59,11 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 3. For Mister Smith packet work, perform the Smith-first preflight before task execution:
    - route the request with `route_workflow_request`
-   - pull current repo or issue state with `get_control_plane_snapshot` or
-     `get_issue_execution_snapshot`
+   - pull the direct execution plan with `prepare_direct_execution`, or pull current repo or issue
+     state with `get_control_plane_snapshot` or `get_issue_execution_snapshot`
    - reconcile the single `## Codex Workpad`
-   - if lifecycle or queue posture matters, use `resolve_issue_lifecycle`, `plan_queue_stage`,
-     `apply_queue_stage`, or the other Smith workflow-family tools before edits
+   - if lifecycle or review posture matters, use `resolve_issue_lifecycle`,
+     `review_merge_status`, or the other Smith workflow-family tools before edits
    - only proceed once the active slice is confirmed honest and runnable
 
 4. Inspect local repo state before edits:

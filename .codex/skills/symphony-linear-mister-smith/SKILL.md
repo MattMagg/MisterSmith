@@ -1,32 +1,37 @@
 ---
 name: symphony-linear-mister-smith
-description: Use when a Mister Smith task spans Symphony runtime, Linear control-plane state, GitHub PR flow, local repo truth, queue triage, runtime reconciliation, or workspace hygiene.
+description: Legacy-named skill for Mister Smith tasks that span Linear control-plane state, GitHub PR flow, local repo truth, lifecycle recovery, or workspace hygiene.
 ---
 
 # Symphony Linear Mister Smith
 
-Use the `smith` MCP tools first for combined Symphony, Linear, GitHub, and repo operations.
+Use the `smith` MCP tools first for direct Codex control-plane operations. Symphony is not part of
+the default Smith MCP route.
 
 ## Primary tools
 
 - `route_workflow_request`
 - `get_control_plane_snapshot`
 - `get_issue_execution_snapshot`
+- `prepare_direct_execution`
 - `resolve_issue_lifecycle`
-- `get_symphony_checkout_snapshot`
+- `review_merge_status`
 - `plan_workspace_adjustments`
-- `sync_linear_with_runtime`
-- `plan_queue_stage`
-- `apply_queue_stage`
-- `refresh_symphony`
-- `sync_symphony_main`
+- `materialize_backlog_slices`
+- `prepare_ralph_packet`
+- `record_ralph_outcome`
+- `prepare_speckit_context`
+- `translate_speckit_tasks`
 
 ## Rules
 
 - Snapshot first, mutate second.
 - Use `save_linear_issue` and `save_issue_workpad` as the only Smith-owned Linear write path.
-- Use `materialize_backlog_slices`, `plan_queue_stage`, and `apply_queue_stage` for backlog and watched-queue moves.
-- Use `prepare_ralph_packet`, `record_ralph_outcome`, `prepare_speckit_context`, and `translate_speckit_tasks` when the task crosses Ralph or SpecKit boundaries.
+- Use `prepare_direct_execution` before implementation when the task needs a runnable plan.
+- Use `materialize_backlog_slices` for direct backlog decomposition, not queue staging.
+- Use `prepare_ralph_packet`, `record_ralph_outcome`, `prepare_speckit_context`, and
+  `translate_speckit_tasks` when the task crosses Ralph or SpecKit boundaries.
 - Prefer Smith workflow tools over raw GraphQL or ad hoc shell commands when the operation is already modeled.
 - Only use the repo-local `linear` skill for uncovered Linear gaps.
-- When the task spans multiple development workflow surfaces, use `docs/plans/2026-03-16-smith-first-development-system.md` as the repo-local integration model.
+- When the task spans multiple development workflow surfaces, use
+  `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md` as the direct-control-plane note.
