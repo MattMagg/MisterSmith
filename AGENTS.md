@@ -188,3 +188,15 @@ For markdown linting:
 - Never commit secrets; use environment variables or another external secret store for credentials
 - Provider API keys: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 - OAuth credentials: Claude subscription uses Keychain/file-based credential sources
+
+## Active Technologies
+
+- Rust 1.88.0 plus the existing TypeScript desktop surface in `apps/operator-console/`
+  (029-session-first-user-shell)
+- Existing retained-session seams in `mister-smith-app`, `mister-smith-http`, and
+  `apps/operator-console/` are the planning focus for `029-session-first-user-shell`
+
+## Recent Changes
+
+- 029-session-first-user-shell: Added packet planning artifacts for the session-first shared
+  CLI and GUI shell
