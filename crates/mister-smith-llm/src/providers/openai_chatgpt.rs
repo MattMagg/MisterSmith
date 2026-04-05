@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 use tokio::sync::mpsc;
+use tokio::time::{timeout, Duration};
+use tracing::debug;
 
 use crate::app_server::CodexAppServerClient;
 use crate::config::{ProviderConfig, ProviderKind};
@@ -51,6 +53,17 @@ impl OpenAiChatGptProvider {
         }
     }
 
+    fn completion_timeout(&self) -> Duration {
+        Duration::from_millis(self.config.timeout_ms)
+    }
+
+    fn timeout_error(&self) -> LlmError {
+        LlmError::Network(format!(
+            "Codex app-server request timed out after {}ms",
+            self.config.timeout_ms
+        ))
+    }
+
     fn validate_request(&self, request: &CompletionRequest) -> Result<(), LlmError> {
         if request.tools.is_some() {
             return Err(self.unsupported_capability("tool_calling"));
@@ -81,11 +94,27 @@ impl ModelProvider for OpenAiChatGptProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse, LlmError> {
         self.validate_request(&request)?;
 
+        debug!(
+            model_id = %self.config.model_id,
+            timeout_ms = self.config.timeout_ms,
+            "openai_chatgpt provider connecting to codex app-server"
+        );
         let mut client = CodexAppServerClient::connect().await?;
+        debug!(
+            model_id = %self.config.model_id,
+            "openai_chatgpt provider checking chatgpt auth status"
+        );
         Self::ensure_authenticated(&mut client).await?;
-        client
-            .run_completion(&self.config.model_id, request, None)
-            .await
+        debug!(
+            model_id = %self.config.model_id,
+            "openai_chatgpt provider starting completion"
+        );
+        timeout(
+            self.completion_timeout(),
+            client.run_completion(&self.config.model_id, request, None),
+        )
+        .await
+        .map_err(|_| self.timeout_error())?
     }
 
     fn stream(&self, request: CompletionRequest) -> CompletionStream {
@@ -105,9 +134,13 @@ impl ModelProvider for OpenAiChatGptProvider {
                         return;
                     }
 
-                    if let Err(error) = client
-                        .run_completion(&provider.config.model_id, request, Some(tx.clone()))
-                        .await
+                    if let Err(error) = timeout(
+                        provider.completion_timeout(),
+                        client.run_completion(&provider.config.model_id, request, Some(tx.clone())),
+                    )
+                    .await
+                    .map_err(|_| provider.timeout_error())
+                    .and_then(|result| result)
                     {
                         let _ = tx.send(Err(error)).await;
                     }

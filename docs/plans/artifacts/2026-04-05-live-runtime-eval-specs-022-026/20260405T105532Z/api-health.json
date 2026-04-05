@@ -1,0 +1,1 @@
+{"status":"healthy","components":[{"name":"http_server","status":"healthy"},{"name":"nats_transport","status":"healthy"}]}

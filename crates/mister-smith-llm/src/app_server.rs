@@ -7,6 +7,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
+use tracing::debug;
 
 use crate::streaming::{ChunkDelta, StreamChunk};
 use crate::types::{CompletionRequest, CompletionResponse, ContentBlock, StopReason, Usage};
@@ -482,6 +483,7 @@ impl CodexAppServerClient {
         stream_tx: Option<mpsc::Sender<Result<StreamChunk, LlmError>>>,
     ) -> Result<CompletionResponse, LlmError> {
         let isolated_cwd = isolated_codex_cwd()?;
+        debug!(model_id = %model_id, "codex app-server starting thread");
         let thread = self
             .request(
                 "thread/start",
@@ -511,7 +513,9 @@ impl CodexAppServerClient {
                     "Codex app-server thread/start response missing thread.id".to_string(),
                 )
             })?;
+        debug!(model_id = %model_id, thread_id, "codex app-server thread ready");
 
+        debug!(model_id = %model_id, thread_id, "codex app-server starting turn");
         let turn = self
             .request(
                 "turn/start",
@@ -546,6 +550,7 @@ impl CodexAppServerClient {
                     "Codex app-server turn/start response missing turn.id".to_string(),
                 )
             })?;
+        debug!(model_id = %model_id, thread_id, turn_id, "codex app-server turn accepted");
 
         let mut content = String::new();
         let mut turn_state = CompletionTurnState::default();
@@ -604,6 +609,7 @@ impl CodexAppServerClient {
                     if method == "turn/completed"
                         && notification_matches_turn(&params, thread_id, turn_id) =>
                 {
+                    debug!(model_id = %model_id, thread_id, turn_id, "codex app-server turn completed");
                     let status = params
                         .get("turn")
                         .and_then(|value| value.get("status"))
@@ -693,6 +699,12 @@ impl CodexAppServerClient {
     async fn request(&mut self, method: &str, params: Value) -> Result<Value, LlmError> {
         let id = self.next_id;
         self.next_id += 1;
+        debug!(
+            request_id = id,
+            method,
+            buffered = self.buffered.len(),
+            "sending codex app-server request"
+        );
 
         self.write_json(&json!({
             "jsonrpc": "2.0",
@@ -703,17 +715,49 @@ impl CodexAppServerClient {
         .await?;
 
         loop {
-            match self.next_message().await? {
+            if let Some(index) = self.buffered.iter().position(|message| {
+                matches!(
+                    message,
+                    RpcMessage::Response { id: response_id, .. } if *response_id == id
+                ) || matches!(
+                    message,
+                    RpcMessage::Error { id: Some(response_id), .. } if *response_id == id
+                )
+            }) {
+                match self
+                    .buffered
+                    .remove(index)
+                    .expect("buffered response index should exist")
+                {
+                    RpcMessage::Response { result, .. } => {
+                        debug!(
+                            request_id = id,
+                            method, "resolved codex app-server response from buffer"
+                        );
+                        return Ok(result);
+                    }
+                    RpcMessage::Error { error, .. } => {
+                        return Err(normalize_rpc_error(method, &error));
+                    }
+                    _ => unreachable!("buffered message match should only remove responses"),
+                }
+            }
+
+            match self.read_message_from_stdout().await? {
                 RpcMessage::Response {
                     id: response_id,
                     result,
-                } if response_id == id => return Ok(result),
+                } if response_id == id => {
+                    debug!(
+                        request_id = id,
+                        method, "received codex app-server response from stdout"
+                    );
+                    return Ok(result);
+                }
                 RpcMessage::Error {
                     id: Some(response_id),
                     error,
-                } if response_id == id => {
-                    return Err(normalize_rpc_error(method, &error));
-                }
+                } if response_id == id => return Err(normalize_rpc_error(method, &error)),
                 other => self.buffered.push_back(other),
             }
         }
@@ -769,6 +813,10 @@ impl CodexAppServerClient {
             return Ok(message);
         }
 
+        self.read_message_from_stdout().await
+    }
+
+    async fn read_message_from_stdout(&mut self) -> Result<RpcMessage, LlmError> {
         let Some(line) = self
             .stdout
             .next_line()

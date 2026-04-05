@@ -15,9 +15,9 @@ use mister_smith_core::{
     DurableWorkflowLifecycleState, ExecutionGraphId, GraphState, OperatorResultPreview,
     OrchestrationQualityView, ProofOutcomeClassification, RepairDirectiveAction,
     ResultProvenanceSummary, RevocationState, SessionId, SessionRetainedResultView,
-    StepEvaluationRecord, StepPolicySummaryView, SupervisionEvidenceView,
-    SupervisionTargetKind, TaskId, TaskResultView, TaskShapeClassification, TaskShapeKind,
-    TopologyKind, TopologyRationale, UnifiedResultEnvelope, VerifierVerdict,
+    StepEvaluationRecord, StepPolicySummaryView, SupervisionEvidenceView, SupervisionTargetKind,
+    TaskId, TaskResultView, TaskShapeClassification, TaskShapeKind, TopologyKind,
+    TopologyRationale, UnifiedResultEnvelope, VerifierVerdict,
 };
 use mister_smith_events::autonomy::merge_operator_result_preview;
 use mister_smith_events::autonomy::AttestationSource;

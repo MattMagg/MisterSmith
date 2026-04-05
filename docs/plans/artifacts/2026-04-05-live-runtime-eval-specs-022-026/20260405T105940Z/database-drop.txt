@@ -1,0 +1,5 @@
+ pg_terminate_backend 
+----------------------
+(0 rows)
+
+ERROR:  DROP DATABASE cannot run inside a transaction block

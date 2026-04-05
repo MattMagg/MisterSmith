@@ -1,0 +1,91 @@
+{
+  "server_id": "NA2HS2JWBWUTC7QJKRNL6VC553G677CT6IC3UOANCXQXATPO4JLYCMXU",
+  "server_name": "NA2HS2JWBWUTC7QJKRNL6VC553G677CT6IC3UOANCXQXATPO4JLYCMXU",
+  "version": "2.12.4",
+  "proto": 1,
+  "git_commit": "34894c1",
+  "go": "go1.25.6",
+  "host": "0.0.0.0",
+  "port": 4222,
+  "max_connections": 65536,
+  "ping_interval": 120000000000,
+  "ping_max": 2,
+  "http_host": "0.0.0.0",
+  "http_port": 8222,
+  "http_base_path": "",
+  "https_port": 0,
+  "auth_timeout": 2,
+  "max_control_line": 4096,
+  "max_payload": 1048576,
+  "max_pending": 67108864,
+  "cluster": {},
+  "gateway": {},
+  "leaf": {},
+  "mqtt": {},
+  "websocket": {},
+  "jetstream": {
+    "config": {
+      "max_memory": 6162269184,
+      "max_storage": 674538067968,
+      "store_dir": "/data/jetstream",
+      "sync_interval": 120000000000,
+      "strict": true
+    },
+    "stats": {
+      "memory": 0,
+      "storage": 2794434,
+      "reserved_memory": 0,
+      "reserved_storage": 0,
+      "accounts": 1,
+      "ha_assets": 0,
+      "api": {
+        "level": 2,
+        "total": 3,
+        "errors": 0
+      }
+    },
+    "limits": {}
+  },
+  "tls_timeout": 2,
+  "write_deadline": 10000000000,
+  "start": "2026-04-05T10:16:30.480780095Z",
+  "now": "2026-04-05T11:06:35.180366972Z",
+  "uptime": "50m4s",
+  "mem": 23015424,
+  "cores": 15,
+  "gomaxprocs": 15,
+  "cpu": 0,
+  "connections": 0,
+  "total_connections": 4,
+  "routes": 0,
+  "remotes": 0,
+  "leafnodes": 0,
+  "in_msgs": 6,
+  "out_msgs": 6,
+  "in_bytes": 2309,
+  "out_bytes": 3080,
+  "slow_consumers": 0,
+  "stale_connections": 1,
+  "stalled_clients": 0,
+  "subscriptions": 77,
+  "http_req_stats": {
+    "/connz": 238,
+    "/jsz": 238,
+    "/varz": 837
+  },
+  "config_load_time": "2026-04-05T10:16:30.480780095Z",
+  "config_digest": "",
+  "system_account": "$SYS",
+  "slow_consumer_stats": {
+    "clients": 0,
+    "routes": 0,
+    "gateways": 0,
+    "leafs": 0
+  },
+  "stale_connection_stats": {
+    "clients": 1,
+    "routes": 0,
+    "gateways": 0,
+    "leafs": 0
+  }
+}

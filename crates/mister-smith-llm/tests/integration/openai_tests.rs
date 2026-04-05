@@ -75,7 +75,8 @@ async fn openai_provider_embeds_against_live_api() {
 async fn openai_chatgpt_provider_completes_against_live_codex_app_server() {
     let provider = OpenAiChatGptProvider::new(ProviderConfig {
         provider_kind: ProviderKind::OpenAiChatGpt,
-        model_id: "gpt-5".to_string(),
+        model_id: "gpt-5.4".to_string(),
+        timeout_ms: 120_000,
         ..ProviderConfig::default()
     })
     .unwrap();

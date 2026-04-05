@@ -16,12 +16,12 @@ use tracing;
 use mister_smith_core::{
     packet_023_placeholder_runtime_truth, CheckpointId, ContextBudgetId,
     CoordinatorDelegationRecord, CoordinatorMergeDecision, CoordinatorRuntimeProofView,
-    CoordinatorSubordinateInboxRecord, DelegatedWorkEvidenceRef, EventPublisher,
-    ExecutionBranchId, ExecutionGraphId, GraphState, GuardDecision, GuardDecisionId, GuardTarget,
-    InterventionRecord, InterventionRecordId, OperatorResultPreview, ProfileSnapshot,
-    ProfileSnapshotId, ProfileTarget, RepairLineageRef, RunTraceRelationshipKind, RuntimeTruthView,
-    StepPolicySummaryView, SubagentStateRecord, SupervisionEvidenceView,
-    SupervisionTargetKind, SupervisionTargetScope, SystemEvent, TaskId, TeamSizingDecision,
+    CoordinatorSubordinateInboxRecord, DelegatedWorkEvidenceRef, EventPublisher, ExecutionBranchId,
+    ExecutionGraphId, GraphState, GuardDecision, GuardDecisionId, GuardTarget, InterventionRecord,
+    InterventionRecordId, OperatorResultPreview, ProfileSnapshot, ProfileSnapshotId, ProfileTarget,
+    RepairLineageRef, RunTraceRelationshipKind, RuntimeTruthView, StepPolicySummaryView,
+    SubagentStateRecord, SupervisionEvidenceView, SupervisionTargetKind, SupervisionTargetScope,
+    SystemEvent, TaskId, TeamSizingDecision,
 };
 
 use crate::autonomy::{

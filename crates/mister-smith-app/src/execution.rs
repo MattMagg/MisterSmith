@@ -34,10 +34,10 @@ use mister_smith_core::{
     LlmError, NodeState, ProfileFingerprint, RepairDirective, RepairDirectiveAction,
     SemanticSignal, SemanticSignalKind, StepBudgetPressureLevel, StepBudgetPressureSummary,
     StepDifficultyAssessment, StepDifficultyBucket, StepEvaluationRecord, StepPolicyAction,
-    StepPolicyConfidenceLabel, StepPolicyDecision, StepPolicyInputRefs,
-    StepPolicyProofBoundaryRef, StepPolicySummaryView, SupervisionEvidenceView,
-    SupervisionStrategy, TaskId, Tool, ToolCapabilities, ToolError, ToolId, ToolSchema,
-    VerifierVerdict, PACKET_023_ORCHESTRATION_ONLY,
+    StepPolicyConfidenceLabel, StepPolicyDecision, StepPolicyInputRefs, StepPolicyProofBoundaryRef,
+    StepPolicySummaryView, SupervisionEvidenceView, SupervisionStrategy, TaskId, Tool,
+    ToolCapabilities, ToolError, ToolId, ToolSchema, VerifierVerdict,
+    PACKET_023_ORCHESTRATION_ONLY,
 };
 use mister_smith_events::{AutonomyStatusView, EventBus, StepRoutingDecisionSummary};
 use mister_smith_http::server::{
@@ -1996,7 +1996,8 @@ impl RuntimeTaskService {
                     self.orchestrator
                         .register_workflow_session(&workflow_id, session_id);
                 }
-                self.orchestrator.coordinator_runtime_proof_view(&workflow_id)
+                self.orchestrator
+                    .coordinator_runtime_proof_view(&workflow_id)
             },
         )
         .unwrap_or(TerminalResultViews {
@@ -2448,7 +2449,8 @@ impl RuntimeTaskService {
                     self.orchestrator
                         .register_workflow_session(&workflow_id, session_id);
                 }
-                self.orchestrator.coordinator_runtime_proof_view(&workflow_id)
+                self.orchestrator
+                    .coordinator_runtime_proof_view(&workflow_id)
             },
         )?;
 
@@ -3078,7 +3080,8 @@ impl RuntimeTaskService {
                     self.orchestrator
                         .register_workflow_session(&workflow_id, session_id);
                 }
-                self.orchestrator.coordinator_runtime_proof_view(&workflow_id)
+                self.orchestrator
+                    .coordinator_runtime_proof_view(&workflow_id)
             },
         )
         .unwrap_or(TerminalResultViews {
@@ -4469,7 +4472,7 @@ mod tests {
 
             let result_views =
                 terminal_result_views(status, canonical_result, None, &json!({}), None)
-                .expect("canonical task and final result envelopes should serialize");
+                    .expect("canonical task and final result envelopes should serialize");
 
             assert_eq!(
                 result_views.final_result["proof_outcome"],
@@ -4816,7 +4819,7 @@ mod tests {
 
         let result_views =
             terminal_result_views("completed", canonical_result, None, &json!({}), None)
-            .expect("terminal result views");
+                .expect("terminal result views");
 
         assert_eq!(result_views.task_result["step_policy"], Value::Null);
     }

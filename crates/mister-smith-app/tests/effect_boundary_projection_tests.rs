@@ -213,8 +213,8 @@ fn incomplete_effect_boundary_stays_explicit_and_retryable() {
 #[test]
 fn packet_026_placeholder_only_proof_stays_explicitly_non_grounded() {
     let workflow_id = TaskId::new();
-    let mut canonical_result = autonomy::build_canonical_result_envelope(
-        autonomy::CanonicalResultEnvelopeInput {
+    let mut canonical_result =
+        autonomy::build_canonical_result_envelope(autonomy::CanonicalResultEnvelopeInput {
             workflow_id,
             provider_kind: "openai_chatgpt",
             model_id: "gpt-5.4",
@@ -228,8 +228,7 @@ fn packet_026_placeholder_only_proof_stays_explicitly_non_grounded() {
             step_results: vec![],
             aggregated_result: json!({ "summary": "placeholder delegated completion" }),
             status: "completed",
-        },
-    );
+        });
     canonical_result.coordinator_runtime_proof = Some(sample_packet_026_proof(
         workflow_id,
         "placeholder-only",
@@ -241,17 +240,18 @@ fn packet_026_placeholder_only_proof_stays_explicitly_non_grounded() {
         .coordinator_runtime_proof
         .expect("packet 026 proof should be present");
 
-    assert_eq!(proof.delegated_work_evidence[0].evidence_kind, "placeholder-only");
-    assert!(proof
-        .proof_boundary
-        .contains("not yet satisfied"));
+    assert_eq!(
+        proof.delegated_work_evidence[0].evidence_kind,
+        "placeholder-only"
+    );
+    assert!(proof.proof_boundary.contains("not yet satisfied"));
 }
 
 #[test]
 fn retained_assistant_result_keeps_packet_026_follow_up_bounded_to_ids_and_evidence_refs() {
     let workflow_id = TaskId::new();
-    let mut canonical_result = autonomy::build_canonical_result_envelope(
-        autonomy::CanonicalResultEnvelopeInput {
+    let mut canonical_result =
+        autonomy::build_canonical_result_envelope(autonomy::CanonicalResultEnvelopeInput {
             workflow_id,
             provider_kind: "openai_chatgpt",
             model_id: "gpt-5.4",
@@ -265,8 +265,7 @@ fn retained_assistant_result_keeps_packet_026_follow_up_bounded_to_ids_and_evide
             step_results: vec![],
             aggregated_result: json!({ "summary": "grounded delegated completion" }),
             status: "completed",
-        },
-    );
+        });
     canonical_result.coordinator_runtime_proof = Some(sample_packet_026_proof(
         workflow_id,
         "grounded",

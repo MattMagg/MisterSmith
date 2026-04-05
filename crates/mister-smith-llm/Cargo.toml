@@ -24,6 +24,7 @@ async-stream = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true, optional = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,4 @@
+{
+  "message": "You are planning a fictional two-day city food festival. Facts: attendance target is 12,000 people; one park permit is still pending; shuttle budget is capped at $18,000; weather risk is a 40% chance of heavy rain on Saturday; vendors need final power-map guidance by Friday; nearby residents asked for a quiet closing plan. Split the work into three clearly independent tracks: logistics and site readiness, communications and attendee guidance, and weather/risk contingencies. Then add one final synthesis step that merges the three tracks into one concise public-ready operations memo. Use multiple agents. Keep the memo under 220 words.",
+  "priority": "high"
+}

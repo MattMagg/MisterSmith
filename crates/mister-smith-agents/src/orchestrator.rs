@@ -617,14 +617,15 @@ impl Orchestrator {
         context: GuardContext,
     ) -> Result<(GuardDecision, InterventionRecord), AgentSystemError> {
         let decision = self.guard.evaluate(&context)?;
-        let record = {
-            let mut graph = self.execution_graphs.get_mut(workflow_id).ok_or_else(|| {
-                AgentSystemError::OrchestrationError(format!(
-                    "No execution graph found for workflow {workflow_id}"
-                ))
-            })?;
+        let record = if let Some(mut graph) = self.execution_graphs.get_mut(workflow_id) {
             self.intervention_engine
                 .apply(&decision, &self.scheduler, graph.value_mut())?
+        } else if matches!(decision.target_scope, GuardTarget::Provider(_)) {
+            self.intervention_engine.apply_without_graph(&decision)?
+        } else {
+            return Err(AgentSystemError::OrchestrationError(format!(
+                "No execution graph found for workflow {workflow_id}"
+            )));
         };
 
         self.guard_decisions
@@ -906,11 +907,8 @@ impl Orchestrator {
             .get(workflow_id)
             .map(|entry| *entry.value())
             .unwrap_or_else(|| AgentId::from_uuid(*workflow_id.as_ref()));
-        let packet_026 = synthesize_coordinator_runtime_projection(
-            &graph,
-            coordinator_agent_id,
-            session_id,
-        );
+        let packet_026 =
+            synthesize_coordinator_runtime_projection(&graph, coordinator_agent_id, session_id);
         if let Some(preview) = result_preview.as_mut() {
             preview.coordinator_runtime_proof = Some(packet_026.coordinator_runtime_proof.clone());
         }
@@ -1638,7 +1636,10 @@ impl Orchestrator {
         state.value_mut().apply(message);
     }
 
-    fn session_id_for_workflow(&self, workflow_id: &TaskId) -> Option<mister_smith_core::SessionId> {
+    fn session_id_for_workflow(
+        &self,
+        workflow_id: &TaskId,
+    ) -> Option<mister_smith_core::SessionId> {
         self.workflow_session_ids
             .get(workflow_id)
             .map(|entry| *entry.value())
@@ -1832,7 +1833,9 @@ fn synthesize_coordinator_runtime_projection(
     }
 }
 
-fn packet_026_delegated_branches(graph: &ExecutionGraph) -> Vec<crate::execution_graph::ExecutionBranch> {
+fn packet_026_delegated_branches(
+    graph: &ExecutionGraph,
+) -> Vec<crate::execution_graph::ExecutionBranch> {
     if graph.branches.len() <= 1 && graph.topology_plan.parallelism_width <= 1 {
         return Vec::new();
     }
@@ -1840,9 +1843,7 @@ fn packet_026_delegated_branches(graph: &ExecutionGraph) -> Vec<crate::execution
     graph.branches.clone()
 }
 
-fn packet_026_child_role(
-    nodes: &[&crate::execution_graph::ExecutionNode],
-) -> String {
+fn packet_026_child_role(nodes: &[&crate::execution_graph::ExecutionNode]) -> String {
     let Some(node) = nodes.first() else {
         return "explorer".to_string();
     };
@@ -1938,13 +1939,9 @@ fn packet_026_evidence_note(kind: &str) -> String {
         "grounded" => {
             "delegated work produced bounded workflow evidence for this slice".to_string()
         }
-        "mixed" => {
-            "delegated work is only partially grounded and still needs coordinator review"
-                .to_string()
-        }
-        _ => {
-            "delegated work has not moved beyond placeholder-only completion yet".to_string()
-        }
+        "mixed" => "delegated work is only partially grounded and still needs coordinator review"
+            .to_string(),
+        _ => "delegated work has not moved beyond placeholder-only completion yet".to_string(),
     }
 }
 
@@ -1977,23 +1974,32 @@ fn packet_026_coordinator_decisions(
             "smallest-workflow rule kept execution sequential",
             "accepted",
         )
-    } else if graph.branches.iter().any(|branch| branch.state == BranchState::Reassigned) {
+    } else if graph
+        .branches
+        .iter()
+        .any(|branch| branch.state == BranchState::Reassigned)
+    {
         (
             "reassign",
             "coordinator reassigned delegated work after recovery pressure",
             "accepted",
         )
-    } else if graph
-        .branches
-        .iter()
-        .any(|branch| matches!(branch.state, BranchState::Checkpointed | BranchState::Isolated))
-    {
+    } else if graph.branches.iter().any(|branch| {
+        matches!(
+            branch.state,
+            BranchState::Checkpointed | BranchState::Isolated
+        )
+    }) {
         (
             "clarify",
             "coordinator kept delegated work visible while waiting on clarification or recovery",
             "blocked",
         )
-    } else if graph.branches.iter().any(|branch| branch.state == BranchState::Failed) {
+    } else if graph
+        .branches
+        .iter()
+        .any(|branch| branch.state == BranchState::Failed)
+    {
         (
             "stop",
             "coordinator stopped the delegated slice after a child failure",
@@ -3473,11 +3479,8 @@ mod tests {
         }
         let session_id = mister_smith_core::SessionId::new();
 
-        let packet_026 = synthesize_coordinator_runtime_projection(
-            &graph,
-            AgentId::new(),
-            Some(session_id),
-        );
+        let packet_026 =
+            synthesize_coordinator_runtime_projection(&graph, AgentId::new(), Some(session_id));
 
         assert!(!packet_026.delegation_records.is_empty());
         assert!(packet_026
@@ -3490,7 +3493,11 @@ mod tests {
     fn synthesize_coordinator_runtime_projection_requires_all_delegated_branches_grounded() {
         let (mut graph, _, _, _) = node_scoped_supervision_graph();
         graph.state = GraphState::Running;
-        let running_branch = graph.branches.get(1).expect("running branch should exist").branch_id;
+        let running_branch = graph
+            .branches
+            .get(1)
+            .expect("running branch should exist")
+            .branch_id;
         for branch in &mut graph.branches {
             branch.state = BranchState::Completed;
         }
@@ -3503,22 +3510,27 @@ mod tests {
         for node in &mut graph.nodes {
             node.state = NodeState::Completed;
         }
-        for node in graph.nodes.iter_mut().filter(|node| node.branch_id == running_branch) {
+        for node in graph
+            .nodes
+            .iter_mut()
+            .filter(|node| node.branch_id == running_branch)
+        {
             node.state = NodeState::Pending;
         }
 
         let packet_026 = synthesize_coordinator_runtime_projection(&graph, AgentId::new(), None);
-        assert_eq!(packet_026.delegation_records.len(), packet_026.delegated_work_evidence.len());
+        assert_eq!(
+            packet_026.delegation_records.len(),
+            packet_026.delegated_work_evidence.len()
+        );
         assert!(packet_026
             .delegated_work_evidence
             .iter()
             .any(|evidence| evidence.evidence_kind != "grounded"));
-        assert!(
-            packet_026
-                .coordinator_runtime_proof
-                .proof_boundary
-                .contains("not yet satisfied")
-        );
+        assert!(packet_026
+            .coordinator_runtime_proof
+            .proof_boundary
+            .contains("not yet satisfied"));
     }
 
     #[test]
@@ -4054,5 +4066,68 @@ mod tests {
             .notes
             .iter()
             .any(|note| note.contains("node evidence")));
+    }
+
+    #[tokio::test]
+    async fn supervise_allows_provider_target_before_graph_registration() {
+        let workflow_id = TaskId::new();
+        let orchestrator = Arc::new(Orchestrator::new(
+            Arc::new(IdentityDecomposer),
+            Arc::new(ArrayAggregator),
+            Arc::new(TaskScheduler::new()),
+        ));
+
+        let assessment = ProfileAssessment::new(
+            Some(ProfileSnapshot {
+                profile_id: ProfileSnapshotId::new(),
+                target: ProfileTarget::Provider,
+                health_state: HealthState::Degraded,
+                latency_window: None,
+                error_window: None,
+                semantic_signals: vec![semantic_signal(
+                    SemanticSignalKind::Stalled,
+                    67,
+                    "provider stream stalled before graph registration",
+                )],
+                fingerprint_ref: None,
+                updated_at: chrono::Utc::now(),
+            }),
+            vec!["provider-only planner supervision".to_string()],
+        );
+
+        let (decision, record) = orchestrator
+            .supervise(
+                &workflow_id,
+                GuardContext::new(GuardTarget::Provider("openai_chatgpt".to_string()))
+                    .with_profile(assessment),
+            )
+            .await
+            .expect("provider supervision should succeed before graph registration");
+
+        assert_eq!(
+            decision.target_scope,
+            GuardTarget::Provider("openai_chatgpt".to_string())
+        );
+        assert_eq!(decision.intervention, InterventionType::Retry);
+        assert_eq!(record.before_state["provider"], "openai_chatgpt");
+
+        let guard_event = orchestrator
+            .autonomy_events(&workflow_id)
+            .into_iter()
+            .find_map(|event| match event {
+                AutonomyEvent::GuardDecisionEvaluated(envelope) => Some(envelope),
+                _ => None,
+            })
+            .expect("guard decision event should be recorded");
+        assert!(guard_event.graph_id.is_none());
+        assert!(guard_event.branch_id.is_none());
+        assert_eq!(
+            guard_event.payload.target_scope,
+            GuardTarget::Provider("openai_chatgpt".to_string())
+        );
+        assert!(
+            orchestrator.autonomy_status(&workflow_id).is_none(),
+            "status projection should stay unavailable until a graph exists"
+        );
     }
 }

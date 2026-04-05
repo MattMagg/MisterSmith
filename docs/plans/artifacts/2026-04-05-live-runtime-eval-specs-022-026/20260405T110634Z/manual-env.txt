@@ -1,0 +1,8 @@
+timestamp_utc: 2026-04-05T11:06:36.020877+00:00
+artifact_dir: docs/plans/artifacts/2026-04-05-live-runtime-eval-specs-022-026/20260405T110634Z
+provider_kind: openai_chatgpt
+model_id: gpt-5.4
+http_port: 63181
+database_name: mistersmith_live_eval_022_026_20260405_110634
+database_url_redacted: postgres://mistersmith:<redacted>@127.0.0.1:5432/mistersmith_live_eval_022_026_20260405_110634
+nats_url: nats://127.0.0.1:4222

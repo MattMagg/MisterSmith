@@ -1,0 +1,19 @@
+timestamp_utc: 2026-04-05T10:55:32Z
+artifact_dir: docs/plans/artifacts/2026-04-05-live-runtime-eval-specs-022-026/20260405T105532Z
+provider_kind: openai_chatgpt
+model_id: gpt-5.4
+http_port: 63180
+database_name: mistersmith_live_eval_022_026_20260405_105532
+database_url_redacted: postgres://mistersmith:<redacted>@127.0.0.1:5432/mistersmith_live_eval_022_026_20260405_105532
+nats_url: nats://127.0.0.1:4222
+supported_routes:
+  - POST /api/v1/sessions
+  - POST /api/v1/sessions/{session_id}/turns
+  - GET /api/v1/sessions/{session_id}
+  - GET /api/v1/tasks/{task_id}
+  - GET /api/v1/autonomy/status/{workflow_id}
+  - mister-smith autonomy status --workflow-id <id>
+prompts:
+  - success_session_turn_1: fictional city festival coordination memo with three independent tracks and one synthesis step
+  - collapse_session_turn_2: Reply with exactly READY.
+  - failure_session_turn_3: fictional museum reopening memo with three worker roles and one joiner role

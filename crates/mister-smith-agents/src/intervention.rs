@@ -158,17 +158,20 @@ impl InterventionEngine {
                     emitted_at: Utc::now(),
                 })
             }
-            GuardTarget::Provider(provider) => Ok(InterventionRecord {
-                record_id: InterventionRecordId::new(),
-                decision_id: decision.decision_id,
-                before_state: json!({ "provider": provider }),
-                after_state: Some(json!({
-                    "provider": provider,
-                    "intervention": format!("{:?}", decision.intervention)
-                })),
-                rationale: rationale_for(decision),
-                emitted_at: Utc::now(),
-            }),
+            GuardTarget::Provider(provider) => Ok(provider_intervention_record(decision, provider)),
+        }
+    }
+
+    /// Apply a provider-only intervention when no execution graph exists yet.
+    pub fn apply_without_graph(
+        &self,
+        decision: &GuardDecision,
+    ) -> Result<InterventionRecord, GuardError> {
+        match &decision.target_scope {
+            GuardTarget::Provider(provider) => Ok(provider_intervention_record(decision, provider)),
+            target => Err(GuardError::InvalidTarget(format!(
+                "graphless intervention is unsupported for target {target:?}"
+            ))),
         }
     }
 }
@@ -223,5 +226,19 @@ fn rationale_for(decision: &GuardDecision) -> String {
             "applied escalation under conservative fallback".to_string()
         }
         InterventionType::Abort => "applied abort to stop unsafe execution".to_string(),
+    }
+}
+
+fn provider_intervention_record(decision: &GuardDecision, provider: &str) -> InterventionRecord {
+    InterventionRecord {
+        record_id: InterventionRecordId::new(),
+        decision_id: decision.decision_id,
+        before_state: json!({ "provider": provider }),
+        after_state: Some(json!({
+            "provider": provider,
+            "intervention": format!("{:?}", decision.intervention)
+        })),
+        rationale: rationale_for(decision),
+        emitted_at: Utc::now(),
     }
 }

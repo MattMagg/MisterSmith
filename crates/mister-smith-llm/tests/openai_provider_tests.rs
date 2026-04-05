@@ -1229,6 +1229,43 @@ async fn openai_chatgpt_provider_accepts_authenticated_session_when_openai_auth_
 
 #[cfg(feature = "openai-chatgpt")]
 #[tokio::test]
+async fn openai_chatgpt_provider_honors_timeout_ms() {
+    let _guard = env_lock().lock().unwrap();
+    let script_path = write_fake_codex_script_with_turn_notifications(
+        true,
+        true,
+        r#"
+        import time
+        time.sleep(0.2)
+"#,
+    );
+    std::env::set_var("MISTER_SMITH_CODEX_BIN", &script_path);
+
+    let provider = OpenAiChatGptProvider::new(ProviderConfig {
+        provider_kind: ProviderKind::OpenAiChatGpt,
+        model_id: "gpt-5".to_string(),
+        timeout_ms: 25,
+        ..ProviderConfig::default()
+    })
+    .unwrap();
+
+    let error = provider
+        .complete(completion_request("hello"))
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        error,
+        LlmError::Network(message)
+        if message.contains("Codex app-server request timed out after 25ms")
+    ));
+
+    std::env::remove_var("MISTER_SMITH_CODEX_BIN");
+    let _ = fs::remove_file(script_path);
+}
+
+#[cfg(feature = "openai-chatgpt")]
+#[tokio::test]
 async fn openai_chatgpt_provider_uses_item_completed_as_authoritative_fallback_and_tracks_usage() {
     let _guard = env_lock().lock().unwrap();
     let script_path = write_fake_codex_script_with_turn_notifications(

@@ -91,6 +91,9 @@ impl AgentConfig {
             AgentType::Supervisor => (Duration::from_secs(3), 1000, Duration::from_secs(60)),
             AgentType::Coordinator => (Duration::from_secs(5), 2000, Duration::from_secs(300)),
             AgentType::Monitor => (Duration::from_secs(2), 1000, Duration::from_secs(60)),
+            AgentType::Planner | AgentType::Executor | AgentType::Critic => {
+                (Duration::from_secs(5), 1000, Duration::from_secs(180))
+            }
             _ => (Duration::from_secs(5), 1000, Duration::from_secs(60)),
         };
 
@@ -101,6 +104,23 @@ impl AgentConfig {
             task_timeout,
             ..Self::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn planner_runtime_timeout_covers_live_provider_round_trips() {
+        let config = AgentConfig::for_type(AgentType::Planner);
+        assert_eq!(config.task_timeout, Duration::from_secs(180));
+    }
+
+    #[test]
+    fn executor_runtime_timeout_covers_model_backed_steps() {
+        let config = AgentConfig::for_type(AgentType::Executor);
+        assert_eq!(config.task_timeout, Duration::from_secs(180));
     }
 }
 
