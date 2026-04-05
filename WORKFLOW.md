@@ -86,7 +86,7 @@ Instructions:
   `docs/plans/2026-03-16-smith-first-development-system.md`.
 - When the Smith MCP is available in the session, route broad workflow requests through
   `route_workflow_request` first, use its `response_only` / `plan_only` / `tracked_execution`
-  classing to keep analysis, planning, and execution distinct, and then use
+  classification to keep analysis, planning, and execution distinct, and then use
   `get_control_plane_snapshot` or `get_issue_execution_snapshot` before mutating issue state.
 - Use `save_linear_issue` and `save_issue_workpad` as the only Smith-owned write path for Linear
   issue and workpad updates.
