@@ -96,6 +96,8 @@ queue-stage tools. Runnable work is determined by:
 - the single `## Codex Workpad`
 - PR and review state
 - available packet docs and validation context
+- internal Smith gate reporting from `prepare_direct_execution`, `get_issue_execution_snapshot`,
+  and `review_merge_status`
 
 `Human Review` is still a real workflow state, but it is now resolved through direct Codex review
 and merge work rather than queue dispatch.
@@ -122,6 +124,10 @@ Use Smith as the default workflow layer over this Linear model.
 For frozen packet execution, keep the workflow hybrid: use Smith MCP to route, reconcile state,
 and prepare the active slice, then run the repo-local `speckit.implement` surface before
 implementation against `specs/`.
+
+`route_workflow_request` now distinguishes `response_only`, `plan_only`, and
+`tracked_execution` asks so analysis and planning can stay autonomous without accidentally
+falling through into execution prep.
 
 Use raw Linear fallback only for workspace administration or metadata operations that Smith does not
 yet model.

@@ -19,7 +19,10 @@ validated through Phase 10 plus the landed frontier packets through `024`.
 Use `docs/current-state.md` as the repo-wide current-state overview and document router.
 Use `docs/direction.md` when you need the merged strategic direction and next-build priority.
 Use `README.md`, `ROADMAP.md`, and `CLAUDE.md` as supporting orientation entry points.
-Treat `WORKFLOW.md` and `docs/linear/LINEAR.md` as the live control-plane contract.
+Treat `AGENTS.md`, `docs/current-state.md`, `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`,
+and the active direct-execution sections of `docs/linear/LINEAR.md` as the current Smith control-plane
+contract. Treat `WORKFLOW.md` as legacy Symphony background unless a task explicitly targets that
+historical automation layer.
 Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the current runtime-proof
 direction when the task is about proving real end-to-end execution rather than adding another
 implementation phase.
@@ -60,6 +63,8 @@ section is about how the repository is developed, not about what the Mister Smit
 runtime.
 
 - Start broad workflow requests with `route_workflow_request`.
+- Use the router's `response_only`, `plan_only`, and `tracked_execution` classes to keep analysis,
+  planning, and execution distinct without bouncing out for extra operator review.
 - Pull current state with `get_control_plane_snapshot` or `get_issue_execution_snapshot` before
   mutating Linear or review state.
 - Use Smith workflow-family tools before raw Linear or ad hoc repo glue:
@@ -88,6 +93,9 @@ runtime.
 - For repo development workflow only, keep Linear as the durable source of truth, Smith MCP as the
   direct Codex control plane, Ralph as the loop runner, and SpecKit as the upstream spec/task-pack
   scaffold.
+- Keep risky or merge-sensitive checks internal to the Smith workflow by using the tool-reported
+  gate state and review status instead of adding extra human interruption just to decide whether the
+  next autonomous step is allowed.
 
 ## Subagent Orchestration
 
