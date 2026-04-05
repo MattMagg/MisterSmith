@@ -1119,6 +1119,27 @@ impl SmithCompatibilityServer {
         json_response(self.collect_readiness_audit().await)
     }
 
+    /// Collects and summarizes local and configuration readiness for the Mister Smith control plane.
+    ///
+    /// Inspects Codex smith configuration, runtime files (repo root, repo .env), CLI tooling (`cargo`, `rustc`, `rustup`, `gh`), GitHub authentication status, and presence of `LINEAR_API_KEY`; aggregates per-check details, evidence items, warnings, and blocking issues into a `ReadinessAudit` wrapped in a `ToolResponse`.
+    ///
+    /// The returned `ToolResponse` contains:
+    /// - `status`: overall readiness (Blocked if any blocker, Degraded if any non-Ok, otherwise Ok)
+    /// - `summary`: human-readable summary derived from `status`
+    /// - `evidence`: discovered configuration and command details (codex command, cwd, args, repo/env paths)
+    /// - `warnings`: non-blocking but relevant issues
+    /// - `blocking_issues`: blocker detail strings for checks with severity "blocker"
+    /// - `recommended_next_tools`: a small fixed set of follow-up tool names
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example(server: &crate::SmithCompatibilityServer) {
+    /// let resp = server.collect_readiness_audit().await;
+    /// // `resp.data` contains the detailed `ReadinessAudit` with individual checks
+    /// assert!(matches!(resp.status, crate::CompatibilityStatus::Ok | crate::CompatibilityStatus::Degraded | crate::CompatibilityStatus::Blocked));
+    /// # }
+    /// ```
     async fn collect_readiness_audit(&self) -> ToolResponse<ReadinessAudit> {
         let config_status = inspect_codex_smith_config(&self.options.codex_config_path);
         let linear_key_available = self.linear_api_key().is_some();
@@ -1415,6 +1436,28 @@ impl SmithCompatibilityServer {
         })
     }
 
+    /// Routes an operator's textual request into a workflow lane and recommends next tools.
+    ///
+    /// Classifies the provided request text into a `WorkflowRequestClass` (ResponseOnly, PlanOnly,
+    /// or TrackedExecution) using keyword heuristics, selects a `route` and `preferred_tool`,
+    /// and emits recommended follow-up tools. The produced `WorkflowRoute` in the response's `data`
+    /// includes `route`, `reason`, `normalized_request`, `preferred_tool`, `request_class`,
+    /// `execution_allowed`, and `needs_plan`. If the request text is empty, the function returns
+    /// a blocked `ToolResponse` indicating the missing parameter and defaults the `request_class` to
+    /// `PlanOnly`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[tokio::test]
+    /// async fn example_route_workflow_request() {
+    ///     // `server` is an instance with `route_workflow_request` in scope.
+    ///     let params = serde_json::json!({ "request": "What is the merge readiness for MS-42?" });
+    ///     let resp = server.route_workflow_request(params).await.unwrap();
+    ///     // response is a serialized ToolResponse; ensure it contains a `data` object with `route`
+    ///     assert!(resp.get("data").and_then(|d| d.get("route")).is_some());
+    /// }
+    /// ```
     async fn route_workflow_request(
         &self,
         params: serde_json::Value,
@@ -2883,6 +2926,42 @@ impl SmithCompatibilityServer {
         })
     }
 
+    /// Prepare a Ralph execution packet for a Linear issue.
+    ///
+    /// Builds a complete `RalphPacket` containing the issue's current context (issue fields and durable workpad),
+    /// a list of repo-local source documents, workflow and validation requirements, stop conditions,
+    /// a definition of done, and a rendered Ralph prompt. The function requires an issue identifier and
+    /// may include an optional `plan_path` to include a local plan file in the packet.
+    ///
+    /// Parameters
+    /// - `params`: JSON object that must include either `"issue_identifier"` or `"identifier"` (a Linear issue key).
+    ///   Optionally include `"plan_path"` to reference a plan file (absolute or repo-root-relative).
+    ///
+    /// Returns
+    /// A serialized `ToolResponse` JSON whose `data` field is a `RalphPacket`:
+    /// - On success the response has `status = Ok` and contains the prepared packet in `data`.
+    /// - If the issue identifier is missing or the issue cannot be resolved the response is a blocked `ToolResponse`
+    ///   containing an empty or partially-populated `RalphPacket`.
+    /// - If an internal error occurs the function returns an `McpError`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// use serde_json::json;
+    ///
+    /// // `server` is an instance of SmithCompatibilityServer or compatible MCP server wrapper.
+    /// // Provide the issue identifier and optional plan_path.
+    /// let params = json!({
+    ///     "issue_identifier": "MS-123",
+    ///     "plan_path": "plans/MS-123/implementation.md"
+    /// });
+    ///
+    /// // Call the async handler and inspect the JSON ToolResponse
+    /// let response_json = server.prepare_ralph_packet(params).await?;
+    /// println!("{}", response_json);
+    /// # Ok(()) }
+    /// ```
     async fn prepare_ralph_packet(
         &self,
         params: serde_json::Value,
@@ -3447,6 +3526,27 @@ impl SmithCompatibilityServer {
         })
     }
 
+    /// Build an execution-readiness snapshot for a single Linear issue.
+    ///
+    /// If the `params` object does not contain `issue_identifier` (or `identifier`), the function
+    /// returns a blocked tool response containing an `IssueExecutionSnapshot` describing the
+    /// missing-input failure (including a failing execution gate and a `resume_note`).
+    ///
+    /// On success the returned `ToolResponse`'s `data` is an `IssueExecutionSnapshot` containing:
+    /// - `execution_state`: the issue's current state name (or `"unknown"`),
+    /// - `workpad_status`: one of `"missing"`, `"duplicate"`, or `"present"`,
+    /// - `pending_gates`: a list of execution gates that must pass before direct execution,
+    /// - `resume_note`: guidance for how to resume once gates are resolved,
+    /// - `blocking_issues`: human-readable blocking messages when the issue or gates block execution.
+    ///
+    /// Examples
+    ///
+    /// ```
+    /// // Construct parameters and call the compatibility server method:
+    /// let params = serde_json::json!({ "issue_identifier": "MS-42" });
+    /// // let res = compatibility_server.get_issue_execution_snapshot(params).await;
+    /// // inspect `res` to read the ToolResponse / IssueExecutionSnapshot fields.
+    /// ```
     async fn get_issue_execution_snapshot(
         &self,
         params: serde_json::Value,
@@ -3600,6 +3700,41 @@ impl SmithCompatibilityServer {
         })
     }
 
+    /// Prepare a DirectExecutionPlan from an operator request and optional issue context.
+    ///
+    /// This method combines the provided request text with the referenced issue's description (if an
+    /// `issue_identifier`/`identifier` is given), resolves an optional feature directory, builds a
+    /// DirectExecutionPlan, appends readiness gates (cargo, Linear access when the plan targets an
+    /// issue, and GitHub auth when `gh` is required), aggregates blocking reasons from the plan and
+    /// gates, and returns a ToolResponse wrapping the resulting plan.
+    ///
+    /// Accepted keys in `params`:
+    /// - `issue_identifier` or `identifier`: optional Linear issue identifier to load issue/workpad/PR
+    ///   context used to enrich the plan.
+    /// - `request_text` or `request`: request string describing the desired execution (defaults to the
+    ///   empty string).
+    /// - `feature_dir` or `feature_directory`: optional repo-root-relative path (string) to a feature
+    ///   directory; if omitted the directory may be inferred from the combined request+issue text.
+    ///
+    /// The returned JSON is a serialized `ToolResponse<DirectExecutionPlan>`. Its `status` is
+    /// `Ok` when the plan has no blocking reasons and no pending gates, and `Degraded` otherwise.
+    /// The `data` field contains the constructed `DirectExecutionPlan`; `blocking_issues` contains
+    /// aggregated blocker messages from the plan and gates.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use serde_json::json;
+    /// # async fn _example() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Create minimal params with a request string
+    /// let params = json!({ "request": "Implement feature X with unit tests" });
+    /// // `server` must be an instance of SmithCompatibilityServer in tests; here we assume a mutable
+    /// // reference `&server` exists and is usable in async context.
+    /// // let resp = server.prepare_direct_execution(params).await?;
+    /// // Inspect the returned ToolResponse JSON:
+    /// // assert!(resp.get("data").is_some());
+    /// # Ok(()) }
+    /// ```
     async fn prepare_direct_execution(
         &self,
         params: serde_json::Value,
@@ -3697,6 +3832,24 @@ impl SmithCompatibilityServer {
         })
     }
 
+    /// Generates a review-and-merge status summary for current GitHub pull requests.
+    ///
+    /// Builds gate-based review/merge diagnostics from the repository's open pull requests
+    /// and the cached Linear workspace (if available). The function returns a serialized
+    /// `ToolResponse` (as JSON) whose `data` is a `ReviewMergeStatus`. The overall
+    /// `ToolResponse.status` is `Ok` when all gates are `Pass`, and `Degraded` otherwise.
+    /// Non-passing gates produce entries in the response's `blocking_issues`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use serde_json::json;
+    /// # async fn example(server: &crate::SmithCompatibilityServer) -> Result<(), Box<dyn std::error::Error>> {
+    /// let resp_json = server.review_merge_status(json!({})).await?;
+    /// // `resp_json` is a ToolResponse serialized as JSON containing `ReviewMergeStatus` in `data`.
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn review_merge_status(
         &self,
         _params: serde_json::Value,
@@ -4050,6 +4203,33 @@ impl SmithCompatibilityServer {
     }
 }
 
+/// Build and register a Smith-compatible MCP server bound to stdio://smith.
+///
+/// This constructs a `SmithCompatibilityServer`, creates an `McpServer` configured
+/// for the Smith compatibility/control-plane, registers the full set of Smith
+/// MCP tools (audit, routing, Linear/SpecKit helpers, Ralph helpers, etc.),
+/// populates the compatibility runtime metadata, and returns the running server.
+///
+/// # Returns
+///
+/// `Ok(Arc<McpServer>)` with the fully-registered server on success, or `Err(McpError)`
+/// if server construction or registration fails.
+///
+/// # Examples
+///
+/// ```
+/// # tokio_test::block_on(async {
+/// use std::sync::Arc;
+/// // Assume SmithCompatibilityOptions::from_env() exists and is usable here.
+/// let options = SmithCompatibilityOptions::from_env();
+/// let server_res = build_smith_compatibility_server(options).await;
+/// assert!(server_res.is_ok());
+/// let server = server_res.unwrap();
+/// // Basic smoke-check: ensure the server reports at least one registered tool name.
+/// let names = server.registered_tool_names().await;
+/// assert!(!names.is_empty());
+/// # });
+/// ```
 pub async fn build_smith_compatibility_server(
     options: SmithCompatibilityOptions,
 ) -> Result<Arc<McpServer>, McpError> {
@@ -5310,10 +5490,41 @@ fn select_current_workpad(comments: &[LinearCommentSnapshot]) -> Option<LinearWo
     })
 }
 
+/// Get the state's name for a Linear issue, if one is present.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Given a `LinearIssueSnapshot` `issue`, retrieve its state name if available:
+/// let name = state_name(&issue);
+/// if let Some(state_name) = name {
+///     println!("Issue state: {}", state_name);
+/// }
+/// ```
+///
+/// # Returns
+///
+/// `Some(&str)` with the state's name if the issue has a state, `None` otherwise.
 fn state_name(issue: &LinearIssueSnapshot) -> Option<&str> {
     issue.state.as_ref().map(|state| state.name.as_str())
 }
 
+/// Retrieves the state's type name for a Linear issue, if present.
+///
+/// Returns `Some(&str)` when the issue has a `state` and that state has a `state_type`,
+/// otherwise returns `None`.
+///
+/// # Examples
+///
+/// ```ignore
+/// // Construct a LinearIssueSnapshot with a state that has a state_type.
+/// let issue = LinearIssueSnapshot {
+///     state: Some(LinearStateSnapshot { state_type: Some("active".to_string()), ..Default::default() }),
+///     ..Default::default()
+/// };
+///
+/// assert_eq!(state_type_name(&issue), Some("active"));
+/// ```
 fn state_type_name(issue: &LinearIssueSnapshot) -> Option<&str> {
     issue
         .state
@@ -5321,6 +5532,17 @@ fn state_type_name(issue: &LinearIssueSnapshot) -> Option<&str> {
         .and_then(|state| state.state_type.as_deref())
 }
 
+/// Determines whether a state name represents a terminal issue state.
+///
+/// # Examples
+///
+/// ```
+/// assert!(is_terminal_state_name("Done"));
+/// assert!(is_terminal_state_name("Cancelled"));
+/// assert!(!is_terminal_state_name("Backlog"));
+/// ```
+///
+/// @returns `true` if the name equals one of: "Done", "Canceled", "Cancelled", "Duplicate", "Complete", or "Completed", `false` otherwise.
 fn is_terminal_state_name(state_name: &str) -> bool {
     matches!(
         state_name,
@@ -5420,6 +5642,34 @@ fn pr_correlation(matching_pull_requests: &[GitHubPullRequest]) -> Vec<String> {
         .collect()
 }
 
+/// Compute an IssueLifecycleResolution for a given Linear issue, its Codex workpad (if any),
+/// and correlated GitHub pull requests.
+///
+/// The resolution includes the resolved issue snapshot (if found), a next recommended action,
+/// any required mutations (workpad/labels), blocking reasons derived from direct blockers,
+/// the review state, and PR correlation details.
+///
+/// # Parameters
+///
+/// - `issue`: optional Linear issue snapshot to resolve; when `None` the result indicates the
+///   issue was not found.
+/// - `workpad`: optional reference to the current Codex workpad comment for the issue.
+/// - `matching_pull_requests`: slice of GitHub pull requests correlated with the issue.
+/// - `issue_identifier`: the identifier string used to look up the issue (used in error messages).
+///
+/// # Returns
+///
+/// An `IssueLifecycleResolution` describing the issue (when found), `next_recommended_action`,
+/// `required_mutations`, `blocking_reasons`, `review_state`, and PR correlation summary.
+///
+/// # Examples
+///
+/// ```
+/// // If the issue is missing the resolution points the caller to verify the identifier.
+/// let res = build_direct_issue_lifecycle_resolution(None, None, &[], "MS-1");
+/// assert_eq!(res.issue, None);
+/// assert_eq!(res.next_recommended_action, "verify_issue_identifier");
+/// ```
 fn build_direct_issue_lifecycle_resolution(
     issue: Option<LinearIssueSnapshot>,
     workpad: Option<&LinearWorkpadSnapshot>,
@@ -5491,6 +5741,30 @@ fn build_direct_issue_lifecycle_resolution(
     }
 }
 
+/// Constructs a DirectExecutionPlan describing the readiness, constraints, and actionable next steps
+/// for performing direct execution against a repository/issue/feature directory.
+///
+/// The returned plan summarizes:
+/// - the execution objective, assumptions, and risks;
+/// - required tools and documents to read;
+/// - validation commands and recommended next action;
+/// - any blocking reasons and computed execution gates (pending_gates);
+/// - resolved feature directory and tasks path if present;
+/// - resume and rollback notes.
+///
+/// The function derives these values from the provided repository root, optional issue/workpad
+/// context, matching pull requests, and an optional feature directory (used to detect SpecKit usage).
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+///
+/// // Prepare a minimal plan with no issue, no workpad, and no feature dir.
+/// let plan = build_direct_execution_plan(Path::new("."), None, "", None, None, &[], None);
+/// // With no inputs the plan will include blocking reasons to indicate missing context.
+/// assert!(!plan.blocking_reasons.is_empty());
+/// ```
 fn build_direct_execution_plan(
     repo_root: &Path,
     requested_issue_identifier: Option<String>,
@@ -5638,6 +5912,25 @@ fn build_direct_execution_plan(
     }
 }
 
+/// Selects the ordered list of recommended next tool names for a direct execution plan.
+///
+/// The returned vector lists tool names in priority order:
+/// - If `plan.should_use_speckit` is true, recommends `prepare_speckit_context` first, then `get_issue_execution_snapshot`.
+/// - Otherwise, recommends `get_issue_execution_snapshot` first, then `save_issue_workpad`.
+///
+/// # Examples
+///
+/// ```
+/// // Requires `DirectExecutionPlan` to implement `Default` for this example.
+/// let mut plan = DirectExecutionPlan::default();
+/// plan.should_use_speckit = true;
+/// let tools = direct_execution_recommended_next_tools(&plan);
+/// assert_eq!(tools, vec!["prepare_speckit_context".to_string(), "get_issue_execution_snapshot".to_string()]);
+///
+/// plan.should_use_speckit = false;
+/// let tools = direct_execution_recommended_next_tools(&plan);
+/// assert_eq!(tools, vec!["get_issue_execution_snapshot".to_string(), "save_issue_workpad".to_string()]);
+/// ```
 fn direct_execution_recommended_next_tools(plan: &DirectExecutionPlan) -> Vec<String> {
     if plan.should_use_speckit {
         vec![
@@ -5652,6 +5945,19 @@ fn direct_execution_recommended_next_tools(plan: &DirectExecutionPlan) -> Vec<St
     }
 }
 
+/// Creates an `ExecutionGate` with the given name, state, and detail.
+///
+/// # Examples
+///
+/// ```
+/// let g = execution_gate("linear_access", GateState::Pass, "LINEAR_API_KEY present");
+/// assert_eq!(g.name, "linear_access");
+/// assert_eq!(g.detail, "LINEAR_API_KEY present");
+/// match g.state {
+///     GateState::Pass => (),
+///     _ => panic!("expected Pass"),
+/// }
+/// ```
 fn execution_gate(
     name: impl Into<String>,
     state: GateState,
@@ -5664,6 +5970,38 @@ fn execution_gate(
     }
 }
 
+/// Builds a list of execution gates representing readiness checks that can block or mark as unknown the direct execution of work.
+///
+/// The returned gates encode named checks (`ExecutionGate.name`) with a `GateState` and a human-readable `detail` explaining why the gate failed or is unknown. The function inspects:
+/// - whether any context input was provided (`has_context_input`),
+/// - the workpad status (`workpad_status_value` may be `"missing"` or `"duplicate"`),
+/// - explicit blocker messages (`blocker_details`),
+/// - correlated PR review state (`review_state`, e.g. `"changes_requested"` or `"review_pending"`),
+/// - whether SpecKit should be used but no tasks path was located (`should_use_speckit` and `tasks_path`),
+/// - and whether the next recommended action requires advancing the issue state (`next_recommended_action == "update_issue_state"`).
+///
+/// # Returns
+///
+/// A `Vec<ExecutionGate>` containing one entry per failing or unknown readiness check; empty when no blocking or unknown gates apply.
+///
+/// # Examples
+///
+/// ```
+/// let gates = blocking_execution_gates(
+///     false,
+///     Some("missing"),
+///     &vec!["blocked by MS-1".to_string()],
+///     Some("changes_requested"),
+///     true,
+///     None,
+///     "none",
+/// );
+/// assert!(gates.iter().any(|g| g.name == "execution_context"));
+/// assert!(gates.iter().any(|g| g.name == "single_codex_workpad"));
+/// assert!(gates.iter().any(|g| g.name == "issue_unblocked"));
+/// assert!(gates.iter().any(|g| g.name == "review_feedback_clear"));
+/// assert!(gates.iter().any(|g| g.name == "speckit_packet_ready"));
+/// ```
 fn blocking_execution_gates(
     has_context_input: bool,
     workpad_status_value: Option<&str>,
@@ -5738,6 +6076,32 @@ fn blocking_execution_gates(
     gates
 }
 
+/// Appends an execution gate to `pending_gates` based on a named readiness check.
+///
+/// Looks up `check_name` in `readiness.checks`. If the check is missing and `required` is
+/// true, an `Unknown` gate is appended indicating the readiness check is unavailable.
+/// If the check exists and its status is not `Ok` or `Applied`, a gate is appended:
+/// - `Fail` when `required` is true
+/// - `Unknown` when `required` is false
+/// The gate's `detail` is taken from the readiness check's `detail` (or a generated message
+/// when the check is missing).
+///
+/// # Examples
+///
+/// ```
+/// # use mister_smith_mcp::compatibility::{append_readiness_gate, ExecutionGate, GateState, ReadinessAudit, ReadinessCheck, CompatibilityStatus};
+/// let mut pending_gates: Vec<ExecutionGate> = Vec::new();
+/// let readiness = ReadinessAudit {
+///     checks: vec![ReadinessCheck {
+///         name: "linear_api_key".to_string(),
+///         status: CompatibilityStatus::Blocked,
+///         detail: "LINEAR_API_KEY not set".to_string(),
+///     }],
+///     evidence: vec![],
+/// };
+/// append_readiness_gate(&mut pending_gates, &readiness, "linear_api_key", "linear_access", true);
+/// assert_eq!(pending_gates.len(), 1);
+/// ```
 fn append_readiness_gate(
     pending_gates: &mut Vec<ExecutionGate>,
     readiness: &ReadinessAudit,
@@ -5775,6 +6139,17 @@ fn append_readiness_gate(
     pending_gates.push(execution_gate(gate_name, state, check.detail.clone()));
 }
 
+/// Format execution gate messages as "Name: detail" strings.
+///
+/// Converts each `ExecutionGate` in `gates` into a single string combining its
+/// `name` and `detail` fields separated by ": ".
+///
+/// # Examples
+///
+/// ```
+/// let msgs = gate_issue_messages(&[]);
+/// assert!(msgs.is_empty());
+/// ```
 fn gate_issue_messages(gates: &[ExecutionGate]) -> Vec<String> {
     gates
         .iter()
@@ -5782,6 +6157,29 @@ fn gate_issue_messages(gates: &[ExecutionGate]) -> Vec<String> {
         .collect()
 }
 
+/// Choose a concise objective for direct execution from available context.
+///
+/// Prefers an associated Linear issue (producing `"Advance <identifier>: <title>"`), then a non-empty trimmed `request_text`, then a `feature_dir` fallback (`"Prepare direct execution for <feature_dir>"`), and finally the generic `"Prepare direct Codex execution"`.
+///
+/// # Returns
+///
+/// The chosen objective string.
+///
+/// # Examples
+///
+/// ```
+/// // prefer request_text when no issue is present
+/// let o = direct_execution_objective(None, "Implement search feature", None);
+/// assert_eq!(o, "Implement search feature");
+///
+/// // use feature_dir when request_text is empty
+/// let o = direct_execution_objective(None, "   ", Some("features/search"));
+/// assert_eq!(o, "Prepare direct execution for features/search");
+///
+/// // fallback generic objective when nothing is provided
+/// let o = direct_execution_objective(None, "", None);
+/// assert_eq!(o, "Prepare direct Codex execution");
+/// ```
 fn direct_execution_objective(
     issue: Option<&LinearIssueSnapshot>,
     request_text: &str,
@@ -5798,6 +6196,17 @@ fn direct_execution_objective(
     }
 }
 
+/// Builds the list of textual assumptions to include in a direct execution plan.
+///
+/// The returned strings describe repository authority, issue anchoring, preferred SpecKit usage,
+/// and pull-request correlation when applicable.
+///
+/// # Examples
+///
+/// ```
+/// let assumptions = direct_execution_assumptions(None, true, false);
+/// assert!(assumptions.iter().any(|s| s.contains("speckit")));
+/// ```
 fn direct_execution_assumptions(
     issue: Option<&LinearIssueSnapshot>,
     should_use_speckit: bool,
@@ -5826,6 +6235,38 @@ fn direct_execution_assumptions(
     assumptions
 }
 
+/// Assembles human-readable risk descriptions relevant to a direct execution plan.
+///
+/// The function inspects workpad presence, blocker details, GitHub review state,
+/// and whether SpecKit context is expected but missing to produce a prioritized
+/// list of risks that should be considered before attempting automated execution.
+///
+/// # Parameters
+///
+/// - `workpad_status_value`: optional workpad status string such as `"missing"` or `"duplicate"`.
+/// - `blocker_details`: list of blocker summary strings; non-empty indicates unresolved blockers.
+/// - `review_state`: optional review indicator such as `"changes_requested"` or `"review_pending"`.
+/// - `should_use_speckit`: `true` when SpecKit-based execution is recommended.
+/// - `tasks_path`: optional resolved path to `tasks.md`; `None` means the SpecKit tasks file is unresolved.
+///
+/// # Returns
+///
+/// A `Vec<String>` where each element is a human-readable risk description. If no specific risks are detected,
+/// the vector contains a single message indicating that no additional execution-specific risks were surfaced.
+///
+/// # Examples
+///
+/// ```
+/// let risks = direct_execution_risks(
+///     Some("missing"),
+///     &vec!["MS-42 blocking".to_string()],
+///     Some("review_pending"),
+///     true,
+///     None,
+/// );
+/// assert!(risks.len() >= 1);
+/// assert!(risks.iter().any(|r| r.contains("workpad")));
+/// ```
 fn direct_execution_risks(
     workpad_status_value: Option<&str>,
     blocker_details: &[String],
@@ -5866,6 +6307,25 @@ fn direct_execution_risks(
     risks
 }
 
+/// Produce a concise resume note advising how to resume execution based on the next recommended action.
+///
+/// The function maps a canonical action identifier (e.g., `"reconcile_workpad"`, `"merge_ready_pr"`)
+/// to a short, human-readable instruction that explains how to continue work safely.
+///
+/// # Parameters
+///
+/// - `next_recommended_action`: a canonical action name indicating the next recommended step.
+///
+/// # Returns
+///
+/// A human-readable guidance string corresponding to the suggested resume action.
+///
+/// # Examples
+///
+/// ```
+/// let note = direct_execution_resume_note("continue_execution");
+/// assert!(note.contains("Resume from the current workpad"));
+/// ```
 fn direct_execution_resume_note(next_recommended_action: &str) -> String {
     match next_recommended_action {
         "reconcile_workpad" => {
@@ -5896,6 +6356,59 @@ fn direct_execution_resume_note(next_recommended_action: &str) -> String {
     }
 }
 
+/// Produce a concise rollback instruction to guide resuming direct execution.
+
+///
+
+/// If `issue` is provided, the instruction references the issue's identifier to
+
+/// suggest keeping the task branch and updating the Codex workpad before resuming.
+
+/// If `issue` is `None`, the instruction gives a generic guidance to return to the
+
+/// last verified branch state and restate the task context.
+
+///
+
+/// # Parameters
+
+///
+
+/// - `issue`: Optional reference to a `LinearIssueSnapshot`; when present the note
+
+///   includes `issue.identifier`.
+
+///
+
+/// # Returns
+
+///
+
+/// A `String` containing the rollback instruction.
+
+///
+
+/// # Examples
+
+///
+
+/// ```
+
+/// let none_note = direct_execution_rollback_note(None);
+
+/// assert!(none_note.contains("return to the last verified branch state"));
+
+///
+
+/// struct LinearIssueSnapshot { identifier: String, /* truncated */ }
+
+/// let issue = LinearIssueSnapshot { identifier: "MS-123".into() };
+
+/// let note = direct_execution_rollback_note(Some(&issue));
+
+/// assert!(note.contains("MS-123"));
+
+/// ```
 fn direct_execution_rollback_note(issue: Option<&LinearIssueSnapshot>) -> String {
     if let Some(issue) = issue {
         format!(
@@ -5907,6 +6420,26 @@ fn direct_execution_rollback_note(issue: Option<&LinearIssueSnapshot>) -> String
     }
 }
 
+/// Builds a ReviewMergeStatus summarizing open pull requests with review blockers,
+/// merge-ready PRs, stale PRs, recommended next actions, and execution gates.
+///
+/// The returned status groups PRs into:
+/// - review blockers: draft PRs or those with requested changes,
+/// - merge-ready PRs: approved, non-draft PRs,
+/// - stale PRs: PRs that lack linked identifiers or whose identifiers are not found in the provided Linear workspace.
+///
+/// Parameters:
+/// - `pull_requests`: slice of GitHub pull request snapshots to evaluate.
+/// - `workspace`: optional Linear workspace snapshot used to determine whether PR-linked issue identifiers are current.
+///
+/// # Examples
+///
+/// ```
+/// // Evaluate an empty repository state: no pull requests present.
+/// let status = build_review_merge_status(&[], None);
+/// assert_eq!(status.open_pull_request_count, 0);
+/// assert!(status.recommended_actions.iter().any(|a| a.contains("no immediate review")));
+/// ```
 fn build_review_merge_status(
     pull_requests: &[GitHubPullRequest],
     workspace: Option<&LinearWorkspaceData>,
