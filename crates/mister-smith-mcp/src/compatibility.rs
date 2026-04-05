@@ -1039,17 +1039,8 @@ impl SmithCompatibilityServer {
             None
         };
         let github = self.github_snapshot().await;
-        let matching_pull_requests = github
-            .open_pull_requests
-            .into_iter()
-            .filter(|pr| {
-                pr.title.contains(issue_identifier)
-                    || pr
-                        .head_ref_name
-                        .to_lowercase()
-                        .contains(&issue_identifier.to_lowercase())
-            })
-            .collect::<Vec<_>>();
+        let matching_pull_requests =
+            matching_pull_requests_for_identifier(&github.open_pull_requests, issue_identifier);
 
         Ok(IssueExecutionContext {
             issue,
@@ -1119,27 +1110,6 @@ impl SmithCompatibilityServer {
         json_response(self.collect_readiness_audit().await)
     }
 
-    /// Collects and summarizes local and configuration readiness for the Mister Smith control plane.
-    ///
-    /// Inspects Codex smith configuration, runtime files (repo root, repo .env), CLI tooling (`cargo`, `rustc`, `rustup`, `gh`), GitHub authentication status, and presence of `LINEAR_API_KEY`; aggregates per-check details, evidence items, warnings, and blocking issues into a `ReadinessAudit` wrapped in a `ToolResponse`.
-    ///
-    /// The returned `ToolResponse` contains:
-    /// - `status`: overall readiness (Blocked if any blocker, Degraded if any non-Ok, otherwise Ok)
-    /// - `summary`: human-readable summary derived from `status`
-    /// - `evidence`: discovered configuration and command details (codex command, cwd, args, repo/env paths)
-    /// - `warnings`: non-blocking but relevant issues
-    /// - `blocking_issues`: blocker detail strings for checks with severity "blocker"
-    /// - `recommended_next_tools`: a small fixed set of follow-up tool names
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn example(server: &crate::SmithCompatibilityServer) {
-    /// let resp = server.collect_readiness_audit().await;
-    /// // `resp.data` contains the detailed `ReadinessAudit` with individual checks
-    /// assert!(matches!(resp.status, crate::CompatibilityStatus::Ok | crate::CompatibilityStatus::Degraded | crate::CompatibilityStatus::Blocked));
-    /// # }
-    /// ```
     async fn collect_readiness_audit(&self) -> ToolResponse<ReadinessAudit> {
         let config_status = inspect_codex_smith_config(&self.options.codex_config_path);
         let linear_key_available = self.linear_api_key().is_some();
@@ -1436,28 +1406,6 @@ impl SmithCompatibilityServer {
         })
     }
 
-    /// Routes an operator's textual request into a workflow lane and recommends next tools.
-    ///
-    /// Classifies the provided request text into a `WorkflowRequestClass` (ResponseOnly, PlanOnly,
-    /// or TrackedExecution) using keyword heuristics, selects a `route` and `preferred_tool`,
-    /// and emits recommended follow-up tools. The produced `WorkflowRoute` in the response's `data`
-    /// includes `route`, `reason`, `normalized_request`, `preferred_tool`, `request_class`,
-    /// `execution_allowed`, and `needs_plan`. If the request text is empty, the function returns
-    /// a blocked `ToolResponse` indicating the missing parameter and defaults the `request_class` to
-    /// `PlanOnly`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #[tokio::test]
-    /// async fn example_route_workflow_request() {
-    ///     // `server` is an instance with `route_workflow_request` in scope.
-    ///     let params = serde_json::json!({ "request": "What is the merge readiness for MS-42?" });
-    ///     let resp = server.route_workflow_request(params).await.unwrap();
-    ///     // response is a serialized ToolResponse; ensure it contains a `data` object with `route`
-    ///     assert!(resp.get("data").and_then(|d| d.get("route")).is_some());
-    /// }
-    /// ```
     async fn route_workflow_request(
         &self,
         params: serde_json::Value,
@@ -1478,6 +1426,8 @@ impl SmithCompatibilityServer {
                 "audit",
                 "assess",
                 "status only",
+                "status",
+                "snapshot",
                 "what changed",
                 "what is true",
             ],
@@ -1517,13 +1467,19 @@ impl SmithCompatibilityServer {
                 "push branch",
             ],
         );
-        let request_class = if has_response_only_language && !has_explicit_execution_language {
-            WorkflowRequestClass::ResponseOnly
-        } else if has_plan_only_language && !has_explicit_execution_language {
-            WorkflowRequestClass::PlanOnly
-        } else {
-            WorkflowRequestClass::TrackedExecution
-        };
+        let has_read_only_review_language = contains_any(
+            &normalized,
+            &[
+                "merge readiness",
+                "review state",
+                "review status",
+                "pr status",
+                "pull request status",
+                "snapshot",
+            ],
+        );
+        let has_bootstrap_execution_language =
+            contains_any(&normalized, &["install", "configure mcp", "setup"]);
 
         if normalized.trim().is_empty() {
             return json_response(ToolResponse {
@@ -1545,252 +1501,267 @@ impl SmithCompatibilityServer {
             });
         }
 
-        let (route, reason, preferred_tool, next_tools) =
-            if matches!(request_class, WorkflowRequestClass::ResponseOnly) {
-                if contains_any(
-                    &normalized,
-                    &["pull request", "github pr", "merge readiness"],
-                ) {
-                    (
-                        "analysis".to_string(),
-                        "request is analysis-only and targets review or merge state".to_string(),
-                        "review_merge_status".to_string(),
-                        vec![
-                            "review_merge_status".to_string(),
-                            "get_control_plane_snapshot".to_string(),
-                        ],
-                    )
-                } else if request_identifiers.is_empty() {
-                    (
-                        "analysis".to_string(),
-                        "request is analysis-only and needs broad control-plane context"
-                            .to_string(),
-                        "get_control_plane_snapshot".to_string(),
-                        vec![
-                            "get_control_plane_snapshot".to_string(),
-                            "get_issue_execution_snapshot".to_string(),
-                        ],
-                    )
-                } else {
-                    (
-                        "analysis".to_string(),
-                        "request is analysis-only and targets current issue execution context"
-                            .to_string(),
-                        "get_issue_execution_snapshot".to_string(),
-                        vec![
-                            "get_issue_execution_snapshot".to_string(),
-                            "get_control_plane_snapshot".to_string(),
-                        ],
-                    )
-                }
-            } else if contains_any(
-                &normalized,
-                &[
-                    "bootstrap",
-                    "readiness",
-                    "install",
-                    "configure mcp",
-                    "setup",
-                ],
-            ) {
-                (
-                    "bootstrap".to_string(),
-                    "request targets readiness or MCP bootstrap".to_string(),
+        let (route, reason, preferred_tool, next_tools) = if contains_any(
+            &normalized,
+            &[
+                "bootstrap",
+                "readiness",
+                "install",
+                "configure mcp",
+                "setup",
+            ],
+        ) {
+            (
+                "bootstrap".to_string(),
+                "request targets readiness or MCP bootstrap".to_string(),
+                "audit_workflow_readiness".to_string(),
+                vec![
                     "audit_workflow_readiness".to_string(),
-                    vec![
-                        "audit_workflow_readiness".to_string(),
-                        "plan_workspace_adjustments".to_string(),
-                    ],
-                )
-            } else if contains_any(
+                    "plan_workspace_adjustments".to_string(),
+                ],
+            )
+        } else if contains_any(
+            &normalized,
+            &[
+                "codex workpad",
+                "workpad comment",
+                "update workpad",
+                "save workpad",
+                "create child issue",
+                "child issue",
+                "create issue",
+                "update issue",
+                "linear comment",
+                "issue comment",
+            ],
+        ) {
+            let preferred_tool = if contains_any(
                 &normalized,
                 &[
                     "codex workpad",
                     "workpad comment",
                     "update workpad",
                     "save workpad",
-                    "create child issue",
-                    "child issue",
-                    "create issue",
-                    "update issue",
                     "linear comment",
                     "issue comment",
                 ],
             ) {
-                let preferred_tool = if contains_any(
-                    &normalized,
-                    &[
-                        "codex workpad",
-                        "workpad comment",
-                        "update workpad",
-                        "save workpad",
-                        "linear comment",
-                        "issue comment",
-                    ],
-                ) {
-                    "save_issue_workpad"
-                } else {
-                    "save_linear_issue"
-                };
-                (
-                    "linear_workflow".to_string(),
-                    "request targets Smith-managed Linear issue or workpad mutation".to_string(),
-                    preferred_tool.to_string(),
-                    vec![
-                        "save_linear_issue".to_string(),
-                        "save_issue_workpad".to_string(),
-                        "get_issue_execution_snapshot".to_string(),
-                    ],
-                )
-            } else if contains_any(
-                &normalized,
-                &[
-                    "backlog slice",
-                    "backlog slicing",
-                    "child issue creation",
-                    "materialize slices",
-                    "translate speckit tasks",
-                    "task-pack translation",
-                    "sub-issue creation",
+                "save_issue_workpad"
+            } else {
+                "save_linear_issue"
+            };
+            (
+                "linear_workflow".to_string(),
+                "request targets Smith-managed Linear issue or workpad mutation".to_string(),
+                preferred_tool.to_string(),
+                vec![
+                    "save_linear_issue".to_string(),
+                    "save_issue_workpad".to_string(),
+                    "get_issue_execution_snapshot".to_string(),
                 ],
-            ) {
-                let preferred_tool = if contains_any(
-                    &normalized,
-                    &["speckit", "task-pack", "tasks.md", "translate"],
-                ) {
-                    "translate_speckit_tasks"
-                } else {
-                    "materialize_backlog_slices"
-                };
-                (
-                    "backlog_slicing".to_string(),
-                    "request targets Smith-managed backlog slicing or SpecKit task translation"
-                        .to_string(),
-                    preferred_tool.to_string(),
-                    vec![
-                        "materialize_backlog_slices".to_string(),
-                        "translate_speckit_tasks".to_string(),
-                        "prepare_direct_execution".to_string(),
-                    ],
-                )
-            } else if contains_any(
+            )
+        } else if contains_any(
+            &normalized,
+            &[
+                "backlog slice",
+                "backlog slicing",
+                "child issue creation",
+                "materialize slices",
+                "translate speckit tasks",
+                "task-pack translation",
+                "sub-issue creation",
+            ],
+        ) {
+            let preferred_tool = if contains_any(
                 &normalized,
-                &[
-                    "implement",
-                    "execution",
-                    "direct execution",
-                    "continue execution",
-                    "fix issue",
-                    "packet",
-                    "spec",
-                    "task pack",
-                    "tasks.md",
-                    "speckit",
-                ],
+                &["speckit", "task-pack", "tasks.md", "translate"],
             ) {
-                (
-                    "direct_execution".to_string(),
-                    "request targets direct Codex execution preparation".to_string(),
+                "translate_speckit_tasks"
+            } else {
+                "materialize_backlog_slices"
+            };
+            (
+                "backlog_slicing".to_string(),
+                "request targets Smith-managed backlog slicing or SpecKit task translation"
+                    .to_string(),
+                preferred_tool.to_string(),
+                vec![
+                    "materialize_backlog_slices".to_string(),
+                    "translate_speckit_tasks".to_string(),
                     "prepare_direct_execution".to_string(),
-                    vec![
-                        "prepare_direct_execution".to_string(),
-                        "get_issue_execution_snapshot".to_string(),
-                        "prepare_speckit_context".to_string(),
-                    ],
-                )
-            } else if contains_any(
-                &normalized,
-                &[
-                    "issue lifecycle",
-                    "next action for issue",
-                    "execution recovery",
-                    "review state",
-                    "next step",
                 ],
-            ) {
-                (
-                    "issue_lifecycle".to_string(),
-                    "request targets issue lifecycle resolution or recovery routing".to_string(),
+            )
+        } else if contains_any(
+            &normalized,
+            &[
+                "implement",
+                "execution",
+                "direct execution",
+                "continue execution",
+                "fix issue",
+                "packet",
+                "spec",
+                "task pack",
+                "tasks.md",
+                "speckit",
+            ],
+        ) {
+            (
+                "direct_execution".to_string(),
+                "request targets direct Codex execution preparation".to_string(),
+                "prepare_direct_execution".to_string(),
+                vec![
+                    "prepare_direct_execution".to_string(),
+                    "get_issue_execution_snapshot".to_string(),
+                    "prepare_speckit_context".to_string(),
+                ],
+            )
+        } else if contains_any(
+            &normalized,
+            &[
+                "issue lifecycle",
+                "next action for issue",
+                "execution recovery",
+                "next step",
+            ],
+        ) {
+            (
+                "issue_lifecycle".to_string(),
+                "request targets issue lifecycle resolution or recovery routing".to_string(),
+                "resolve_issue_lifecycle".to_string(),
+                vec![
                     "resolve_issue_lifecycle".to_string(),
-                    vec![
-                        "resolve_issue_lifecycle".to_string(),
-                        "get_issue_execution_snapshot".to_string(),
-                        "prepare_direct_execution".to_string(),
-                    ],
-                )
-            } else if contains_any(
-                &normalized,
-                &[
-                    "workflow system",
-                    "development workflow",
-                    "development system",
-                    "workflow architecture",
-                    "operating model",
-                    "smith-first",
-                    "ralph",
-                    "speckit",
-                    "prompt",
-                    "workpad",
-                    "handoff",
-                    "skills",
-                    "repo context",
-                    "context gathering",
+                    "get_issue_execution_snapshot".to_string(),
+                    "prepare_direct_execution".to_string(),
                 ],
-            ) {
-                (
-                    "direct_execution".to_string(),
-                    "request targets Smith-first direct execution design or chaining".to_string(),
+            )
+        } else if contains_any(
+            &normalized,
+            &[
+                "workflow system",
+                "development workflow",
+                "development system",
+                "workflow architecture",
+                "operating model",
+                "smith-first",
+                "ralph",
+                "speckit",
+                "prompt",
+                "workpad",
+                "handoff",
+                "skills",
+                "repo context",
+                "context gathering",
+            ],
+        ) {
+            (
+                "direct_execution".to_string(),
+                "request targets Smith-first direct execution design or chaining".to_string(),
+                "prepare_direct_execution".to_string(),
+                vec![
                     "prepare_direct_execution".to_string(),
-                    vec![
-                        "prepare_direct_execution".to_string(),
-                        "get_control_plane_snapshot".to_string(),
-                        "prepare_speckit_context".to_string(),
-                    ],
-                )
-            } else if contains_any(
-                &normalized,
-                &["review", "merge", "pull request", "github pr"],
-            ) {
-                (
-                    "review_merge".to_string(),
-                    "request targets direct review or merge reconciliation".to_string(),
+                    "get_control_plane_snapshot".to_string(),
+                    "prepare_speckit_context".to_string(),
+                ],
+            )
+        } else if contains_any(
+            &normalized,
+            &[
+                "merge",
+                "pull request",
+                "github pr",
+                "pr status",
+                "merge readiness",
+                "requested changes",
+                "draft pr",
+            ],
+        ) {
+            (
+                "review_merge".to_string(),
+                "request targets direct review or merge reconciliation".to_string(),
+                "review_merge_status".to_string(),
+                vec![
                     "review_merge_status".to_string(),
-                    vec![
-                        "review_merge_status".to_string(),
-                        "get_control_plane_snapshot".to_string(),
-                    ],
-                )
-            } else if contains_any(&normalized, &["legitimacy", "frontier", "scope", "drift"]) {
-                (
-                    "legitimacy".to_string(),
-                    "request targets legitimacy or scope judgment".to_string(),
+                    "get_control_plane_snapshot".to_string(),
+                ],
+            )
+        } else if contains_any(&normalized, &["legitimacy", "frontier", "scope", "drift"]) {
+            (
+                "legitimacy".to_string(),
+                "request targets legitimacy or scope judgment".to_string(),
+                "evaluate_issue_legitimacy".to_string(),
+                vec![
                     "evaluate_issue_legitimacy".to_string(),
-                    vec![
-                        "evaluate_issue_legitimacy".to_string(),
-                        "classify_follow_up_work".to_string(),
-                    ],
-                )
-            } else if contains_any(&normalized, &["issue", "linear", "ticket", "backlog"]) {
+                    "classify_follow_up_work".to_string(),
+                ],
+            )
+        } else if has_response_only_language {
+            if request_identifiers.is_empty() {
                 (
-                    "direct_execution".to_string(),
-                    "request targets direct issue state or execution routing".to_string(),
-                    "prepare_direct_execution".to_string(),
+                    "analysis".to_string(),
+                    "request is analysis-only and needs broad control-plane context".to_string(),
+                    "get_control_plane_snapshot".to_string(),
                     vec![
-                        "prepare_direct_execution".to_string(),
+                        "get_control_plane_snapshot".to_string(),
                         "get_issue_execution_snapshot".to_string(),
                     ],
                 )
             } else {
                 (
-                    "direct_execution".to_string(),
-                    "request needs a broad control-plane snapshot first".to_string(),
-                    "get_control_plane_snapshot".to_string(),
+                    "analysis".to_string(),
+                    "request is analysis-only and targets current issue execution context"
+                        .to_string(),
+                    "get_issue_execution_snapshot".to_string(),
                     vec![
+                        "get_issue_execution_snapshot".to_string(),
                         "get_control_plane_snapshot".to_string(),
-                        "prepare_direct_execution".to_string(),
                     ],
                 )
-            };
+            }
+        } else if contains_any(&normalized, &["issue", "linear", "ticket", "backlog"]) {
+            (
+                "direct_execution".to_string(),
+                "request targets direct issue state or execution routing".to_string(),
+                "prepare_direct_execution".to_string(),
+                vec![
+                    "prepare_direct_execution".to_string(),
+                    "get_issue_execution_snapshot".to_string(),
+                ],
+            )
+        } else {
+            (
+                "direct_execution".to_string(),
+                "request needs a broad control-plane snapshot first".to_string(),
+                "get_control_plane_snapshot".to_string(),
+                vec![
+                    "get_control_plane_snapshot".to_string(),
+                    "prepare_direct_execution".to_string(),
+                ],
+            )
+        };
+        let request_class = match route.as_str() {
+            "analysis" => WorkflowRequestClass::ResponseOnly,
+            "review_merge" if has_response_only_language || has_read_only_review_language => {
+                WorkflowRequestClass::ResponseOnly
+            }
+            "issue_lifecycle" if has_response_only_language || has_read_only_review_language => {
+                WorkflowRequestClass::ResponseOnly
+            }
+            "bootstrap" if has_bootstrap_execution_language || has_explicit_execution_language => {
+                WorkflowRequestClass::TrackedExecution
+            }
+            "bootstrap" if has_plan_only_language => WorkflowRequestClass::PlanOnly,
+            "bootstrap" => WorkflowRequestClass::ResponseOnly,
+            "direct_execution"
+                if has_response_only_language && !has_explicit_execution_language =>
+            {
+                WorkflowRequestClass::ResponseOnly
+            }
+            _ if has_plan_only_language && !has_explicit_execution_language => {
+                WorkflowRequestClass::PlanOnly
+            }
+            _ => WorkflowRequestClass::TrackedExecution,
+        };
 
         json_response(ToolResponse {
             status: CompatibilityStatus::Ok,
@@ -2926,42 +2897,6 @@ impl SmithCompatibilityServer {
         })
     }
 
-    /// Prepare a Ralph execution packet for a Linear issue.
-    ///
-    /// Builds a complete `RalphPacket` containing the issue's current context (issue fields and durable workpad),
-    /// a list of repo-local source documents, workflow and validation requirements, stop conditions,
-    /// a definition of done, and a rendered Ralph prompt. The function requires an issue identifier and
-    /// may include an optional `plan_path` to include a local plan file in the packet.
-    ///
-    /// Parameters
-    /// - `params`: JSON object that must include either `"issue_identifier"` or `"identifier"` (a Linear issue key).
-    ///   Optionally include `"plan_path"` to reference a plan file (absolute or repo-root-relative).
-    ///
-    /// Returns
-    /// A serialized `ToolResponse` JSON whose `data` field is a `RalphPacket`:
-    /// - On success the response has `status = Ok` and contains the prepared packet in `data`.
-    /// - If the issue identifier is missing or the issue cannot be resolved the response is a blocked `ToolResponse`
-    ///   containing an empty or partially-populated `RalphPacket`.
-    /// - If an internal error occurs the function returns an `McpError`.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// use serde_json::json;
-    ///
-    /// // `server` is an instance of SmithCompatibilityServer or compatible MCP server wrapper.
-    /// // Provide the issue identifier and optional plan_path.
-    /// let params = json!({
-    ///     "issue_identifier": "MS-123",
-    ///     "plan_path": "plans/MS-123/implementation.md"
-    /// });
-    ///
-    /// // Call the async handler and inspect the JSON ToolResponse
-    /// let response_json = server.prepare_ralph_packet(params).await?;
-    /// println!("{}", response_json);
-    /// # Ok(()) }
-    /// ```
     async fn prepare_ralph_packet(
         &self,
         params: serde_json::Value,
@@ -3031,6 +2966,11 @@ impl SmithCompatibilityServer {
                 self.options
                     .repo_root
                     .join("AGENTS.md")
+                    .display()
+                    .to_string(),
+                self.options
+                    .repo_root
+                    .join("docs/current-state.md")
                     .display()
                     .to_string(),
                 self.options
@@ -3526,27 +3466,6 @@ impl SmithCompatibilityServer {
         })
     }
 
-    /// Build an execution-readiness snapshot for a single Linear issue.
-    ///
-    /// If the `params` object does not contain `issue_identifier` (or `identifier`), the function
-    /// returns a blocked tool response containing an `IssueExecutionSnapshot` describing the
-    /// missing-input failure (including a failing execution gate and a `resume_note`).
-    ///
-    /// On success the returned `ToolResponse`'s `data` is an `IssueExecutionSnapshot` containing:
-    /// - `execution_state`: the issue's current state name (or `"unknown"`),
-    /// - `workpad_status`: one of `"missing"`, `"duplicate"`, or `"present"`,
-    /// - `pending_gates`: a list of execution gates that must pass before direct execution,
-    /// - `resume_note`: guidance for how to resume once gates are resolved,
-    /// - `blocking_issues`: human-readable blocking messages when the issue or gates block execution.
-    ///
-    /// Examples
-    ///
-    /// ```
-    /// // Construct parameters and call the compatibility server method:
-    /// let params = serde_json::json!({ "issue_identifier": "MS-42" });
-    /// // let res = compatibility_server.get_issue_execution_snapshot(params).await;
-    /// // inspect `res` to read the ToolResponse / IssueExecutionSnapshot fields.
-    /// ```
     async fn get_issue_execution_snapshot(
         &self,
         params: serde_json::Value,
@@ -3579,23 +3498,36 @@ impl SmithCompatibilityServer {
             ));
         };
 
-        let context = self.load_issue_execution_context(&identifier).await?;
         let readiness = self.collect_readiness_audit().await;
+        let context_result = self.load_issue_execution_context(&identifier).await;
+        let context_error = context_result
+            .as_ref()
+            .err()
+            .map(compatibility_error_detail);
+        let context = context_result.ok();
+        let github = self.github_snapshot().await;
+        let matching_pull_requests = context
+            .as_ref()
+            .map(|context| context.matching_pull_requests.clone())
+            .unwrap_or_else(|| {
+                matching_pull_requests_for_identifier(&github.open_pull_requests, &identifier)
+            });
+        let issue = context.as_ref().and_then(|context| context.issue.clone());
+        let workpad = context.as_ref().and_then(|context| context.workpad.clone());
         let resolution = build_direct_issue_lifecycle_resolution(
-            context.issue.clone(),
-            context.workpad.as_ref(),
-            &context.matching_pull_requests,
+            issue.clone(),
+            workpad.as_ref(),
+            &matching_pull_requests,
             &identifier,
         );
-        let blocker_summaries = context
-            .issue
+        let blocker_summaries = issue
             .as_ref()
             .map(direct_blocker_summaries)
             .unwrap_or_default();
-        let workpad_status_value = workpad_status(context.workpad.as_ref());
+        let workpad_status_value = workpad_status(workpad.as_ref());
         let mut pending_gates = blocking_execution_gates(
             true,
-            Some(&workpad_status_value),
+            issue.as_ref().map(|_| workpad_status_value.as_str()),
             &blocker_summaries,
             Some(&resolution.review_state),
             false,
@@ -3609,7 +3541,7 @@ impl SmithCompatibilityServer {
             "linear_access",
             true,
         );
-        if !context.matching_pull_requests.is_empty()
+        if !matching_pull_requests.is_empty()
             || matches!(
                 resolution.next_recommended_action.as_str(),
                 "merge_ready_pr" | "address_review_feedback"
@@ -3623,18 +3555,42 @@ impl SmithCompatibilityServer {
                 true,
             );
         }
-        let mut blocking_issues = if context.issue.is_some() {
+        if let Some(error) = context_error.as_ref() {
+            pending_gates.push(execution_gate(
+                "linear_issue_context",
+                GateState::Unknown,
+                format!("could not load Linear issue context for {identifier}: {error}"),
+            ));
+        }
+        let mut blocking_issues = if issue.is_some() {
             Vec::new()
         } else {
             vec![format!(
                 "issue {identifier} was not found in the current Linear snapshot"
             )]
         };
+        if let Some(error) = context_error.as_ref() {
+            blocking_issues.clear();
+            blocking_issues.push(format!(
+                "could not load Linear issue context for {identifier}: {error}"
+            ));
+        }
         blocking_issues.extend(gate_issue_messages(&pending_gates));
         let next_step_hint = resolution.next_recommended_action.clone();
-        let resume_note = direct_execution_resume_note(&next_step_hint);
+        let resume_note = context_error
+            .as_ref()
+            .map(|_| {
+                "Restore Linear access or verify the issue identifier, then rerun the execution snapshot."
+                    .to_string()
+            })
+            .unwrap_or_else(|| direct_execution_resume_note(&next_step_hint));
 
-        let (status, summary) = if context.issue.is_some() {
+        let (status, summary) = if context_error.is_some() {
+            (
+                CompatibilityStatus::Degraded,
+                format!("could not load execution snapshot for {identifier}"),
+            )
+        } else if issue.is_some() {
             (
                 if pending_gates.is_empty() {
                     CompatibilityStatus::Ok
@@ -3665,17 +3621,15 @@ impl SmithCompatibilityServer {
             ],
             blocking_issues,
             data: IssueExecutionSnapshot {
-                execution_state: context
-                    .issue
+                execution_state: issue
                     .as_ref()
                     .and_then(|issue| issue.state.as_ref().map(|state| state.name.clone()))
                     .unwrap_or_else(|| "unknown".to_string()),
                 blocker_summaries,
                 workpad_status: workpad_status_value,
                 next_step_hint,
-                notes: if context.issue.is_some() {
-                    context
-                        .workpad
+                notes: if issue.is_some() {
+                    workpad
                         .as_ref()
                         .and_then(|workpad| {
                             if workpad.duplicate_count > 0 {
@@ -3693,48 +3647,13 @@ impl SmithCompatibilityServer {
                 },
                 pending_gates,
                 resume_note,
-                issue: context.issue,
-                workpad: context.workpad,
-                matching_pull_requests: context.matching_pull_requests,
+                issue,
+                workpad,
+                matching_pull_requests,
             },
         })
     }
 
-    /// Prepare a DirectExecutionPlan from an operator request and optional issue context.
-    ///
-    /// This method combines the provided request text with the referenced issue's description (if an
-    /// `issue_identifier`/`identifier` is given), resolves an optional feature directory, builds a
-    /// DirectExecutionPlan, appends readiness gates (cargo, Linear access when the plan targets an
-    /// issue, and GitHub auth when `gh` is required), aggregates blocking reasons from the plan and
-    /// gates, and returns a ToolResponse wrapping the resulting plan.
-    ///
-    /// Accepted keys in `params`:
-    /// - `issue_identifier` or `identifier`: optional Linear issue identifier to load issue/workpad/PR
-    ///   context used to enrich the plan.
-    /// - `request_text` or `request`: request string describing the desired execution (defaults to the
-    ///   empty string).
-    /// - `feature_dir` or `feature_directory`: optional repo-root-relative path (string) to a feature
-    ///   directory; if omitted the directory may be inferred from the combined request+issue text.
-    ///
-    /// The returned JSON is a serialized `ToolResponse<DirectExecutionPlan>`. Its `status` is
-    /// `Ok` when the plan has no blocking reasons and no pending gates, and `Degraded` otherwise.
-    /// The `data` field contains the constructed `DirectExecutionPlan`; `blocking_issues` contains
-    /// aggregated blocker messages from the plan and gates.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use serde_json::json;
-    /// # async fn _example() -> Result<(), Box<dyn std::error::Error>> {
-    /// // Create minimal params with a request string
-    /// let params = json!({ "request": "Implement feature X with unit tests" });
-    /// // `server` must be an instance of SmithCompatibilityServer in tests; here we assume a mutable
-    /// // reference `&server` exists and is usable in async context.
-    /// // let resp = server.prepare_direct_execution(params).await?;
-    /// // Inspect the returned ToolResponse JSON:
-    /// // assert!(resp.get("data").is_some());
-    /// # Ok(()) }
-    /// ```
     async fn prepare_direct_execution(
         &self,
         params: serde_json::Value,
@@ -3748,11 +3667,31 @@ impl SmithCompatibilityServer {
             .or_else(|| string_param(&params, "feature_directory"))
             .map(|raw| resolve_repo_path(&self.options.repo_root, &raw));
 
-        let context = if let Some(identifier) = issue_identifier.as_deref() {
-            Some(self.load_issue_execution_context(identifier).await?)
+        let readiness = self.collect_readiness_audit().await;
+        let context_result = if let Some(identifier) = issue_identifier.as_deref() {
+            Some(self.load_issue_execution_context(identifier).await)
         } else {
             None
         };
+        let context_error = context_result
+            .as_ref()
+            .and_then(|result| result.as_ref().err().map(compatibility_error_detail));
+        let context = context_result.and_then(Result::ok);
+        let github = self.github_snapshot().await;
+        let matching_pull_requests = context
+            .as_ref()
+            .map(|context| context.matching_pull_requests.clone())
+            .unwrap_or_else(|| {
+                issue_identifier
+                    .as_deref()
+                    .map(|identifier| {
+                        matching_pull_requests_for_identifier(
+                            &github.open_pull_requests,
+                            identifier,
+                        )
+                    })
+                    .unwrap_or_default()
+            });
         let combined_text = format!(
             "{}\n{}",
             request_text,
@@ -3766,14 +3705,9 @@ impl SmithCompatibilityServer {
             .or_else(|| extract_feature_dir_from_text(&combined_text).map(PathBuf::from));
         let issue = context.as_ref().and_then(|context| context.issue.clone());
         let workpad = context.as_ref().and_then(|context| context.workpad.clone());
-        let matching_pull_requests = context
-            .as_ref()
-            .map(|context| context.matching_pull_requests.clone())
-            .unwrap_or_default();
-        let readiness = self.collect_readiness_audit().await;
         let mut plan = build_direct_execution_plan(
             &self.options.repo_root,
-            issue_identifier,
+            issue_identifier.clone(),
             &combined_text,
             issue,
             workpad,
@@ -3787,7 +3721,7 @@ impl SmithCompatibilityServer {
             "cargo_available",
             true,
         );
-        if plan.issue.is_some() {
+        if issue_identifier.is_some() {
             append_readiness_gate(
                 &mut plan.pending_gates,
                 &readiness.data,
@@ -3804,6 +3738,21 @@ impl SmithCompatibilityServer {
                 "github_review_auth",
                 true,
             );
+        }
+        if let Some(error) = context_error.as_ref() {
+            if let Some(identifier) = issue_identifier.as_deref() {
+                plan.pending_gates.push(execution_gate(
+                    "linear_issue_context",
+                    GateState::Unknown,
+                    format!("could not load Linear issue context for {identifier}: {error}"),
+                ));
+                plan.blocking_reasons.push(format!(
+                    "could not load Linear issue context for {identifier}: {error}"
+                ));
+            }
+            plan.resume_note =
+                "Restore Linear access or verify the issue identifier, then rerun direct execution prep."
+                    .to_string();
         }
         let mut blocking_issues = plan.blocking_reasons.clone();
         blocking_issues.extend(gate_issue_messages(&plan.pending_gates));
@@ -3832,24 +3781,6 @@ impl SmithCompatibilityServer {
         })
     }
 
-    /// Generates a review-and-merge status summary for current GitHub pull requests.
-    ///
-    /// Builds gate-based review/merge diagnostics from the repository's open pull requests
-    /// and the cached Linear workspace (if available). The function returns a serialized
-    /// `ToolResponse` (as JSON) whose `data` is a `ReviewMergeStatus`. The overall
-    /// `ToolResponse.status` is `Ok` when all gates are `Pass`, and `Degraded` otherwise.
-    /// Non-passing gates produce entries in the response's `blocking_issues`.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # use serde_json::json;
-    /// # async fn example(server: &crate::SmithCompatibilityServer) -> Result<(), Box<dyn std::error::Error>> {
-    /// let resp_json = server.review_merge_status(json!({})).await?;
-    /// // `resp_json` is a ToolResponse serialized as JSON containing `ReviewMergeStatus` in `data`.
-    /// # Ok(())
-    /// # }
-    /// ```
     async fn review_merge_status(
         &self,
         _params: serde_json::Value,
@@ -4203,33 +4134,6 @@ impl SmithCompatibilityServer {
     }
 }
 
-/// Build and register a Smith-compatible MCP server bound to stdio://smith.
-///
-/// This constructs a `SmithCompatibilityServer`, creates an `McpServer` configured
-/// for the Smith compatibility/control-plane, registers the full set of Smith
-/// MCP tools (audit, routing, Linear/SpecKit helpers, Ralph helpers, etc.),
-/// populates the compatibility runtime metadata, and returns the running server.
-///
-/// # Returns
-///
-/// `Ok(Arc<McpServer>)` with the fully-registered server on success, or `Err(McpError)`
-/// if server construction or registration fails.
-///
-/// # Examples
-///
-/// ```
-/// # tokio_test::block_on(async {
-/// use std::sync::Arc;
-/// // Assume SmithCompatibilityOptions::from_env() exists and is usable here.
-/// let options = SmithCompatibilityOptions::from_env();
-/// let server_res = build_smith_compatibility_server(options).await;
-/// assert!(server_res.is_ok());
-/// let server = server_res.unwrap();
-/// // Basic smoke-check: ensure the server reports at least one registered tool name.
-/// let names = server.registered_tool_names().await;
-/// assert!(!names.is_empty());
-/// # });
-/// ```
 pub async fn build_smith_compatibility_server(
     options: SmithCompatibilityOptions,
 ) -> Result<Arc<McpServer>, McpError> {
@@ -5490,41 +5394,10 @@ fn select_current_workpad(comments: &[LinearCommentSnapshot]) -> Option<LinearWo
     })
 }
 
-/// Get the state's name for a Linear issue, if one is present.
-///
-/// # Examples
-///
-/// ```no_run
-/// // Given a `LinearIssueSnapshot` `issue`, retrieve its state name if available:
-/// let name = state_name(&issue);
-/// if let Some(state_name) = name {
-///     println!("Issue state: {}", state_name);
-/// }
-/// ```
-///
-/// # Returns
-///
-/// `Some(&str)` with the state's name if the issue has a state, `None` otherwise.
 fn state_name(issue: &LinearIssueSnapshot) -> Option<&str> {
     issue.state.as_ref().map(|state| state.name.as_str())
 }
 
-/// Retrieves the state's type name for a Linear issue, if present.
-///
-/// Returns `Some(&str)` when the issue has a `state` and that state has a `state_type`,
-/// otherwise returns `None`.
-///
-/// # Examples
-///
-/// ```ignore
-/// // Construct a LinearIssueSnapshot with a state that has a state_type.
-/// let issue = LinearIssueSnapshot {
-///     state: Some(LinearStateSnapshot { state_type: Some("active".to_string()), ..Default::default() }),
-///     ..Default::default()
-/// };
-///
-/// assert_eq!(state_type_name(&issue), Some("active"));
-/// ```
 fn state_type_name(issue: &LinearIssueSnapshot) -> Option<&str> {
     issue
         .state
@@ -5532,17 +5405,6 @@ fn state_type_name(issue: &LinearIssueSnapshot) -> Option<&str> {
         .and_then(|state| state.state_type.as_deref())
 }
 
-/// Determines whether a state name represents a terminal issue state.
-///
-/// # Examples
-///
-/// ```
-/// assert!(is_terminal_state_name("Done"));
-/// assert!(is_terminal_state_name("Cancelled"));
-/// assert!(!is_terminal_state_name("Backlog"));
-/// ```
-///
-/// @returns `true` if the name equals one of: "Done", "Canceled", "Cancelled", "Duplicate", "Complete", or "Completed", `false` otherwise.
 fn is_terminal_state_name(state_name: &str) -> bool {
     matches!(
         state_name,
@@ -5642,34 +5504,6 @@ fn pr_correlation(matching_pull_requests: &[GitHubPullRequest]) -> Vec<String> {
         .collect()
 }
 
-/// Compute an IssueLifecycleResolution for a given Linear issue, its Codex workpad (if any),
-/// and correlated GitHub pull requests.
-///
-/// The resolution includes the resolved issue snapshot (if found), a next recommended action,
-/// any required mutations (workpad/labels), blocking reasons derived from direct blockers,
-/// the review state, and PR correlation details.
-///
-/// # Parameters
-///
-/// - `issue`: optional Linear issue snapshot to resolve; when `None` the result indicates the
-///   issue was not found.
-/// - `workpad`: optional reference to the current Codex workpad comment for the issue.
-/// - `matching_pull_requests`: slice of GitHub pull requests correlated with the issue.
-/// - `issue_identifier`: the identifier string used to look up the issue (used in error messages).
-///
-/// # Returns
-///
-/// An `IssueLifecycleResolution` describing the issue (when found), `next_recommended_action`,
-/// `required_mutations`, `blocking_reasons`, `review_state`, and PR correlation summary.
-///
-/// # Examples
-///
-/// ```
-/// // If the issue is missing the resolution points the caller to verify the identifier.
-/// let res = build_direct_issue_lifecycle_resolution(None, None, &[], "MS-1");
-/// assert_eq!(res.issue, None);
-/// assert_eq!(res.next_recommended_action, "verify_issue_identifier");
-/// ```
 fn build_direct_issue_lifecycle_resolution(
     issue: Option<LinearIssueSnapshot>,
     workpad: Option<&LinearWorkpadSnapshot>,
@@ -5741,30 +5575,6 @@ fn build_direct_issue_lifecycle_resolution(
     }
 }
 
-/// Constructs a DirectExecutionPlan describing the readiness, constraints, and actionable next steps
-/// for performing direct execution against a repository/issue/feature directory.
-///
-/// The returned plan summarizes:
-/// - the execution objective, assumptions, and risks;
-/// - required tools and documents to read;
-/// - validation commands and recommended next action;
-/// - any blocking reasons and computed execution gates (pending_gates);
-/// - resolved feature directory and tasks path if present;
-/// - resume and rollback notes.
-///
-/// The function derives these values from the provided repository root, optional issue/workpad
-/// context, matching pull requests, and an optional feature directory (used to detect SpecKit usage).
-///
-/// # Examples
-///
-/// ```
-/// use std::path::Path;
-///
-/// // Prepare a minimal plan with no issue, no workpad, and no feature dir.
-/// let plan = build_direct_execution_plan(Path::new("."), None, "", None, None, &[], None);
-/// // With no inputs the plan will include blocking reasons to indicate missing context.
-/// assert!(!plan.blocking_reasons.is_empty());
-/// ```
 fn build_direct_execution_plan(
     repo_root: &Path,
     requested_issue_identifier: Option<String>,
@@ -5774,6 +5584,9 @@ fn build_direct_execution_plan(
     matching_pull_requests: &[GitHubPullRequest],
     resolved_feature_dir: Option<PathBuf>,
 ) -> DirectExecutionPlan {
+    let has_context_input = requested_issue_identifier.is_some()
+        || !request_text.trim().is_empty()
+        || resolved_feature_dir.is_some();
     let tasks_path = resolved_feature_dir
         .as_ref()
         .map(|path| path.join("tasks.md"))
@@ -5798,7 +5611,7 @@ fn build_direct_execution_plan(
             "SpecKit execution was requested but no tasks.md path could be resolved".to_string(),
         );
     }
-    if issue.is_none() && request_text.trim().is_empty() && resolved_feature_dir.is_none() {
+    if !has_context_input {
         blocking_reasons.push(
             "provide an issue identifier, request text, or feature directory to prepare direct execution".to_string(),
         );
@@ -5849,7 +5662,7 @@ fn build_direct_execution_plan(
         .map(|path| path.display().to_string());
     let tasks_path_value = tasks_path.map(|path| path.display().to_string());
     let pending_gates = blocking_execution_gates(
-        issue.is_some() || !request_text.trim().is_empty() || feature_dir_value.is_some(),
+        has_context_input,
         issue
             .as_ref()
             .map(|_| workpad_status(workpad.as_ref()))
@@ -5912,25 +5725,6 @@ fn build_direct_execution_plan(
     }
 }
 
-/// Selects the ordered list of recommended next tool names for a direct execution plan.
-///
-/// The returned vector lists tool names in priority order:
-/// - If `plan.should_use_speckit` is true, recommends `prepare_speckit_context` first, then `get_issue_execution_snapshot`.
-/// - Otherwise, recommends `get_issue_execution_snapshot` first, then `save_issue_workpad`.
-///
-/// # Examples
-///
-/// ```
-/// // Requires `DirectExecutionPlan` to implement `Default` for this example.
-/// let mut plan = DirectExecutionPlan::default();
-/// plan.should_use_speckit = true;
-/// let tools = direct_execution_recommended_next_tools(&plan);
-/// assert_eq!(tools, vec!["prepare_speckit_context".to_string(), "get_issue_execution_snapshot".to_string()]);
-///
-/// plan.should_use_speckit = false;
-/// let tools = direct_execution_recommended_next_tools(&plan);
-/// assert_eq!(tools, vec!["get_issue_execution_snapshot".to_string(), "save_issue_workpad".to_string()]);
-/// ```
 fn direct_execution_recommended_next_tools(plan: &DirectExecutionPlan) -> Vec<String> {
     if plan.should_use_speckit {
         vec![
@@ -5945,19 +5739,6 @@ fn direct_execution_recommended_next_tools(plan: &DirectExecutionPlan) -> Vec<St
     }
 }
 
-/// Creates an `ExecutionGate` with the given name, state, and detail.
-///
-/// # Examples
-///
-/// ```
-/// let g = execution_gate("linear_access", GateState::Pass, "LINEAR_API_KEY present");
-/// assert_eq!(g.name, "linear_access");
-/// assert_eq!(g.detail, "LINEAR_API_KEY present");
-/// match g.state {
-///     GateState::Pass => (),
-///     _ => panic!("expected Pass"),
-/// }
-/// ```
 fn execution_gate(
     name: impl Into<String>,
     state: GateState,
@@ -5970,38 +5751,6 @@ fn execution_gate(
     }
 }
 
-/// Builds a list of execution gates representing readiness checks that can block or mark as unknown the direct execution of work.
-///
-/// The returned gates encode named checks (`ExecutionGate.name`) with a `GateState` and a human-readable `detail` explaining why the gate failed or is unknown. The function inspects:
-/// - whether any context input was provided (`has_context_input`),
-/// - the workpad status (`workpad_status_value` may be `"missing"` or `"duplicate"`),
-/// - explicit blocker messages (`blocker_details`),
-/// - correlated PR review state (`review_state`, e.g. `"changes_requested"` or `"review_pending"`),
-/// - whether SpecKit should be used but no tasks path was located (`should_use_speckit` and `tasks_path`),
-/// - and whether the next recommended action requires advancing the issue state (`next_recommended_action == "update_issue_state"`).
-///
-/// # Returns
-///
-/// A `Vec<ExecutionGate>` containing one entry per failing or unknown readiness check; empty when no blocking or unknown gates apply.
-///
-/// # Examples
-///
-/// ```
-/// let gates = blocking_execution_gates(
-///     false,
-///     Some("missing"),
-///     &vec!["blocked by MS-1".to_string()],
-///     Some("changes_requested"),
-///     true,
-///     None,
-///     "none",
-/// );
-/// assert!(gates.iter().any(|g| g.name == "execution_context"));
-/// assert!(gates.iter().any(|g| g.name == "single_codex_workpad"));
-/// assert!(gates.iter().any(|g| g.name == "issue_unblocked"));
-/// assert!(gates.iter().any(|g| g.name == "review_feedback_clear"));
-/// assert!(gates.iter().any(|g| g.name == "speckit_packet_ready"));
-/// ```
 fn blocking_execution_gates(
     has_context_input: bool,
     workpad_status_value: Option<&str>,
@@ -6076,32 +5825,6 @@ fn blocking_execution_gates(
     gates
 }
 
-/// Appends an execution gate to `pending_gates` based on a named readiness check.
-///
-/// Looks up `check_name` in `readiness.checks`. If the check is missing and `required` is
-/// true, an `Unknown` gate is appended indicating the readiness check is unavailable.
-/// If the check exists and its status is not `Ok` or `Applied`, a gate is appended:
-/// - `Fail` when `required` is true
-/// - `Unknown` when `required` is false
-/// The gate's `detail` is taken from the readiness check's `detail` (or a generated message
-/// when the check is missing).
-///
-/// # Examples
-///
-/// ```
-/// # use mister_smith_mcp::compatibility::{append_readiness_gate, ExecutionGate, GateState, ReadinessAudit, ReadinessCheck, CompatibilityStatus};
-/// let mut pending_gates: Vec<ExecutionGate> = Vec::new();
-/// let readiness = ReadinessAudit {
-///     checks: vec![ReadinessCheck {
-///         name: "linear_api_key".to_string(),
-///         status: CompatibilityStatus::Blocked,
-///         detail: "LINEAR_API_KEY not set".to_string(),
-///     }],
-///     evidence: vec![],
-/// };
-/// append_readiness_gate(&mut pending_gates, &readiness, "linear_api_key", "linear_access", true);
-/// assert_eq!(pending_gates.len(), 1);
-/// ```
 fn append_readiness_gate(
     pending_gates: &mut Vec<ExecutionGate>,
     readiness: &ReadinessAudit,
@@ -6139,17 +5862,6 @@ fn append_readiness_gate(
     pending_gates.push(execution_gate(gate_name, state, check.detail.clone()));
 }
 
-/// Format execution gate messages as "Name: detail" strings.
-///
-/// Converts each `ExecutionGate` in `gates` into a single string combining its
-/// `name` and `detail` fields separated by ": ".
-///
-/// # Examples
-///
-/// ```
-/// let msgs = gate_issue_messages(&[]);
-/// assert!(msgs.is_empty());
-/// ```
 fn gate_issue_messages(gates: &[ExecutionGate]) -> Vec<String> {
     gates
         .iter()
@@ -6157,29 +5869,6 @@ fn gate_issue_messages(gates: &[ExecutionGate]) -> Vec<String> {
         .collect()
 }
 
-/// Choose a concise objective for direct execution from available context.
-///
-/// Prefers an associated Linear issue (producing `"Advance <identifier>: <title>"`), then a non-empty trimmed `request_text`, then a `feature_dir` fallback (`"Prepare direct execution for <feature_dir>"`), and finally the generic `"Prepare direct Codex execution"`.
-///
-/// # Returns
-///
-/// The chosen objective string.
-///
-/// # Examples
-///
-/// ```
-/// // prefer request_text when no issue is present
-/// let o = direct_execution_objective(None, "Implement search feature", None);
-/// assert_eq!(o, "Implement search feature");
-///
-/// // use feature_dir when request_text is empty
-/// let o = direct_execution_objective(None, "   ", Some("features/search"));
-/// assert_eq!(o, "Prepare direct execution for features/search");
-///
-/// // fallback generic objective when nothing is provided
-/// let o = direct_execution_objective(None, "", None);
-/// assert_eq!(o, "Prepare direct Codex execution");
-/// ```
 fn direct_execution_objective(
     issue: Option<&LinearIssueSnapshot>,
     request_text: &str,
@@ -6196,17 +5885,6 @@ fn direct_execution_objective(
     }
 }
 
-/// Builds the list of textual assumptions to include in a direct execution plan.
-///
-/// The returned strings describe repository authority, issue anchoring, preferred SpecKit usage,
-/// and pull-request correlation when applicable.
-///
-/// # Examples
-///
-/// ```
-/// let assumptions = direct_execution_assumptions(None, true, false);
-/// assert!(assumptions.iter().any(|s| s.contains("speckit")));
-/// ```
 fn direct_execution_assumptions(
     issue: Option<&LinearIssueSnapshot>,
     should_use_speckit: bool,
@@ -6235,38 +5913,6 @@ fn direct_execution_assumptions(
     assumptions
 }
 
-/// Assembles human-readable risk descriptions relevant to a direct execution plan.
-///
-/// The function inspects workpad presence, blocker details, GitHub review state,
-/// and whether SpecKit context is expected but missing to produce a prioritized
-/// list of risks that should be considered before attempting automated execution.
-///
-/// # Parameters
-///
-/// - `workpad_status_value`: optional workpad status string such as `"missing"` or `"duplicate"`.
-/// - `blocker_details`: list of blocker summary strings; non-empty indicates unresolved blockers.
-/// - `review_state`: optional review indicator such as `"changes_requested"` or `"review_pending"`.
-/// - `should_use_speckit`: `true` when SpecKit-based execution is recommended.
-/// - `tasks_path`: optional resolved path to `tasks.md`; `None` means the SpecKit tasks file is unresolved.
-///
-/// # Returns
-///
-/// A `Vec<String>` where each element is a human-readable risk description. If no specific risks are detected,
-/// the vector contains a single message indicating that no additional execution-specific risks were surfaced.
-///
-/// # Examples
-///
-/// ```
-/// let risks = direct_execution_risks(
-///     Some("missing"),
-///     &vec!["MS-42 blocking".to_string()],
-///     Some("review_pending"),
-///     true,
-///     None,
-/// );
-/// assert!(risks.len() >= 1);
-/// assert!(risks.iter().any(|r| r.contains("workpad")));
-/// ```
 fn direct_execution_risks(
     workpad_status_value: Option<&str>,
     blocker_details: &[String],
@@ -6307,25 +5953,6 @@ fn direct_execution_risks(
     risks
 }
 
-/// Produce a concise resume note advising how to resume execution based on the next recommended action.
-///
-/// The function maps a canonical action identifier (e.g., `"reconcile_workpad"`, `"merge_ready_pr"`)
-/// to a short, human-readable instruction that explains how to continue work safely.
-///
-/// # Parameters
-///
-/// - `next_recommended_action`: a canonical action name indicating the next recommended step.
-///
-/// # Returns
-///
-/// A human-readable guidance string corresponding to the suggested resume action.
-///
-/// # Examples
-///
-/// ```
-/// let note = direct_execution_resume_note("continue_execution");
-/// assert!(note.contains("Resume from the current workpad"));
-/// ```
 fn direct_execution_resume_note(next_recommended_action: &str) -> String {
     match next_recommended_action {
         "reconcile_workpad" => {
@@ -6356,59 +5983,6 @@ fn direct_execution_resume_note(next_recommended_action: &str) -> String {
     }
 }
 
-/// Produce a concise rollback instruction to guide resuming direct execution.
-
-///
-
-/// If `issue` is provided, the instruction references the issue's identifier to
-
-/// suggest keeping the task branch and updating the Codex workpad before resuming.
-
-/// If `issue` is `None`, the instruction gives a generic guidance to return to the
-
-/// last verified branch state and restate the task context.
-
-///
-
-/// # Parameters
-
-///
-
-/// - `issue`: Optional reference to a `LinearIssueSnapshot`; when present the note
-
-///   includes `issue.identifier`.
-
-///
-
-/// # Returns
-
-///
-
-/// A `String` containing the rollback instruction.
-
-///
-
-/// # Examples
-
-///
-
-/// ```
-
-/// let none_note = direct_execution_rollback_note(None);
-
-/// assert!(none_note.contains("return to the last verified branch state"));
-
-///
-
-/// struct LinearIssueSnapshot { identifier: String, /* truncated */ }
-
-/// let issue = LinearIssueSnapshot { identifier: "MS-123".into() };
-
-/// let note = direct_execution_rollback_note(Some(&issue));
-
-/// assert!(note.contains("MS-123"));
-
-/// ```
 fn direct_execution_rollback_note(issue: Option<&LinearIssueSnapshot>) -> String {
     if let Some(issue) = issue {
         format!(
@@ -6420,26 +5994,6 @@ fn direct_execution_rollback_note(issue: Option<&LinearIssueSnapshot>) -> String
     }
 }
 
-/// Builds a ReviewMergeStatus summarizing open pull requests with review blockers,
-/// merge-ready PRs, stale PRs, recommended next actions, and execution gates.
-///
-/// The returned status groups PRs into:
-/// - review blockers: draft PRs or those with requested changes,
-/// - merge-ready PRs: approved, non-draft PRs,
-/// - stale PRs: PRs that lack linked identifiers or whose identifiers are not found in the provided Linear workspace.
-///
-/// Parameters:
-/// - `pull_requests`: slice of GitHub pull request snapshots to evaluate.
-/// - `workspace`: optional Linear workspace snapshot used to determine whether PR-linked issue identifiers are current.
-///
-/// # Examples
-///
-/// ```
-/// // Evaluate an empty repository state: no pull requests present.
-/// let status = build_review_merge_status(&[], None);
-/// assert_eq!(status.open_pull_request_count, 0);
-/// assert!(status.recommended_actions.iter().any(|a| a.contains("no immediate review")));
-/// ```
 fn build_review_merge_status(
     pull_requests: &[GitHubPullRequest],
     workspace: Option<&LinearWorkspaceData>,
@@ -6473,27 +6027,24 @@ fn build_review_merge_status(
         })
         .map(|pr| format!("#{} {}", pr.number, pr.title))
         .collect::<Vec<_>>();
-    let stale_pull_requests = pull_requests
-        .iter()
-        .filter(|pr| {
-            let identifiers =
-                collect_issue_identifiers(&format!("{} {}", pr.title, pr.head_ref_name));
-            if identifiers.is_empty() {
-                return true;
-            }
-            workspace
-                .map(|workspace| {
-                    !identifiers.iter().any(|identifier| {
-                        workspace
-                            .issues
-                            .iter()
-                            .any(|issue| issue.identifier.eq_ignore_ascii_case(identifier))
-                    })
+    let stale_pull_requests = workspace
+        .map(|workspace| {
+            pull_requests
+                .iter()
+                .filter(|pr| {
+                    let identifiers = pull_request_issue_identifiers(pr);
+                    identifiers.is_empty()
+                        || !identifiers.iter().any(|identifier| {
+                            workspace
+                                .issues
+                                .iter()
+                                .any(|issue| issue.identifier.eq_ignore_ascii_case(identifier))
+                        })
                 })
-                .unwrap_or(false)
+                .map(|pr| format!("#{} {}", pr.number, pr.title))
+                .collect::<Vec<_>>()
         })
-        .map(|pr| format!("#{} {}", pr.number, pr.title))
-        .collect::<Vec<_>>();
+        .unwrap_or_default();
 
     let mut recommended_actions = Vec::new();
     if !review_blockers.is_empty() {
@@ -6509,6 +6060,12 @@ fn build_review_merge_status(
     if !stale_pull_requests.is_empty() {
         recommended_actions
             .push("inspect stale PRs and close or relink them to active issues".to_string());
+    }
+    if workspace.is_none() {
+        recommended_actions.push(
+            "refresh Linear workspace access before treating PR-to-issue links as current"
+                .to_string(),
+        );
     }
     if recommended_actions.is_empty() {
         recommended_actions.push("no immediate review or merge action is required".to_string());
@@ -6543,7 +6100,14 @@ fn build_review_merge_status(
                 review_blockers.join("; "),
             )
         },
-        if stale_pull_requests.is_empty() {
+        if workspace.is_none() {
+            execution_gate(
+                "issue_links_current",
+                GateState::Unknown,
+                "Linear workspace snapshot is unavailable, so PR-to-issue links could not be verified"
+                    .to_string(),
+            )
+        } else if stale_pull_requests.is_empty() {
             execution_gate(
                 "issue_links_current",
                 GateState::Pass,
@@ -6565,6 +6129,13 @@ fn build_review_merge_status(
         stale_pull_requests,
         recommended_actions,
         gates,
+    }
+}
+
+fn compatibility_error_detail(error: &McpError) -> String {
+    match error {
+        McpError::ToolCallFailed(message) => message.clone(),
+        other => other.to_string(),
     }
 }
 
@@ -6681,23 +6252,70 @@ fn collect_issue_identifiers(text: &str) -> Vec<String> {
     let mut identifiers = text
         .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '-'))
         .filter(|token| !token.is_empty())
-        .filter(|token| token.contains('-'))
-        .filter_map(|token| {
-            let mut parts = token.splitn(2, '-');
-            let prefix = parts.next()?;
-            let suffix = parts.next()?;
-            if prefix.chars().all(|ch| ch.is_ascii_uppercase())
-                && suffix.chars().all(|ch| ch.is_ascii_digit())
-            {
-                Some(format!("{prefix}-{suffix}"))
-            } else {
-                None
-            }
-        })
+        .filter_map(normalize_issue_identifier_token)
         .collect::<Vec<_>>();
     identifiers.sort();
     identifiers.dedup();
     identifiers
+}
+
+fn normalize_issue_identifier_token(token: &str) -> Option<String> {
+    let prefix_end = token
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphabetic())
+        .count();
+    if prefix_end == 0 || prefix_end >= token.len() {
+        return None;
+    }
+    if token.as_bytes().get(prefix_end).copied()? != b'-' {
+        return None;
+    }
+
+    let suffix = token.get(prefix_end + 1..)?;
+    let digits_len = suffix.chars().take_while(|ch| ch.is_ascii_digit()).count();
+    if digits_len == 0 {
+        return None;
+    }
+
+    let trailing = &suffix[digits_len..];
+    if !trailing.is_empty() && !trailing.starts_with('-') {
+        return None;
+    }
+
+    Some(format!(
+        "{}-{}",
+        token[..prefix_end].to_ascii_uppercase(),
+        &suffix[..digits_len]
+    ))
+}
+
+fn pull_request_issue_identifiers(pr: &GitHubPullRequest) -> Vec<String> {
+    collect_issue_identifiers(&format!("{} {}", pr.title, pr.head_ref_name))
+}
+
+fn pull_request_matches_issue_identifier(pr: &GitHubPullRequest, issue_identifier: &str) -> bool {
+    pull_request_issue_identifiers(pr)
+        .iter()
+        .any(|identifier| identifier.eq_ignore_ascii_case(issue_identifier))
+        || pr
+            .title
+            .to_lowercase()
+            .contains(&issue_identifier.to_lowercase())
+        || pr
+            .head_ref_name
+            .to_lowercase()
+            .contains(&issue_identifier.to_lowercase())
+}
+
+fn matching_pull_requests_for_identifier(
+    pull_requests: &[GitHubPullRequest],
+    issue_identifier: &str,
+) -> Vec<GitHubPullRequest> {
+    pull_requests
+        .iter()
+        .filter(|pr| pull_request_matches_issue_identifier(pr, issue_identifier))
+        .cloned()
+        .collect()
 }
 
 fn translate_speckit_task_markdown(markdown: &str) -> Vec<TranslatedSpecKitSlice> {
@@ -7158,6 +6776,36 @@ apps = true
     }
 
     #[test]
+    fn build_review_merge_status_marks_issue_links_unknown_without_workspace() {
+        let pull_requests = vec![GitHubPullRequest {
+            number: 1,
+            title: "Tighten routing".to_string(),
+            head_ref_name: "codex/ms-80-routing".to_string(),
+            url: "https://example.invalid/pr/1".to_string(),
+            review_decision: Some("APPROVED".to_string()),
+            is_draft: false,
+        }];
+
+        let status = build_review_merge_status(&pull_requests, None);
+
+        assert!(status.stale_pull_requests.is_empty());
+        assert!(status
+            .recommended_actions
+            .iter()
+            .any(|item| item.contains("refresh Linear workspace access")));
+        assert!(status.gates.iter().any(|gate| {
+            gate.name == "issue_links_current" && matches!(gate.state, GateState::Unknown)
+        }));
+    }
+
+    #[test]
+    fn collect_issue_identifiers_normalizes_branch_tokens() {
+        let identifiers = collect_issue_identifiers("codex/ms-80-routing and MS-81");
+
+        assert_eq!(identifiers, vec!["MS-80".to_string(), "MS-81".to_string()]);
+    }
+
+    #[test]
     fn build_direct_execution_plan_includes_packet_docs_and_existing_workpad() {
         let repo_root = temp_path("direct-execution-plan");
         write_fixture_repo(&repo_root);
@@ -7528,6 +7176,52 @@ apps = true
             serde_json::Value::Bool(false)
         );
         assert_eq!(result["data"]["needs_plan"], serde_json::Value::Bool(false));
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_routes_workflow_readiness_audits_to_bootstrap() {
+        let repo_root = temp_path("route-bootstrap-audit");
+        write_fixture_repo(&repo_root);
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Audit workflow readiness for Mister Smith"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("bootstrap".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("audit_workflow_readiness".to_string())
+        );
+        assert_eq!(
+            result["data"]["request_class"],
+            serde_json::Value::String("response_only".to_string())
+        );
+        assert_eq!(
+            result["data"]["execution_allowed"],
+            serde_json::Value::Bool(false)
+        );
     }
 
     #[tokio::test]
@@ -8139,6 +7833,112 @@ apps = true
                 .map(|slices| !slices.is_empty())
                 .unwrap_or(false)
         );
+    }
+
+    #[tokio::test]
+    async fn get_issue_execution_snapshot_degrades_when_linear_context_load_fails() {
+        let repo_root = temp_path("snapshot-missing-linear");
+        write_fixture_repo(&repo_root);
+        fs::remove_file(repo_root.join(".env")).unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "get_issue_execution_snapshot",
+                serde_json::json!({ "issue_identifier": "MS-90" }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["status"],
+            serde_json::Value::String("degraded".to_string())
+        );
+        assert_eq!(
+            result["summary"],
+            serde_json::Value::String("could not load execution snapshot for MS-90".to_string())
+        );
+        assert!(result["data"]["pending_gates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|gate| gate["name"] == "linear_access"));
+        assert!(result["data"]["pending_gates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|gate| gate["name"] == "linear_issue_context"));
+        assert!(result["data"]["resume_note"]
+            .as_str()
+            .unwrap()
+            .contains("Restore Linear access"));
+    }
+
+    #[tokio::test]
+    async fn prepare_direct_execution_degrades_when_linear_context_load_fails() {
+        let repo_root = temp_path("direct-execution-missing-linear");
+        write_fixture_repo(&repo_root);
+        fs::remove_file(repo_root.join(".env")).unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "prepare_direct_execution",
+                serde_json::json!({ "issue_identifier": "MS-90" }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["status"],
+            serde_json::Value::String("degraded".to_string())
+        );
+        assert!(result["data"]["pending_gates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|gate| gate["name"] == "linear_access"));
+        assert!(result["data"]["pending_gates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|gate| gate["name"] == "linear_issue_context"));
+        assert!(result["data"]["blocking_reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason
+                .as_str()
+                .unwrap()
+                .contains("could not load Linear issue context")));
+        assert!(result["data"]["resume_note"]
+            .as_str()
+            .unwrap()
+            .contains("Restore Linear access"));
     }
 
     #[tokio::test]
