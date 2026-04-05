@@ -70,10 +70,12 @@ external workflow services such as Linear or Symphony.
 ## Current Repo-Wide State
 
 - `main` is the durable development branch and is currently synced at
-  `9f6e3a79cc12a171bf72a6f0daa3d04a5711e2d7`.
+  `d30e627c49593a27023afc9832485ce3779b7bf2`.
 - The workspace contains 20 crates: 18 library crates, 1 binary crate, and 1 integration-test
   crate.
 - Phases 1 through 10 are landed in the repo as implemented substrate and validation artifacts.
+- GitHub Actions are intentionally disabled in this repository; current review posture is local
+  validation plus CodeRabbit and operator review.
 - The current live operator surfaces are:
   - one-shot workflow execution through `mister-smith run` and `POST /api/v1/tasks`
   - autonomy inspection through `mister-smith autonomy list` and `mister-smith autonomy status`

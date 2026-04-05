@@ -28,10 +28,11 @@ Initiative (strategic goal)
 Use initiatives as the strategic layer, not as Symphony's dispatch boundary. Historical initiatives
 remain useful for reporting and status updates, but the current repo-wide router is
 `docs/current-state.md`. The latest landed packet authorities are
-`specs/023-runtime-truth-and-run-trace/` and
-`specs/024-agent-boundary-security-hardening/`, the next scaffold is
-`specs/025-step-level-intelligence-v2/`, and the last explicit bounded live-proof note remains
-`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`.
+`specs/023-runtime-truth-and-run-trace/`,
+`specs/024-agent-boundary-security-hardening/`, and
+`specs/025-step-level-intelligence-v2/`. The next implementation-ready packet is
+`specs/026-first-real-coordinator-subagent-runtime/`, and the last explicit bounded live-proof
+note remains `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`.
 
 ### Current Strategy
 
@@ -39,20 +40,20 @@ remain useful for reporting and status updates, but the current repo-wide router
   backlog history rather than current runnable direction.
 - the packet-016 family (`MS-96` parent, `MS-97` through `MS-100` child slices) is complete on
   `main`; treat it as closed backlog history rather than current runnable direction
-- packets `019` through `024` are complete on `main`; treat them as landed frontier history unless
+- packets `019` through `025` are complete on `main`; treat them as landed frontier history unless
   current repo truth shows a defect
-- packet `025` is the next draft scaffold, not the next automatically runnable direct slice; keep
-  it in validated backlog until it is refreshed against current truth and one child slice is
-  explicitly staged
-- packets `026` through `028` are later scaffolds and should stay in backlog until they are
-  deliberately selected for direct execution
+- packet `026` is the next implementation-ready packet for direct execution when that slice is
+  deliberately selected
+- packets `027` and `028` remain later scaffolds and should stay in backlog until they are
+  deliberately selected
 - the historical `Smith MCP Development` project is archived and should not be reopened as a
   separate forward program
 - the next active planning move is not an automatic refill; start from `docs/current-state.md`
   plus `docs/direction.md`, `specs/023-runtime-truth-and-run-trace/`,
-  `specs/024-agent-boundary-security-hardening/`, and
-  `specs/025-step-level-intelligence-v2/`, confirm current repo truth, and only then create one
-  fresh bounded packet slice
+  `specs/024-agent-boundary-security-hardening/`,
+  `specs/025-step-level-intelligence-v2/`, and
+  `specs/026-first-real-coordinator-subagent-runtime/`, confirm current repo truth, and only then
+  create one fresh bounded packet slice
 - `MisterSmith Validated Backlog` should hold only genuinely open frontier work in `Backlog` after
   fresh repo-grounded validation and explicit packet framing
 - Do not move these issues into `Todo` just to keep automation busy. Select only the next bounded
@@ -61,7 +62,8 @@ remain useful for reporting and status updates, but the current repo-wide router
   generic parking lot.
 - the current repo-owned direction notes are `docs/current-state.md`, `docs/direction.md`,
   `specs/023-runtime-truth-and-run-trace/`, `specs/024-agent-boundary-security-hardening/`,
-  `specs/025-step-level-intelligence-v2/`, and
+  `specs/025-step-level-intelligence-v2/`,
+  `specs/026-first-real-coordinator-subagent-runtime/`, and
   `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`; packet-021 and packet-016
   notes remain useful historical support references
 
@@ -324,8 +326,8 @@ Linear documents are used for reference material linked to projects:
 | Symphony Linear Feature Matrix | MisterSmith Workspace Docs | Business vs Enterprise feature decisions and adoption stance |
 | Symphony Linear Operating Model | MisterSmith Workspace Docs | Current-state audit, target model, and manual follow-up checklist |
 | Smith-First Development System | MisterSmith Workspace Docs | Canonical Smith-first development workflow model |
-| Smith MCP MS-51 Through MS-59 Execution | MisterSmith Workspace Docs | Current Smith workflow-family implementation status and remaining proof work |
-| Execution Queue Operating Rules | MisterSmith Execution Queue | Project-specific routing and dispatch rules for the live Symphony queue |
+| Smith MCP Direct-Execution Overhaul | MisterSmith Workspace Docs | Current Smith workflow-family implementation status and active cleanup plan |
+| Execution Queue Operating Rules | MisterSmith Execution Queue | Historical watched-queue routing and dispatch rules retained for legacy Symphony sessions |
 | Validated Backlog Admission Rules | MisterSmith Validated Backlog | Project-specific gating rules for what belongs in curated backlog |
 | Phase 9.1 Security Hardening Spec | Phase 9.1 | Security hardening specification |
 | Research Corpus Index | MisterSmith Workspace Docs | Research program navigation |
@@ -362,7 +364,7 @@ Post initiative-level status updates with health indicators:
 
 Include: current state, key blockers, plan for the next cycle.
 
-The active execution queue now has a native Linear reminder cadence configured:
+The historical execution queue project still has a native Linear reminder cadence configured:
 
 - `MisterSmith Execution Queue`: weekly reminder, Mondays at 9:00 local time for the project lead
 
@@ -411,6 +413,8 @@ Settings > Integrations > GitHub > Connect `matthewmaggio/Mister-Smith`
 - PR becomes mergeable → issue moves to Merging
 - PR merge to `main` → issue moves to Done
 - Include `MS-###` in branch names and commit messages
+- GitHub Actions are intentionally disabled in this repository; use local validation plus
+  CodeRabbit and operator review instead of waiting for hosted checks
 - When the operator has explicitly delegated authority in the active Codex session, the agent may
   perform the Human Review decision and advance the issue to `Merging` without waiting for another
   human to click approve.
@@ -470,9 +474,9 @@ When adding a new crate to the workspace:
 against Linear issues. It polls for `Todo` issues, spawns a Codex `app-server`
 per issue, and manages the full lifecycle through the status state machine.
 
-Important: Symphony is currently scoped to one watched `project_slug`, and that value must be the
-Linear project `slugId`. Issues outside that watched project do not dispatch, even if their status
-is `Todo`.
+This section is historical reference only. The active Smith MCP route no longer depends on a
+watched `project_slug` or queue-stage tools. Use it only when you are intentionally operating a
+legacy Symphony queue session through `WORKFLOW.md`.
 
 ### State Machine
 
@@ -510,7 +514,7 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 | `agent.max_concurrent_agents` | 10 |
 | `agent.max_turns` | 150 |
 
-### Current Queue Contract
+### Historical Queue Contract
 
 - Current watched project: `MisterSmith Execution Queue`
 - Current watched slugId: `320a0741920c`
@@ -521,10 +525,10 @@ Symphony is configured via `WORKFLOW.md` in the repository root:
 - `Todo` is a live dispatch queue, not a generic "next work" list
 - If `Todo` looks empty, verify whether the runnable issue has already been claimed and moved to `In Progress`
 
-### Queue Design
+### Historical Queue Design
 
-The dedicated execution queue is now the canonical dispatch boundary. Keep it small, runnable, and
-deliberately staged:
+The dedicated execution queue was the legacy dispatch boundary. Keep it small, runnable, and
+deliberately staged when you are intentionally running that historical Symphony flow:
 
 - `MisterSmith Execution Queue` is for active or immediately runnable work only
 - `MisterSmith Validated Backlog` is for real repo-validated work that is not yet scheduled

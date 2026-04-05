@@ -22,10 +22,13 @@ stable repo-wide state summary and document router.
 - `docs/current-state.md`: current repo and OS state
 - `specs/023-runtime-truth-and-run-trace/`: latest landed runtime packet on `main`
 - `specs/024-agent-boundary-security-hardening/`: latest landed security packet on `main`
-- `specs/025-step-level-intelligence-v2/`: next packet draft scaffold
+- `specs/025-step-level-intelligence-v2/`: latest landed step-policy packet on `main`
+- `specs/026-first-real-coordinator-subagent-runtime/`: next implementation-ready packet
 - `specs/022-durable-workflow-core/`: packet-022 implementation authority
 - `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`: bounded packet-019 proof and
   closure note
+- `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`: current direct-execution
+  control-plane note
 - `WORKFLOW.md` and `docs/linear/LINEAR.md`: development workflow contract
 - `ROADMAP.md`: architectural build map
 
@@ -53,7 +56,7 @@ runtime.
 - Smith-first development workflow system:
   `docs/plans/2026-03-16-smith-first-development-system.md`
 - Current Smith workflow-family implementation note:
-  `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md`
+  `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`
 - Runtime contract: `WORKFLOW.md`
 - Linear operating model: `docs/linear/LINEAR.md`
 - Current overall direction and repo-wide router: `docs/direction.md`, `docs/current-state.md`
@@ -61,12 +64,13 @@ runtime.
   `specs/023-runtime-truth-and-run-trace/`,
   `specs/024-agent-boundary-security-hardening/`,
   `specs/025-step-level-intelligence-v2/`,
+  `specs/026-first-real-coordinator-subagent-runtime/`,
   `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - Historical packet-016 closure evidence:
   `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`
 - Phase 10 artifact set and gate evidence: `specs/012-phase10-frontier-autonomy/`,
   `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`
-- Active control-plane recovery and queue-governance plans:
+- Historical workflow recovery and queue-governance background:
   `docs/plans/2026-03-14-smith-mcp-rebuild.md`,
   `docs/plans/2026-03-15-smith-mcp-workflow-forensics.md`,
   `docs/plans/2026-03-15-smith-mcp-comprehensive-workflows.md`
@@ -80,8 +84,8 @@ real gap.
 2. Pull current state with `get_control_plane_snapshot` or `get_issue_execution_snapshot`.
 3. Use the Smith workflow-family tools for the actual task:
    - `save_linear_issue` and `save_issue_workpad`
-   - `materialize_backlog_slices`, `plan_queue_stage`, and `apply_queue_stage`
-   - `resolve_issue_lifecycle`
+   - `prepare_direct_execution` and `materialize_backlog_slices`
+   - `resolve_issue_lifecycle` and `review_merge_status`
    - `prepare_ralph_packet` and `record_ralph_outcome`
    - `prepare_speckit_context` and `translate_speckit_tasks`
 4. Fall back to raw Linear, shell, or one-off repo glue only when Smith does not yet model the
@@ -139,10 +143,16 @@ mister-smith-core (foundation types, traits, errors)
 | `archive/` | Completed validation work, historical operations, and research |
 | `deploy/` | Deployment artifacts — Dockerfile, docker-compose, Kubernetes manifests, Grafana dashboards, Prometheus alerts |
 | `nats.rs/` | Official NATS Rust client (cloned from nats-io/nats.rs) — reference for async-nats API |
-| `docs/` | Research output, code reviews, session analysis, prompt-improver spec |
-| `scripts/` | Mem0 platform setup (`mem0_setup.py`) |
+| `docs/` | Current-state routers, plans, research output, code reviews, and session analysis |
+| `scripts/` | Runtime proof, Ralph, closure, and local support scripts |
 | `.agents/workflows/` | Agent workflow templates (bulk PR merge, mandate) |
-| `.github/workflows/` | CI/CD pipelines |
+| `.github/` | Repo metadata, templates, labels, and archived workflow history; hosted GitHub Actions are intentionally disabled |
+
+## Review Posture
+
+- GitHub Actions are intentionally disabled in this repository.
+- Use local validation as the merge gate.
+- Treat CodeRabbit plus operator review as the active review posture.
 
 > **`spec/` vs `specs/` — these are different directories.** `spec/` contains the canonical architecture specifications defining *what* the system is (types, patterns, interfaces, message schemas). `specs/` contains SpecKit-generated implementation artifacts defining *how* each phase is built (feature specs, plans, task breakdowns). The `ROADMAP.md` bridges them by referencing `spec/` docs for each phase.
 
