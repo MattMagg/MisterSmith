@@ -20,9 +20,10 @@ Use `docs/current-state.md` as the repo-wide current-state overview and document
 Use `docs/direction.md` when you need the merged strategic direction and next-build priority.
 Use `README.md`, `ROADMAP.md`, and `CLAUDE.md` as supporting orientation entry points.
 Treat `WORKFLOW.md` and `docs/linear/LINEAR.md` as the live control-plane contract.
-Treat `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as the current runtime-proof
-direction when the task is about proving real end-to-end execution rather than adding another
-implementation phase.
+Treat `docs/current-state.md`, `scripts/live_runtime_proof_smoke.py`, and
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` as the current bounded
+runtime-proof baseline. Use `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as
+historical broader live-run context.
 Treat `docs/current-state.md` as the current forward-direction router. Use
 `specs/023-runtime-truth-and-run-trace/` and
 `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
@@ -170,9 +171,11 @@ For markdown linting:
   before `Human Review`, and again after merge
 - PRs should include: concise problem/solution summary, touched files, validation commands run
 - PR references use `(#NNN)` suffix
+- GitHub Actions are intentionally disabled in this repository; use local validation plus
+  CodeRabbit and operator review as the review posture
 
 ## Security & Configuration Tips
 
-- Never commit secrets; use environment variables or GitHub Actions secrets for credentials
+- Never commit secrets; use environment variables or another external secret store for credentials
 - Provider API keys: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 - OAuth credentials: Claude subscription uses Keychain/file-based credential sources

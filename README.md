@@ -144,7 +144,7 @@ and graceful degradation when a backend is unavailable.
 ### Build
 
 ```bash
-git clone https://github.com/anthropics/mister-smith.git
+git clone https://github.com/MattMagg/MisterSmith.git
 cd mister-smith
 cargo build --workspace
 ```
