@@ -6,7 +6,7 @@
 
 Improve four recurring Codex workflow prompts for Mister Smith:
 
-1. update `AGENTS.md`
+1. update all repo tracking and status docs
 2. detect dependency and SDK drift
 3. scan recent commits for likely bugs
 4. audit performance regressions
@@ -24,9 +24,9 @@ Constraints carried forward from the user request:
 
 ### Normalized Input To Ideal Output Pairs
 
-- Input: "Update AGENTS.md with newly discovered workflows and commands"
+- Input: "Update all tracking and status docs with newly discovered repo truth"
   Ideal output: a repo-truth sync prompt that prioritizes current state and router docs, keeps
-  edits minimal, and updates `AGENTS.md` only when grounded
+  edits minimal, and updates the full target doc set only when grounded
 - Input: "Dependency and SDK drift"
   Ideal output: a drift-audit prompt that proves drift from manifests and lockfiles, writes a
   dated report, and opens issues only when drift is real
@@ -61,7 +61,7 @@ sync, drift analysis, bug triage, and performance work into one overbroad task.
 - walkthrough:
   `docs/prompt-improver-spec/automation-maintenance-walkthrough.md`
 - final prompts:
-  - `docs/prompt-improver-spec/final-prompts/mister-smith-agents-doc-sync.md`
+  - `docs/prompt-improver-spec/final-prompts/mister-smith-tracking-and-status-doc-sync.md`
   - `docs/prompt-improver-spec/final-prompts/mister-smith-dependency-and-sdk-drift.md`
   - `docs/prompt-improver-spec/final-prompts/mister-smith-bug-scan.md`
   - `docs/prompt-improver-spec/final-prompts/mister-smith-performance-audit.md`
@@ -74,7 +74,10 @@ Keep four prompts.
 
 Reason:
 
-- `AGENTS.md` sync is a documentation truth-maintenance task
+- tracking/status doc sync is a documentation truth-maintenance task
+- the tracking-doc workflow must update the whole tracking/status doc set, not `AGENTS.md` alone
+- the tracking-doc workflow must derive packet and proof facts dynamically so it still works when
+  the repo moves far beyond packet `026`
 - dependency drift is version-alignment analysis
 - bug scan is correctness triage from concrete repo signals
 - performance audit depends on measurement evidence and different acceptance rules
@@ -89,12 +92,26 @@ Prompts should explicitly route through these Mister Smith sources where relevan
 - `docs/direction.md`
 - `WORKFLOW.md`
 - `docs/linear/LINEAR.md`
+- `docs/ms_recent_context.md`
 - `README.md`
 - `CLAUDE.md`
 - `ROADMAP.md`
+- `VERSION_REFERENCE.md`
 - recent relevant `docs/plans/*.md`
-- current packet authorities under `specs/022-*` through `specs/026-*` when packet/router truth
-  matters
+- packet and phase directories under `specs/`, discovered dynamically from current router truth
+  when packet/router truth matters
+- `scripts/live_runtime_proof_smoke.py`
+- `scripts/tests/test_live_runtime_proof_smoke.py`
+- `apps/operator-console/package.json`
+- `apps/operator-console/package-lock.json`
+- `apps/operator-console/src-tauri/Cargo.toml`
+- `apps/operator-console/src-tauri/Cargo.lock`
+- `deploy/docker-compose.yml`
+- `deploy/Dockerfile`
+- `deploy/dashboards/*.json`
+- `deploy/alerts/*.yml`
+- `.github/workflows/README.md`
+- `.coderabbit.yaml`
 - `.codex/README.md`
 - `.codex/agents/README.md`
 - `.codex/commands/*.md` and `.codex/prompts/*.md` when command behavior is the claim being
@@ -103,16 +120,7 @@ Prompts should explicitly route through these Mister Smith sources where relevan
 
 ### Output Format
 
-Markdown prompt files with XML-tagged optional inputs and explicit workflow sections.
-
-### Variable Plan
-
-| Prompt | Variables |
-| ------ | --------- |
-| AGENTS sync | `<report_date>`, `<focus_note>`, `<extra_paths>` |
-| Dependency drift | `<report_date>`, `<lookback_window>`, `<scope_note>` |
-| Bug scan | `<report_date>`, `<lookback_window>`, `<focus_note>` |
-| Performance audit | `<report_date>`, `<lookback_window>`, `<focus_note>` |
+Markdown prompt files with fixed workflow instructions and no optional-input scaffolding.
 
 ### Constraint Preservation Checklist
 

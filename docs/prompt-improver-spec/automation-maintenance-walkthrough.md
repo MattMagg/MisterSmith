@@ -4,7 +4,7 @@
 
 The source material described four recurring workflows:
 
-1. keep `AGENTS.md` accurate
+1. keep the repo's tracking and status docs accurate
 2. detect dependency and SDK drift
 3. scan recent commits for likely bugs
 4. audit performance regressions
@@ -14,6 +14,12 @@ Mister Smith grounding, clearer issue-routing rules, and explicit output paths f
 
 ## Key Improvements
 
+- broadened the first prompt from `AGENTS.md` only to the full repo tracking/status doc set
+- removed optional-input XML sections because these prompts are meant to run unattended as fixed
+  automations
+- made the first prompt future-proof by replacing hardcoded packet references with dynamic packet
+  and proof discovery rules
+- replaced generic repo-source lists with exact Mister Smith files and runtime-proof surfaces
 - kept all four prompts separate because they use different evidence standards and likely different
   cadences
 - grounded the prompts in Mister Smith's current router and workflow contract docs instead of vague
@@ -37,6 +43,7 @@ Mister Smith grounding, clearer issue-routing rules, and explicit output paths f
 ### After
 
 - four standalone prompts with clear boundaries
+- one repo-truth sync prompt that targets all eight tracking/status docs
 - repo-specific grounding order and source list
 - dated report output paths
 - GitHub issue-template guidance plus Linear project, state, priority, and label guidance
@@ -44,7 +51,7 @@ Mister Smith grounding, clearer issue-routing rules, and explicit output paths f
 
 ## Final Prompt Locations
 
-- `docs/prompt-improver-spec/final-prompts/mister-smith-agents-doc-sync.md`
+- `docs/prompt-improver-spec/final-prompts/mister-smith-tracking-and-status-doc-sync.md`
 - `docs/prompt-improver-spec/final-prompts/mister-smith-dependency-and-sdk-drift.md`
 - `docs/prompt-improver-spec/final-prompts/mister-smith-bug-scan.md`
 - `docs/prompt-improver-spec/final-prompts/mister-smith-performance-audit.md`

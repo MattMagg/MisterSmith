@@ -3,6 +3,9 @@
 Use this folder for recurring Codex-generated maintenance reports that should stay separate from
 one-off plans in `docs/plans/`.
 
+The tracking-and-status-doc sync workflow does not write a report here. That workflow updates the
+repo-truth docs in place.
+
 ## Naming Convention
 
 - `YYYY-MM-DD-dependency-and-sdk-drift.md`

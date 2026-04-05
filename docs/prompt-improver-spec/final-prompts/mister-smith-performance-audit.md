@@ -13,22 +13,6 @@ optimization wishlist.
 Audit recent performance regressions or high-leverage performance risks, write a dated report, and
 create GitHub plus Linear issues for any grounded regression or justified code-change proposal.
 
-## Optional Inputs
-
-<report_date>
-Use the local date in `YYYY-MM-DD` format. Default output path:
-`docs/automation-reports/<report_date>-performance-audit.md`
-</report_date>
-
-<lookback_window>
-Optional time, commit, or release window for the audit.
-</lookback_window>
-
-<focus_note>
-Optional instruction to focus on a surface such as runtime routing, operator console, persistence,
-or transport.
-</focus_note>
-
 ## Grounding Rules
 
 - Ground claims in measurements, traces, timings, benchmarks, or other concrete evidence when
@@ -38,37 +22,58 @@ or transport.
 - When evidence is thin, recommend what should be measured next instead of inventing a fix.
 - Prefer highest-leverage bounded fixes over broad optimization programs.
 
-## Repo Evidence Sources
+## Mister Smith Evidence Sources
 
-Use whichever of these are actually present and relevant:
+Prioritize these repo-native surfaces:
 
-- benchmark or timing artifacts in the repo
-- CI timing changes
-- runtime proof notes under `docs/plans/`
-- operator-console or runtime logs
-- recent diffs that plausibly changed hot paths
-- tests or smoke-harness outputs that expose slower behavior
+- `scripts/live_runtime_proof_smoke.py`
+- `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
+- recent packet validation notes under `docs/plans/`, especially packet `021`, `025`, and `026`
+- artifact bundles under `docs/plans/artifacts/live-runtime-proof-smoke/` when present
+- `deploy/dashboards/mister-smith-overview.json`
+- `deploy/dashboards/mister-smith-autonomy.json`
+- `deploy/alerts/mister-smith-rules.yml`
+- `deploy/alerts/mister-smith-autonomy-rules.yml`
+- recent changes in:
+  `crates/mister-smith-runtime`,
+  `crates/mister-smith-monitoring`,
+  `crates/mister-smith-events`,
+  `crates/mister-smith-nats`,
+  `crates/mister-smith-agents`,
+  `crates/mister-smith-app`,
+  `crates/mister-smith-persistence`,
+  `apps/operator-console/src/`,
+  and `apps/operator-console/src-tauri/`
+
+Do not use hosted GitHub Actions timing as a primary source. GitHub Actions are intentionally
+disabled in this repository.
 
 ## Workflow
 
-1. Inspect recent evidence within the requested window.
-2. Separate findings into:
+1. Use the local date and write the report to:
+   `docs/automation-reports/YYYY-MM-DD-performance-audit.md`
+2. Inspect recent evidence on the default runtime path and the newest landed packet surfaces.
+3. Focus on hot paths that matter to Mister Smith now:
+   - runtime bootstrap and readiness
+   - NATS and PostgreSQL-backed task execution
+   - autonomy status and task inspect read paths
+   - packet-owned proof and projection surfaces
+   - operator-console selected-run rendering and build/test performance
+4. Separate findings into:
    - confirmed regression
    - plausible concern with incomplete evidence
    - no meaningful regression found
-3. Write the report to:
-   `docs/automation-reports/<report_date>-performance-audit.md`
-4. If no meaningful regression is grounded, say so and stop after saving the report.
-5. For each grounded regression or justified improvement proposal, identify the highest-leverage
+5. If no meaningful regression is grounded, say so and stop after saving the report.
+6. For each grounded regression or justified improvement proposal, identify the highest-leverage
    bounded fix direction.
-6. Create both GitHub and Linear issues for each tracked follow-up before finishing.
+7. Create both GitHub and Linear issues for each tracked follow-up before finishing.
 
 ## Report Format
 
 Use these sections:
 
 - Summary
-- Audit Window And Focus
+- Audit Window
 - Evidence Reviewed
 - Confirmed Regressions
 - Plausible Concerns Needing Measurement
@@ -86,14 +91,14 @@ Choose the matching template:
 
 - bug report for confirmed performance regressions
 - feature request for bounded instrumentation or optimization work that is not yet a bug
-- workflow / CI issue only when the performance problem is in automation or CI
+- workflow / CI issue only when the performance problem is in repo-owned validation or automation
 
 Labels:
 
 - always add `codex`
 - add `bug` for confirmed regressions
 - add `rust` or `javascript` when the hot path is clear
-- add `github_actions` if the issue is CI performance
+- add `github_actions` only when the finding is about repo GitHub metadata or issue plumbing
 
 Issue body should include:
 

@@ -9,38 +9,33 @@ upgrade work.
 
 ## Objective
 
-Detect dependency, SDK, action-version, and tool-version drift that is provable from the
-repository, then write a dated report and create issues only when the drift is real or when a code
-change proposal is justified.
-
-## Optional Inputs
-
-<report_date>
-Use the local date in `YYYY-MM-DD` format. Default output path:
-`docs/automation-reports/<report_date>-dependency-and-sdk-drift.md`
-</report_date>
-
-<lookback_window>
-Optional time or commit window for recent drift context.
-</lookback_window>
-
-<scope_note>
-Optional instruction to focus on one subsystem, language surface, or packaging layer.
-</scope_note>
+Detect dependency, SDK, runtime-version, and version-reference drift that is provable from the
+Mister Smith repository, then write a dated report and create issues only when the drift is real
+or when a code change proposal is justified.
 
 ## Repo Grounding
 
 Prioritize evidence from:
 
-- `Cargo.toml` files and `Cargo.lock`
-- package manifests and JS lockfiles if present
-- `.github/workflows/` and action-version pins
-- Docker and deploy manifests under `deploy/`
-- scripts with explicit version pins
-- current router docs when they claim a provider, model, command, or supported runtime path
+- workspace `Cargo.toml` and `Cargo.lock`
+- crate manifests under `crates/*/Cargo.toml`
+- `VERSION_REFERENCE.md`
+- `apps/operator-console/package.json`
+- `apps/operator-console/package-lock.json`
+- `apps/operator-console/src-tauri/Cargo.toml`
+- `apps/operator-console/src-tauri/Cargo.lock`
+- `deploy/docker-compose.yml` and `deploy/Dockerfile`
+- `scripts/requirements.txt`
+- `scripts/live_runtime_proof_smoke.py` when provider, model, or runtime-proof support claims are
+  involved
+- `README.md`, `CLAUDE.md`, `docs/current-state.md`, and `docs/ms_recent_context.md` when they
+  make version, provider, model, or runtime-support claims
 
-Do not treat vendored reference code as upgrade debt unless the repo clearly says it should track
-upstream.
+Do not treat these as primary drift targets:
+
+- `.github/workflows/` action pins, because GitHub Actions are intentionally disabled here
+- vendored `nats.rs/`, unless the repo explicitly says it must track upstream
+- archived docs or deploy archive material
 
 ## Grounding Rules
 
@@ -52,18 +47,21 @@ upstream.
 
 ## Workflow
 
-1. Inspect the repo's current version pins and lockfiles.
-2. Look for drift that is already visible inside the repo, such as:
-   - mismatched manifest and lockfile expectations
-   - outdated workflow or action pins relative to repo-stated support
-   - SDK or tool references that conflict with current shipped paths
-   - duplicate or inconsistent version pins across the same runtime surface
-3. Separate findings into:
+1. Use the local date and write the report to:
+   `docs/automation-reports/YYYY-MM-DD-dependency-and-sdk-drift.md`
+2. Inspect the repo's current version pins and reference docs.
+3. Look for drift that is already visible inside the repo, such as:
+   - workspace manifest and lockfile mismatches
+   - `VERSION_REFERENCE.md` no longer matching the real workspace
+   - operator-console JavaScript and Tauri manifests drifting from their lockfiles
+   - deploy image pins drifting from repo-stated support baselines
+   - runtime-proof docs claiming provider or model support that no longer matches
+     `scripts/live_runtime_proof_smoke.py`, `README.md`, or `docs/current-state.md`
+   - mixed or contradictory version pins across the same Mister Smith surface
+4. Separate findings into:
    - confirmed drift
    - possible drift that needs external confirmation
    - no drift
-4. Write a report to:
-   `docs/automation-reports/<report_date>-dependency-and-sdk-drift.md`
 5. If no real drift exists, say so clearly and stop after saving the report.
 6. If real drift exists, propose the smallest safe alignment plan.
 7. For any non-trivial proposed code or config change, create both GitHub and Linear issues before
@@ -90,14 +88,14 @@ Create issues only for confirmed drift or a clearly justified alignment proposal
 Choose the matching template:
 
 - bug report when drift is already causing incorrect behavior
-- workflow / CI issue when the drift lives in GitHub Actions or automation wiring
+- workflow / CI issue when the drift lives in repo-owned validation or automation files
 - feature request when the change is a bounded improvement rather than a current bug
 
 Use the smallest fitting label set:
 
 - always add `codex`
 - add `dependencies` for dependency or SDK alignment work
-- add `github_actions` when the finding is workflow-related
+- add `github_actions` only when the finding is about repo GitHub metadata or issue plumbing
 - add `rust` or `javascript` when that surface is primary
 
 ### Linear
@@ -130,7 +128,7 @@ Cross-link the GitHub and Linear issues.
 
 Use narrow validation only:
 
-- re-read the touched manifests and lockfiles
+- re-read the touched manifests, lockfiles, and version-reference docs
 - run `git diff --check`
 - if you update only the report and issue links, keep validation documentation-only
 

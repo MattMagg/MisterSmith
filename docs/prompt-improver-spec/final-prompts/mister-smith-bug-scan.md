@@ -9,24 +9,9 @@ bugs and propose the smallest safe fixes without inventing problems.
 
 ## Objective
 
-Review recent commits, diffs, tests, CI signals, and validation artifacts for credible bug signals.
-Write a dated report, and create GitHub plus Linear issues for any grounded bug or code-change
-proposal that should be tracked.
-
-## Optional Inputs
-
-<report_date>
-Use the local date in `YYYY-MM-DD` format. Default output path:
-`docs/automation-reports/<report_date>-bug-scan.md`
-</report_date>
-
-<lookback_window>
-Optional commit count, date range, or comparison range for the scan.
-</lookback_window>
-
-<focus_note>
-Optional instruction to focus on one crate, path, packet, or recent merge.
-</focus_note>
+Review recent Mister Smith commits, diffs, local validation signals, proof notes, and review
+surfaces for credible bug signals. Write a dated report, and create GitHub plus Linear issues for
+any grounded bug or code-change proposal that should be tracked.
 
 ## Grounding Rules
 
@@ -43,21 +28,42 @@ Concrete evidence means things like:
 - file paths
 - diffs
 - failing tests
-- CI failures
+- failed local validation commands
 - validation regressions
-- logs or traces checked into the repo or produced during the run
+- logs, traces, smoke-harness artifacts, or packet validation notes checked into the repo or
+  produced during the run
+
+## Mister Smith Evidence Sources
+
+Prioritize:
+
+- recent `main` history from `git log`, especially recent `feat(...)`, `fix(...)`, and docs/router
+  sync commits
+- recent packet notes under `docs/plans/`, especially packet `019`, packet `025`, and packet
+  `026`
+- `scripts/live_runtime_proof_smoke.py` and
+  `scripts/tests/test_live_runtime_proof_smoke.py`
+- current runtime/router docs:
+  `docs/current-state.md`, `docs/direction.md`, `docs/ms_recent_context.md`
+- local validation surfaces named in recent packet notes:
+  targeted `cargo test -p ...`, `npm --prefix apps/operator-console test`, and
+  `npm --prefix apps/operator-console run build`
+- review posture from `WORKFLOW.md`, `.github/workflows/README.md`, and `.coderabbit.yaml`
+
+Do not treat pure doc drift as a bug unless it points to a real code, runtime, or workflow-contract
+defect. Pure doc-truth cleanup belongs to the tracking-doc sync workflow.
 
 ## Workflow
 
-1. Inspect recent repo history and recent validation signals inside the requested window.
-2. Identify only grounded bug candidates.
-3. For each candidate, capture:
+1. Use the local date and write the report to:
+   `docs/automation-reports/YYYY-MM-DD-bug-scan.md`
+2. Inspect recent `main` history and recent local validation signals.
+3. Identify only grounded bug candidates.
+4. For each candidate, capture:
    - why it looks wrong
    - the exact evidence
    - likely impact
    - the smallest safe fix direction
-4. Write the report to:
-   `docs/automation-reports/<report_date>-bug-scan.md`
 5. If no grounded bug candidates exist, say so clearly and stop after saving the report.
 6. For each credible bug or code-change proposal, create both GitHub and Linear issues before
    finishing.
@@ -67,7 +73,7 @@ Concrete evidence means things like:
 Use these sections:
 
 - Summary
-- Scan Window And Inputs
+- Scan Window
 - Evidence Reviewed
 - Credible Bug Candidates
 - Skipped Weak Signals
@@ -88,7 +94,7 @@ Labels:
 
 - always add `codex`
 - add `bug` for product or runtime defects
-- add `github_actions` for workflow or CI failures
+- add `github_actions` only when the finding is about repo GitHub metadata or issue plumbing
 - add `rust` or `javascript` when the primary affected surface is clear
 
 Issue body should include:
