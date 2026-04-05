@@ -26,7 +26,8 @@ implementation phase.
 Treat `docs/current-state.md` as the current forward-direction router. Use
 `specs/023-runtime-truth-and-run-trace/` and
 `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
-`specs/025-step-level-intelligence-v2/` as the next draft scaffold,
+`specs/025-step-level-intelligence-v2/` as the latest landed step-policy packet authority,
+`specs/026-first-real-coordinator-subagent-runtime/` as the next implementation-ready packet,
 `specs/022-durable-workflow-core/` for packet-022 ownership, and
 `docs/plans/2026-03-27-runtime-planning-simplification.md` plus
 `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for the current live-proof and
@@ -82,7 +83,8 @@ runtime.
 - Treat `docs/current-state.md` as the current repo-wide router,
   `specs/023-runtime-truth-and-run-trace/` and
   `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
-  `specs/025-step-level-intelligence-v2/` as the next draft scaffold,
+  `specs/025-step-level-intelligence-v2/` as the latest landed step-policy packet authority,
+  `specs/026-first-real-coordinator-subagent-runtime/` as the next implementation-ready packet,
   `docs/plans/2026-03-16-smith-first-development-system.md` as historical control-plane background,
   and
   `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current implemented
