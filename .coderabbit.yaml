@@ -1,17 +1,289 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 language: "en-US"
+tone_instructions: "Use plain English. Be direct and factual. Focus on correctness, regressions, security, contract drift, and missing validation. Prefer actionable findings over praise. Avoid jokes, poems, or filler."
 early_access: false
 
 reviews:
-  profile: "chill"
+  profile: "assertive"
   request_changes_workflow: false
   high_level_summary: true
+  high_level_summary_instructions: >
+    Write a short plain-English walkthrough that covers what changed, which crates/apps/docs moved,
+    how linked work is addressed when present, the validation the author reported, and the main
+    remaining risk or follow-up. Keep product/runtime truth separate from repo workflow tooling.
+  high_level_summary_in_walkthrough: true
   review_status: true
-  collapse_walkthrough: false
+  review_details: false
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: false
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  suggested_reviewers: false
+  in_progress_fortune: false
+  poem: false
+  enable_prompt_for_ai_agents: true
+  path_filters:
+    - "!deploy/archive/**"
+    - "!.github/deactived-workflows/**"
+    - "!logs/**"
+  path_instructions:
+    - path: ".coderabbit.yaml"
+      instructions: >
+        Keep CodeRabbit aligned with the repo's real workflow: local validation, CodeRabbit plus
+        operator review, Linear as read context, and no duplicate planning or GitHub Actions
+        assumptions.
+    - path: ".github/**/*"
+      instructions: >
+        GitHub Actions are intentionally disabled in this repo. Review `.github` changes against
+        the current low-hosted-automation posture: Dependabot, labels, PR templates, and
+        CodeRabbit config are active; archived workflows are historical only.
+    - path: "crates/**/*.rs"
+      instructions: >
+        This is a Rust workspace with shared cross-crate contracts. Prioritize correctness,
+        compatibility, async/concurrency safety, feature-flag boundaries, serialization stability,
+        and honest validation scope. Prefer affected-crate tests plus `cargo build --workspace`;
+        ask for broader proof only when shared contracts, CI-critical surfaces, or runtime-boundary
+        behavior actually changed.
+    - path: "crates/mister-smith-core/**/*.rs"
+      instructions: >
+        Treat `mister-smith-core` changes as workspace-wide contract changes. Be extra strict about
+        downstream type compatibility, error semantics, serde stability, and whether broader build
+        or test coverage is needed before merge.
+    - path: "crates/mister-smith-security/**/*.rs"
+      instructions: >
+        Focus on authn/authz boundaries, least-privilege behavior, secret handling, trust-boundary
+        drift, and failure-mode safety. Flag any change that weakens explicit enforcement,
+        quarantine, or auditability.
+    - path: "crates/mister-smith-app/**/*.rs"
+      instructions: >
+        Treat execution, planning, autonomy status, and proof-surface changes as operator-facing
+        runtime behavior. Check that status wording stays honest about live proof versus
+        deterministic validation and that event/history invariants remain consistent.
+    - path: "crates/mister-smith-mcp/**/*.rs"
+      instructions: >
+        Keep shipped runtime/control-plane behavior separate from external repo workflow tooling.
+        Review Smith MCP changes for stable tool contracts, safe parameter handling, and clear
+        boundary reporting rather than aspirational workflow behavior.
+    - path: "apps/operator-console/**/*"
+      instructions: >
+        Review the operator console as a React 19, Vite, and Tauri app. Focus on user-visible
+        behavior, state correctness, hook safety, TypeScript soundness, and avoiding changes to
+        generated frontend artifacts. Relevant validation is `npm run lint`, `npm run test`, and
+        `npm run build` in `apps/operator-console`; do not ask for cargo-only proof when the diff
+        is frontend-only.
+    - path: "scripts/**/*.py"
+      instructions: >
+        Keep Python scripts deterministic and stdlib-first unless the repo already uses another
+        dependency. Prefer `unittest` coverage and `python3 -m py_compile` for changed scripts. If
+        the live runtime smoke harness changes, distinguish mock-only checks from real
+        provider-backed proof.
+    - path: "scripts/**/*.sh"
+      instructions: >
+        Shell scripts should be defensive and portable for repo automation: quote expansions, fail
+        early, avoid destructive shortcuts, and preserve the repo's clean-closure workflow.
+    - path: "docs/**/*.md"
+      instructions: >
+        Docs in this repo are operational truth, not marketing copy. Flag stale routing, broken
+        references, ungrounded future-tense claims, and any wording that confuses the shipped
+        Mister Smith OS with external development workflow tooling such as Linear or Symphony. Keep
+        live proof, landed code, and deterministic validation clearly separated.
+    - path: "plans/**/*.md"
+      instructions: >
+        Plans must stay short, factual, and resumable. Check for explicit objective, scope,
+        assumptions, constraints, non-goals, milestones, validation, and stop conditions.
+    - path: "spec/**/*.md"
+      instructions: >
+        `spec/` is canonical architecture. Review for contract clarity and consistency, not for
+        accidental drift toward packet-level implementation details.
+    - path: "specs/**/*.md"
+      instructions: >
+        `specs/` are SpecKit packet artifacts, not canonical architecture. Check that they stay
+        implementation-scoped, current, and consistent with the latest landed repo truth.
+    - path: "deploy/**/*"
+      instructions: >
+        Deploy assets are real operator/runtime surfaces. Review Docker, Kubernetes, Prometheus,
+        and dashboard changes for environment correctness, least surprise, and alignment with the
+        current product boundary and runtime expectations.
   auto_review:
     enabled: true
     auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 10
     drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "[skip review]"
+      - "[skip coderabbit]"
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: true
+    simplify:
+      enabled: false
+    custom:
+      - name: "tighten truth boundaries"
+        instructions: >
+          For touched docs, specs, plans, or operator-facing text, rewrite claims so they clearly
+          separate landed code, deterministic validation, and live runtime proof. Remove wording
+          that collapses Mister Smith product/runtime behavior into external repo workflow tooling.
+      - name: "strengthen validation note"
+        instructions: >
+          Update the PR description's Validation section so it lists only validation that was
+          actually run, matched to the touched surfaces. Call out anything that remains unverified,
+          especially live runtime proof or env-gated integrations.
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: >
+        Use a concise, descriptive PR title that names the real change, not just the ticket number
+        or a vague status update.
+    description:
+      mode: error
+    issue_assessment:
+      mode: warning
+    docstrings:
+      mode: off
+    custom_checks:
+      - mode: error
+        name: "Validation matches scope"
+        instructions: >
+          Fail if the PR description does not record validation that matches the touched surfaces.
+          Rust code changes should mention `cargo build --workspace` plus affected-crate tests
+          unless the diff is docs-only. Operator console changes should mention the relevant
+          `npm run` checks or explain why they were not run. Script changes should mention the
+          narrowest real proof such as `python3 -m unittest`, `python3 -m py_compile`, or
+          `git diff --check`.
+      - mode: error
+        name: "Docs keep truth boundaries"
+        instructions: >
+          When docs, plans, specs, AGENTS, WORKFLOW, current-state, or Linear protocol files are
+          changed, fail if the PR blurs the boundary between the Mister Smith operating system and
+          external development workflow tools, or if it claims live runtime proof without naming
+          concrete evidence.
+      - mode: warning
+        name: "Scope stays reviewable"
+        instructions: >
+          Warn when the PR pulls in archived material, repo noise, or generated artifacts without a
+          clear reason in the summary. Prefer tightly scoped, reviewable diffs.
+
+tools:
+  clippy:
+    enabled: true
+  ruff:
+    enabled: true
+  flake8:
+    enabled: false
+  pylint:
+    enabled: false
+  shellcheck:
+    enabled: true
+  markdownlint:
+    enabled: true
+  languagetool:
+    enabled: false
+  yamllint:
+    enabled: true
+  hadolint:
+    enabled: true
+  checkov:
+    enabled: true
+  trivy:
+    enabled: false
+  gitleaks:
+    enabled: true
+  trufflehog:
+    enabled: false
+  semgrep:
+    enabled: false
+  opengrep:
+    enabled: false
+  eslint:
+    enabled: true
+  biome:
+    enabled: false
+  oxc:
+    enabled: false
+  actionlint:
+    enabled: false
+  github-checks:
+    enabled: false
 
 chat:
+  art: false
+  allow_non_org_members: false
   auto_reply: true
+  integrations:
+    jira:
+      usage: "disabled"
+    linear:
+      usage: "enabled"
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "WORKFLOW.md"
+      - "SECURITY.md"
+      - "docs/current-state.md"
+      - "docs/direction.md"
+      - "docs/linear/LINEAR.md"
+      - ".github/workflows/README.md"
+  learnings:
+    scope: "local"
+  issues:
+    scope: "local"
+  jira:
+    usage: "disabled"
+  linear:
+    usage: "enabled"
+    team_keys:
+      - "MS"
+  pull_requests:
+    scope: "local"
+  mcp:
+    usage: "enabled"
+
+code_generation:
+  docstrings:
+    language: "en-US"
+    path_instructions:
+      - path: "crates/**/*.rs"
+        instructions: >
+          If docstrings are explicitly requested, use idiomatic Rust `///` or `//!` comments only
+          where they clarify public behavior, invariants, errors, or safety constraints. Do not add
+          boilerplate comments to private helpers or tests.
+  unit_tests:
+    path_instructions:
+      - path: "crates/**/*.rs"
+        instructions: >
+          Add focused deterministic Rust tests close to the touched crate. Prefer existing module or
+          crate test patterns, avoid introducing env-gated integrations unless the changed code is
+          already covered that way, and target regressions or invariants rather than broad rewrites.
+      - path: "apps/operator-console/src/**/*.ts"
+        instructions: >
+          Add or update Vitest coverage for user-visible behavior, data formatting, or integration
+          logic. Prefer direct behavior tests over snapshots.
+      - path: "apps/operator-console/src/**/*.tsx"
+        instructions: >
+          Use Testing Library style tests that cover rendered behavior, user interaction, and state
+          changes. Avoid brittle implementation-detail assertions.
+      - path: "scripts/**/*.py"
+        instructions: >
+          Use `unittest` with temporary directories or mocks where needed. Keep tests deterministic,
+          local, and free of network dependence.
+
+issue_enrichment:
+  auto_enrich:
+    enabled: true
+  planning:
+    enabled: true
