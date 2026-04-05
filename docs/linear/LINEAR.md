@@ -4,6 +4,14 @@
 **Team**: MisterSmith (`MS`)
 **Team URL**: `https://linear.app/agentic-ops/team/MS/all`
 
+This document now serves two roles:
+
+- active Linear issue and labeling guidance for direct Codex execution
+- historical reference for older Symphony automation design further below
+
+For the active Smith MCP route, prefer `AGENTS.md`, `docs/current-state.md`, and
+`docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`.
+
 ## Workspace Structure
 
 ### Hierarchy
@@ -33,23 +41,24 @@ remain useful for reporting and status updates, but the current repo-wide router
   `main`; treat it as closed backlog history rather than current runnable direction
 - packets `019` through `024` are complete on `main`; treat them as landed frontier history unless
   current repo truth shows a defect
-- packet `025` is the next draft scaffold, not the next automatically runnable queue slice; keep
+- packet `025` is the next draft scaffold, not the next automatically runnable direct slice; keep
   it in validated backlog until it is refreshed against current truth and one child slice is
   explicitly staged
-- packets `026` through `028` are later scaffolds and should stay out of the watched queue unless
-  they are deliberately promoted
+- packets `026` through `028` are later scaffolds and should stay in backlog until they are
+  deliberately selected for direct execution
 - the historical `Smith MCP Development` project is archived and should not be reopened as a
   separate forward program
-- the next active planning move is not an automatic queue refill; start from `docs/current-state.md`
+- the next active planning move is not an automatic refill; start from `docs/current-state.md`
   plus `docs/direction.md`, `specs/023-runtime-truth-and-run-trace/`,
   `specs/024-agent-boundary-security-hardening/`, and
   `specs/025-step-level-intelligence-v2/`, confirm current repo truth, and only then create one
   fresh bounded packet slice
 - `MisterSmith Validated Backlog` should hold only genuinely open frontier work in `Backlog` after
   fresh repo-grounded validation and explicit packet framing
-- Do not move these issues into the watched queue just to keep Symphony busy. Stage only the next
-  bounded runnable slice.
-- the watched queue should remain empty until that next bounded slice is explicitly staged
+- Do not move these issues into `Todo` just to keep automation busy. Select only the next bounded
+  runnable slice.
+- Keep `Todo` intentionally small and explicit. It should reflect real near-term execution, not a
+  generic parking lot.
 - the current repo-owned direction notes are `docs/current-state.md`, `docs/direction.md`,
   `specs/023-runtime-truth-and-run-trace/`, `specs/024-agent-boundary-security-hardening/`,
   `specs/025-step-level-intelligence-v2/`, and
@@ -58,21 +67,14 @@ remain useful for reporting and status updates, but the current repo-wide router
 
 ### Projects
 
-Projects serve two different purposes:
-
-1. planning and reporting
-2. Symphony dispatch
-
-Do not assume those are the same thing.
-
-Historical phase projects are archived once they stop serving as an active workspace surface.
-Symphony's live queue is currently a single watched project, validated future work is intentionally
-kept in a separate backlog project, and cross-cutting docs live in a neutral docs hub.
+Projects serve planning, reporting, and issue organization. Do not assume project placement alone
+decides whether work is runnable. For the active Smith MCP path, runnable work is determined by
+issue truth, workpad state, review state, and available packet context.
 
 | Project | Role | State | Notes |
 |---------|------|-------|-------|
-| MisterSmith Execution Queue | Active Queue | In Progress | Current watched project for Symphony and the only project that should hold runnable `Todo` work |
-| MisterSmith Validated Backlog | Validated Backlog | Backlog | Curated repo-validated future work outside the live queue until explicitly staged |
+| MisterSmith Execution Queue | Historical Automation Queue | In Progress | Legacy queue-oriented project retained for traceability; not the active Smith MCP boundary |
+| MisterSmith Validated Backlog | Validated Backlog | Backlog | Curated repo-validated future work until it is deliberately selected for direct execution |
 | MisterSmith Workspace Docs | Docs Hub | Backlog | Visible home for architecture, workflow, and Linear operating docs |
 | Archived historical phases | Historical Phase | Completed | Completed phase and batch projects are archived by default and can be unarchived if needed |
 | Smith MCP Development | Historical Control Plane | Archived | Historical Smith-first workflow build-out; do not reopen as a parallel product program |
@@ -81,20 +83,22 @@ kept in a separate backlog project, and cross-cutting docs live in a neutral doc
 
 Project role is encoded with project labels, not additional issue labels:
 
-- `Active Queue`: the single project Symphony is currently watching
-- `Validated Backlog`: repo-validated work that should not dispatch yet
+- `Active Queue`: legacy automation queue context retained for reporting
+- `Validated Backlog`: repo-validated work that should not start yet
 - `Historical Phase`: completed phase or batch projects retained for context
 
-### Current Dispatch Boundary
+### Current Direct-Execution Boundary
 
-Symphony currently watches one `project_slug` from `WORKFLOW.md`. Only issues in that watched
-project and in active workflow states can dispatch. Project placement is therefore operational, not
-decorative.
+The active Smith MCP route no longer depends on `WORKFLOW.md`, a watched `project_slug`, or
+queue-stage tools. Runnable work is determined by:
 
-`Human Review` is a real workflow state, but it is intentionally not part of Symphony's
-`active_states` because review handoff is not dispatch-active work. Keep the native state name,
-but do not require a second human hop when the active Codex session already has explicit operator
-authority to review and merge.
+- the issue state and blockers
+- the single `## Codex Workpad`
+- PR and review state
+- available packet docs and validation context
+
+`Human Review` is still a real workflow state, but it is now resolved through direct Codex review
+and merge work rather than queue dispatch.
 
 Do not collapse all planning into a single giant `MisterSmith` project just to satisfy that current
 runtime limitation. If project switching becomes the real bottleneck, prefer a dedicated execution
@@ -106,14 +110,14 @@ Use Smith as the default workflow layer over this Linear model.
 
 - route and state discovery:
   `route_workflow_request`, `get_control_plane_snapshot`, `get_issue_execution_snapshot`,
-  `resolve_issue_lifecycle`
+  `prepare_direct_execution`, `resolve_issue_lifecycle`
 - issue and workpad mutation:
   `save_linear_issue`, `save_issue_workpad`
-- backlog and queue operations:
-  `materialize_backlog_slices`, `plan_queue_stage`, `apply_queue_stage`
+- backlog, packet prep, and review guidance:
+  `materialize_backlog_slices`, `translate_speckit_tasks`, `prepare_speckit_context`,
+  `review_merge_status`
 - Ralph and SpecKit glue:
-  `prepare_ralph_packet`, `record_ralph_outcome`, `prepare_speckit_context`,
-  `translate_speckit_tasks`
+  `prepare_ralph_packet`, `record_ralph_outcome`
 
 For frozen packet execution, keep the workflow hybrid: use Smith MCP to route, reconcile state,
 and prepare the active slice, then run the repo-local `speckit.implement` surface before
@@ -126,7 +130,7 @@ yet model.
 
 Use cycles only for scheduled near-term work.
 
-- Leave `Triage` and validated backlog items cycle-free until they are actually staged.
+- Leave `Triage` and validated backlog items cycle-free until they are actually selected.
 - Assign a cycle only when the issue is moving toward `Todo`.
 - Do not bulk-assign the validated backlog to cycles just for visibility.
 
@@ -160,8 +164,6 @@ Frontier Autonomy
 ### Operational Standalone Labels
 
 - `Validated`: the work has been repo-validated and accepted as real
-- `Symphony Candidate`: the issue is structured tightly enough for unattended execution once
-  scheduled
 
 ### Group Label Constraint
 
@@ -187,8 +189,8 @@ Every issue should include:
 1. **Title**: Short, descriptive (under 70 characters)
 2. **Project**:
    - leave raw intake in `Triage` minimally routed until validated
-   - use the watched project only for active-scope runnable work
-   - use `MisterSmith Validated Backlog` for validated future work outside the current queue
+   - use `MisterSmith Validated Backlog` for validated future work not yet selected for execution
+   - use an active working project only when the issue is deliberately in play now
 3. **Milestone**: Only when the project actively uses milestones
 4. **Priority**: 1-4 using Linear's built-in field
 5. **Labels**:
@@ -197,7 +199,6 @@ Every issue should include:
    - one source label when the source is known
    - one phase label when it adds routing value
    - `Validated` when the finding is repo-grounded
-   - `Symphony Candidate` when the issue is execution-ready once scheduled
 6. **Assignee**: Optional until real human ownership exists
 7. **Cycle**: Only after the issue is actually scheduled; validated backlog items can remain cycle-free
 8. **Description**: Structured markdown with:
@@ -256,10 +257,9 @@ Use Linear's blocking feature for dependency chains. Document the dependency in 
 
 - `Triage`: raw suggestions, scanner output, Slack/Asks intake, or CI findings that are not yet repo-validated
 - `Backlog`: validated but unscheduled
-- `Todo`: unblocked, in the watched project, and safe to start now
-- `Symphony Candidate` does not mean `Todo`; it means the issue is safe once scheduled
+- `Todo`: unblocked, selected for near-term execution, and safe to start now
 - An empty `Todo` list means nothing is runnable right now; it does not mean the state disappeared
-- Do not move work into the watched project simply to make it visible
+- Do not move work into `Todo` simply to make it visible
 
 ### Branch Naming
 
@@ -270,9 +270,9 @@ matthewtmaggio/ms-<number>-<slug>
 ```
 
 Include `MS-###` in commit messages and PR titles to link them to Linear issues.
-No Symphony execution should finish with local uncommitted or untracked changes. Leftovers must be
-reviewed, landed on a branch/PR if valid, or explicitly dropped after verifying they are already
-landed or stale.
+No execution should finish with local uncommitted or untracked changes. Leftovers must be reviewed,
+landed on a branch/PR if valid, or explicitly dropped after verifying they are already landed or
+stale.
 
 ## Statuses
 
@@ -280,12 +280,12 @@ landed or stale.
 |--------|------|---------|
 | Triage | triage | Raw intake not yet validated |
 | Backlog | backlog | Validated but unscheduled |
-| Todo | unstarted | Unblocked work in the watched project, ready to start |
+| Todo | unstarted | Unblocked work selected for near-term execution |
 | In Progress | started | Actively being worked on |
-| In Review | started | Optional human-only review state; avoid using it for the Symphony path |
-| Human Review | started | Native Symphony review checkpoint; delegated-agent review may satisfy it when the operator has already granted authority |
-| Rework | started | Reviewer requested changes, agent restarts (Symphony) |
-| Merging | started | Review is complete, agent lands the merge (Symphony) |
+| In Review | started | Optional human-only review state |
+| Human Review | started | Review checkpoint for direct Codex review or external reviewer input |
+| Rework | started | Reviewer requested changes |
+| Merging | started | Review is complete and the PR is being landed |
 | Done | completed | Merged and verified |
 | Duplicate | canceled | Duplicate of another issue |
 | Canceled | canceled | Will not be done |
@@ -294,27 +294,16 @@ landed or stale.
 
 ```
 Triage → Backlog (validated but not scheduled)
-Backlog → Todo (explicit staging into the watched project)
+Backlog → Todo (explicitly selected for execution)
 Todo → In Progress (work begins)
 In Progress → In Review (human-only flow)
 In Review → Done (PR merged)
 ```
 
 With GitHub integration, branch creation should move to `In Progress`, PR open/review-requested
-should move Symphony issues to `Human Review`, review-complete work should move to `Merging`, and
-merge to `main` should move to `Done`, but only after the issue workspace has been reconciled back
-to a clean local checkpoint.
-
-### Status Transitions (Symphony)
-
-```
-Todo → In Progress (agent picks up issue)
-In Progress → Human Review (agent opens PR, requests review)
-Human Review → Merging (delegated agent or reviewer completes review)
-Human Review → Rework (reviewer or delegated agent requests changes)
-Rework → In Progress (agent restarts with feedback)
-Merging → Done (agent lands PR merge)
-```
+should move issues to `Human Review`, review-complete work should move to `Merging`, and merge to
+`main` should move to `Done`, but only after the issue workspace has been reconciled back to a
+clean local checkpoint.
 
 ## Documents
 
@@ -469,7 +458,7 @@ When adding a new crate to the workspace:
 2. Update the Crate Dependency Map document in Linear
 3. Update `CLAUDE.md` workspace structure
 
-## Symphony Integration
+## Historical Symphony Integration
 
 [OpenAI Symphony](https://github.com/openai/symphony) orchestrates Codex agents
 against Linear issues. It polls for `Todo` issues, spawns a Codex `app-server`
@@ -535,7 +524,7 @@ deliberately staged:
 - `MisterSmith Validated Backlog` is for real repo-validated work that is not yet scheduled
 - historical phase projects remain for reporting and traceability, not dispatch
 - if Symphony concurrency is underutilized, fill the execution queue with additional unblocked
-  `Symphony Candidate` issues instead of retargeting the runtime to a different phase project
+  validated issues instead of retargeting the runtime to a different phase project
 
 ### Required Credentials
 

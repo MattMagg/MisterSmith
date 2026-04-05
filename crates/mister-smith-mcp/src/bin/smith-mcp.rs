@@ -13,7 +13,6 @@ fn parse_args(mut options: SmithCompatibilityOptions) -> Result<SmithCompatibili
                     .next()
                     .ok_or_else(|| "--repo-root requires a value".to_string())?;
                 options.repo_root = PathBuf::from(value);
-                options.workflow_path = options.repo_root.join("WORKFLOW.md");
                 options.env_file_path = options.repo_root.join(".env");
             }
             "--codex-config-path" => {
@@ -21,18 +20,6 @@ fn parse_args(mut options: SmithCompatibilityOptions) -> Result<SmithCompatibili
                     .next()
                     .ok_or_else(|| "--codex-config-path requires a value".to_string())?;
                 options.codex_config_path = PathBuf::from(value);
-            }
-            "--symphony-checkout" => {
-                let value = args
-                    .next()
-                    .ok_or_else(|| "--symphony-checkout requires a value".to_string())?;
-                options.symphony_checkout = PathBuf::from(value);
-            }
-            "--workspace-root" => {
-                let value = args
-                    .next()
-                    .ok_or_else(|| "--workspace-root requires a value".to_string())?;
-                options.workspace_root_override = Some(PathBuf::from(value));
             }
             "--linear-endpoint" => {
                 let value = args
@@ -48,7 +35,7 @@ fn parse_args(mut options: SmithCompatibilityOptions) -> Result<SmithCompatibili
             }
             "--help" | "-h" => {
                 return Err(
-                    "usage: smith-mcp [--repo-root PATH] [--codex-config-path PATH] [--symphony-checkout PATH] [--workspace-root PATH] [--linear-endpoint URL] [--server-name NAME]"
+                    "usage: smith-mcp [--repo-root PATH] [--codex-config-path PATH] [--linear-endpoint URL] [--server-name NAME]"
                         .to_string(),
                 );
             }

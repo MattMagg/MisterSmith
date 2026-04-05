@@ -89,11 +89,11 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **REQUIRED for Mister Smith packet work**: before reading `tasks.md`, run the Smith-first
      preflight that applies in this repo:
      - route the request with `route_workflow_request`
-     - pull live repo or issue state with `get_control_plane_snapshot` or
-       `get_issue_execution_snapshot`
+     - pull live repo or issue state with `prepare_direct_execution`,
+       `get_control_plane_snapshot`, or `get_issue_execution_snapshot`
      - reconcile the single `## Codex Workpad`
-     - if lifecycle or queue posture matters, use `resolve_issue_lifecycle`, `plan_queue_stage`,
-       or other Smith workflow-family tools before edits
+     - if lifecycle or review posture matters, use `resolve_issue_lifecycle`,
+       `review_merge_status`, or the other Smith workflow-family tools before edits
      - only continue into task execution once that preflight confirms the slice is honest and
        runnable
    - **REQUIRED**: Read tasks.md for the complete task list and execution plan
@@ -168,15 +168,15 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Polish and validation**: Unit tests, performance optimization, documentation
    - **Mister Smith subagent wiring**:
      - start with `smith_repo_grounder` when repo grounding is incomplete
-     - add `smith_control_plane_auditor` when workflow, queue, issue, or PR state matters
+     - add `smith_control_plane_auditor` when workflow, issue, or PR state matters
      - add `smith_docs_researcher` when external docs or provider behavior are relevant
      - use one `smith_crate_worker` per disjoint write scope
      - pair each write worker with `smith_validator`
      - run `smith_reviewer` before final parent-thread finalization
      - use `smith_ralph_packet_builder` for Ralph flows and `smith_speckit_router`
        plus `smith_slice_planner` for SpecKit flows
-     - keep `save_linear_issue`, `save_issue_workpad`, `apply_queue_stage`,
-       PR merge/push/land, and final state transitions in the parent thread
+     - keep `save_linear_issue`, `save_issue_workpad`, PR merge/push/land, and final state
+       transitions in the parent thread
 
 8. Progress tracking and error handling:
    - Report progress after each completed task

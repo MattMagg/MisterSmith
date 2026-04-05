@@ -61,15 +61,15 @@ runtime.
 
 - Start broad workflow requests with `route_workflow_request`.
 - Pull current state with `get_control_plane_snapshot` or `get_issue_execution_snapshot` before
-  mutating Linear, queue, or review state.
+  mutating Linear or review state.
 - Use Smith workflow-family tools before raw Linear or ad hoc repo glue:
   - `save_linear_issue`, `save_issue_workpad`
-  - `materialize_backlog_slices`, `plan_queue_stage`, `apply_queue_stage`
-  - `resolve_issue_lifecycle`
+  - `prepare_direct_execution`, `materialize_backlog_slices`
+  - `resolve_issue_lifecycle`, `review_merge_status`
   - `prepare_ralph_packet`, `record_ralph_outcome`
   - `prepare_speckit_context`, `translate_speckit_tasks`
 - For frozen packet implementation work, use a hybrid flow:
-  - Smith-first routing and state reconciliation decide whether the slice is runnable and what
+  - Smith-first routing and state reconciliation decide the direct execution plan and what
     control-plane state must be refreshed first.
   - After that preflight, explicitly execute the repo-local `speckit.implement` surface through
     `.codex/commands/implement.md` and `.codex/prompts/speckit.implement.md` before code changes.
@@ -77,20 +77,16 @@ runtime.
     running the repo-local implement flow.
 - When a task explicitly calls for Ralph, use `./scripts/ralph` instead of bare `ralph`; rerun
   `./scripts/ralph prompt --packet <packet.json>` before each `./scripts/ralph run`.
-- When launching Symphony locally for this repo, use `./scripts/run-symphony.sh`; it loads this
-  repository's `.env`, verifies `LINEAR_API_KEY`, defaults `SYMPHONY_ROOT=$HOME/symphony`, and
-  starts Symphony against this repo's `WORKFLOW.md`.
 - Treat `docs/current-state.md` as the current repo-wide router,
   `specs/023-runtime-truth-and-run-trace/` and
   `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
   `specs/025-step-level-intelligence-v2/` as the latest landed step-policy packet authority,
   `specs/026-first-real-coordinator-subagent-runtime/` as the next implementation-ready packet,
   `docs/plans/2026-03-16-smith-first-development-system.md` as historical control-plane background,
-  and
-  `docs/plans/2026-03-16-smith-mcp-ms-51-ms-59-execution.md` as the current implemented
-  workflow-family surface.
-- For repo development workflow only, keep Linear as the durable source of truth, Symphony as the
-  watched-queue executor, Ralph as the loop runner, and SpecKit as the upstream spec/task-pack
+  and `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md` as the current direct
+  execution control-plane note.
+- For repo development workflow only, keep Linear as the durable source of truth, Smith MCP as the
+  direct Codex control plane, Ralph as the loop runner, and SpecKit as the upstream spec/task-pack
   scaffold.
 
 ## Subagent Orchestration
@@ -103,7 +99,7 @@ This repo ships a project-scoped Codex agent roster under `.codex/agents/`.
 - Use `smith_repo_grounder` plus `smith_control_plane_auditor` for kickoff and recovery. Add
   `smith_docs_researcher` when external docs or tool behavior matter.
 - Use `smith_frontier_guard` plus `smith_slice_planner` for backlog legitimacy, bounded slicing,
-  and queue-readiness analysis.
+  and direct execution readiness analysis.
 - Use one `smith_crate_worker` per disjoint write scope, pair it with `smith_validator`, and run
   `smith_reviewer` before parent-controlled finalization.
 - Use `smith_ralph_packet_builder` for Ralph-assisted flows and `smith_speckit_router` plus
@@ -111,8 +107,8 @@ This repo ships a project-scoped Codex agent roster under `.codex/agents/`.
 - Use `spawn_agents_on_csv` for repeated audits or review sweeps across many similar files, issues,
   or services.
 - Keep durable control-plane mutations in the parent thread:
-  `save_linear_issue`, `save_issue_workpad`, `apply_queue_stage`, PR merge/push/land, and final
-  issue state transitions stay parent-owned unless a one-off exception is explicitly delegated.
+  `save_linear_issue`, `save_issue_workpad`, PR merge/push/land, and final issue state transitions
+  stay parent-owned unless a one-off exception is explicitly delegated.
 
 ## Build, Test, and Development Commands
 
