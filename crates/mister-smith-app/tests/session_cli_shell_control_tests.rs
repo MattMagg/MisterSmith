@@ -63,10 +63,7 @@ async fn session_control_updates_round_trip_through_http_helper() {
 
     handle.abort();
 
-    assert_eq!(
-        control.selected_model_id.as_deref(),
-        Some("gpt-5.4-mini")
-    );
+    assert_eq!(control.selected_model_id.as_deref(), Some("gpt-5.4-mini"));
     assert_eq!(control.permission_mode, "review");
     assert_eq!(control.status_view, "detail");
     assert_eq!(control.mcp_posture, "connected");
@@ -78,6 +75,7 @@ fn render_session_surfaces_control_state_and_support_notices() {
         title: "live control session".to_string(),
         session_id: "11111111-1111-1111-1111-111111111111".to_string(),
         status: "active".to_string(),
+        loop_state: "ready".to_string(),
         coordinator_agent_id: "22222222-2222-2222-2222-222222222222".to_string(),
         provider_kind: "openai_chatgpt".to_string(),
         model_id: "gpt-5.4".to_string(),
@@ -85,6 +83,18 @@ fn render_session_surfaces_control_state_and_support_notices() {
         last_completed_workflow_id: Some("33333333-3333-3333-3333-333333333333".to_string()),
         turn_count: 2,
         last_assistant_result: None,
+        current_turn_state: Some(conversation::ConversationCliCurrentTurnStateView {
+            workflow_id: "33333333-3333-3333-3333-333333333333".to_string(),
+            turn_index: 2,
+            turn_status: "completed".to_string(),
+            lifecycle_state: DurableWorkflowLifecycleState::Completed,
+            result_preview: Some("control state captured".to_string()),
+            proof_boundary_note: Some(
+                "result is orchestration proof, not substantive task proof".to_string(),
+            ),
+            state_source: "retained_session".to_string(),
+            next_action_hint: "send a follow-up turn or adjust the session controls".to_string(),
+        }),
         turns: vec![conversation::ConversationCliTurnSummary {
             turn_index: 2,
             workflow_id: "33333333-3333-3333-3333-333333333333".to_string(),
@@ -107,13 +117,18 @@ fn render_session_surfaces_control_state_and_support_notices() {
             severity: "warning".to_string(),
             summary: "Shell control changes are stored with this session, but runtime execution still follows the active runtime path.".to_string(),
             support_surface: Some("config".to_string()),
+            blocks_live_turn: false,
+            allowed_next_action:
+                "keep working in this session or adjust the support posture".to_string(),
         }],
+        next_action_hint: "send a follow-up turn or adjust the session controls".to_string(),
         ended_at: None,
     };
 
     let rendered = conversation::render_session(&view);
 
-    assert!(rendered.contains("title: live control session"));
+    assert!(rendered.contains("session: live control session"));
+    assert!(rendered.contains("loop_state: ready"));
     assert!(rendered.contains("selected_model: gpt-5.4-mini"));
     assert!(rendered.contains("permission_mode: review"));
     assert!(rendered.contains("[warning] Shell control changes are stored with this session"));

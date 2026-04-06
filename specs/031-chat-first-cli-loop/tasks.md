@@ -58,16 +58,16 @@ surfaces inline turn-state without relying on detached inspection output.
 
 ### Tests For User Story 1
 
-- [ ] T004 [P] [US1] Add loop-state rendering coverage in
+- [x] T004 [P] [US1] Add loop-state rendering coverage in
       `crates/mister-smith-app/src/conversation.rs`
-- [ ] T005 [P] [US1] Add active CLI session-loop interaction coverage in
+- [x] T005 [P] [US1] Add active CLI session-loop interaction coverage in
       `crates/mister-smith-app/src/main.rs`
 
 ### Implementation For User Story 1
 
-- [ ] T006 [P] [US1] Replace detached turn-accepted-plus-inspect flow in
+- [x] T006 [P] [US1] Replace detached turn-accepted-plus-inspect flow in
       `crates/mister-smith-app/src/main.rs`
-- [ ] T007 [US1] Add inline current-turn state and conversation-loop rendering helpers in
+- [x] T007 [US1] Add inline current-turn state and conversation-loop rendering helpers in
       `crates/mister-smith-app/src/conversation.rs`
 
 **Checkpoint**: follow-up turns read as one live CLI conversation instead of submit plus inspect.
@@ -84,17 +84,17 @@ one lands back in a usable live loop with retained context still visible.
 
 ### Tests For User Story 2
 
-- [ ] T008 [P] [US2] Add resumed-session continuity and retained-context coverage in
+- [x] T008 [P] [US2] Add resumed-session continuity and retained-context coverage in
       `crates/mister-smith-app/src/conversation.rs`
-- [ ] T009 [P] [US2] Add session-view contract coverage for resumed and degraded states in
+- [x] T009 [P] [US2] Add session-view contract coverage for resumed and degraded states in
       `crates/mister-smith-http/src/server.rs`
 
 ### Implementation For User Story 2
 
-- [ ] T010 [P] [US2] Extend resumed-session view mapping and loop entry behavior in
+- [x] T010 [P] [US2] Extend resumed-session view mapping and loop entry behavior in
       `crates/mister-smith-app/src/conversation.rs` and
       `crates/mister-smith-app/src/main.rs`
-- [ ] T011 [US2] Preserve runtime-unavailable, busy-session, and ended-session truth inside the
+- [x] T011 [US2] Preserve runtime-unavailable, busy-session, and ended-session truth inside the
       resumed loop in `crates/mister-smith-app/src/conversation.rs` and
       `crates/mister-smith-http/src/server.rs`
 
@@ -113,16 +113,16 @@ degraded, or proof-limited states remain visible without leaving the loop.
 
 ### Tests For User Story 3
 
-- [ ] T012 [P] [US3] Add in-session steering and truth-notice coverage in
+- [x] T012 [P] [US3] Add in-session steering and truth-notice coverage in
       `crates/mister-smith-app/src/conversation.rs`
-- [ ] T013 [P] [US3] Add slash-command loop coverage for active-session steering in
+- [x] T013 [P] [US3] Add slash-command loop coverage for active-session steering in
       `crates/mister-smith-app/src/main.rs`
 
 ### Implementation For User Story 3
 
-- [ ] T014 [P] [US3] Keep steering commands inside the live loop in
+- [x] T014 [P] [US3] Keep steering commands inside the live loop in
       `crates/mister-smith-app/src/main.rs`
-- [ ] T015 [US3] Preserve support notices, proof-boundary wording, and retained-control posture in
+- [x] T015 [US3] Preserve support notices, proof-boundary wording, and retained-control posture in
       `crates/mister-smith-app/src/conversation.rs` and
       `crates/mister-smith-http/src/server.rs`
 
@@ -133,14 +133,14 @@ admin-first workflow.
 
 ## Final Validation And Evidence
 
-- [ ] T016 Run `cargo test -p mister-smith-app`
-- [ ] T017 Run `cargo test -p mister-smith-http`
-- [ ] T018 Run `cargo build --workspace`
-- [ ] T019 Run
+- [x] T016 Run `cargo test -p mister-smith-app`
+- [x] T017 Run `cargo test -p mister-smith-http`
+- [x] T018 Run `cargo build --workspace`
+- [x] T019 Run
       `SPECIFY_FEATURE=031-chat-first-cli-loop ./.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
-- [ ] T020 Run
+- [x] T020 Run
       `npx markdownlint-cli2 "specs/031-chat-first-cli-loop/**/*.md" --config .markdownlint.json`
-- [ ] T021 Run `git diff --check`
+- [x] T021 Run `git diff --check`
 
 ## Parallel Directive
 

@@ -74,7 +74,8 @@ async fn resume_last_opens_the_most_recent_session() {
 
     assert!(output.status.success(), "{:?}", output);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("title: most recent retained session"));
+    assert!(stdout.contains("session: most recent retained session"));
+    assert!(stdout.contains("loop_state: ready"));
     assert!(stdout.contains("session_id: 11111111-1111-1111-1111-111111111111"));
 }
 
@@ -176,7 +177,8 @@ async fn sessions_open_renders_the_selected_session() {
 
     assert!(output.status.success(), "{:?}", output);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("title: selected retained session"));
+    assert!(stdout.contains("session: selected retained session"));
+    assert!(stdout.contains("current_turn:\n  none"));
     assert!(stdout.contains("selected_model: gpt-5.4-mini"));
     assert!(stdout.contains("permission_mode: review"));
 }
@@ -227,6 +229,7 @@ async fn resume_by_session_id_renders_the_selected_session() {
 
     assert!(output.status.success(), "{:?}", output);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("title: resume specific retained session"));
+    assert!(stdout.contains("session: resume specific retained session"));
+    assert!(stdout.contains("loop_state: ready"));
     assert!(stdout.contains("session_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
 }

@@ -17,9 +17,9 @@ use uuid::Uuid;
 
 use crate::errors::HttpError;
 use crate::server::{
-    AppState, ConversationContinueRequest, ConversationCreateRequest,
-    ConversationSessionControlUpdateRequest, ConversationServiceError, SessionListRequest,
-    TaskListRequest, TaskSubmissionRequest,
+    AppState, ConversationContinueRequest, ConversationCreateRequest, ConversationServiceError,
+    ConversationSessionControlUpdateRequest, SessionListRequest, TaskListRequest,
+    TaskSubmissionRequest,
 };
 
 fn is_false(value: &bool) -> bool {
@@ -306,6 +306,29 @@ pub struct SessionResumeProvenanceResponse {
     pub resumed_from_turn_index: Option<u32>,
 }
 
+/// Focused current-turn state returned by the session inspect view.
+#[derive(Debug, Serialize)]
+pub struct SessionCurrentTurnStateResponse {
+    /// Root workflow in focus for the current turn state.
+    pub workflow_id: TaskId,
+    /// 1-based accepted turn order.
+    pub turn_index: u32,
+    /// User-visible current turn state.
+    pub turn_status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
+    /// Compact preview of the most recent result when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_preview: Option<String>,
+    /// Explicit proof-boundary wording when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof_boundary_note: Option<String>,
+    /// Whether this state is backed by live runtime or retained projections.
+    pub state_source: String,
+    /// Next honest action from the same session loop.
+    pub next_action_hint: String,
+}
+
 /// Session inspect response.
 #[derive(Debug, Serialize)]
 pub struct SessionInspectResponse {
@@ -315,6 +338,8 @@ pub struct SessionInspectResponse {
     pub session_id: SessionId,
     /// Session lifecycle state.
     pub status: mister_smith_core::SessionStatus,
+    /// Current loop posture for the active session.
+    pub loop_state: String,
     /// Stable coordinator identity.
     pub coordinator_agent_id: AgentId,
     /// Provider attributed to the session.
@@ -332,12 +357,17 @@ pub struct SessionInspectResponse {
     /// Most recent retained session-facing result projection.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_assistant_result: Option<mister_smith_core::SessionRetainedResultView>,
+    /// Focused current-turn projection for the live loop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_turn_state: Option<SessionCurrentTurnStateResponse>,
     /// Ordered turn summaries.
     pub turns: Vec<SessionTurnSummaryResponse>,
     /// Durable control state currently attached to the session shell.
     pub control_state: SessionControlResponse,
     /// Inline warnings and degraded-state notes for the session shell.
     pub support_notices: Vec<SupportNoticeResponse>,
+    /// Next honest action from the same session identity.
+    pub next_action_hint: String,
     /// Logical close time when ended.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -402,6 +432,11 @@ pub struct SupportNoticeResponse {
     /// Related support surface, when one exists.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub support_surface: Option<String>,
+    /// Whether the notice currently blocks another live turn.
+    #[serde(skip_serializing_if = "is_false")]
+    pub blocks_live_turn: bool,
+    /// Next honest action while the notice remains active.
+    pub allowed_next_action: String,
 }
 
 /// Durable control state exposed to the CLI session shell.
@@ -756,6 +791,7 @@ pub async fn get_session(
         title: view.title,
         session_id: view.session_id,
         status: view.status,
+        loop_state: view.loop_state.as_str().to_string(),
         coordinator_agent_id: view.coordinator_agent_id,
         provider_kind: view.provider_kind,
         model_id: view.model_id,
@@ -763,6 +799,18 @@ pub async fn get_session(
         last_completed_workflow_id: view.last_completed_workflow_id,
         turn_count: view.turn_count,
         last_assistant_result: view.last_assistant_result,
+        current_turn_state: view
+            .current_turn_state
+            .map(|turn| SessionCurrentTurnStateResponse {
+                workflow_id: turn.workflow_id,
+                turn_index: turn.turn_index,
+                turn_status: turn.turn_status,
+                lifecycle_state: turn.lifecycle_state,
+                result_preview: turn.result_preview,
+                proof_boundary_note: turn.proof_boundary_note,
+                state_source: turn.state_source.as_str().to_string(),
+                next_action_hint: turn.next_action_hint,
+            }),
         turns: view
             .turns
             .into_iter()
@@ -801,8 +849,11 @@ pub async fn get_session(
                 severity: notice.severity,
                 summary: notice.summary,
                 support_surface: notice.support_surface,
+                blocks_live_turn: notice.blocks_live_turn,
+                allowed_next_action: notice.allowed_next_action,
             })
             .collect(),
+        next_action_hint: view.next_action_hint,
         ended_at: view.ended_at,
     }))
 }
@@ -1037,11 +1088,10 @@ mod tests {
         AgentInspectionDetailView, AgentInspectionService, AgentInspectionSummaryView, AppState,
         ConversationContinueRequest, ConversationEndView, ConversationResumeProvenanceView,
         ConversationServiceError, ConversationSessionControlUpdateRequest,
-        ConversationSessionControlView, ConversationSessionService,
-        ConversationSessionSummaryView, ConversationSessionView, ConversationSupportNoticeView,
-        ConversationTurnAccepted, ConversationTurnSummaryView, NatsHealthCheck,
-        SessionListRequest, TaskExecutionService, TaskListRequest, TaskStatusView,
-        TaskSubmissionResponse, TaskSummaryView,
+        ConversationSessionControlView, ConversationSessionService, ConversationSessionSummaryView,
+        ConversationSessionView, ConversationSupportNoticeView, ConversationTurnAccepted,
+        ConversationTurnSummaryView, NatsHealthCheck, SessionListRequest, TaskExecutionService,
+        TaskListRequest, TaskStatusView, TaskSubmissionResponse, TaskSummaryView,
     };
     use mister_smith_core::{
         AuthorityPrincipal, CapabilityActionKind, DelegatedAction, DelegatedActionPolicy,
@@ -1528,6 +1578,7 @@ mod tests {
                 title: "resume interrupted workflow".to_string(),
                 session_id,
                 status: mister_smith_core::SessionStatus::Active,
+                loop_state: crate::server::ConversationLoopState::TurnPending,
                 coordinator_agent_id: AgentId::new(),
                 provider_kind: "openai_chatgpt".to_string(),
                 model_id: "gpt-5.4".to_string(),
@@ -1535,6 +1586,7 @@ mod tests {
                 last_completed_workflow_id: Some(resumed_from_workflow_id),
                 turn_count: 2,
                 last_assistant_result: Some(retained_result.clone()),
+                current_turn_state: None,
                 turns: vec![
                     ConversationTurnSummaryView {
                         turn_index: 1,
@@ -1586,7 +1638,12 @@ mod tests {
                     severity: "warning".to_string(),
                     summary: "Shell control changes are stored with this session, but runtime execution still follows the active runtime path.".to_string(),
                     support_surface: Some("config".to_string()),
+                    blocks_live_turn: false,
+                    allowed_next_action:
+                        "keep working in this session or adjust the support posture".to_string(),
                 }],
+                next_action_hint:
+                    "stay in this session while the accepted turn starts".to_string(),
                 ended_at: None,
             },
             summaries: vec![ConversationSessionSummaryView {
@@ -1651,6 +1708,7 @@ mod tests {
                 title: "first retained session".to_string(),
                 session_id,
                 status: mister_smith_core::SessionStatus::Active,
+                loop_state: crate::server::ConversationLoopState::Ready,
                 coordinator_agent_id: AgentId::new(),
                 provider_kind: "openai_chatgpt".to_string(),
                 model_id: "gpt-5.4".to_string(),
@@ -1658,6 +1716,7 @@ mod tests {
                 last_completed_workflow_id: None,
                 turn_count: 1,
                 last_assistant_result: None,
+                current_turn_state: None,
                 turns: vec![],
                 control_state: ConversationSessionControlView {
                     session_id,
@@ -1669,6 +1728,9 @@ mod tests {
                     mcp_posture: "support_only".to_string(),
                 },
                 support_notices: vec![],
+                next_action_hint:
+                    "send a follow-up turn or adjust the session controls from this loop"
+                        .to_string(),
                 ended_at: None,
             },
             summaries: vec![ConversationSessionSummaryView {
