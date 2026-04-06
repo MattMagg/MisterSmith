@@ -1,6 +1,6 @@
 //! Runtime-backed HTTP task execution for one real local workflow path.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
@@ -68,7 +68,7 @@ use mister_smith_transport::{MessageEnvelope, MessagePriority};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -89,6 +89,8 @@ const WORKFLOW_EXECUTE_STEP_TOOL: &str = "execute_step";
 const DEFAULT_RUNTIME_CASCADE_THRESHOLD: f32 = 0.5;
 const HISTORY_COMPACTION_THRESHOLD: usize = 12;
 const HISTORY_COMPACTION_REPLAY_TAIL: usize = 6;
+const LIVE_PROOF_DELAY_ENV: &str = "MISTER_SMITH_LIVE_PROOF_DELAY_MS";
+const MAX_LIVE_PROOF_DELAY_MS: u64 = 60_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RuntimeLlmSelection {
@@ -124,6 +126,12 @@ struct RuntimeExecutionModeContext {
     routing_policy: String,
     registered_provider_count: usize,
     budget_root: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ReplaySeedOutcome {
+    inserted_any: bool,
+    resume_launched: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -424,6 +432,9 @@ impl Tool for WorkflowStepTool {
                 "{WORKFLOW_TOOL_NAMESPACE}.{WORKFLOW_EXECUTE_STEP_TOOL}"
             )),
         );
+        if let Some(delay_ms) = live_proof_delay_ms() {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
 
         Ok(Value::Object(object))
     }
@@ -1278,7 +1289,7 @@ fn terminal_step_evaluation_for_policy(
     canonical_result: &mister_smith_core::UnifiedResultEnvelope,
 ) -> Option<StepEvaluationRecord> {
     let step_indices = execution_plan_step_indices_for_policy(&canonical_result.execution_plan);
-    canonical_result
+    let explicit = canonical_result
         .step_results
         .iter()
         .filter_map(|step_result| {
@@ -1293,6 +1304,60 @@ fn terminal_step_evaluation_for_policy(
             })
         })
         .max_by_key(|candidate| (candidate.plan_index, candidate.repair_attempt_count))
+        .map(|candidate| candidate.record);
+
+    explicit.or_else(|| synthetic_placeholder_step_evaluation_for_policy(canonical_result))
+}
+
+fn synthetic_placeholder_step_evaluation_for_policy(
+    canonical_result: &mister_smith_core::UnifiedResultEnvelope,
+) -> Option<StepEvaluationRecord> {
+    let step_indices = execution_plan_step_indices_for_policy(&canonical_result.execution_plan);
+    let expected_tool_name = format!("{WORKFLOW_TOOL_NAMESPACE}.{WORKFLOW_EXECUTE_STEP_TOOL}");
+    canonical_result
+        .step_results
+        .iter()
+        .filter_map(|step_result| {
+            if step_result.get("step_evaluation").is_some() {
+                return None;
+            }
+            let nested_result = step_result.get("result")?.as_object()?;
+            if nested_result.get("execution_boundary").and_then(Value::as_str) != Some("tool_bus")
+                || nested_result.get("tool_name").and_then(Value::as_str)
+                    != Some(expected_tool_name.as_str())
+            {
+                return None;
+            }
+
+            let task = nested_result.get("task")?.as_object()?;
+            let step_id = task
+                .get("step_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    task.get("action")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                })?;
+
+            Some(StepPolicyEvaluationCandidate {
+                plan_index: step_indices.get(&step_id).copied().unwrap_or(0),
+                repair_attempt_count: 0,
+                record: StepEvaluationRecord {
+                    workflow_id: canonical_result.workflow_id,
+                    step_id: step_id.clone(),
+                    verdict: VerifierVerdict::Accepted,
+                    confidence: Some(0.49),
+                    reason: "placeholder workflow.execute_step completion only; orchestration proof does not yet prove semantic completion".to_string(),
+                    failure_code: Some("placeholder_orchestration_only".to_string()),
+                    checkpoint_ref: None,
+                    repair_directive: None,
+                    clarification_request: None,
+                    failure_context_checkpoint: None,
+                },
+            })
+        })
+        .max_by_key(|candidate| candidate.plan_index)
         .map(|candidate| candidate.record)
 }
 
@@ -1356,6 +1421,20 @@ fn pressure_level_label(level: StepBudgetPressureLevel) -> &'static str {
         StepBudgetPressureLevel::Softcap => "softcap",
         StepBudgetPressureLevel::HardStop => "hard_stop",
     }
+}
+
+fn live_proof_delay_ms() -> Option<u64> {
+    env::var(LIVE_PROOF_DELAY_ENV)
+        .ok()
+        .and_then(|raw| parse_live_proof_delay_ms(&raw))
+}
+
+fn parse_live_proof_delay_ms(raw: &str) -> Option<u64> {
+    raw.trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|delay_ms| *delay_ms > 0)
+        .map(|delay_ms| delay_ms.min(MAX_LIVE_PROOF_DELAY_MS))
 }
 
 fn step_budget_pressure_for_policy(
@@ -1697,6 +1776,7 @@ pub(crate) struct RuntimeTaskService {
     runtime_supervisor_id: AgentId,
     tool_bus: Arc<ToolBus>,
     boot_started_at: chrono::DateTime<Utc>,
+    resume_launches_this_boot: Arc<Mutex<HashSet<TaskId>>>,
     default_coordinator_id: AgentId,
     worker_ids: Vec<AgentId>,
     runtime_llm: RuntimeLlmSelection,
@@ -1813,6 +1893,7 @@ impl RuntimeTaskService {
             runtime_supervisor_id,
             tool_bus,
             boot_started_at,
+            resume_launches_this_boot: Arc::new(Mutex::new(HashSet::new())),
             default_coordinator_id: AgentId::new(),
             worker_ids: vec![AgentId::new(), AgentId::new()],
             runtime_llm: runtime_bootstrap.active_selection,
@@ -1915,8 +1996,210 @@ impl RuntimeTaskService {
             return false;
         };
 
+        if let Some(coordinator_id) = coordinator_id_from_metadata(&record.metadata) {
+            self.orchestrator
+                .register_workflow_coordinator(&workflow_id, coordinator_id);
+        }
+        if let Some(session_id) = metadata_session_id(&record.metadata) {
+            self.orchestrator
+                .register_workflow_session(&workflow_id, session_id);
+        }
         self.orchestrator.register_execution_graph(graph);
         true
+    }
+
+    fn seed_scheduler_from_replayed_graph(
+        &self,
+        graph: &ExecutionGraph,
+        record: &TaskRecord,
+    ) -> Result<ReplaySeedOutcome, String> {
+        let step_results = persisted_step_results_by_task_id(&record.metadata);
+        let description = workflow_description(record);
+        let mut inserted_any = false;
+        let resume_launched = replayed_workflow_requires_resume_launch(graph);
+
+        for node in &graph.nodes {
+            let task_id = TaskId::from_uuid(*node.node_id.as_ref());
+            if self.orchestrator.scheduler().get(&task_id).is_some() {
+                continue;
+            }
+
+            let mut task = task_assignment_for_node(graph.workflow_id, node, &description);
+            let replayed_state = replayed_task_state_for_node_state(node.state);
+            task.state = replayed_state;
+            if matches!(replayed_state, TaskState::Completed | TaskState::Failed) {
+                task.output = step_results
+                    .get(&task_id.to_string())
+                    .and_then(|step_result| step_result.get("result").cloned());
+                task.completed_at = Some(Utc::now());
+                task.assigned_to = step_results
+                    .get(&task_id.to_string())
+                    .and_then(|step_result| step_result.get("worker_id"))
+                    .and_then(Value::as_str)
+                    .and_then(|raw| Uuid::parse_str(raw).ok())
+                    .map(AgentId::from_uuid);
+                if replayed_state == TaskState::Failed {
+                    task.error_message = replayed_step_error_message(
+                        step_results.get(&task_id.to_string()),
+                        &record.metadata,
+                    );
+                }
+            }
+
+            self.orchestrator.scheduler().submit(task);
+            inserted_any = true;
+        }
+
+        Ok(ReplaySeedOutcome {
+            inserted_any,
+            resume_launched,
+        })
+    }
+
+    async fn resume_replayed_workflow_if_needed(
+        &self,
+        workflow_id: TaskId,
+        record: &TaskRecord,
+    ) -> Result<(), String> {
+        let Some(graph) = self.orchestrator.execution_graph(&workflow_id) else {
+            return Ok(());
+        };
+        if replayed_workflow_is_terminal(&graph) && matches_inflight_status(&record.status) {
+            let replay_seed = self.seed_scheduler_from_replayed_graph(&graph, record)?;
+            return self
+                .reconcile_terminal_replayed_workflow(workflow_id, record, graph, replay_seed)
+                .await;
+        }
+        if workflow_resume_launched_this_boot(&record.metadata, self.boot_started_at)
+            || self
+                .resume_launches_this_boot
+                .lock()
+                .await
+                .contains(&workflow_id)
+        {
+            return Ok(());
+        }
+
+        let replay_seed = self.seed_scheduler_from_replayed_graph(&graph, record)?;
+        if !replay_seed.resume_launched {
+            return Ok(());
+        }
+        let resume_launched = {
+            let mut launches = self.resume_launches_this_boot.lock().await;
+            launches.insert(workflow_id)
+        };
+        if !resume_launched {
+            return Ok(());
+        }
+
+        let resumed_at = Utc::now();
+        let mut metadata = record.metadata.clone();
+        put_metadata(
+            &mut metadata,
+            "restart_recovery",
+            json!({
+                "reason": "workflow resumed after runtime restart from durable execution history",
+                "recovered_at": resumed_at,
+                "resumed_at": resumed_at,
+            }),
+        );
+        self.capture_autonomy_status_metadata(workflow_id, &mut metadata, record.result.as_ref());
+        if let Err(error) = self
+            .update_task_metadata(workflow_id, metadata.clone())
+            .await
+        {
+            warn!(
+                workflow_id = %workflow_id,
+                inserted_any = replay_seed.inserted_any,
+                error = %error,
+                "failed to persist restart recovery metadata before resuming recovered workflow"
+            );
+        }
+
+        let coordinator_id =
+            coordinator_id_from_metadata(&metadata).unwrap_or(self.default_coordinator_id);
+        let description = workflow_description(record);
+        let step_results = persisted_step_results_by_task_id(&metadata);
+        let service = self.clone();
+        tokio::spawn(async move {
+            if let Err(error) = service
+                .continue_workflow_execution(
+                    workflow_id,
+                    coordinator_id,
+                    description,
+                    metadata,
+                    graph,
+                    step_results,
+                )
+                .await
+            {
+                error!(
+                    workflow_id = %workflow_id,
+                    error = %error,
+                    "Recovered workflow run failed"
+                );
+                service.fail_workflow(workflow_id, error).await;
+            }
+        });
+
+        Ok(())
+    }
+
+    async fn reconcile_terminal_replayed_workflow(
+        &self,
+        workflow_id: TaskId,
+        record: &TaskRecord,
+        graph: ExecutionGraph,
+        replay_seed: ReplaySeedOutcome,
+    ) -> Result<(), String> {
+        let reconciled_at = Utc::now();
+        let mut metadata = record.metadata.clone();
+        let step_results = persisted_step_results_by_task_id(&metadata);
+        let coordinator_id =
+            coordinator_id_from_metadata(&metadata).unwrap_or(self.default_coordinator_id);
+        let description = workflow_description(record);
+
+        put_metadata(
+            &mut metadata,
+            "restart_recovery",
+            json!({
+                "reason": restart_recovery_reason_for_graph_state(graph.state),
+                "recovered_at": reconciled_at,
+                "reconciled_terminal_graph": true,
+                "replay_seed_inserted_any": replay_seed.inserted_any,
+            }),
+        );
+
+        match graph.state {
+            GraphState::Completed => {
+                self.continue_workflow_execution(
+                    workflow_id,
+                    coordinator_id,
+                    description,
+                    metadata,
+                    graph,
+                    step_results,
+                )
+                .await
+            }
+            GraphState::Failed | GraphState::Aborted => {
+                if let Err(error) = self.update_task_metadata(workflow_id, metadata).await {
+                    warn!(
+                        workflow_id = %workflow_id,
+                        inserted_any = replay_seed.inserted_any,
+                        error = %error,
+                        "failed to persist terminal replay recovery metadata before failure reconciliation"
+                    );
+                }
+                self.fail_workflow(
+                    workflow_id,
+                    replayed_terminal_failure_message(&record.metadata, graph.state),
+                )
+                .await;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 
     pub(crate) async fn recover_orphaned_workflow(
@@ -1930,13 +2213,24 @@ impl RuntimeTaskService {
             return Ok(None);
         };
 
-        self.restore_execution_graph_from_record(&record);
+        let restored = self.restore_execution_graph_from_record(&record);
+        let has_in_memory_graph =
+            restored || self.orchestrator.execution_graph(&workflow_id).is_some();
 
-        if !should_recover_orphaned_workflow(
-            &record,
-            self.boot_started_at,
-            self.orchestrator.execution_graph(&workflow_id).is_some(),
-        ) {
+        if matches_inflight_status(&record.status)
+            && record.started_at.unwrap_or(record.created_at) < self.boot_started_at
+            && has_in_memory_graph
+        {
+            self.resume_replayed_workflow_if_needed(workflow_id, &record)
+                .await?;
+            return queries::find_task(&self.pool, *workflow_id.as_ref())
+                .await
+                .map_err(|error| {
+                    format!("failed to reload workflow record {workflow_id}: {error}")
+                });
+        }
+
+        if !should_recover_orphaned_workflow(&record, self.boot_started_at, has_in_memory_graph) {
             return Ok(Some(record));
         }
 
@@ -2206,8 +2500,31 @@ impl RuntimeTaskService {
                 ));
         }
 
-        let mut step_results = BTreeMap::new();
-        let mut routing_history = Vec::new();
+        self.continue_workflow_execution(
+            workflow_id,
+            coordinator_id,
+            request.description,
+            metadata,
+            graph,
+            BTreeMap::new(),
+        )
+        .await
+    }
+
+    async fn continue_workflow_execution(
+        &self,
+        workflow_id: TaskId,
+        coordinator_id: AgentId,
+        description: String,
+        mut metadata: Value,
+        mut graph: ExecutionGraph,
+        mut step_results: BTreeMap<String, Value>,
+    ) -> Result<(), String> {
+        let mut routing_history = metadata
+            .get("routing_history")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
 
         while !self.orchestrator.all_subtasks_completed(&workflow_id) {
             let decisions = self
@@ -2308,7 +2625,7 @@ impl RuntimeTaskService {
                     let execution_input = execution_input_for_task(
                         &graph,
                         &task,
-                        &request.description,
+                        &description,
                         worker_id,
                         &step_results,
                         &self.runtime_llm,
@@ -2424,7 +2741,7 @@ impl RuntimeTaskService {
                 workflow_id,
                 provider_kind: self.provider_kind_name(),
                 model_id: self.model_id(),
-                description: &request.description,
+                description: &description,
                 runtime_execution_mode: self.runtime_execution_mode(),
                 planner_output: metadata
                     .get("planner_output")
@@ -3795,6 +4112,24 @@ fn workflow_description(record: &TaskRecord) -> String {
         .to_string()
 }
 
+fn persisted_step_results_by_task_id(metadata: &Value) -> BTreeMap<String, Value> {
+    metadata
+        .get("step_results")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| {
+                    entry.get("task_id").map(|task_id| match task_id {
+                        Value::String(raw) => (raw.clone(), entry.clone()),
+                        other => (other.to_string(), entry.clone()),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn metadata_session_id(metadata: &Value) -> Option<mister_smith_core::SessionId> {
     metadata
         .get("session_id")
@@ -3808,6 +4143,116 @@ fn metadata_turn_index(metadata: &Value) -> Option<u32> {
         .get("turn_index")
         .and_then(Value::as_u64)
         .and_then(|value| u32::try_from(value).ok())
+}
+
+fn workflow_resume_launched_this_boot(
+    metadata: &Value,
+    boot_started_at: chrono::DateTime<Utc>,
+) -> bool {
+    metadata
+        .get("restart_recovery")
+        .and_then(Value::as_object)
+        .and_then(|recovery| recovery.get("resumed_at"))
+        .and_then(Value::as_str)
+        .and_then(|raw| chrono::DateTime::parse_from_rfc3339(raw).ok())
+        .map(|timestamp| timestamp.with_timezone(&Utc) >= boot_started_at)
+        .unwrap_or(false)
+}
+
+fn replayed_task_state_for_node_state(node_state: NodeState) -> TaskState {
+    match node_state {
+        NodeState::Completed => TaskState::Completed,
+        NodeState::Failed => TaskState::Failed,
+        _ => TaskState::Pending,
+    }
+}
+
+fn replayed_workflow_is_terminal(graph: &ExecutionGraph) -> bool {
+    matches!(
+        graph.state,
+        GraphState::Completed | GraphState::Failed | GraphState::Aborted
+    )
+}
+
+fn replayed_workflow_requires_resume_launch(graph: &ExecutionGraph) -> bool {
+    if replayed_workflow_is_terminal(graph) {
+        return false;
+    }
+
+    graph
+        .nodes
+        .iter()
+        .any(|node| !matches!(node.state, NodeState::Completed | NodeState::Failed))
+}
+
+fn restart_recovery_reason_for_graph_state(graph_state: GraphState) -> &'static str {
+    match graph_state {
+        GraphState::Completed => {
+            "workflow terminal completion reconciled after runtime restart from durable execution history"
+        }
+        GraphState::Failed => {
+            "workflow terminal failure reconciled after runtime restart from durable execution history"
+        }
+        GraphState::Aborted => {
+            "workflow terminal abort reconciled after runtime restart from durable execution history"
+        }
+        _ => "workflow resumed after runtime restart from durable execution history",
+    }
+}
+
+fn replayed_terminal_failure_message(metadata: &Value, graph_state: GraphState) -> String {
+    metadata
+        .get("failure")
+        .and_then(|value| value.get("message"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            metadata
+                .get("last_step_failure")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
+        .unwrap_or_else(|| {
+            match graph_state {
+                GraphState::Aborted => {
+                    "workflow replay restored an aborted graph and reconciled the root record"
+                }
+                _ => "workflow replay restored a failed graph and reconciled the root record",
+            }
+            .to_string()
+        })
+}
+
+fn replayed_step_error_message(step_result: Option<&Value>, metadata: &Value) -> Option<String> {
+    step_result
+        .and_then(|result| result.get("result"))
+        .and_then(error_message_from_result_value)
+        .or_else(|| {
+            step_result
+                .and_then(|result| result.get("message"))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
+        .or_else(|| {
+            metadata
+                .get("last_step_failure")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
+}
+
+fn error_message_from_result_value(value: &Value) -> Option<String> {
+    value
+        .get("error")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            value
+                .get("message")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
+        .or_else(|| value.as_str().map(ToOwned::to_owned))
 }
 
 fn task_proof_outcome(
@@ -4792,7 +5237,7 @@ mod tests {
     }
 
     #[test]
-    fn terminal_result_views_omit_step_policy_when_terminal_evaluation_is_missing() {
+    fn terminal_result_views_project_placeholder_step_policy_when_terminal_evaluation_is_missing() {
         let workflow_id = TaskId::new();
         let canonical_result = crate::autonomy::build_canonical_result_envelope(
             crate::autonomy::CanonicalResultEnvelopeInput {
@@ -4810,7 +5255,15 @@ mod tests {
                     "steps": [{ "id": "draft-outline" }]
                 }),
                 step_results: vec![json!({
-                    "result": { "summary": "no verifier output" }
+                    "result": {
+                        "summary": "no verifier output",
+                        "execution_boundary": "tool_bus",
+                        "tool_name": "workflow.execute_step",
+                        "task": {
+                            "step_id": "draft-outline",
+                            "action": "draft-outline",
+                        },
+                    }
                 })],
                 aggregated_result: json!({ "summary": "no verifier output" }),
                 status: "completed",
@@ -4821,7 +5274,20 @@ mod tests {
             terminal_result_views("completed", canonical_result, None, &json!({}), None)
                 .expect("terminal result views");
 
-        assert_eq!(result_views.task_result["step_policy"], Value::Null);
+        assert_eq!(
+            result_views.task_result["step_policy"]["difficulty_assessment"]["step_id"],
+            json!("draft-outline")
+        );
+        assert_eq!(
+            result_views.task_result["step_policy"]["proof_boundary_ref"]["owner_packet"],
+            json!("023")
+        );
+        assert_eq!(
+            result_views.task_result["step_policy"]["display_note"],
+            json!(
+                "placeholder orchestration proof only; local correction preferred before escalation"
+            )
+        );
     }
 
     #[test]
@@ -6082,6 +6548,178 @@ mod tests {
         record.started_at = Some(Utc::now() - chrono::Duration::minutes(4));
 
         assert!(!should_recover_orphaned_workflow(&record, Utc::now(), true,));
+    }
+
+    #[test]
+    fn persisted_step_results_by_task_id_indexes_entries_by_task_id() {
+        let task_id = TaskId::new();
+        let metadata = json!({
+            "step_results": [
+                {
+                    "task_id": task_id,
+                    "result": { "summary": "ready" }
+                }
+            ]
+        });
+
+        let indexed = persisted_step_results_by_task_id(&metadata);
+
+        assert_eq!(indexed.len(), 1);
+        assert_eq!(
+            indexed
+                .get(&task_id.to_string())
+                .and_then(|entry| entry.get("result"))
+                .and_then(|result| result.get("summary")),
+            Some(&json!("ready"))
+        );
+    }
+
+    #[test]
+    fn workflow_resume_launched_this_boot_only_accepts_current_boot_marker() {
+        let boot_started_at = Utc::now();
+        let current_boot = json!({
+            "restart_recovery": {
+                "resumed_at": (boot_started_at + chrono::Duration::seconds(5)).to_rfc3339(),
+            }
+        });
+        let previous_boot = json!({
+            "restart_recovery": {
+                "resumed_at": (boot_started_at - chrono::Duration::seconds(5)).to_rfc3339(),
+            }
+        });
+
+        assert!(workflow_resume_launched_this_boot(
+            &current_boot,
+            boot_started_at,
+        ));
+        assert!(!workflow_resume_launched_this_boot(
+            &previous_boot,
+            boot_started_at,
+        ));
+    }
+
+    #[test]
+    fn replayed_task_state_for_node_state_preserves_terminal_failure() {
+        assert_eq!(
+            replayed_task_state_for_node_state(NodeState::Completed),
+            TaskState::Completed
+        );
+        assert_eq!(
+            replayed_task_state_for_node_state(NodeState::Failed),
+            TaskState::Failed
+        );
+        assert_eq!(
+            replayed_task_state_for_node_state(NodeState::Running),
+            TaskState::Pending
+        );
+    }
+
+    #[test]
+    fn parse_live_proof_delay_ms_rejects_zero_and_caps_large_values() {
+        assert_eq!(parse_live_proof_delay_ms("0"), None);
+        assert_eq!(parse_live_proof_delay_ms("25"), Some(25));
+        assert_eq!(
+            parse_live_proof_delay_ms("60001"),
+            Some(MAX_LIVE_PROOF_DELAY_MS)
+        );
+    }
+
+    #[test]
+    fn replayed_workflow_requires_resume_launch_only_for_resumable_graphs() {
+        let workflow_id = TaskId::new();
+        let mut graph = TopologyCompiler::default()
+            .compile(
+                workflow_id,
+                &json!({
+                    "goal": "restart-resume",
+                    "steps": [
+                        {
+                            "id": "branch-a",
+                            "step": 1,
+                            "action": "branch-a",
+                            "description": "Branch A"
+                        }
+                    ]
+                }),
+                &TopologySignals::default(),
+            )
+            .expect("graph should compile");
+
+        graph.state = GraphState::Running;
+        assert!(replayed_workflow_requires_resume_launch(&graph));
+
+        graph.state = GraphState::Completed;
+        for node in &mut graph.nodes {
+            node.state = NodeState::Completed;
+        }
+        assert!(!replayed_workflow_requires_resume_launch(&graph));
+
+        graph.state = GraphState::Failed;
+        if let Some(node) = graph.nodes.first_mut() {
+            node.state = NodeState::Failed;
+        }
+        assert!(!replayed_workflow_requires_resume_launch(&graph));
+    }
+
+    #[test]
+    fn replayed_workflow_is_terminal_tracks_terminal_graph_states() {
+        let workflow_id = TaskId::new();
+        let mut graph = TopologyCompiler::default()
+            .compile(
+                workflow_id,
+                &json!({
+                    "goal": "restart-reconcile",
+                    "steps": [
+                        {
+                            "id": "step-a",
+                            "step": 1,
+                            "action": "step-a",
+                            "description": "Step A"
+                        }
+                    ]
+                }),
+                &TopologySignals::default(),
+            )
+            .expect("graph should compile");
+
+        graph.state = GraphState::Running;
+        assert!(!replayed_workflow_is_terminal(&graph));
+
+        graph.state = GraphState::Completed;
+        assert!(replayed_workflow_is_terminal(&graph));
+
+        graph.state = GraphState::Failed;
+        assert!(replayed_workflow_is_terminal(&graph));
+
+        graph.state = GraphState::Aborted;
+        assert!(replayed_workflow_is_terminal(&graph));
+    }
+
+    #[test]
+    fn replayed_terminal_failure_message_prefers_metadata_and_uses_state_default() {
+        let metadata = json!({
+            "failure": {
+                "message": "top-level failure"
+            },
+            "last_step_failure": "step failure"
+        });
+        assert_eq!(
+            replayed_terminal_failure_message(&metadata, GraphState::Failed),
+            "top-level failure"
+        );
+
+        let metadata = json!({
+            "last_step_failure": "step failure"
+        });
+        assert_eq!(
+            replayed_terminal_failure_message(&metadata, GraphState::Failed),
+            "step failure"
+        );
+
+        assert_eq!(
+            replayed_terminal_failure_message(&json!({}), GraphState::Aborted),
+            "workflow replay restored an aborted graph and reconciled the root record"
+        );
     }
 
     #[test]
