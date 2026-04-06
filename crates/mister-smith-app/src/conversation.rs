@@ -676,7 +676,7 @@ fn session_control_state_from_context(
     let stored = retained_context.get("session_control_state");
 
     ConversationSessionControlView {
-        session_id: session.session_id,
+        session_id: SessionId::from_uuid(session.session_id),
         selected_provider_kind: normalized_optional_string(
             stored
                 .and_then(|value| value.get("selected_provider_kind"))
