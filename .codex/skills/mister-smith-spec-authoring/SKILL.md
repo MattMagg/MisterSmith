@@ -22,7 +22,8 @@ implementation, post-packet staging, runtime proof runs, or general repo-doc syn
 
 ## Core rules
 
-- Start with Smith MCP legitimacy and scope routing:
+- Start with Smith MCP authoring prep, legitimacy, and scope routing:
+  - `prepare_spec_authoring`
   - `evaluate_issue_legitimacy`
   - `classify_follow_up_work`
 - Keep the work product-side unless the user explicitly asks for repo-workflow surfaces.
@@ -46,6 +47,9 @@ Read, in order:
 If the ask is frontier-planning only, also use
 [$mister-smith-frontier-mandate](../mister-smith-frontier-mandate/SKILL.md) to keep the packet
 legitimate and bounded.
+
+Use `prepare_spec_authoring` before running the local SpecKit chain so the authoring mode, entry
+surface, stop stage, and validation posture are explicit.
 
 If the user already provided a pre-SpecKit primer or packet-prep dossier, verify that it:
 

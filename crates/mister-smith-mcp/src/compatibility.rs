@@ -368,12 +368,62 @@ pub struct RepoSnapshot {
     pub repo_root: String,
     pub git_branch: Option<String>,
     pub head_sha: Option<String>,
+    pub base_sha: Option<String>,
     pub upstream: Option<String>,
     pub remote_url: Option<String>,
     pub clean: bool,
     pub modified_count: usize,
     pub untracked_count: usize,
     pub recent_commit_subject: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionAuthority {
+    pub name: String,
+    pub required: bool,
+    pub satisfied: bool,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionEligibility {
+    pub eligible: bool,
+    pub task_id: Option<String>,
+    pub repo_context: RepoSnapshot,
+    pub required_tools: Vec<String>,
+    pub external_authorities: Vec<ExecutionAuthority>,
+    pub gates: Vec<ExecutionGate>,
+    pub missing_items: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionMilestone {
+    pub id: String,
+    pub title: String,
+    pub done_when: Vec<String>,
+    pub validation: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceExpectationItem {
+    pub label: String,
+    pub instruction: String,
+    pub proof_intent: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionEvidenceExpectations {
+    pub durable_location: String,
+    pub items: Vec<EvidenceExpectationItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionResumeContext {
+    pub source_precedence: Vec<String>,
+    pub confirmed_next_action: String,
+    pub stale_state_conflicts: Vec<String>,
+    pub retry_classes: Vec<String>,
+    pub cancel_preservation_modes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -513,6 +563,8 @@ pub struct IssueExecutionSnapshot {
     pub notes: Vec<String>,
     pub pending_gates: Vec<ExecutionGate>,
     pub resume_note: String,
+    pub eligibility: ExecutionEligibility,
+    pub resume_context: ExecutionResumeContext,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -533,6 +585,10 @@ pub struct DirectExecutionPlan {
     pub blocking_reasons: Vec<String>,
     pub resume_note: String,
     pub rollback_note: String,
+    pub eligibility: ExecutionEligibility,
+    pub milestones: Vec<ExecutionMilestone>,
+    pub evidence_expectations: ExecutionEvidenceExpectations,
+    pub resume_context: ExecutionResumeContext,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -577,6 +633,8 @@ pub struct IssueLifecycleResolution {
     pub blocking_reasons: Vec<String>,
     pub review_state: String,
     pub pr_correlation: Vec<String>,
+    pub pending_gates: Vec<ExecutionGate>,
+    pub resume_note: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -611,6 +669,23 @@ pub struct SpecKitContext {
     pub source_docs: Vec<String>,
     pub packet_summary: String,
     pub next_command_hint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpecAuthoringPlan {
+    pub issue_identifier: Option<String>,
+    pub source_path: Option<String>,
+    pub feature_dir: Option<String>,
+    pub authoring_mode: String,
+    pub entry_surface: String,
+    pub source_docs: Vec<String>,
+    pub spec_chain: Vec<String>,
+    pub stop_after_stage: Option<String>,
+    pub validation_commands: Vec<String>,
+    pub required_tools: Vec<String>,
+    pub pending_gates: Vec<ExecutionGate>,
+    pub next_recommended_action: String,
+    pub resume_note: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1465,6 +1540,29 @@ impl SmithCompatibilityServer {
                 "merge",
                 "land pr",
                 "push branch",
+                "write spec",
+                "extend spec",
+                "create packet",
+                "create spec",
+                "refine primer",
+                "speckit.specify",
+                "speckit.clarify",
+            ],
+        );
+        let has_spec_authoring_language = contains_any(
+            &normalized,
+            &[
+                "spec-only",
+                "write spec",
+                "extend spec",
+                "create packet",
+                "create spec",
+                "packet authoring",
+                "packet-writing",
+                "pre-speckit primer",
+                "primer",
+                "speckit.specify",
+                "speckit.clarify",
             ],
         );
         let has_read_only_review_language = contains_any(
@@ -1558,6 +1656,30 @@ impl SmithCompatibilityServer {
                     "save_linear_issue".to_string(),
                     "save_issue_workpad".to_string(),
                     "get_issue_execution_snapshot".to_string(),
+                ],
+            )
+        } else if has_spec_authoring_language
+            || contains_any(
+                &normalized,
+                &[
+                    "new packet",
+                    "packet spec",
+                    "spec extension",
+                    "specify-init",
+                    "author packet",
+                    "authoring workflow",
+                ],
+            )
+        {
+            (
+                "spec_authoring".to_string(),
+                "request targets Smith-managed SpecKit packet authoring or primer refinement"
+                    .to_string(),
+                "prepare_spec_authoring".to_string(),
+                vec![
+                    "prepare_spec_authoring".to_string(),
+                    "evaluate_issue_legitimacy".to_string(),
+                    "prepare_speckit_context".to_string(),
                 ],
             )
         } else if contains_any(
@@ -2852,20 +2974,66 @@ impl SmithCompatibilityServer {
                     blocking_reasons: vec!["provide an issue identifier such as MS-51".to_string()],
                     review_state: "unknown".to_string(),
                     pr_correlation: Vec::new(),
+                    pending_gates: vec![execution_gate(
+                        "task_identity",
+                        GateState::Fail,
+                        "issue_identifier parameter is required",
+                    )],
+                    resume_note:
+                        "Provide a concrete issue identifier, then reload the Smith lifecycle view."
+                            .to_string(),
                 },
             ));
         };
 
+        let readiness = self.collect_readiness_audit().await;
         let context = self.load_issue_execution_context(&identifier).await?;
-        let resolution = build_direct_issue_lifecycle_resolution(
+        let mut resolution = build_direct_issue_lifecycle_resolution(
             context.issue.clone(),
             context.workpad.as_ref(),
             &context.matching_pull_requests,
             &identifier,
         );
+        let blocker_summaries = resolution.blocking_reasons.clone();
+        let mut pending_gates = blocking_execution_gates(
+            true,
+            resolution
+                .issue
+                .as_ref()
+                .map(|_| workpad_status(context.workpad.as_ref()))
+                .as_deref(),
+            &blocker_summaries,
+            Some(&resolution.review_state),
+            false,
+            None,
+            &resolution.next_recommended_action,
+        );
+        append_readiness_gate(
+            &mut pending_gates,
+            &readiness.data,
+            "linear_api_key",
+            "linear_access",
+            true,
+        );
+        if !context.matching_pull_requests.is_empty()
+            || matches!(
+                resolution.next_recommended_action.as_str(),
+                "merge_ready_pr" | "address_review_feedback"
+            )
+        {
+            append_readiness_gate(
+                &mut pending_gates,
+                &readiness.data,
+                "gh_auth",
+                "github_review_auth",
+                true,
+            );
+        }
+        resolution.pending_gates = pending_gates.clone();
+        resolution.resume_note = direct_execution_resume_note(&resolution.next_recommended_action);
 
         json_response(ToolResponse {
-            status: if resolution.issue.is_some() {
+            status: if resolution.issue.is_some() && pending_gates.is_empty() {
                 CompatibilityStatus::Ok
             } else {
                 CompatibilityStatus::Degraded
@@ -2892,7 +3060,12 @@ impl SmithCompatibilityServer {
                 ],
                 _ => vec!["get_issue_execution_snapshot".to_string()],
             },
-            blocking_issues: resolution.blocking_reasons.clone(),
+            blocking_issues: resolution
+                .blocking_reasons
+                .iter()
+                .cloned()
+                .chain(gate_issue_messages(&pending_gates))
+                .collect(),
             data: resolution,
         })
     }
@@ -3172,6 +3345,129 @@ impl SmithCompatibilityServer {
                 workpad_action: workpad_response.data.action,
                 target_state,
                 comment_id: Some(workpad_response.data.comment_id),
+            },
+        })
+    }
+
+    async fn prepare_spec_authoring(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let request_text = string_param(&params, "request_text")
+            .or_else(|| string_param(&params, "request"))
+            .unwrap_or_default();
+        let issue_identifier = string_param(&params, "issue_identifier")
+            .or_else(|| string_param(&params, "identifier"));
+        let feature_dir = string_param(&params, "feature_dir")
+            .or_else(|| string_param(&params, "feature_directory"))
+            .map(|raw| resolve_repo_path(&self.options.repo_root, &raw));
+        let source_path = string_param(&params, "source_path")
+            .map(|raw| resolve_repo_path(&self.options.repo_root, &raw));
+
+        let issue_context = if let Some(identifier) = issue_identifier.as_deref() {
+            self.load_issue_execution_context(identifier).await.ok()
+        } else {
+            None
+        };
+        let combined_text = format!(
+            "{}\n{}",
+            request_text,
+            issue_context
+                .as_ref()
+                .and_then(|context| context.issue.as_ref())
+                .and_then(|issue| issue.description.clone())
+                .unwrap_or_default()
+        );
+        let resolved_feature_dir = feature_dir
+            .clone()
+            .or_else(|| extract_feature_dir_from_text(&combined_text).map(PathBuf::from))
+            .or_else(|| {
+                source_path
+                    .as_ref()
+                    .and_then(|path| path.parent().map(PathBuf::from))
+            });
+        let authoring_mode = spec_authoring_mode(
+            &combined_text,
+            source_path.as_deref(),
+            resolved_feature_dir.as_deref(),
+        );
+        let entry_surface = spec_authoring_entry_surface(
+            &combined_text,
+            source_path.as_deref(),
+            resolved_feature_dir.as_deref(),
+        );
+        let stop_after_stage = spec_authoring_stop_after_stage(&combined_text);
+        let source_docs = spec_authoring_source_docs(
+            &self.options.repo_root,
+            source_path.as_deref(),
+            resolved_feature_dir.as_deref(),
+        );
+        let spec_chain = spec_authoring_chain(stop_after_stage.as_deref());
+        let validation_commands = spec_authoring_validation_commands(
+            resolved_feature_dir.as_deref(),
+            stop_after_stage.as_deref(),
+        );
+        let required_tools = vec!["git".to_string(), "npx".to_string()];
+        let pending_gates = spec_authoring_pending_gates(
+            &authoring_mode,
+            &entry_surface,
+            &request_text,
+            issue_identifier.as_deref(),
+            source_path.as_deref(),
+        );
+        let next_recommended_action =
+            spec_authoring_next_action(&authoring_mode, stop_after_stage.as_deref());
+        let resume_note = spec_authoring_resume_note(&authoring_mode, stop_after_stage.as_deref());
+        let blocking_issues = gate_issue_messages(&pending_gates);
+        let feature_dir_string = resolved_feature_dir
+            .as_ref()
+            .map(|path| path.display().to_string());
+        let source_path_string = source_path.as_ref().map(|path| path.display().to_string());
+
+        json_response(ToolResponse {
+            status: if pending_gates.is_empty() {
+                CompatibilityStatus::Ok
+            } else {
+                CompatibilityStatus::Degraded
+            },
+            summary: "prepared Smith SpecKit authoring context".to_string(),
+            evidence: issue_identifier
+                .clone()
+                .into_iter()
+                .map(|identifier| EvidenceItem {
+                    label: "issue_identifier".to_string(),
+                    detail: identifier,
+                })
+                .chain(
+                    source_path_string
+                        .clone()
+                        .into_iter()
+                        .map(|path| EvidenceItem {
+                            label: "source_path".to_string(),
+                            detail: path,
+                        }),
+                )
+                .collect(),
+            warnings: Vec::new(),
+            recommended_next_tools: vec![
+                "evaluate_issue_legitimacy".to_string(),
+                "prepare_speckit_context".to_string(),
+            ],
+            blocking_issues,
+            data: SpecAuthoringPlan {
+                issue_identifier,
+                source_path: source_path_string,
+                feature_dir: feature_dir_string,
+                authoring_mode,
+                entry_surface,
+                source_docs,
+                spec_chain,
+                stop_after_stage,
+                validation_commands,
+                required_tools,
+                pending_gates,
+                next_recommended_action,
+                resume_note,
             },
         })
     }
@@ -3470,6 +3766,7 @@ impl SmithCompatibilityServer {
         &self,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
+        let repo = self.repo_snapshot().await;
         let identifier = string_param(&params, "issue_identifier")
             .or_else(|| string_param(&params, "identifier"));
         let Some(identifier) = identifier else {
@@ -3494,6 +3791,26 @@ impl SmithCompatibilityServer {
                     resume_note:
                         "Provide a concrete issue identifier, then rerun the execution snapshot."
                             .to_string(),
+                    eligibility: build_execution_eligibility(
+                        None,
+                        repo.clone(),
+                        &["git".to_string(), "cargo".to_string()],
+                        &[execution_gate(
+                            "execution_context",
+                            GateState::Fail,
+                            "issue_identifier parameter is required",
+                        )],
+                        Vec::new(),
+                    ),
+                    resume_context: build_execution_resume_context(
+                        &repo,
+                        None,
+                        None,
+                        None,
+                        &[],
+                        "verify_issue_identifier",
+                        None,
+                    ),
                 },
             ));
         };
@@ -3584,6 +3901,43 @@ impl SmithCompatibilityServer {
                     .to_string()
             })
             .unwrap_or_else(|| direct_execution_resume_note(&next_step_hint));
+        let required_tools = {
+            let mut tools = vec!["git".to_string(), "cargo".to_string()];
+            if !matching_pull_requests.is_empty()
+                || matches!(
+                    resolution.next_recommended_action.as_str(),
+                    "merge_ready_pr" | "address_review_feedback"
+                )
+            {
+                tools.push("gh".to_string());
+            }
+            tools
+        };
+        let external_authorities = execution_external_authorities(
+            &readiness.data,
+            true,
+            !matching_pull_requests.is_empty()
+                || matches!(
+                    resolution.next_recommended_action.as_str(),
+                    "merge_ready_pr" | "address_review_feedback"
+                ),
+        );
+        let eligibility = build_execution_eligibility(
+            Some(identifier.clone()),
+            repo.clone(),
+            &required_tools,
+            &pending_gates,
+            external_authorities,
+        );
+        let resume_context = build_execution_resume_context(
+            &repo,
+            Some(identifier.as_str()),
+            workpad.as_ref(),
+            Some(&resolution.review_state),
+            &blocker_summaries,
+            &next_step_hint,
+            context_error.as_deref(),
+        );
 
         let (status, summary) = if context_error.is_some() {
             (
@@ -3647,6 +4001,8 @@ impl SmithCompatibilityServer {
                 },
                 pending_gates,
                 resume_note,
+                eligibility,
+                resume_context,
                 issue,
                 workpad,
                 matching_pull_requests,
@@ -3658,6 +4014,7 @@ impl SmithCompatibilityServer {
         &self,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
+        let repo = self.repo_snapshot().await;
         let issue_identifier = string_param(&params, "issue_identifier")
             .or_else(|| string_param(&params, "identifier"));
         let request_text = string_param(&params, "request_text")
@@ -3707,6 +4064,7 @@ impl SmithCompatibilityServer {
         let workpad = context.as_ref().and_then(|context| context.workpad.clone());
         let mut plan = build_direct_execution_plan(
             &self.options.repo_root,
+            repo.clone(),
             issue_identifier.clone(),
             &combined_text,
             issue,
@@ -3754,11 +4112,40 @@ impl SmithCompatibilityServer {
                 "Restore Linear access or verify the issue identifier, then rerun direct execution prep."
                     .to_string();
         }
+        let external_authorities = execution_external_authorities(
+            &readiness.data,
+            issue_identifier.is_some() || plan.issue.is_some(),
+            plan.required_tools.iter().any(|tool| tool == "gh"),
+        );
+        plan.eligibility = build_execution_eligibility(
+            plan.issue
+                .as_ref()
+                .map(|value| value.identifier.clone())
+                .or_else(|| issue_identifier.clone()),
+            repo.clone(),
+            &plan.required_tools,
+            &plan.pending_gates,
+            external_authorities,
+        );
+        plan.resume_context = build_execution_resume_context(
+            &repo,
+            plan.issue
+                .as_ref()
+                .map(|value| value.identifier.as_str())
+                .or(issue_identifier.as_deref()),
+            plan.workpad.as_ref(),
+            None,
+            &plan.blocking_reasons,
+            &plan.next_recommended_action,
+            context_error.as_deref(),
+        );
         let mut blocking_issues = plan.blocking_reasons.clone();
-        blocking_issues.extend(gate_issue_messages(&plan.pending_gates));
+        blocking_issues.extend(plan.eligibility.missing_items.clone());
+        blocking_issues.sort();
+        blocking_issues.dedup();
 
         json_response(ToolResponse {
-            status: if plan.blocking_reasons.is_empty() && plan.pending_gates.is_empty() {
+            status: if plan.eligibility.eligible {
                 CompatibilityStatus::Ok
             } else {
                 CompatibilityStatus::Degraded
@@ -4080,6 +4467,14 @@ impl SmithCompatibilityServer {
             )
             .await,
         );
+        let base_sha = trimmed_output(
+            run_command_in_dir(
+                "git",
+                &["merge-base", "HEAD", "@{u}"],
+                &self.options.repo_root,
+            )
+            .await,
+        );
         let remote_url = trimmed_output(
             run_command_in_dir(
                 "git",
@@ -4113,6 +4508,7 @@ impl SmithCompatibilityServer {
             repo_root: self.options.repo_root.display().to_string(),
             git_branch: branch,
             head_sha,
+            base_sha,
             upstream,
             remote_url,
             clean: modified_count == 0 && untracked_count == 0,
@@ -4233,6 +4629,38 @@ pub async fn build_smith_compatibility_server(
             &[],
         ),
         |state, params| async move { state.prepare_direct_execution(params).await },
+    )
+    .await;
+    register_compatibility_tool(
+        &server,
+        &compatibility,
+        "prepare_spec_authoring",
+        "Prepare direct Smith SpecKit authoring context for new packets, spec extensions, or primer refinement.",
+        object_schema(
+            &[
+                (
+                    "request_text",
+                    string_schema("Optional request text describing the authoring work"),
+                ),
+                ("request", string_schema("Alias for request_text")),
+                (
+                    "issue_identifier",
+                    string_schema("Optional issue identifier such as MS-33"),
+                ),
+                ("identifier", string_schema("Alias for issue_identifier")),
+                (
+                    "feature_dir",
+                    string_schema("Optional absolute or repo-relative feature directory"),
+                ),
+                ("feature_directory", string_schema("Alias for feature_dir")),
+                (
+                    "source_path",
+                    string_schema("Optional primer, spec.md, or other packet doc path"),
+                ),
+            ],
+            &[],
+        ),
+        |state, params| async move { state.prepare_spec_authoring(params).await },
     )
     .await;
     register_compatibility_tool(
@@ -5504,6 +5932,580 @@ fn pr_correlation(matching_pull_requests: &[GitHubPullRequest]) -> Vec<String> {
         .collect()
 }
 
+fn find_readiness_check<'a>(
+    readiness: &'a ReadinessAudit,
+    check_name: &str,
+) -> Option<&'a ReadinessCheck> {
+    readiness
+        .checks
+        .iter()
+        .find(|check| check.name == check_name)
+}
+
+fn execution_authority(
+    name: &str,
+    required: bool,
+    check: Option<&ReadinessCheck>,
+    fallback_detail: impl Into<String>,
+) -> ExecutionAuthority {
+    let detail = check
+        .map(|value| value.detail.clone())
+        .unwrap_or_else(|| fallback_detail.into());
+    let satisfied = check
+        .map(|value| {
+            matches!(
+                value.status,
+                CompatibilityStatus::Ok | CompatibilityStatus::Applied
+            )
+        })
+        .unwrap_or(false);
+
+    ExecutionAuthority {
+        name: name.to_string(),
+        required,
+        satisfied,
+        detail,
+    }
+}
+
+fn execution_external_authorities(
+    readiness: &ReadinessAudit,
+    require_linear: bool,
+    require_github: bool,
+) -> Vec<ExecutionAuthority> {
+    let mut authorities = Vec::new();
+    if require_linear {
+        authorities.push(execution_authority(
+            "linear_issue_context",
+            true,
+            find_readiness_check(readiness, "linear_api_key"),
+            "Linear API access is required for issue-grounded Smith execution",
+        ));
+    }
+    if require_github {
+        authorities.push(execution_authority(
+            "github_review_context",
+            true,
+            find_readiness_check(readiness, "gh_auth"),
+            "GitHub auth is required for review-sensitive Smith execution",
+        ));
+    }
+    authorities
+}
+
+fn execution_missing_items(
+    task_id: Option<&str>,
+    gates: &[ExecutionGate],
+    authorities: &[ExecutionAuthority],
+) -> Vec<String> {
+    let mut missing = Vec::new();
+    if task_id.is_none() {
+        missing.push("task identity is missing".to_string());
+    }
+    for gate in gates {
+        if !matches!(gate.state, GateState::Pass) {
+            missing.push(format!("{}: {}", gate.name, gate.detail));
+        }
+    }
+    for authority in authorities {
+        if authority.required && !authority.satisfied {
+            missing.push(format!("{}: {}", authority.name, authority.detail));
+        }
+    }
+    missing.sort();
+    missing.dedup();
+    missing
+}
+
+fn build_execution_eligibility(
+    task_id: Option<String>,
+    repo_context: RepoSnapshot,
+    required_tools: &[String],
+    gates: &[ExecutionGate],
+    authorities: Vec<ExecutionAuthority>,
+) -> ExecutionEligibility {
+    let missing_items = execution_missing_items(task_id.as_deref(), gates, &authorities);
+
+    ExecutionEligibility {
+        eligible: missing_items.is_empty(),
+        task_id,
+        repo_context,
+        required_tools: required_tools.to_vec(),
+        external_authorities: authorities,
+        gates: gates.to_vec(),
+        missing_items,
+    }
+}
+
+fn build_execution_resume_context(
+    repo: &RepoSnapshot,
+    issue_identifier: Option<&str>,
+    workpad: Option<&LinearWorkpadSnapshot>,
+    review_state: Option<&str>,
+    blocker_details: &[String],
+    next_action: &str,
+    context_error: Option<&str>,
+) -> ExecutionResumeContext {
+    let mut stale_state_conflicts = Vec::new();
+    if issue_identifier.is_none() {
+        stale_state_conflicts.push("task identity is missing".to_string());
+    }
+    if !repo.clean {
+        stale_state_conflicts.push(format!(
+            "worktree is not clean ({} modified, {} untracked)",
+            repo.modified_count, repo.untracked_count
+        ));
+    }
+    if let Some(workpad) = workpad {
+        if workpad.duplicate_count > 0 {
+            stale_state_conflicts.push(format!(
+                "{} duplicate top-level Codex workpad comment(s) remain",
+                workpad.duplicate_count
+            ));
+        }
+    } else if issue_identifier.is_some() {
+        stale_state_conflicts.push("Codex workpad is missing".to_string());
+    }
+    if !blocker_details.is_empty() {
+        stale_state_conflicts.push(format!(
+            "issue blockers remain active: {}",
+            blocker_details.join("; ")
+        ));
+    }
+    match review_state {
+        Some("changes_requested") => stale_state_conflicts
+            .push("requested GitHub review changes are still unresolved".to_string()),
+        Some("review_pending") => stale_state_conflicts
+            .push("Human Review is still pending a merge or rework decision".to_string()),
+        _ => {}
+    }
+    if let Some(error) = context_error {
+        stale_state_conflicts.push(format!("Linear context reload failed: {error}"));
+    }
+
+    ExecutionResumeContext {
+        source_precedence: vec![
+            "workpad".to_string(),
+            "issue_snapshot".to_string(),
+            "repo_state".to_string(),
+            "pr_state".to_string(),
+        ],
+        confirmed_next_action: next_action.to_string(),
+        stale_state_conflicts,
+        retry_classes: vec![
+            "transient_environment".to_string(),
+            "tool_unavailable".to_string(),
+            "missing_credential_now_restored".to_string(),
+            "flaky_validation".to_string(),
+            "implementation_fix_required".to_string(),
+            "plan_was_wrong".to_string(),
+            "unknown".to_string(),
+        ],
+        cancel_preservation_modes: vec![
+            "reverted".to_string(),
+            "parked".to_string(),
+            "kept".to_string(),
+        ],
+    }
+}
+
+fn extract_markdown_field(line: &str, label: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    trimmed
+        .strip_prefix(label)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn execution_milestones_from_tasks(
+    tasks_path: &Path,
+    validation_commands: &[String],
+) -> Vec<ExecutionMilestone> {
+    let Ok(markdown) = fs::read_to_string(tasks_path) else {
+        return Vec::new();
+    };
+
+    let mut sections = Vec::<(String, Vec<String>)>::new();
+    let mut current_heading: Option<String> = None;
+    let mut current_lines = Vec::new();
+    for line in markdown.lines() {
+        if let Some(rest) = line.strip_prefix("## ") {
+            if let Some(heading) = current_heading.take() {
+                sections.push((heading, current_lines));
+            }
+            current_heading = Some(rest.trim().to_string());
+            current_lines = Vec::new();
+        } else if current_heading.is_some() {
+            current_lines.push(line.to_string());
+        }
+    }
+    if let Some(heading) = current_heading.take() {
+        sections.push((heading, current_lines));
+    }
+
+    sections
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, (heading, lines))| {
+            let tasks = lines
+                .iter()
+                .filter(|line| line.trim_start().starts_with("- [ ]"))
+                .collect::<Vec<_>>();
+            if tasks.is_empty() {
+                return None;
+            }
+
+            let goal = lines
+                .iter()
+                .find_map(|line| extract_markdown_field(line, "**Goal**:"));
+            let checkpoint = lines
+                .iter()
+                .find_map(|line| extract_markdown_field(line, "**Checkpoint**:"));
+            let independent_test = lines
+                .iter()
+                .find_map(|line| extract_markdown_field(line, "**Independent Test**:"));
+
+            let mut done_when = Vec::new();
+            if let Some(goal) = goal {
+                done_when.push(goal);
+            }
+            if let Some(checkpoint) = checkpoint {
+                done_when.push(checkpoint);
+            }
+            done_when.push(format!(
+                "All listed tasks under `{heading}` are complete and recorded in the workpad."
+            ));
+
+            let validation = independent_test
+                .into_iter()
+                .chain(validation_commands.iter().cloned())
+                .collect::<Vec<_>>();
+
+            Some(ExecutionMilestone {
+                id: format!("m{}", index + 1),
+                title: heading,
+                done_when,
+                validation,
+            })
+        })
+        .collect()
+}
+
+fn fallback_execution_milestone(
+    issue: Option<&LinearIssueSnapshot>,
+    next_action: &str,
+    validation_commands: &[String],
+) -> ExecutionMilestone {
+    let title = issue
+        .map(|value| format!("Advance {}", value.identifier))
+        .unwrap_or_else(|| next_action.replace('_', " "));
+    let mut done_when = vec![format!(
+        "The `{}` step is completed and recorded in the Codex workpad.",
+        next_action
+    )];
+    if let Some(issue) = issue {
+        done_when.push(format!(
+            "{} advances without introducing new unresolved blockers.",
+            issue.identifier
+        ));
+    }
+
+    ExecutionMilestone {
+        id: "m1".to_string(),
+        title,
+        done_when,
+        validation: validation_commands.to_vec(),
+    }
+}
+
+fn proof_intent_for_instruction(instruction: &str) -> &'static str {
+    let normalized = instruction.to_lowercase();
+    if contains_any(
+        &normalized,
+        &[
+            "playwright",
+            "screenshot",
+            "browser",
+            "manual",
+            "runtime behavior",
+        ],
+    ) {
+        "runtime_behavior"
+    } else if contains_any(
+        &normalized,
+        &[
+            "cargo test",
+            "pnpm test",
+            "pytest",
+            "integration test",
+            "unit test",
+        ],
+    ) {
+        "local_runtime"
+    } else {
+        "static"
+    }
+}
+
+fn build_execution_evidence_expectations(
+    validation_commands: &[String],
+    workpad: Option<&LinearWorkpadSnapshot>,
+    require_runtime_gap_marker: bool,
+) -> ExecutionEvidenceExpectations {
+    let mut items = validation_commands
+        .iter()
+        .enumerate()
+        .map(|(index, instruction)| EvidenceExpectationItem {
+            label: format!("validation_{}", index + 1),
+            instruction: instruction.clone(),
+            proof_intent: proof_intent_for_instruction(instruction).to_string(),
+        })
+        .collect::<Vec<_>>();
+
+    if require_runtime_gap_marker
+        && !items.iter().any(|item| {
+            matches!(
+                item.proof_intent.as_str(),
+                "runtime_behavior" | "shared_env" | "human_review"
+            )
+        })
+    {
+        items.push(EvidenceExpectationItem {
+            label: "runtime_behavior_gap".to_string(),
+            instruction: "Runtime behavior proof is not yet defined for this bounded step."
+                .to_string(),
+            proof_intent: "not_verified".to_string(),
+        });
+    }
+
+    ExecutionEvidenceExpectations {
+        durable_location: workpad
+            .map(|value| format!("linear_comment:{}", value.comment_id))
+            .unwrap_or_else(|| "none".to_string()),
+        items,
+    }
+}
+
+fn spec_authoring_mode(
+    combined_text: &str,
+    source_path: Option<&Path>,
+    feature_dir: Option<&Path>,
+) -> String {
+    if source_path
+        .and_then(|path| path.file_name().and_then(|name| name.to_str()))
+        .map(|name| name.eq_ignore_ascii_case("spec.md"))
+        .unwrap_or(false)
+        || contains_any(
+            &combined_text.to_lowercase(),
+            &["extend spec", "spec extension"],
+        )
+    {
+        "extend_packet".to_string()
+    } else if source_path
+        .map(|path| path.display().to_string().to_lowercase().contains("primer"))
+        .unwrap_or(false)
+        || contains_any(&combined_text.to_lowercase(), &["primer", "pre-speckit"])
+    {
+        "refine_primer".to_string()
+    } else if feature_dir
+        .map(|path| path.join("spec.md").exists())
+        .unwrap_or(false)
+    {
+        "extend_packet".to_string()
+    } else {
+        "new_packet".to_string()
+    }
+}
+
+fn spec_authoring_entry_surface(
+    combined_text: &str,
+    source_path: Option<&Path>,
+    feature_dir: Option<&Path>,
+) -> String {
+    if source_path
+        .and_then(|path| path.file_name().and_then(|name| name.to_str()))
+        .map(|name| name.eq_ignore_ascii_case("spec.md"))
+        .unwrap_or(false)
+        || feature_dir
+            .map(|path| path.join("spec.md").exists())
+            .unwrap_or(false)
+    {
+        "existing_spec".to_string()
+    } else if source_path
+        .map(|path| path.display().to_string().to_lowercase().contains("primer"))
+        .unwrap_or(false)
+        || contains_any(&combined_text.to_lowercase(), &["primer", "pre-speckit"])
+    {
+        "primer".to_string()
+    } else {
+        "new_prompt".to_string()
+    }
+}
+
+fn spec_authoring_stop_after_stage(combined_text: &str) -> Option<String> {
+    let normalized = combined_text.to_lowercase();
+    if contains_any(
+        &normalized,
+        &["spec-only", "spec only", "stop after specify"],
+    ) {
+        Some("speckit.specify".to_string())
+    } else if contains_any(
+        &normalized,
+        &["clarify-only", "clarify only", "stop after clarify"],
+    ) {
+        Some("speckit.clarify".to_string())
+    } else {
+        None
+    }
+}
+
+fn spec_authoring_source_docs(
+    repo_root: &Path,
+    source_path: Option<&Path>,
+    feature_dir: Option<&Path>,
+) -> Vec<String> {
+    let mut docs = vec![
+        repo_root.join("AGENTS.md").display().to_string(),
+        repo_root
+            .join("docs/current-state.md")
+            .display()
+            .to_string(),
+        repo_root.join("docs/direction.md").display().to_string(),
+        repo_root
+            .join("docs/ms_recent_context.md")
+            .display()
+            .to_string(),
+    ];
+    if let Some(source_path) = source_path {
+        docs.push(source_path.display().to_string());
+    }
+    if let Some(feature_dir) = feature_dir {
+        for path in ["spec.md", "plan.md", "tasks.md"] {
+            let candidate = feature_dir.join(path);
+            if candidate.exists() {
+                docs.push(candidate.display().to_string());
+            }
+        }
+    }
+    docs
+}
+
+fn spec_authoring_chain(stop_after_stage: Option<&str>) -> Vec<String> {
+    let chain = vec![
+        "speckit.specify".to_string(),
+        "speckit.clarify".to_string(),
+        "custom_checklist".to_string(),
+        "speckit.plan".to_string(),
+        "speckit.tasks".to_string(),
+        "speckit.analyze".to_string(),
+    ];
+    if let Some(stop_after_stage) = stop_after_stage {
+        let mut limited = Vec::new();
+        for stage in chain {
+            limited.push(stage.clone());
+            if stage == stop_after_stage {
+                break;
+            }
+        }
+        limited
+    } else {
+        chain
+    }
+}
+
+fn spec_authoring_validation_commands(
+    feature_dir: Option<&Path>,
+    stop_after_stage: Option<&str>,
+) -> Vec<String> {
+    let packet_glob = feature_dir
+        .map(|path| format!("\"{}/*.md\"", path.display()))
+        .unwrap_or_else(|| "\"specs/<packet>/**/*.md\"".to_string());
+    let mut commands = vec![
+        if stop_after_stage.is_some() {
+            ".specify/scripts/bash/check-prerequisites.sh --json --include-tasks".to_string()
+        } else {
+            ".specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks"
+                .to_string()
+        },
+        format!("npx markdownlint-cli2 {packet_glob} --config .markdownlint.json"),
+        "git diff --check".to_string(),
+    ];
+    if stop_after_stage == Some("speckit.specify") {
+        commands.remove(0);
+    }
+    commands
+}
+
+fn spec_authoring_pending_gates(
+    authoring_mode: &str,
+    entry_surface: &str,
+    request_text: &str,
+    issue_identifier: Option<&str>,
+    source_path: Option<&Path>,
+) -> Vec<ExecutionGate> {
+    let mut gates = Vec::new();
+    if request_text.trim().is_empty() && issue_identifier.is_none() && source_path.is_none() {
+        gates.push(execution_gate(
+            "authoring_context",
+            GateState::Fail,
+            "provide a packet request, issue identifier, or source path before spec authoring",
+        ));
+    }
+    if authoring_mode == "extend_packet" && entry_surface == "existing_spec" {
+        if source_path.is_none() {
+            gates.push(execution_gate(
+                "existing_spec_source",
+                GateState::Unknown,
+                "extend-packet authoring is more reliable with an explicit spec.md path",
+            ));
+        }
+    }
+    if authoring_mode == "refine_primer" && source_path.is_none() {
+        gates.push(execution_gate(
+            "primer_source",
+            GateState::Unknown,
+            "primer refinement is more reliable with an explicit primer or dossier path",
+        ));
+    }
+    gates
+}
+
+fn spec_authoring_next_action(authoring_mode: &str, stop_after_stage: Option<&str>) -> String {
+    match (authoring_mode, stop_after_stage) {
+        (_, Some("speckit.specify")) => "run_speckit_specify".to_string(),
+        (_, Some("speckit.clarify")) => "run_speckit_clarify".to_string(),
+        ("refine_primer", _) => "refine_primer_boundary".to_string(),
+        ("extend_packet", _) => "extend_existing_spec".to_string(),
+        _ => "run_speckit_specify".to_string(),
+    }
+}
+
+fn spec_authoring_resume_note(authoring_mode: &str, stop_after_stage: Option<&str>) -> String {
+    match (authoring_mode, stop_after_stage) {
+        (_, Some("speckit.specify")) => {
+            "Resume from the repo truth bundle, regenerate or tighten the specify input, and stop after speckit.specify."
+                .to_string()
+        }
+        (_, Some("speckit.clarify")) => {
+            "Resume from the current packet draft, settle the open clarification questions, and stop after speckit.clarify."
+                .to_string()
+        }
+        ("refine_primer", _) => {
+            "Tighten the primer boundary first, then continue into the full local SpecKit chain only if the packet shape is stable."
+                .to_string()
+        }
+        ("extend_packet", _) => {
+            "Reload the existing packet, preserve its bounded scope, and extend only the missing spec surface before later plan or tasks stages."
+                .to_string()
+        }
+        _ => {
+            "Freeze the packet boundary against current repo truth, then run the full local SpecKit authoring chain in order."
+                .to_string()
+        }
+    }
+}
+
 fn build_direct_issue_lifecycle_resolution(
     issue: Option<LinearIssueSnapshot>,
     workpad: Option<&LinearWorkpadSnapshot>,
@@ -5521,6 +6523,13 @@ fn build_direct_issue_lifecycle_resolution(
             )],
             review_state: "unknown".to_string(),
             pr_correlation: Vec::new(),
+            pending_gates: vec![execution_gate(
+                "task_identity",
+                GateState::Fail,
+                format!("issue {issue_identifier} was not found in the current Linear snapshot"),
+            )],
+            resume_note: "Verify the issue identifier, then reload the Smith execution snapshot."
+                .to_string(),
         };
     };
 
@@ -5567,16 +6576,19 @@ fn build_direct_issue_lifecycle_resolution(
     IssueLifecycleResolution {
         issue: Some(issue_value.clone()),
         issue_identifier: issue_value.identifier.clone(),
-        next_recommended_action,
+        next_recommended_action: next_recommended_action.clone(),
         required_mutations,
         blocking_reasons: blocker_details,
         review_state,
         pr_correlation: pr_correlation(matching_pull_requests),
+        pending_gates: Vec::new(),
+        resume_note: direct_execution_resume_note(&next_recommended_action),
     }
 }
 
 fn build_direct_execution_plan(
     repo_root: &Path,
+    repo_snapshot: RepoSnapshot,
     requested_issue_identifier: Option<String>,
     request_text: &str,
     issue: Option<LinearIssueSnapshot>,
@@ -5704,6 +6716,90 @@ fn build_direct_execution_plan(
     );
     let resume_note = direct_execution_resume_note(&next_recommended_action);
     let rollback_note = direct_execution_rollback_note(issue.as_ref());
+    let milestones = tasks_path_value
+        .as_deref()
+        .map(PathBuf::from)
+        .map(|path| execution_milestones_from_tasks(&path, &validation_commands))
+        .filter(|items| !items.is_empty())
+        .unwrap_or_else(|| {
+            vec![fallback_execution_milestone(
+                issue.as_ref(),
+                &next_recommended_action,
+                &validation_commands,
+            )]
+        });
+    let require_github = !matching_pull_requests.is_empty()
+        || matches!(
+            next_recommended_action.as_str(),
+            "merge_ready_pr" | "address_review_feedback"
+        );
+    let external_authorities = vec![
+        ExecutionAuthority {
+            name: "linear_issue_context".to_string(),
+            required: true,
+            satisfied: !issue_identifier_for_resolution.is_empty(),
+            detail: if issue_identifier_for_resolution.is_empty() {
+                "Issue-grounded execution requires a durable Linear issue identifier".to_string()
+            } else {
+                format!(
+                    "Linear issue context is anchored to {}",
+                    issue_identifier_for_resolution
+                )
+            },
+        },
+        ExecutionAuthority {
+            name: "github_review_context".to_string(),
+            required: require_github,
+            satisfied: !require_github || !matching_pull_requests.is_empty(),
+            detail: if require_github && matching_pull_requests.is_empty() {
+                "Review-sensitive execution needs correlated GitHub pull request context"
+                    .to_string()
+            } else if require_github {
+                "GitHub review context is already correlated to the active issue".to_string()
+            } else {
+                "GitHub review context is not required for this next action".to_string()
+            },
+        },
+    ];
+    let eligibility = build_execution_eligibility(
+        issue
+            .as_ref()
+            .map(|value| value.identifier.clone())
+            .or_else(|| {
+                if issue_identifier_for_resolution.is_empty() {
+                    None
+                } else {
+                    Some(issue_identifier_for_resolution.clone())
+                }
+            }),
+        repo_snapshot.clone(),
+        &required_tools,
+        &pending_gates,
+        external_authorities,
+    );
+    let evidence_expectations = build_execution_evidence_expectations(
+        &validation_commands,
+        workpad.as_ref(),
+        !should_use_speckit,
+    );
+    let resume_context = build_execution_resume_context(
+        &repo_snapshot,
+        issue
+            .as_ref()
+            .map(|value| value.identifier.as_str())
+            .or_else(|| {
+                if issue_identifier_for_resolution.is_empty() {
+                    None
+                } else {
+                    Some(issue_identifier_for_resolution.as_str())
+                }
+            }),
+        workpad.as_ref(),
+        Some(&resolution.review_state),
+        &resolution.blocking_reasons,
+        &next_recommended_action,
+        None,
+    );
 
     DirectExecutionPlan {
         objective,
@@ -5722,6 +6818,10 @@ fn build_direct_execution_plan(
         blocking_reasons,
         resume_note,
         rollback_note,
+        eligibility,
+        milestones,
+        evidence_expectations,
+        resume_context,
     }
 }
 
@@ -6506,6 +7606,21 @@ apps = true
         }
     }
 
+    fn test_repo_snapshot(repo_root: &Path) -> RepoSnapshot {
+        RepoSnapshot {
+            repo_root: repo_root.display().to_string(),
+            git_branch: Some("main".to_string()),
+            head_sha: Some("abc1234".to_string()),
+            base_sha: Some("abc1234".to_string()),
+            upstream: Some("origin/main".to_string()),
+            remote_url: Some("https://example.invalid/mister-smith.git".to_string()),
+            clean: true,
+            modified_count: 0,
+            untracked_count: 0,
+            recent_commit_subject: Some("test subject".to_string()),
+        }
+    }
+
     #[test]
     fn inspect_codex_smith_config_reads_rich_codex_config() {
         let repo_root = temp_path("rich-config");
@@ -6835,6 +7950,7 @@ apps = true
 
         let plan = build_direct_execution_plan(
             &repo_root,
+            test_repo_snapshot(&repo_root),
             Some("MS-90".to_string()),
             "Implement specs/999-direct-execution/tasks.md",
             Some(issue),
@@ -6872,6 +7988,13 @@ apps = true
             .any(|item| item.contains("speckit.implement flow before code edits")));
         assert!(plan.pending_gates.is_empty());
         assert_eq!(plan.required_tools, vec!["git", "cargo"]);
+        assert!(plan.eligibility.eligible);
+        assert_eq!(plan.eligibility.task_id.as_deref(), Some("MS-90"));
+        assert!(plan.milestones.len() >= 1);
+        assert_eq!(
+            plan.evidence_expectations.durable_location,
+            "linear_comment:c1"
+        );
         assert_eq!(
             plan.resume_note,
             "Run the repo-local speckit.implement flow against the active packet before touching code."
@@ -6886,6 +8009,7 @@ apps = true
 
         let plan = build_direct_execution_plan(
             &repo_root,
+            test_repo_snapshot(&repo_root),
             None,
             "Implement the SpecKit packet for specs/999-missing/tasks.md",
             None,
@@ -6907,13 +8031,65 @@ apps = true
         let repo_root = temp_path("direct-execution-missing-context");
         write_fixture_repo(&repo_root);
 
-        let plan = build_direct_execution_plan(&repo_root, None, "", None, None, &[], None);
+        let plan = build_direct_execution_plan(
+            &repo_root,
+            test_repo_snapshot(&repo_root),
+            None,
+            "",
+            None,
+            None,
+            &[],
+            None,
+        );
 
         assert!(!plan.should_use_speckit);
         assert!(plan
             .blocking_reasons
             .iter()
             .any(|reason| reason.contains("provide an issue identifier")));
+        assert!(!plan.eligibility.eligible);
+        assert!(plan
+            .eligibility
+            .missing_items
+            .iter()
+            .any(|reason| reason.contains("task identity is missing")));
+    }
+
+    #[test]
+    fn build_direct_execution_plan_marks_runtime_proof_not_verified_for_non_packet_work() {
+        let repo_root = temp_path("direct-execution-runtime-gap");
+        write_fixture_repo(&repo_root);
+
+        let plan = build_direct_execution_plan(
+            &repo_root,
+            test_repo_snapshot(&repo_root),
+            Some("MS-91".to_string()),
+            "Tighten route_workflow_request for Smith",
+            Some(LinearIssueSnapshot {
+                identifier: "MS-91".to_string(),
+                title: "Tighten router".to_string(),
+                state: Some(LinearStateSnapshot {
+                    name: "In Progress".to_string(),
+                    ..LinearStateSnapshot::default()
+                }),
+                ..LinearIssueSnapshot::default()
+            }),
+            Some(LinearWorkpadSnapshot {
+                comment_id: "c-runtime".to_string(),
+                updated_at: None,
+                body: "## Codex Workpad\n\n- [ ] route updates".to_string(),
+                duplicate_count: 0,
+            }),
+            &[],
+            None,
+        );
+
+        assert_eq!(plan.milestones.len(), 1);
+        assert!(plan
+            .evidence_expectations
+            .items
+            .iter()
+            .any(|item| item.proof_intent == "not_verified"));
     }
 
     #[test]
@@ -6995,6 +8171,145 @@ apps = true
     }
 
     #[tokio::test]
+    async fn prepare_spec_authoring_handles_primer_driven_authoring() {
+        let repo_root = temp_path("prepare-spec-authoring-primer");
+        write_fixture_repo(&repo_root);
+        fs::create_dir_all(repo_root.join("docs/primers")).unwrap();
+        fs::write(
+            repo_root.join("docs/primers/control-plane-primer.md"),
+            "# Primer\n",
+        )
+        .unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "prepare_spec_authoring",
+                serde_json::json!({
+                    "request_text": "Refine the pre-SpecKit primer for the next Smith control-plane packet",
+                    "source_path": "docs/primers/control-plane-primer.md"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["authoring_mode"],
+            serde_json::Value::String("refine_primer".to_string())
+        );
+        assert_eq!(
+            result["data"]["entry_surface"],
+            serde_json::Value::String("primer".to_string())
+        );
+        assert!(result["data"]["source_docs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value
+                .as_str()
+                .unwrap()
+                .ends_with("docs/primers/control-plane-primer.md")));
+    }
+
+    #[tokio::test]
+    async fn prepare_spec_authoring_handles_existing_spec_extension() {
+        let repo_root = temp_path("prepare-spec-authoring-existing-spec");
+        write_fixture_repo(&repo_root);
+        let feature_dir = repo_root.join("specs/031-chat-first-cli-loop");
+        fs::create_dir_all(&feature_dir).unwrap();
+        fs::write(feature_dir.join("spec.md"), "# Spec\n").unwrap();
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "prepare_spec_authoring",
+                serde_json::json!({
+                    "request_text": "Extend spec for the packet",
+                    "source_path": "specs/031-chat-first-cli-loop/spec.md"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["authoring_mode"],
+            serde_json::Value::String("extend_packet".to_string())
+        );
+        assert_eq!(
+            result["data"]["entry_surface"],
+            serde_json::Value::String("existing_spec".to_string())
+        );
+        assert!(result["data"]["spec_chain"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "speckit.tasks"));
+    }
+
+    #[tokio::test]
+    async fn prepare_spec_authoring_respects_spec_only_boundary() {
+        let repo_root = temp_path("prepare-spec-authoring-spec-only");
+        write_fixture_repo(&repo_root);
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "prepare_spec_authoring",
+                serde_json::json!({
+                    "request_text": "Write a spec-only packet for Smith and stop after specify"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["stop_after_stage"],
+            serde_json::Value::String("speckit.specify".to_string())
+        );
+        assert_eq!(
+            result["data"]["next_recommended_action"],
+            serde_json::Value::String("run_speckit_specify".to_string())
+        );
+        assert_eq!(result["data"]["spec_chain"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
     async fn route_workflow_request_recognizes_development_workflow_requests() {
         let repo_root = temp_path("route-development-workflow");
         write_fixture_repo(&repo_root);
@@ -7044,6 +8359,82 @@ apps = true
             .unwrap()
             .iter()
             .any(|value| value == "prepare_direct_execution"));
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_routes_packet_authoring_requests_to_spec_authoring() {
+        let repo_root = temp_path("route-spec-authoring");
+        write_fixture_repo(&repo_root);
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Write a new SpecKit packet spec-only for the next Smith control-plane slice"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("spec_authoring".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("prepare_spec_authoring".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn route_workflow_request_routes_spec_extension_requests_to_spec_authoring() {
+        let repo_root = temp_path("route-spec-extension");
+        write_fixture_repo(&repo_root);
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "route_workflow_request",
+                serde_json::json!({
+                    "request": "Extend spec for specs/031-chat-first-cli-loop/spec.md and refine the packet boundary"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["data"]["route"],
+            serde_json::Value::String("spec_authoring".to_string())
+        );
+        assert_eq!(
+            result["data"]["preferred_tool"],
+            serde_json::Value::String("prepare_spec_authoring".to_string())
+        );
     }
 
     #[tokio::test]
@@ -7501,6 +8892,9 @@ apps = true
         assert!(tools.iter().any(|tool| tool.name == "record_ralph_outcome"));
         assert!(tools
             .iter()
+            .any(|tool| tool.name == "prepare_spec_authoring"));
+        assert!(tools
+            .iter()
             .any(|tool| tool.name == "prepare_speckit_context"));
         assert!(tools
             .iter()
@@ -7791,6 +9185,25 @@ apps = true
                 .unwrap()
         );
 
+        let spec_authoring = peer
+            .call_tool(
+                CallToolRequestParams::new("prepare_spec_authoring".to_string()).with_arguments(
+                    serde_json::json!({
+                        "request_text": "Write a spec-only packet for Smith and stop after specify"
+                    })
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
+                ),
+            )
+            .await
+            .unwrap();
+        assert!(!spec_authoring.is_error.unwrap_or(false));
+        assert_eq!(
+            spec_authoring.structured_content.as_ref().unwrap()["data"]["stop_after_stage"],
+            serde_json::json!("speckit.specify")
+        );
+
         let speckit_context = peer
             .call_tool(CallToolRequestParams::new(
                 "prepare_speckit_context".to_string(),
@@ -7939,6 +9352,49 @@ apps = true
             .as_str()
             .unwrap()
             .contains("Restore Linear access"));
+    }
+
+    #[tokio::test]
+    async fn prepare_direct_execution_fails_closed_without_task_identity() {
+        let repo_root = temp_path("direct-execution-missing-task-id");
+        write_fixture_repo(&repo_root);
+        let config_path = repo_root.join("config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "[mcp_servers.smith]\ncommand = \"{}/scripts/run-smith-mcp.sh\"\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let server = build_smith_compatibility_server(test_options(&repo_root, config_path))
+            .await
+            .unwrap();
+
+        let result = server
+            .handle_tools_call(
+                "prepare_direct_execution",
+                serde_json::json!({
+                    "request_text": "Tighten Smith routing guards without a linked issue"
+                }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["status"],
+            serde_json::Value::String("degraded".to_string())
+        );
+        assert_eq!(
+            result["data"]["eligibility"]["eligible"],
+            serde_json::Value::Bool(false)
+        );
+        assert!(result["data"]["eligibility"]["missing_items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item.as_str().unwrap().contains("task identity is missing")));
     }
 
     #[tokio::test]

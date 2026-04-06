@@ -14,6 +14,7 @@ Use the `smith` MCP tools first for any Mister Smith workflow request.
 3. For broad workflow-architecture or Smith-first development-system requests, read `docs/plans/2026-03-16-smith-first-development-system.md` after routing.
 4. Use the routed workflow family before reaching for any raw fallback skills:
    - `linear_workflow` -> `save_linear_issue`, `save_issue_workpad`, `get_issue_execution_snapshot`
+   - `spec_authoring` -> `prepare_spec_authoring`, `evaluate_issue_legitimacy`, `prepare_speckit_context`
    - `direct_execution` -> `prepare_direct_execution`, `get_issue_execution_snapshot`, `prepare_speckit_context`
    - `backlog_slicing` -> `materialize_backlog_slices`, `translate_speckit_tasks`, `prepare_direct_execution`
    - `issue_lifecycle` -> `resolve_issue_lifecycle`, `get_issue_execution_snapshot`, `prepare_direct_execution`

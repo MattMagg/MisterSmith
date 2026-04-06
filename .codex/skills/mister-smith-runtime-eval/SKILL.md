@@ -28,7 +28,7 @@ Do not use this skill when:
 - the user only wants unit or integration tests
 - the task is to write or revise a SpecKit packet
 - the task is to implement code changes
-- the task is only about Linear, Symphony, or watched-queue workflow state
+- the task is only about Linear, Symphony, or execution-lane workflow state
 - mock-only coverage is enough for the request
 
 ## Required Inputs

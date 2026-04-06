@@ -52,7 +52,7 @@ Treat the Mister Smith OS and the repo-development workflow as different layers.
   NATS and persistence integration, the shipped `mister-smith-mcp` crate, security model, deploy
   assets, and the architecture captured in `spec/` and implemented in `crates/`.
 - Repository development workflow around Mister Smith: Linear, Symphony, Ralph, SpecKit, repo
-  workpads, PR flow, and watched-queue orchestration.
+  workpads, PR flow, backlog materialization, and direct-execution routing.
 - Smith MCP is a repo-owned crate and control-plane surface in this workspace. Do not collapse it
   into the same bucket as external workflow services.
 - Linear and Symphony are not part of the Mister Smith operating system. They are external
@@ -77,7 +77,7 @@ runtime.
   mutating Linear or review state.
 - Use Smith workflow-family tools before raw Linear or ad hoc repo glue:
   - `save_linear_issue`, `save_issue_workpad`
-  - `prepare_direct_execution`, `materialize_backlog_slices`
+  - `prepare_spec_authoring`, `prepare_direct_execution`, `materialize_backlog_slices`
   - `resolve_issue_lifecycle`, `review_merge_status`
   - `prepare_ralph_packet`, `record_ralph_outcome`
   - `prepare_speckit_context`, `translate_speckit_tasks`

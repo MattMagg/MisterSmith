@@ -1,6 +1,6 @@
 ---
 name: mister-smith-post-speckit-prep
-description: Use after a Mister Smith SpecKit packet has been created and needs post-spec closure: packet verification, git closure, Linear materialization, honest queue staging, and Symphony readiness without implementation unless explicitly requested.
+description: Use after a Mister Smith SpecKit packet has been created and needs post-spec closure: packet verification, git closure, Linear materialization, honest execution-lane preparation, and follow-on execution readiness without implementation unless explicitly requested.
 ---
 
 # Mister Smith Post-SpecKit Prep
@@ -18,7 +18,7 @@ Trigger this skill when the user wants any of the following after a packet alrea
 - verify the packet still matches repo truth
 - materialize the packet into Linear
 - preserve blocker chains from `tasks.md`
-- stage only the honest runnable slices for the watched queue
+- stage only the honest runnable slices into the active execution lane
 - reconcile status-bearing docs, notes, logs, readmes, and artifact indexes so they match the landed packet
 - stop at “ready for Symphony”
 - optionally launch Symphony only if the user explicitly asks
@@ -53,7 +53,7 @@ Optional:
 - Treat the packet as the source of truth unless current repo truth proves it stale or wrong.
 - Verify first, mutate second.
 - Use [$mister-smith-git-closure](/Users/macmain/MisterSmith/.codex/skills/mister-smith-git-closure/SKILL.md) for git closure.
-- Use [$stage-mister-smith-phase](/Users/macmain/MisterSmith/.codex/skills/stage-mister-smith-phase/SKILL.md) plus Smith MCP tools for packet-to-Linear translation and queue staging.
+- Use [$stage-mister-smith-phase](/Users/macmain/MisterSmith/.codex/skills/stage-mister-smith-phase/SKILL.md) plus Smith MCP tools for packet-to-Linear translation and execution-lane prep.
 - Check and refresh status-bearing repo docs, notes, logs, readmes, and artifact indexes before calling the packet closed.
 - Do not widen into implementation.
 - Do not stage blocked slices just to keep Symphony busy.
@@ -206,17 +206,17 @@ For every child:
 - preserve blocker chains exactly
 - keep the slice bounded and runnable
 - keep blocked or future work in `MisterSmith Validated Backlog`
-- do not put everything into the watched queue
+- do not move everything into active execution
 
-### 5. Honest queue staging
+### 5. Honest execution-lane prep
 
 Use [$stage-mister-smith-phase](/Users/macmain/MisterSmith/.codex/skills/stage-mister-smith-phase/SKILL.md).
 
 Required flow:
 
-1. `plan_phase_execution`
-2. review runnable, blocked, and prep-only slices
-3. `apply_phase_execution_plan` only for the honest runnable slices
+1. `translate_speckit_tasks` when `tasks.md` is honest enough
+2. otherwise `materialize_backlog_slices` with explicitly bounded slices
+3. move only the truly runnable slices into the active Linear execution lane
 
 Rules:
 
@@ -255,7 +255,7 @@ Default stop point:
 - packet landed on `main`
 - parent issue created or updated
 - child slices created
-- honest runnable slices staged
+- honest runnable slices moved into the active execution lane
 - repo clean and synced
 - ready for Symphony dispatch
 
@@ -263,8 +263,8 @@ Do not launch Symphony automatically unless the user explicitly asks.
 
 If the user explicitly asks to launch Symphony:
 
-- launch it against the watched queue
-- confirm which staged slices were picked up
+- launch it only after confirming the intended runnable slices are already in the active execution lane
+- confirm which runnable slices were picked up
 - report only completed actions and blockers
 
 ## Final Response Requirements
@@ -277,7 +277,7 @@ Always include:
 - parent Linear issue identifier and URL
 - child slice identifiers created
 - blocker-chain summary
-- which slices were staged into the watched queue
+- which slices were moved into the active execution lane
 - which status-bearing docs or artifact indexes were updated
 - whether Symphony was launched or intentionally not launched
 - any blockers preventing the next execution stage
@@ -313,9 +313,9 @@ By the end of this session, you must have:
 3. committed and pushed the packet to `main`
 4. synchronized the packet into Linear as one parent epic issue plus child slices
 5. preserved blocker chains and placed slices in the correct project and state
-6. staged only the honest runnable slices into the watched queue for Symphony
+6. moved only the honest runnable slices into the active execution lane for Symphony
 7. reconciled status-bearing docs, notes, logs, readmes, and artifact indexes so they reflect the current state honestly
-8. stopped with the repo clean and with a clear report of what is now ready for Symphony
+8. stopped with the repo clean and with a clear report of what is now ready for follow-on execution
 
 ## Core Rules
 
@@ -428,15 +428,15 @@ For every child:
 - preserve blocker chains exactly
 - keep slices bounded and runnable
 - keep blocked or future work in `MisterSmith Validated Backlog`
-- do not put everything into the watched queue
+- do not move everything into active execution
 
-## Phase 4: Honest Queue Staging
+## Phase 4: Honest Execution-Lane Prep
 
 Once the slices exist in Linear:
 
-1. use `plan_phase_execution`
-2. review runnable slices, blocked slices, and prep-only slices
-3. use `apply_phase_execution_plan` to stage only the honest runnable slices
+1. use `translate_speckit_tasks` when the packet maps cleanly from `tasks.md`
+2. otherwise use `materialize_backlog_slices`
+3. move only the honest runnable slices into the active execution lane
 
 Rules:
 
@@ -466,7 +466,7 @@ Default stop point:
 - packet landed on `main`
 - parent Linear issue created or updated
 - child slices created
-- runnable slices staged honestly
+- runnable slices moved honestly into the active execution lane
 - repo clean and synced
 - ready for Symphony dispatch
 
@@ -487,7 +487,7 @@ Your final response must include:
 - parent Linear issue identifier and URL
 - child slice identifiers created
 - blocker-chain summary
-- which slices were staged into the watched queue
+- which slices were moved into the active execution lane
 - which status-bearing docs or artifact indexes were updated
 - whether Symphony was launched or intentionally not launched
 - any blockers that prevent the next execution stage

@@ -90,6 +90,8 @@ Instructions:
   `get_control_plane_snapshot` or `get_issue_execution_snapshot` before mutating issue state.
 - Use `save_linear_issue` and `save_issue_workpad` as the only Smith-owned write path for Linear
   issue and workpad updates.
+- Use `prepare_spec_authoring` for packet-writing, primer-refinement, or spec-extension work so
+  those requests do not fall through into implementation prep.
 - Use `materialize_backlog_slices` and `resolve_issue_lifecycle` for backlog and execution-state
   control on the active Smith MCP route.
 - Use `prepare_ralph_packet` and `record_ralph_outcome` for Ralph-assisted flows.
