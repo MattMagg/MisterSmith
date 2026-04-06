@@ -136,11 +136,12 @@ admin-first workflow.
 - [x] T016 Run `cargo test -p mister-smith-app`
 - [x] T017 Run `cargo test -p mister-smith-http`
 - [x] T018 Run `cargo build --workspace`
-- [x] T019 Run
-      `SPECIFY_FEATURE=031-chat-first-cli-loop ./.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
+- [x] T019 Run `cargo clippy --workspace -- -D warnings`
 - [x] T020 Run
+      `SPECIFY_FEATURE=031-chat-first-cli-loop ./.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
+- [x] T021 Run
       `npx markdownlint-cli2 "specs/031-chat-first-cli-loop/**/*.md" --config .markdownlint.json`
-- [x] T021 Run `git diff --check`
+- [x] T022 Run `git diff --check`
 
 ## Parallel Directive
 

@@ -1698,6 +1698,19 @@ mod tests {
             value["turns"][1]["resume_provenance"]["resumed_from_workflow_id"],
             resumed_from_workflow_id.to_string()
         );
+
+        // Assert new response fields
+        assert_eq!(value["loop_state"], "TurnPending");
+        assert!(value["current_turn_state"].is_null());
+        assert_eq!(
+            value["next_action_hint"],
+            "wait for the accepted turn to start or inspect the current session state"
+        );
+        assert_eq!(value["support_notices"][0]["blocks_live_turn"], false);
+        assert_eq!(
+            value["support_notices"][0]["allowed_next_action"],
+            "keep working in this session or adjust the support posture"
+        );
     }
 
     #[tokio::test]
@@ -1762,5 +1775,19 @@ mod tests {
 
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].last_preview.as_deref(), Some("READY"));
+
+        // Now test the full inspect response to verify all new fields
+        let Json(inspect_response) = get_session(State(state), Path(session_id.to_string()))
+            .await
+            .expect("session inspect should succeed");
+        let inspect_value = serde_json::to_value(inspect_response).expect("inspect response should serialize");
+
+        assert_eq!(inspect_value["loop_state"], "Ready");
+        assert!(inspect_value["current_turn_state"].is_null());
+        assert_eq!(
+            inspect_value["next_action_hint"],
+            "send a follow-up turn or adjust the session controls from this loop"
+        );
+        assert_eq!(inspect_value["support_notices"].as_array().unwrap().len(), 0);
     }
 }

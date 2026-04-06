@@ -627,7 +627,10 @@ async fn start_session_and_maybe_attach(
     let session_id = conversation::parse_session_id(&accepted.session_id)?;
 
     if io::stdin().is_terminal() {
-        print_session_loop(context, session_id).await?;
+        if let Err(error) = print_session_loop(context, session_id).await {
+            println!("{}", conversation::render_turn_accepted(&accepted));
+            return Err(error);
+        }
         run_live_session_loop(context, session_id).await?;
     } else {
         println!("{}", conversation::render_turn_accepted(&accepted));
@@ -641,19 +644,27 @@ async fn open_session_and_maybe_attach(
     session_id: mister_smith_core::SessionId,
     prompt: Option<&str>,
 ) -> Result<(), Box<dyn Error>> {
-    if let Some(message) = prompt {
+    let accepted = if let Some(message) = prompt {
         if io::stdin().is_terminal() {
-            conversation::continue_session_http(&context.base_url, session_id, message, None)
-                .await?;
+            Some(conversation::continue_session_http(&context.base_url, session_id, message, None)
+                .await?)
         } else {
             let accepted =
                 conversation::continue_session_http(&context.base_url, session_id, message, None)
                     .await?;
             println!("{}", conversation::render_turn_accepted(&accepted));
+            return Ok(());
         }
-    }
+    } else {
+        None
+    };
 
-    print_session_loop(context, session_id).await?;
+    if let Err(error) = print_session_loop(context, session_id).await {
+        if let Some(accepted) = accepted {
+            println!("{}", conversation::render_turn_accepted(&accepted));
+        }
+        return Err(error);
+    }
 
     if io::stdin().is_terminal() {
         run_live_session_loop(context, session_id).await?;
@@ -719,11 +730,14 @@ async fn run_live_session_loop(
                     }
                 }
                 Err(error) => {
-                    if let Err(render_error) =
-                        print_blocked_session_loop(context, session_id, &error.to_string()).await
-                    {
+                    if conversation::is_session_state_error(&error) {
+                        if let Err(render_error) =
+                            print_blocked_session_loop(context, session_id, &error.to_string()).await
+                        {
+                            print_shell_error(render_error.as_ref());
+                        }
+                    } else {
                         println!("send_failed: {error}");
-                        print_shell_error(render_error.as_ref());
                     }
                 }
             }

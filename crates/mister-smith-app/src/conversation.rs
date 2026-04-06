@@ -511,13 +511,25 @@ async fn build_session_view(
 
     let support_notices =
         session_support_notices(&session, &control_state, last_assistant_result.as_ref());
-    let current_turn_state = current_turn_state_for_loop(
+    let state_source = if session.active_workflow_id.is_none() {
+        ConversationTurnStateSource::RetainedSession
+    } else {
+        ConversationTurnStateSource::LiveRuntime
+    };
+    let mut current_turn_state = current_turn_state_for_loop(
         &session,
         &turn_summaries,
-        ConversationTurnStateSource::LiveRuntime,
+        state_source,
     );
     let loop_state = loop_state_for_session(&session, current_turn_state.as_ref());
     let next_action_hint = next_action_for_loop_state(loop_state).to_string();
+
+    // Override next_action_hint when the session/loop has ended
+    if loop_state == ConversationLoopState::Ended {
+        if let Some(ref mut turn_state) = current_turn_state {
+            turn_state.next_action_hint = next_action_for_loop_state(ConversationLoopState::Ended).to_string();
+        }
+    }
 
     Ok(ConversationSessionView {
         title: session_title(&session.retained_context, &session),
@@ -885,15 +897,7 @@ fn current_turn_state_for_loop(
         turns.last()
     }?;
 
-    let turn_status = if let Some(active_workflow_id) = session.active_workflow_id {
-        if focused_turn.workflow_id == TaskId::from_uuid(active_workflow_id) {
-            normalized_turn_status(&focused_turn.status).to_string()
-        } else {
-            normalized_turn_status(&focused_turn.status).to_string()
-        }
-    } else {
-        normalized_turn_status(&focused_turn.status).to_string()
-    };
+    let turn_status = normalized_turn_status(&focused_turn.status).to_string();
 
     let (result_preview, proof_boundary_note) = focused_turn
         .assistant_result
@@ -1721,21 +1725,47 @@ pub(crate) async fn inspect_session_for_cli(
         Err(err) => {
             tracing::warn!("inspect_session_for_cli: HTTP inspect failed: {}", err);
             let mut view = inspect_session_direct(session_id).await?;
-            mark_view_as_durable_storage(&mut view);
-            view.support_notices.insert(
-                0,
-                ConversationCliSupportNoticeView {
-                    notice_kind: "degraded".to_string(),
-                    severity: "warning".to_string(),
-                    summary:
-                        "Runtime is unavailable. This session is shown from durable storage only, so live work cannot continue yet."
-                            .to_string(),
-                    support_surface: Some("run".to_string()),
-                    blocks_live_turn: true,
-                    allowed_next_action:
-                        next_action_for_loop_state(ConversationLoopState::Degraded).to_string(),
-                },
-            );
+
+            // Only mark as degraded for transport/connection errors
+            let should_mark_degraded = match &err {
+                ConversationClientError::Http(_) => true,
+                ConversationClientError::HttpStatus(status, _) => {
+                    // 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout
+                    matches!(status.as_u16(), 502 | 503 | 504)
+                }
+                _ => false,
+            };
+
+            if should_mark_degraded {
+                mark_view_as_durable_storage(&mut view);
+                view.support_notices.insert(
+                    0,
+                    ConversationCliSupportNoticeView {
+                        notice_kind: "degraded".to_string(),
+                        severity: "warning".to_string(),
+                        summary:
+                            "Runtime is unavailable. This session is shown from durable storage only, so live work cannot continue yet."
+                                .to_string(),
+                        support_surface: Some("run".to_string()),
+                        blocks_live_turn: true,
+                        allowed_next_action:
+                            next_action_for_loop_state(ConversationLoopState::Degraded).to_string(),
+                    },
+                );
+            } else {
+                // For other errors, add a neutral notice without marking as degraded
+                view.support_notices.insert(
+                    0,
+                    ConversationCliSupportNoticeView {
+                        notice_kind: "inspect_error".to_string(),
+                        severity: "info".to_string(),
+                        summary: format!("Session inspection encountered an issue: {}", err),
+                        support_surface: None,
+                        blocks_live_turn: false,
+                        allowed_next_action: view.next_action_hint.clone(),
+                    },
+                );
+            }
             Ok(view)
         }
     }
@@ -1798,6 +1828,23 @@ pub(crate) fn apply_blocked_follow_up_notice(
     );
     if let Some(current_turn_state) = view.current_turn_state.as_mut() {
         current_turn_state.next_action_hint = allowed_next_action.to_string();
+    }
+}
+
+pub(crate) fn is_session_state_error(error: &ConversationClientError) -> bool {
+    match error {
+        ConversationClientError::HttpStatus(status, body) => {
+            if status.as_u16() == 409 {
+                // Conflict errors are session-state related (busy/ended)
+                return true;
+            }
+            let normalized = body.trim().to_ascii_lowercase();
+            normalized.contains("busy") || normalized.contains("ended")
+        }
+        _ => {
+            let error_text = error.to_string().to_ascii_lowercase();
+            error_text.contains("busy") || error_text.contains("ended")
+        }
     }
 }
 
