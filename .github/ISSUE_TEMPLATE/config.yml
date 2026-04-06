@@ -1,8 +1,14 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Repository roadmap and docs
+  - name: Project overview
     url: https://github.com/MattMagg/MisterSmith/blob/main/README.md
-    about: Review the README and roadmap before opening a new intake issue.
-  - name: Mister Smith operating model
-    url: https://github.com/MattMagg/MisterSmith/blob/main/docs/linear/LINEAR.md
-    about: For maintainers and operators, accepted work is routed through Linear and Symphony.
+    about: Start here for the public-facing overview and current product framing.
+  - name: Current repo state
+    url: https://github.com/MattMagg/MisterSmith/blob/main/docs/current-state.md
+    about: Check what is currently true on main before filing a bug or feature request.
+  - name: Contributing guide
+    url: https://github.com/MattMagg/MisterSmith/blob/main/CONTRIBUTING.md
+    about: Read contribution, validation, and pull request expectations.
+  - name: Security policy
+    url: https://github.com/MattMagg/MisterSmith/blob/main/SECURITY.md
+    about: Use this path for private vulnerability reporting instead of public issues.

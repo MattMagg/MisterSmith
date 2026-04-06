@@ -1,137 +1,112 @@
 # Mister Smith
 
-A multi-agent orchestration operating system built in Rust. Mister Smith coordinates AI agents
-through Erlang-inspired supervision trees, NATS messaging, and a model-agnostic LLM layer —
-giving you fault-tolerant, observable, budget-aware agent execution with real operator control.
+Mister Smith is a multi-agent orchestration operating system built in Rust. It combines supervised
+agent execution, NATS and JetStream messaging, PostgreSQL-backed workflow state, MCP integration,
+durable sessions, and operator-facing CLI, HTTP, and desktop surfaces into one runtime-focused
+system.
+
+The current repo is centered on building a real agent runtime, not just a prompt wrapper. On
+`main`, Mister Smith already ships the runtime substrate, autonomy inspection surfaces, same-agent
+session continuity, bounded live runtime proof on the `openai_chatgpt` / `gpt-5.4` path, and a
+local macOS operator console for managing the stack and inspecting runs.
 
 ## Why Mister Smith
 
-Most agent frameworks give you a thin wrapper around LLM calls. Mister Smith is an operating
-system for agents — it manages their lifecycles, supervises their failures, routes their messages,
-enforces their budgets, and gives operators real-time visibility into what every agent is doing and
-why.
+Most agent frameworks stop at orchestration helpers around model calls. Mister Smith is trying to
+be the operating layer behind long-running, inspectable, failure-tolerant agent work:
 
-**Supervision, not hope.** Agents crash. Models hallucinate. Networks partition. Mister Smith
-handles all of it through hierarchical supervision trees borrowed from Erlang/OTP — the same
-pattern that keeps telephone switches running for decades. When an agent fails, its supervisor
-decides whether to restart it, restart its siblings, or escalate. No silent failures, no orphaned
-tasks.
+- **Supervised execution** rather than optimistic retries
+- **Durable workflow and session state** rather than best-effort memory
+- **Operator-visible autonomy** rather than hidden internal heuristics
+- **Explicit runtime truth and proof boundaries** rather than vague "agent succeeded" summaries
+- **Strong execution boundaries** across tools, transports, and external capabilities
 
-**Model-agnostic by design.** Mister Smith is not married to any LLM provider. Swap between
-OpenAI, Anthropic, Claude, or your own provider without changing your agent logic. Cascade routing
-lets you start with a cheaper model and escalate to a more capable one only when confidence drops —
-cutting costs without sacrificing quality.
+This repo should be read as a runtime system with real operator surfaces, not as a development
+workflow around Linear, Symphony, or other external tools.
 
-**Budget enforcement built in.** Reserve tokens before sending, reconcile after completion,
-enforce hierarchical limits per workflow, branch, and step. Runaway agents don't run away your
-bill.
+## Current Highlights
 
-**Observable from day one.** OpenTelemetry traces, Prometheus metrics, Grafana dashboards, and
-structured JSON logs ship with the system. W3C TraceContext propagates through every NATS message
-envelope so you can follow a request from CLI submission through agent coordination to final
-result.
+- **Session-first CLI shell.** Running `mister-smith` with no subcommand opens the retained-session
+  shell, and the binary also supports `resume`, `sessions`, `conversation`, `autonomy`, and
+  provider auth helpers.
+- **Durable same-agent conversations.** Sessions retain `session_id`, coordinator continuity, turn
+  history, and follow-up control surfaces across CLI and HTTP.
+- **Operator control plane.** Runtime submission, task inspection, autonomy inspection, and live
+  event streaming are exposed through CLI, HTTP, and the local desktop operator console.
+- **Runtime-backed orchestration substrate.** Supervised planner and executor lifecycles, ToolBus
+  execution boundaries, NATS/JetStream transport, and PostgreSQL persistence are all part of the
+  landed runtime path.
+- **MCP in the product boundary.** The repo ships `mister-smith-mcp` as a real workspace crate for
+  tool exposure, compatibility, and external capability mediation.
+- **Recent landed runtime packets.** Packets `022` through `026` are landed on `main`, covering
+  durable workflow ownership, runtime-truth and run-trace projection, agent-boundary hardening,
+  deterministic step policy projection, and first bounded coordinator-runtime delegation.
 
-**Rust performance and safety.** No garbage collector pauses. No null pointer exceptions. The
-entire system compiles to a single static binary under 100MB. Memory-bounded contexts and
-backpressure handling prevent resource exhaustion under load.
+## What Is Live On `main`
 
-## Features
+The current repo-wide truth lives in [docs/current-state.md](docs/current-state.md). At a high
+level, the repo currently has:
 
-### Nine Specialized Agent Roles
+- the Rust workspace substrate through Phase 10
+- one-shot runtime execution through `mister-smith run` and `POST /api/v1/tasks`
+- autonomy inspection through `mister-smith autonomy list`, `mister-smith autonomy status`, and
+  related HTTP views
+- durable session handling through CLI flows and `POST /api/v1/sessions`
+- a bounded live runtime-proof baseline on `openai_chatgpt` / `gpt-5.4`
+- a local macOS Tauri operator console under `apps/operator-console/`
 
-Mister Smith decomposes work across purpose-built agent roles that form dynamic teams based on task
-requirements:
+The newest landed packet authorities are:
 
-| Role | Purpose |
-|------|---------|
-| **Supervisor** | Manages agent lifecycles and restart strategies |
-| **Coordinator** | Orchestrates multi-agent workflows and dependencies |
-| **Planner** | Decomposes goals into executable subtask DAGs |
-| **Executor** | Carries out atomic actions and tool calls |
-| **Critic** | Validates outcomes against acceptance criteria |
-| **Router** | Load-balances and routes tasks by capability |
-| **Worker** | Performs computational work units |
-| **Monitor** | Observes system health and collects metrics |
-| **Memory** | Persistent knowledge storage and retrieval |
+- `specs/023-runtime-truth-and-run-trace/`
+- `specs/024-agent-boundary-security-hardening/`
+- `specs/025-step-level-intelligence-v2/`
+- `specs/026-first-real-coordinator-subagent-runtime/`
 
-### Erlang-Style Supervision Trees
+Draft or pre-spec forward work exists under `specs/027-*`, `specs/028-*`, and `specs/029-*`, but
+those later packets are not yet the default runtime story.
 
-Hierarchical fault tolerance with four restart strategies:
+## Community Health
 
-- **OneForOne** — restart only the failed agent (independent workers)
-- **OneForAll** — restart all siblings when one fails (tightly coupled groups)
-- **RestForOne** — restart the failed agent and everything started after it (ordered pipelines)
-- **Escalate** — propagate to the parent supervisor (critical failures)
+- [CONTRIBUTING.md](CONTRIBUTING.md) for setup, validation, and pull request expectations
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards
+- [SECURITY.md](SECURITY.md) for private vulnerability reporting
+- [SUPPORT.md](SUPPORT.md) for where to ask questions and when to file issues
 
-Failure detection uses a phi-accrual detector that adapts to each agent's heartbeat pattern,
-minimizing false positives while catching real failures fast.
+## Feature Surface
 
-### Multi-Provider LLM Integration
+### Session-First Operator Surfaces
 
-Five built-in providers with pluggable routing:
+- CLI home shell for starting, resuming, and browsing retained sessions
+- direct conversation commands for create, continue, inspect, and end
+- autonomy inspection for workflow state, proof wording, and operator-facing status
+- HTTP API plus WebSocket event feed for external operators and local tooling
+- local Tauri operator console for stack bootstrap, run inspection, and session/task actions
 
-- **Anthropic** (Claude API)
-- **OpenAI** (standard API)
-- **OpenAI ChatGPT** (session-based)
-- **Claude Subscription** (credential-based)
-- **Mock** (deterministic testing)
+### Runtime Orchestration
 
-**Cascade routing** starts with your default provider and escalates to a more capable (and
-expensive) model when confidence drops below a configurable threshold. Combined with per-workflow
-budget enforcement, you get cost control without manual intervention.
+- Erlang-inspired supervision trees with restart strategy support
+- coordinator, planner, executor, verifier, and runtime evidence projection seams
+- durable workflow lifecycle, event-history, and effect-boundary ownership
+- deterministic step-policy projection and coordinator-owned delegation surfaces
+- explicit runtime-truth, run-trace, and proof-boundary views
 
-**Dual-stream architecture** separates semantic events (tool calls, lifecycle transitions) from UI
-output (streaming text), so your agent coordination stays lossless while user-facing output handles
-backpressure gracefully.
+### Transport, Execution, and Integration
 
-### Transport and Messaging
+| Surface | Technology | Role |
+| ------- | ---------- | ---- |
+| **NATS + JetStream** | async-nats | agent transport, event distribution, queues, and KV-backed runtime state |
+| **HTTP** | Axum | task, session, autonomy, health, metrics, and websocket surfaces |
+| **gRPC** | Tonic | typed service boundaries |
+| **MCP** | rmcp | capability exposure, compatibility, and external tool mediation |
+| **ToolBus** | repo-native execution boundary | bounded tool execution and capability control |
 
-Four transport backends for different needs:
+### Security and Observability
 
-| Transport | Technology | Use Case |
-|-----------|-----------|----------|
-| **NATS** | async-nats 0.46 + JetStream | Agent-to-agent messaging, pub/sub, persistent queues |
-| **HTTP** | Axum 0.8 | REST API, WebSocket streaming, operator interface |
-| **gRPC** | Tonic 0.14 | Type-safe inter-service RPC |
-| **MCP** | rmcp 1.1 | Bidirectional tool discovery and invocation |
-
-NATS subject hierarchy provides structured routing:
-```
-agents.{id}.commands     # Direct agent commands
-tasks.{type}.queue       # Task distribution queues
-workflow.{id}.step.{n}   # Workflow step coordination
-events.{type}            # System-wide event bus
-```
-
-### Security
-
-- **JWT authentication** (RS256, 15-minute access tokens, 7-day refresh)
-- **RBAC + ABAC** authorization with fine-grained permission policies
-- **mTLS** between services (rustls, TLS 1.2+)
-- **Message signing** (HMAC-SHA256 with nonce-based replay prevention)
-- **Delegation chains** with provenance tracking across agent boundaries
-- **Sandbox execution** with timeout and memory limits
-- **Agent quarantine** for unhealthy agents
-- **Full audit trail** persisted to PostgreSQL
-
-### Persistence
-
-Dual-store architecture balances consistency with speed:
-
-- **PostgreSQL** — authoritative store for tasks, sessions, agents, audit logs
-- **JetStream KV** — distributed cache for agent state, budgets, ephemeral data
-
-A data router directs reads and writes to the appropriate backend with conflict resolution
-and graceful degradation when a backend is unavailable.
-
-### Observability
-
-- **Health probes**: `/health/live` (liveness) and `/health/ready` (readiness)
-- **Prometheus metrics**: task throughput, agent capacity, error rates, context pressure, budget usage
-- **OpenTelemetry tracing**: W3C TraceContext propagation through NATS envelopes
-- **Grafana dashboards**: pre-built system and autonomy dashboards in `deploy/dashboards/`
-- **Alert rules**: pre-built Prometheus alerts in `deploy/alerts/`
-- **WebSocket streaming**: real-time event feed at `/api/v1/events/ws`
+- JWT auth plus policy-aware authorization seams
+- quarantine and external-capability enforcement surfaces
+- structured runtime proof and delegated-work provenance
+- Prometheus metrics, OpenTelemetry traces, Grafana dashboards, and alert rules
+- health probes at `/health/live` and `/health/ready`
 
 ## Getting Started
 
@@ -145,7 +120,7 @@ and graceful degradation when a backend is unavailable.
 
 ```bash
 git clone https://github.com/MattMagg/MisterSmith.git
-cd mister-smith
+cd MisterSmith
 cargo build --workspace
 ```
 
@@ -179,6 +154,7 @@ model_id = "gpt-5.4"
 ```
 
 Environment variable overrides:
+
 - `MISTER_SMITH_LOG_LEVEL` — log level (trace, debug, info, warn, error)
 - `MISTER_SMITH_NATS_URL` — NATS connection URL
 - `MISTER_SMITH_DATABASE_URL` — PostgreSQL connection string
@@ -193,25 +169,29 @@ mister-smith run --config config.toml
 
 # Or with defaults
 mister-smith run
+
+# Open the session-first CLI shell
+mister-smith
 ```
 
 ## Usage
 
-### Submit a Task
+### Session-First CLI
 
 ```bash
-# Via HTTP API
-curl -X POST http://localhost:8080/api/v1/tasks \
-  -H "Content-Type: application/json" \
-  -d '{"description": "Analyze the error logs from the last hour", "priority": "high"}'
+# Open the home shell
+mister-smith
 
-# Check task status
-curl http://localhost:8080/api/v1/tasks/{task_id}
+# Resume the last retained session
+mister-smith resume --last
+
+# Browse retained sessions
+mister-smith sessions list
 ```
 
 ### Durable Conversations
 
-Multi-turn sessions maintain a stable agent coordinator across turns:
+Multi-turn sessions maintain a stable coordinator across turns:
 
 ```bash
 # Start a session
@@ -229,9 +209,21 @@ mister-smith conversation inspect --session-id <session_id>
 mister-smith conversation end --session-id <session_id>
 ```
 
+### Submit A Task
+
+```bash
+# Via HTTP API
+curl -X POST http://localhost:8080/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"description": "Analyze the error logs from the last hour", "priority": "high"}'
+
+# Check task status
+curl http://localhost:8080/api/v1/tasks/{task_id}
+```
+
 ### Inspect Autonomy Status
 
-See what every workflow is doing, its topology, branch health, and intervention history:
+See what the operator-facing autonomy control plane is doing:
 
 ```bash
 # List all active workflows
@@ -255,7 +247,7 @@ mister-smith auth claude status
 ### REST API
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
+| ------ | -------- | ----------- |
 | `GET` | `/health/live` | Liveness probe (always 200) |
 | `GET` | `/health/ready` | Readiness probe (503 during startup) |
 | `GET` | `/metrics` | Prometheus metrics |
@@ -299,6 +291,7 @@ A local macOS desktop app (Tauri + React) for visual operation:
 - Real-time workflow timeline via WebSocket
 - Task submission and session management
 - NATS monitor integration
+- Session and run-detail inspection for the current local stack
 
 ```bash
 cd apps/operator-console
@@ -307,7 +300,7 @@ npm install && npm run tauri dev
 
 ## Architecture
 
-```
+```text
                         ┌──────────────────────────────┐
                         │     CLI / HTTP API / gRPC     │
                         └──────────────┬───────────────┘
@@ -340,7 +333,7 @@ npm install && npm run tauri dev
 20 crates organized by architectural layer:
 
 | Layer | Crates |
-|-------|--------|
+| ----- | ------ |
 | **Foundation** | `mister-smith-core`, `mister-smith-config` |
 | **Runtime** | `mister-smith-runtime`, `mister-smith-monitoring`, `mister-smith-events`, `mister-smith-async`, `mister-smith-resources` |
 | **Actor System** | `mister-smith-actor`, `mister-smith-supervision` |
@@ -352,21 +345,16 @@ npm install && npm run tauri dev
 | **Application** | `mister-smith-app` |
 | **Testing** | `mister-smith-integration-tests` |
 
-## Technology
+## Core Stack
 
-| Component | Technology | Version |
-|-----------|-----------|---------|
-| Language | Rust | 1.88.0 MSRV |
-| Async runtime | Tokio | 1.49.0 |
-| Messaging | async-nats (JetStream, KV) | 0.46.0 |
-| HTTP | Axum | 0.8.8 |
-| gRPC | Tonic + Prost | 0.14 |
-| MCP | rmcp | 1.1.0 |
-| Database | sqlx (PostgreSQL) | 0.8.6 |
-| Auth | jsonwebtoken + rustls | 10.x, 0.23 |
-| Observability | opentelemetry + tracing | 0.31.0, 0.1.44 |
-| Metrics | metrics-exporter-prometheus | 0.18.1 |
-| Serialization | serde + serde_json + rmp-serde | 1.x |
+- **Rust** runtime and workspace architecture
+- **Tokio** async execution
+- **NATS + JetStream** messaging and bounded state projection
+- **Axum** HTTP and websocket operator surfaces
+- **Tonic** gRPC boundaries
+- **rmcp** MCP support
+- **PostgreSQL + sqlx** durable state
+- **OpenTelemetry, tracing, Prometheus, Grafana** observability
 
 ## Development
 
@@ -383,4 +371,4 @@ cargo clippy --workspace -- -D warnings
 
 ## License
 
-MIT OR Apache-2.0
+This repository uses dual licensing under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE).

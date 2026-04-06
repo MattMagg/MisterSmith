@@ -27,7 +27,6 @@ Use one of these private paths instead:
 
 ## Scope
 
-This repository includes Rust crates, GitHub workflows, deployment artifacts,
-and Symphony/Linear operating configuration. Reports that include exact file
-paths, commit SHAs, request traces, or failing validation commands are much
-easier to triage quickly.
+This repository includes the Rust workspace, operator surfaces, deployment artifacts, and related
+repo configuration. Reports that include exact file paths, commit SHAs, request traces, or failing
+validation commands are much easier to triage quickly.
