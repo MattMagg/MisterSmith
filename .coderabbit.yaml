@@ -173,48 +173,6 @@ reviews:
           Warn when the PR pulls in archived material, repo noise, or generated artifacts without a
           clear reason in the summary. Prefer tightly scoped, reviewable diffs.
 
-tools:
-  clippy:
-    enabled: true
-  ruff:
-    enabled: true
-  flake8:
-    enabled: false
-  pylint:
-    enabled: false
-  shellcheck:
-    enabled: true
-  markdownlint:
-    enabled: true
-  languagetool:
-    enabled: false
-  yamllint:
-    enabled: true
-  hadolint:
-    enabled: true
-  checkov:
-    enabled: true
-  trivy:
-    enabled: false
-  gitleaks:
-    enabled: true
-  trufflehog:
-    enabled: false
-  semgrep:
-    enabled: false
-  opengrep:
-    enabled: false
-  eslint:
-    enabled: true
-  biome:
-    enabled: false
-  oxc:
-    enabled: false
-  actionlint:
-    enabled: false
-  github-checks:
-    enabled: false
-
 chat:
   art: false
   allow_non_org_members: false

@@ -15,10 +15,11 @@ use mister_smith_core::{
 };
 use mister_smith_http::server::{
     ConversationContinueRequest, ConversationCreateRequest, ConversationEndView,
-    ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionControlUpdateRequest,
-    ConversationSessionControlView, ConversationSessionService, ConversationSessionSummaryView,
-    ConversationSessionView, ConversationSupportNoticeView, ConversationTurnAccepted,
-    ConversationTurnContext, ConversationTurnSummaryView, SessionListRequest, TaskSubmissionRequest,
+    ConversationResumeProvenanceView, ConversationServiceError,
+    ConversationSessionControlUpdateRequest, ConversationSessionControlView,
+    ConversationSessionService, ConversationSessionSummaryView, ConversationSessionView,
+    ConversationSupportNoticeView, ConversationTurnAccepted, ConversationTurnContext,
+    ConversationTurnSummaryView, SessionListRequest, TaskSubmissionRequest,
 };
 use mister_smith_persistence::postgres::pool::PostgresConnection;
 use mister_smith_persistence::postgres::queries::{self, TaskRecord};
@@ -397,10 +398,12 @@ impl ConversationSessionService for ConversationRuntimeService {
             return Err(ConversationServiceError::SessionEnded { session_id });
         }
 
-        let mut control_state = session_control_state_from_context(&session.retained_context, &session);
+        let mut control_state =
+            session_control_state_from_context(&session.retained_context, &session);
         validate_and_apply_control_updates(&mut control_state, &request)?;
 
-        session.retained_context = upsert_session_control_state(&session.retained_context, &control_state);
+        session.retained_context =
+            upsert_session_control_state(&session.retained_context, &control_state);
         session.updated_at = Utc::now();
         self.session_repository
             .update_session(&session)
@@ -750,7 +753,9 @@ fn session_support_notices(
         notices.push(ConversationSupportNoticeView {
             notice_kind: "session_busy".to_string(),
             severity: "info".to_string(),
-            summary: "This session already has a live workflow. New turns will wait until it finishes.".to_string(),
+            summary:
+                "This session already has a live workflow. New turns will wait until it finishes."
+                    .to_string(),
             support_surface: Some("status".to_string()),
         });
     }
@@ -817,7 +822,9 @@ fn validate_and_apply_control_updates(
 ) -> Result<(), ConversationServiceError> {
     if request.clear_selected_provider_kind {
         control_state.selected_provider_kind = None;
-    } else if let Some(value) = normalized_optional_string(request.selected_provider_kind.as_deref()) {
+    } else if let Some(value) =
+        normalized_optional_string(request.selected_provider_kind.as_deref())
+    {
         control_state.selected_provider_kind = Some(value);
     }
     if request.clear_selected_model_id {
@@ -1090,6 +1097,15 @@ impl fmt::Display for ConversationClientError {
 
 impl Error for ConversationClientError {}
 
+pub(crate) fn should_fallback_to_direct_session_store(error: &ConversationClientError) -> bool {
+    match error {
+        ConversationClientError::Http(error) => error.is_connect() || error.is_timeout(),
+        ConversationClientError::InvalidSessionId(_)
+        | ConversationClientError::StorageUnavailable(_)
+        | ConversationClientError::HttpStatus(_, _) => false,
+    }
+}
+
 pub(crate) fn parse_session_id(raw: &str) -> Result<SessionId, ConversationClientError> {
     Uuid::parse_str(raw)
         .map(SessionId::from_uuid)
@@ -1252,13 +1268,11 @@ fn session_store_url() -> Result<String, ConversationClientError> {
 
 async fn connect_session_store() -> Result<PostgresConnection, ConversationClientError> {
     let url = session_store_url()?;
-    PostgresConnection::connect(&url)
-        .await
-        .map_err(|error| {
-            ConversationClientError::StorageUnavailable(format!(
-                "failed to connect to the retained session store: {error}"
-            ))
-        })
+    PostgresConnection::connect(&url).await.map_err(|error| {
+        ConversationClientError::StorageUnavailable(format!(
+            "failed to connect to the retained session store: {error}"
+        ))
+    })
 }
 
 fn cli_control_state_from_view(
@@ -1294,7 +1308,9 @@ fn cli_summary_from_view(
         provider_kind: view.provider_kind,
         model_id: view.model_id,
         active_workflow_id: view.active_workflow_id.map(|value| value.to_string()),
-        last_completed_workflow_id: view.last_completed_workflow_id.map(|value| value.to_string()),
+        last_completed_workflow_id: view
+            .last_completed_workflow_id
+            .map(|value| value.to_string()),
         turn_count: view.turn_count,
         updated_at: view.updated_at.to_rfc3339(),
         ended_at: view.ended_at.map(|value| value.to_rfc3339()),
@@ -1311,7 +1327,9 @@ fn cli_session_from_view(view: ConversationSessionView) -> ConversationCliSessio
         provider_kind: view.provider_kind,
         model_id: view.model_id,
         active_workflow_id: view.active_workflow_id.map(|value| value.to_string()),
-        last_completed_workflow_id: view.last_completed_workflow_id.map(|value| value.to_string()),
+        last_completed_workflow_id: view
+            .last_completed_workflow_id
+            .map(|value| value.to_string()),
         turn_count: view.turn_count,
         last_assistant_result: view.last_assistant_result,
         turns: view
@@ -1362,7 +1380,10 @@ pub(crate) async fn list_sessions_direct(
             ))
         })?;
 
-    Ok(rows.into_iter().map(|row| cli_summary_from_view(build_session_summary_view(&row))).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| cli_summary_from_view(build_session_summary_view(&row)))
+        .collect())
 }
 
 pub(crate) async fn inspect_session_direct(
@@ -1383,14 +1404,11 @@ pub(crate) async fn inspect_session_direct(
                 "retained session {session_id} was not found in the direct session store"
             ))
         })?;
-    let turns = repository
-        .list_turns(session_id)
-        .await
-        .map_err(|error| {
-            ConversationClientError::StorageUnavailable(format!(
-                "failed to load retained turns for session {session_id}: {error}"
-            ))
-        })?;
+    let turns = repository.list_turns(session_id).await.map_err(|error| {
+        ConversationClientError::StorageUnavailable(format!(
+            "failed to load retained turns for session {session_id}: {error}"
+        ))
+    })?;
     let view = build_session_view(session, turns, connection.pool())
         .await
         .map_err(|error| {
@@ -1428,28 +1446,27 @@ pub(crate) async fn update_session_control_direct(
     }
 
     let mut control_state = session_control_state_from_context(&session.retained_context, &session);
-    validate_and_apply_control_updates(&mut control_state, &request).map_err(|error| {
-        ConversationClientError::StorageUnavailable(error.to_string())
-    })?;
+    validate_and_apply_control_updates(&mut control_state, &request)
+        .map_err(|error| ConversationClientError::StorageUnavailable(error.to_string()))?;
 
-    session.retained_context = upsert_session_control_state(&session.retained_context, &ConversationSessionControlView {
-        session_id: control_state.session_id,
-        selected_provider_kind: control_state.selected_provider_kind.clone(),
-        selected_model_id: control_state.selected_model_id.clone(),
-        permission_mode: control_state.permission_mode.clone(),
-        config_posture: control_state.config_posture.clone(),
-        status_view: control_state.status_view.clone(),
-        mcp_posture: control_state.mcp_posture.clone(),
-    });
+    session.retained_context = upsert_session_control_state(
+        &session.retained_context,
+        &ConversationSessionControlView {
+            session_id: control_state.session_id,
+            selected_provider_kind: control_state.selected_provider_kind.clone(),
+            selected_model_id: control_state.selected_model_id.clone(),
+            permission_mode: control_state.permission_mode.clone(),
+            config_posture: control_state.config_posture.clone(),
+            status_view: control_state.status_view.clone(),
+            mcp_posture: control_state.mcp_posture.clone(),
+        },
+    );
     session.updated_at = Utc::now();
-    repository
-        .update_session(&session)
-        .await
-        .map_err(|error| {
-            ConversationClientError::StorageUnavailable(format!(
-                "failed to store session shell controls for {session_id}: {error}"
-            ))
-        })?;
+    repository.update_session(&session).await.map_err(|error| {
+        ConversationClientError::StorageUnavailable(format!(
+            "failed to store session shell controls for {session_id}: {error}"
+        ))
+    })?;
 
     Ok(cli_control_state_from_view(control_state))
 }
@@ -1457,18 +1474,20 @@ pub(crate) async fn update_session_control_direct(
 pub(crate) async fn resolve_last_session_id(
     base_url: &str,
     _config: &FrameworkConfig,
-) -> Option<SessionId> {
-    if let Ok(rows) = list_sessions_http(base_url, 1).await {
-        return rows
+) -> Result<Option<SessionId>, ConversationClientError> {
+    match list_sessions_http(base_url, 1).await {
+        Ok(rows) => Ok(rows
             .first()
-            .and_then(|row| parse_session_id(&row.session_id).ok());
+            .and_then(|row| parse_session_id(&row.session_id).ok())),
+        Err(error) if should_fallback_to_direct_session_store(&error) => {
+            Ok(list_sessions_direct(1)
+                .await
+                .ok()
+                .and_then(|rows| rows.first().cloned())
+                .and_then(|row| parse_session_id(&row.session_id).ok()))
+        }
+        Err(error) => Err(error),
     }
-
-    list_sessions_direct(1)
-        .await
-        .ok()
-        .and_then(|rows| rows.first().cloned())
-        .and_then(|row| parse_session_id(&row.session_id).ok())
 }
 
 pub(crate) async fn inspect_session_for_cli(
@@ -1478,7 +1497,7 @@ pub(crate) async fn inspect_session_for_cli(
 ) -> Result<ConversationCliSessionView, ConversationClientError> {
     match inspect_session_http(base_url, session_id).await {
         Ok(view) => Ok(view),
-        Err(err) => {
+        Err(err) if should_fallback_to_direct_session_store(&err) => {
             tracing::warn!("inspect_session_for_cli: HTTP inspect failed: {}", err);
             let mut view = inspect_session_direct(session_id).await?;
             view.support_notices.insert(
@@ -1494,6 +1513,7 @@ pub(crate) async fn inspect_session_for_cli(
             );
             Ok(view)
         }
+        Err(err) => Err(err),
     }
 }
 
@@ -1505,10 +1525,11 @@ pub(crate) async fn update_session_control_for_cli(
 ) -> Result<ConversationCliSessionControlState, ConversationClientError> {
     match update_session_control_http(base_url, session_id, request.clone()).await {
         Ok(view) => Ok(view),
-        Err(e) => {
+        Err(e) if should_fallback_to_direct_session_store(&e) => {
             tracing::error!("update_session_control_for_cli: HTTP update failed: {}", e);
             update_session_control_direct(session_id, request).await
         }
+        Err(e) => Err(e),
     }
 }
 
@@ -1522,7 +1543,7 @@ pub(crate) async fn build_startup_home(
     let (recent_sessions, session_source, mut startup_warnings, discovery_success) =
         match list_sessions_http(base_url, limit).await {
             Ok(rows) => (rows, "runtime_api".to_string(), Vec::new(), true),
-            Err(_) => match list_sessions_direct(limit).await {
+            Err(error) if should_fallback_to_direct_session_store(&error) => match list_sessions_direct(limit).await {
                 Ok(rows) => (
                     rows,
                     "durable_store".to_string(),
@@ -1550,6 +1571,17 @@ pub(crate) async fn build_startup_home(
                     false,
                 ),
             },
+            Err(error) => (
+                Vec::new(),
+                "runtime_api_error".to_string(),
+                vec![ConversationCliSupportNoticeView {
+                    notice_kind: "session_discovery_failed".to_string(),
+                    severity: "warning".to_string(),
+                    summary: format!("Recent session discovery failed: {error}"),
+                    support_surface: Some("run".to_string()),
+                }],
+                false,
+            ),
         };
 
     if !runtime_available && startup_warnings.is_empty() {
@@ -1565,7 +1597,8 @@ pub(crate) async fn build_startup_home(
         startup_warnings.push(ConversationCliSupportNoticeView {
             notice_kind: "no_recent_sessions".to_string(),
             severity: "info".to_string(),
-            summary: "No retained sessions were found yet. Start a new session to begin.".to_string(),
+            summary: "No retained sessions were found yet. Start a new session to begin."
+                .to_string(),
             support_surface: None,
         });
     }
@@ -1643,7 +1676,8 @@ pub(crate) fn render_session(view: &ConversationCliSessionView) -> String {
         .map(render_retained_result)
         .unwrap_or_else(|| "none".to_string());
     let support_notices = render_support_notices(&view.support_notices);
-    let control_state = render_control_state(&view.control_state, &view.provider_kind, &view.model_id);
+    let control_state =
+        render_control_state(&view.control_state, &view.provider_kind, &view.model_id);
 
     format!(
         "title: {}\nsession_id: {}\nstatus: {}\ncoordinator_agent_id: {}\nprovider_kind: {}\nmodel_id: {}\nactive_workflow_id: {}\nlast_completed_workflow_id: {}\nlast_assistant_result: {}\nturn_count: {}\ncontrols:\n{}\nsupport_notices:\n{}\nended_at: {}\nturns:\n{}",
@@ -1692,10 +1726,7 @@ pub(crate) fn render_session_list(sessions: &[ConversationCliSessionSummaryView]
                 session.status,
                 session.model_id,
                 session.updated_at,
-                session
-                    .last_preview
-                    .as_deref()
-                    .unwrap_or("none")
+                session.last_preview.as_deref().unwrap_or("none")
             )
         })
         .collect::<Vec<_>>()
@@ -1895,6 +1926,16 @@ mod tests {
 
         assert_eq!(transcript.len(), 1);
         assert_eq!(second["latest_workflow_id"], workflow_id.to_string());
+    }
+
+    #[test]
+    fn fallback_predicate_rejects_http_status_errors() {
+        let error = ConversationClientError::HttpStatus(
+            StatusCode::UNAUTHORIZED,
+            "permission denied".to_string(),
+        );
+
+        assert!(!should_fallback_to_direct_session_store(&error));
     }
 
     #[test]

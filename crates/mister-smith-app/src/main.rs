@@ -257,7 +257,10 @@ fn is_global_option_with_inline_value(token: &str) -> bool {
 }
 
 fn is_global_option_requiring_value(token: &str) -> bool {
-    matches!(token, "-c" | "--config" | "--base-url" | "--log-level" | "--log-format")
+    matches!(
+        token,
+        "-c" | "--config" | "--base-url" | "--log-level" | "--log-format"
+    )
 }
 
 fn split_prompt_words(raw_args: &[String]) -> (Vec<String>, Option<Vec<String>>) {
@@ -476,7 +479,7 @@ async fn execute_resume_command(
     let context = load_cli_context(cli)?;
     let resolved_session_id = if last || session_id.is_none() {
         conversation::resolve_last_session_id(&context.base_url, &context.config)
-            .await
+            .await?
             .ok_or_else(|| "no retained session is available to resume".to_string())?
     } else {
         conversation::parse_session_id(
@@ -570,20 +573,23 @@ async fn run_home_loop(context: &LoadedCliContext) -> Result<(), Box<dyn Error>>
         }
         if line == "resume last" {
             match conversation::resolve_last_session_id(&context.base_url, &context.config).await {
-                Some(session_id) => {
-                    if let Err(error) = open_session_and_maybe_attach(context, session_id, None).await
+                Ok(Some(session_id)) => {
+                    if let Err(error) =
+                        open_session_and_maybe_attach(context, session_id, None).await
                     {
                         print_shell_error(error.as_ref());
                     }
                 }
-                None => print_shell_error(&"no retained session is available to resume"),
+                Ok(None) => print_shell_error(&"no retained session is available to resume"),
+                Err(error) => print_shell_error(&error),
             }
             continue;
         }
         if let Some(raw) = line.strip_prefix("resume ") {
             match conversation::parse_session_id(raw.trim()) {
                 Ok(session_id) => {
-                    if let Err(error) = open_session_and_maybe_attach(context, session_id, None).await
+                    if let Err(error) =
+                        open_session_and_maybe_attach(context, session_id, None).await
                     {
                         print_shell_error(error.as_ref());
                     }
@@ -595,7 +601,8 @@ async fn run_home_loop(context: &LoadedCliContext) -> Result<(), Box<dyn Error>>
         if let Some(raw) = line.strip_prefix("open ") {
             match conversation::parse_session_id(raw.trim()) {
                 Ok(session_id) => {
-                    if let Err(error) = open_session_and_maybe_attach(context, session_id, None).await
+                    if let Err(error) =
+                        open_session_and_maybe_attach(context, session_id, None).await
                     {
                         print_shell_error(error.as_ref());
                     }
@@ -635,11 +642,14 @@ async fn open_session_and_maybe_attach(
 ) -> Result<(), Box<dyn Error>> {
     if let Some(message) = prompt {
         let accepted =
-            conversation::continue_session_http(&context.base_url, session_id, message, None).await?;
+            conversation::continue_session_http(&context.base_url, session_id, message, None)
+                .await?;
         println!("{}", conversation::render_turn_accepted(&accepted));
     }
 
-    let view = conversation::inspect_session_for_cli(&context.base_url, &context.config, session_id).await?;
+    let view =
+        conversation::inspect_session_for_cli(&context.base_url, &context.config, session_id)
+            .await?;
     println!("{}", conversation::render_session(&view));
 
     if io::stdin().is_terminal() {
@@ -687,7 +697,10 @@ async fn run_live_session_loop(
 
         let mut parts = line.splitn(2, ' ');
         let command = parts.next().unwrap_or("");
-        let arg = parts.next().map(str::trim).filter(|value| !value.is_empty());
+        let arg = parts
+            .next()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
 
         match command {
             "/quit" => break,
@@ -698,14 +711,18 @@ async fn run_live_session_loop(
             }
             "/sessions" => {
                 let result = async {
-                    let sessions = match conversation::list_sessions_http(&context.base_url, 20).await
-                    {
-                        Ok(rows) => rows,
-                        Err(e) => {
-                            tracing::debug!("list_sessions_http failed, falling back to direct: {}", e);
-                            conversation::list_sessions_direct(20).await?
-                        }
-                    };
+                    let sessions =
+                        match conversation::list_sessions_http(&context.base_url, 20).await {
+                            Ok(rows) => rows,
+                            Err(e) if conversation::should_fallback_to_direct_session_store(&e) => {
+                                tracing::debug!(
+                                    "list_sessions_http failed, falling back to direct: {}",
+                                    e
+                                );
+                                conversation::list_sessions_direct(20).await?
+                            }
+                            Err(e) => return Err::<(), Box<dyn Error>>(Box::new(e)),
+                        };
                     println!("{}", conversation::render_session_list(&sessions));
                     Ok::<(), Box<dyn Error>>(())
                 }
@@ -918,7 +935,7 @@ async fn run_live_session_loop(
                 let result = async {
                     let new_session_id = if target == "last" {
                         conversation::resolve_last_session_id(&context.base_url, &context.config)
-                            .await
+                            .await?
                             .ok_or_else(|| {
                                 "no retained session is available to resume".to_string()
                             })?
