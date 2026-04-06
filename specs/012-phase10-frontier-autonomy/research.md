@@ -154,7 +154,7 @@ Token-format replacement or federation-specific capability systems can remain la
 | `docs/research-output/consolidated/07-memory-and-context.md` | Grounds managed memory, role-aware context routing, and background consolidation |
 | `docs/research-output/consolidated/04-security-and-trust.md` | Grounds bounded delegation/provenance as enabling substrate |
 | `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md` | Provides the phase's strategic framing and anti-drift guardrail |
-| `docs/2026-03-05-implementation-deviation-report.md` | Identifies "Phase 10: Advanced Agent Patterns" as the next roadmap extension |
+| `docs/audits/2026-03-05-implementation-deviation-report.md` | Identifies "Phase 10: Advanced Agent Patterns" as the next roadmap extension |
 | `spec/core-architecture/supervision-and-events.md` | Grounds typed autonomy event propagation and operator-visible event assembly |
 | `spec/data-management/agent-orchestration.md` | Provides the existing planner/router/memory boundaries and context-management hook |
 | `spec/data-management/message-schemas.md` | Defines workflow coordination and hook-event boundaries that Phase 10 can extend |

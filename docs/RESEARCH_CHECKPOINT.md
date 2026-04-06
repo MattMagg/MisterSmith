@@ -9,6 +9,7 @@ updated: 2026-03-28
 > **Checkpoint Date**: 2026-03-28
 > **Status**: 7 rounds complete. Consolidated authority layer active. No new research round is being launched.
 > **Governing directive**: Frontier-first — optimize for strategic advantage, not comprehensiveness
+> **Local-only note**: the `docs/research-output/` corpus is now intentionally gitignored and maintained as local material when present
 > **Current Action**: Use the corpus in layers:
 > canonical merged direction -> `docs/direction.md`
 > current repo truth -> `docs/current-state.md`
@@ -43,7 +44,7 @@ as the repo-truth router and `docs/research-output/consolidated/` as the researc
 
 ### 1. Authority
 
-`docs/research-output/consolidated/` is the default reading path for Mister Smith's whole-system
+When the local corpus is present, `docs/research-output/consolidated/` is the default reading path for Mister Smith's whole-system
 future direction inside the research corpus. Start there unless you are doing evidence lookup or
 intake adjudication. Use `docs/direction.md` for the single merged direction source above the
 corpus.

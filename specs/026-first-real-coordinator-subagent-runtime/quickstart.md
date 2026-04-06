@@ -27,7 +27,7 @@ sed -n '1,260p' specs/022-durable-workflow-core/spec.md
 sed -n '1,260p' specs/023-runtime-truth-and-run-trace/spec.md
 sed -n '1,260p' specs/024-agent-boundary-security-hardening/spec.md
 sed -n '1,260p' specs/025-step-level-intelligence-v2/spec.md
-sed -n '1,220p' docs/2026-03-28-session-context-report.md
+sed -n '1,220p' docs/reports/2026-03-28-session-context-report.md
 sed -n '1,220p' docs/plans/2026-03-27-runtime-planning-simplification.md
 sed -n '100,240p' docs/research-output/analysis/2026-04-02-openclaude-transfer/04-priority-backlog.md
 ```

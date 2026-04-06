@@ -3,8 +3,8 @@
 **Feature Branch**: `012-phase10-frontier-autonomy`
 **Created**: 2026-03-10
 **Status**: Validated (repo state reconciled 2026-03-15)
-**Input**: Linear issue `MS-26`, `ROADMAP.md`, `docs/2026-03-05-architectural-grounding-audit.md`,
-`docs/2026-03-05-implementation-deviation-report.md`,
+**Input**: Linear issue `MS-26`, `ROADMAP.md`, `docs/audits/2026-03-05-architectural-grounding-audit.md`,
+`docs/audits/2026-03-05-implementation-deviation-report.md`,
 `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`, the consolidated research corpus in
 `docs/research-output/`, and canonical framework sources in `spec/`.
 
@@ -19,7 +19,7 @@ control-plane plans under `docs/plans/`. This specification is the structured Ph
 set for that active frontier-autonomy lane, extending the roadmap after Phase 9.1 using the
 strongest repo-local evidence for what should come next:
 
-- `docs/2026-03-05-implementation-deviation-report.md` proposes **Phase 10: Advanced Agent
+- `docs/audits/2026-03-05-implementation-deviation-report.md` proposes **Phase 10: Advanced Agent
   Patterns**
 - `specs/009-phase9-llm-provider-integration/` and
   `specs/011-phase9.1-security-hardening/` both defer multiple capabilities to **Phase 10+**
@@ -33,8 +33,8 @@ This Phase 10 specification is constrained by the following precedence order:
 1. `ROADMAP.md` current scope note plus completed roadmap phases through Phase 9
 2. `WORKFLOW.md` and `docs/linear/LINEAR.md` for the live Phase 10 control-plane contract
 3. `docs/plans/2026-03-09-frontier-autonomy-zero-trust-design.md`
-4. `docs/2026-03-05-implementation-deviation-report.md`
-5. `docs/2026-03-05-architectural-grounding-audit.md`
+4. `docs/audits/2026-03-05-implementation-deviation-report.md`
+5. `docs/audits/2026-03-05-architectural-grounding-audit.md`
 6. Consolidated research findings in `docs/research-output/consolidated/`
 7. Canonical architecture sources in `spec/`
 8. Supporting repo context in `README.md`, `CLAUDE.md`, and `.specify/memory/constitution.md`

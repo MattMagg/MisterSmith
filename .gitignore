@@ -14,6 +14,7 @@ agenterra/
 
 # Logs
 *.log
+/logs/
 
 # Environment and secrets
 .env*
@@ -37,3 +38,11 @@ agenterra/
 # Python cache
 __pycache__/
 *.pyc
+
+# Local-only historical/private doc trees
+/archive/
+/docs/research-output/
+/docs/research-prompts/
+/docs/pulse-tasks/
+/docs/prompt-improver-spec/
+/docs/linear/

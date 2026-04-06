@@ -22,8 +22,8 @@ follow-on is complete; they only mean Phase 9 can proceed honestly without hidin
 | Source | Why it matters |
 | ------ | -------------- |
 | `ROADMAP.md:500-514` | Canonical definition of Phase 7.5 and its six pre-Phase-9 hardening items |
-| `docs/2026-03-05-implementation-deviation-report.md:225-232` | Explains why security and heartbeat gaps were originally carried as cross-phase risks |
-| `docs/2026-03-05-implementation-deviation-report.md:308-317` | Approved blocker inventory for the original Phase 7.5 follow-on set |
+| `docs/audits/2026-03-05-implementation-deviation-report.md:225-232` | Explains why security and heartbeat gaps were originally carried as cross-phase risks |
+| `docs/audits/2026-03-05-implementation-deviation-report.md:308-317` | Approved blocker inventory for the original Phase 7.5 follow-on set |
 | `specs/009-phase9-llm-provider-integration/spec.md:66-80` | Phase 9 keeps the six items visible as prerequisites rather than silently absorbing them |
 | `specs/009-phase9-llm-provider-integration/plan.md:178-181` | Planning posture: prerequisite work stays bounded and explicit |
 | `specs/009-phase9-llm-provider-integration/tasks.md:43-58` | Task-level scope guardrail for blocker handling |

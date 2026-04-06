@@ -10,8 +10,8 @@ validated through Phase 10 plus the landed frontier packets through `026`.
 - `spec/`: Canonical architecture specifications (the system contract)
 - `specs/`: SpecKit-generated per-phase implementation artifacts (build instructions)
 - `plans/`: Implementation plans and batch trackers
-- `docs/`: Research output, code reviews, session analysis
-- `archive/`: Historical validation/research artifacts; avoid editing unless explicitly needed
+- `docs/`: Tracked repo docs, code reviews, plans, examples, and active reports
+- `archive/`: Local-only historical spillover and uncertain legacy artifacts (gitignored)
 - `deploy/`: Deployment artifacts — Dockerfile, K8s manifests, Grafana dashboards, Prometheus alerts
 - `nats.rs/`: Vendored upstream Rust NATS workspace used as API reference
 - `scripts/`: Utility scripts for control-plane bootstrap, validation, and local runtime support
@@ -20,8 +20,9 @@ Use `docs/current-state.md` as the repo-wide current-state overview and document
 Use `docs/direction.md` when you need the merged strategic direction and next-build priority.
 Use `README.md`, `ROADMAP.md`, and `CLAUDE.md` as supporting orientation entry points.
 Treat `AGENTS.md`, `docs/current-state.md`,
-`docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`, and the active direct-execution
-sections of `docs/linear/LINEAR.md` as the current Smith control-plane contract. Treat
+`docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`, and any local-only
+direct-execution notes under `docs/linear/` when present as the current Smith control-plane
+contract. Treat
 `WORKFLOW.md` as legacy Symphony background unless a task explicitly targets that historical
 automation layer.
 Treat `docs/current-state.md`, `scripts/live_runtime_proof_smoke.py`, and
@@ -198,6 +199,9 @@ For markdown linting:
 - OAuth credentials: Claude subscription uses Keychain/file-based credential sources
 
 ## Active Technologies
+
+- Rust 1.88.0 + `mister-smith-app`, `mister-smith-http`, current durable session seams, (031-chat-first-cli-loop)
+- Existing PostgreSQL-backed retained session store plus the current runtime session (031-chat-first-cli-loop)
 
 - Rust 1.88.0 for the app and runtime seams + `mister-smith-app`, `mister-smith-http`, existing session persistence (030-session-first-cli-shell)
 - existing durable session records, retained turn history, and current session summary (030-session-first-cli-shell)

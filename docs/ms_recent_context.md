@@ -61,7 +61,7 @@ Status: Current
 9. `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md`
 10. `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 11. `WORKFLOW.md`
-12. `docs/linear/LINEAR.md`
+12. local-only `docs/linear/LINEAR.md` when present
 
 ## What Just Landed
 

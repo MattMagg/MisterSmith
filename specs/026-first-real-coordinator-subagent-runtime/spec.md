@@ -4,7 +4,7 @@
 **Created**: 2026-04-01
 **Status**: Implementation-ready
 **Input**: `docs/current-state.md`, `docs/direction.md`,
-`docs/2026-03-28-session-context-report.md`,
+`docs/reports/2026-03-28-session-context-report.md`,
 `docs/plans/2026-03-27-runtime-planning-simplification.md`,
 `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md`,
 `docs/plans/2026-04-02-openclaude-transfer-analysis.md`,

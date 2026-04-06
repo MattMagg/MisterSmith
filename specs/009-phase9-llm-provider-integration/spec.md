@@ -4,8 +4,8 @@
 **Created**: 2026-03-06  
 **Status**: Draft  
 **Input**: `ROADMAP.md` Phase 9, `docs/plans/2026-03-05-llm-provider-integration-design.md`,
-`docs/2026-03-05-architectural-grounding-audit.md`,
-`docs/2026-03-05-implementation-deviation-report.md`, and the active Phase 7 baseline in
+`docs/audits/2026-03-05-architectural-grounding-audit.md`,
+`docs/audits/2026-03-05-implementation-deviation-report.md`, and the active Phase 7 baseline in
 `specs/007-phase7-agent-system/`.
 
 ## Scope & Traceability

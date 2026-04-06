@@ -36,7 +36,7 @@ stable repo-wide state summary and document router.
   note
 - `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`: current direct-execution
   control-plane note
-- `docs/linear/LINEAR.md`: current Linear operating model for repo workflow
+- local-only `docs/linear/LINEAR.md` when present: legacy Linear operating model for repo workflow
 - `WORKFLOW.md`: legacy Symphony workflow background
 - `ROADMAP.md`: architectural build map
 
@@ -66,7 +66,7 @@ runtime.
 - Current Smith workflow-family implementation note:
   `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`
 - Legacy workflow background: `WORKFLOW.md`
-- Linear operating model: `docs/linear/LINEAR.md`
+- Local-only Linear operating model when present: `docs/linear/LINEAR.md`
 - Current overall direction and repo-wide router: `docs/direction.md`, `docs/current-state.md`
 - Latest landed packet authorities:
   `specs/023-runtime-truth-and-run-trace/`,

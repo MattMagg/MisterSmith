@@ -19,8 +19,7 @@ under [`027`](specs/027-capability-discovery-and-interoperability/spec.md),
 [`028`](specs/028-selective-strong-coordination/spec.md), and
 [`029`](specs/029-session-first-user-shell/spec.md) remains draft or pre-spec planning, plus
 [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
-[`WORKFLOW.md`](WORKFLOW.md), [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md), and the dated
-plans under [`docs/plans/`](docs/plans/). Use
+[`WORKFLOW.md`](WORKFLOW.md), and the dated plans under [`docs/plans/`](docs/plans/). Use
 [`docs/direction.md`](docs/direction.md) for overall system direction,
 [`docs/current-state.md`](docs/current-state.md) for current repo truth and what is live on the
 default runtime path, and the latest packet notes for bounded closure evidence.

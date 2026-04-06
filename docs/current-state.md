@@ -35,7 +35,7 @@ Use this file when you need one honest answer to:
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final validation artifact for the completed packet-016 epic |
 | Packet 015 closure evidence | `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md` | Historical live-proof and validation artifact for the completed packet-015 epic |
 | Development workflow and direct Codex control plane | `AGENTS.md`, `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`, `.codex/commands/implement.md` | Active Smith-first development contract with explicit request-class routing and internal gate-aware execution prep |
-| Historical workflow automation background | `WORKFLOW.md`, `docs/linear/LINEAR.md` | Legacy Linear and Symphony operating context; not the active Smith MCP route |
+| Historical workflow automation background | `WORKFLOW.md` plus local-only `docs/linear/` notes when present | Legacy Linear and Symphony operating context; not the active Smith MCP route |
 | Architectural build map | `ROADMAP.md` | Phase dependency map and build order |
 | Broad repo orientation | `README.md` | High-level repo surface and operator entry points |
 | Operator-oriented repo orientation | `CLAUDE.md` | Concise working overview for contributors and agents |
@@ -243,7 +243,7 @@ If you need to understand the repo quickly:
 5. read the later packet material under `specs/027-capability-discovery-and-interoperability/`,
    `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` only
    when selecting the next frontier slice
-6. read `WORKFLOW.md` and `docs/linear/LINEAR.md` only if you are working on the development
+6. read `WORKFLOW.md` and any local-only `docs/linear/` notes only if you are working on the development
    control plane
 7. read `ROADMAP.md`, `spec/`, and the rest of `specs/` when you need architectural or
    phase-level detail
@@ -271,6 +271,6 @@ If you need to understand the repo quickly:
   simplified live runtime planning and surfaced runtime-owned repair telemetry.
 - Use `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for historical packet-019
   budget-aware live-proof provenance.
-- Use `WORKFLOW.md` and `docs/linear/LINEAR.md` for development workflow rules.
+- Use `WORKFLOW.md` and any local-only `docs/linear/` notes for development workflow rules.
 - Use `spec/` for architecture truth.
 - Use `specs/` for implementation packet truth.

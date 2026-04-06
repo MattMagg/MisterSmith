@@ -236,7 +236,6 @@ knowledge_base:
       - "SECURITY.md"
       - "docs/current-state.md"
       - "docs/direction.md"
-      - "docs/linear/LINEAR.md"
       - ".github/workflows/README.md"
   learnings:
     scope: "local"

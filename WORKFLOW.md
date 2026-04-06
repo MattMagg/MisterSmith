@@ -45,7 +45,7 @@ Legacy note:
 - It is not the active Smith MCP route for direct Codex execution.
 - For the current control-plane contract, start from `AGENTS.md`, `docs/current-state.md`,
   `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`, and the active direct-execution
-  sections of `docs/linear/LINEAR.md`.
+  notes under local-only `docs/linear/` when present.
 
 You are working on a Linear ticket `{{ issue.identifier }}` in the Mister Smith repository.
 

@@ -17,8 +17,8 @@ Use this file when you need one clear answer to:
 Source split:
 
 - `docs/current-state.md` is the authority for what is currently true on `main`
-- `docs/research-output/consolidated/` and `docs/research-output/analysis/` provide the research
-  rationale and strategic evidence
+- the local-only research corpus under `docs/research-output/` provides the research rationale and
+  strategic evidence when present
 - `spec/` remains the authority for architecture and type contracts
 
 Conflict rules:
@@ -170,7 +170,6 @@ generalize.
 
 - overall direction -> `docs/direction.md`
 - current truth -> `docs/current-state.md`
-- research basis -> `docs/research-output/consolidated/` and
-  `docs/research-output/analysis/`
+- research basis -> local-only `docs/research-output/` corpus when present
 - contracts -> `spec/`
-- workflow control plane -> `WORKFLOW.md` and `docs/linear/LINEAR.md`
+- workflow control plane -> `WORKFLOW.md` and local-only `docs/linear/` notes when present
