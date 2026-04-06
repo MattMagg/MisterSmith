@@ -145,7 +145,7 @@ and the same session identity and retained history remain intact.
 - [x] T022 Run `git diff --check`
 - [x] T023 Refresh a durable packet proof note under `docs/plans/` and any state-bearing docs
       only when the implementation actually lands
-- [ ] T024 Run `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`
+- [x] T024 Run `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`
 
 ## Parallel Directive
 
