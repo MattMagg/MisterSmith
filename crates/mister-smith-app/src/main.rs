@@ -693,7 +693,7 @@ async fn run_live_session_loop(
             "/quit" => break,
             "/help" => {
                 println!(
-                    "session commands:\n  /model [model or provider:model]\n  /permissions [default|review|full]\n  /status [summary|detail]\n  /config [inline|support]\n  /mcp [connected|support_only|detached]\n  /sessions\n  /resume <session_id|last>\n  /new <message>\n  /quit\nplain text sends the next turn"
+                    "session commands:\n  /model [model or provider:model or inherit]\n  /permissions [default|review|full]\n  /status [summary|detail]\n  /config [inline|support]\n  /mcp [connected|support_only|detached]\n  /sessions\n  /resume <session_id|last>\n  /new <message>\n  /quit\nplain text sends the next turn"
                 );
             }
             "/sessions" => {
@@ -841,28 +841,47 @@ async fn run_live_session_loop(
             "/model" => {
                 let result = async {
                     if let Some(value) = arg {
-                        let (selected_provider_kind, selected_model_id) = value
-                            .split_once(':')
-                            .map(|(provider, model)| {
-                                (Some(provider.to_string()), model.to_string())
-                            })
-                            .unwrap_or((None, value.to_string()));
-                        let control = conversation::update_session_control_for_cli(
-                            &context.base_url,
-                            &context.config,
-                            session_id,
-                            mister_smith_http::server::ConversationSessionControlUpdateRequest {
-                                selected_provider_kind,
-                                selected_model_id: Some(selected_model_id),
-                                ..Default::default()
-                            },
-                        )
-                        .await?;
-                        println!(
-                            "selected_provider: {}\nselected_model: {}",
-                            control.selected_provider_kind.as_deref().unwrap_or("inherit"),
-                            control.selected_model_id.as_deref().unwrap_or("inherit")
-                        );
+                        if value == "inherit" {
+                            let control = conversation::update_session_control_for_cli(
+                                &context.base_url,
+                                &context.config,
+                                session_id,
+                                mister_smith_http::server::ConversationSessionControlUpdateRequest {
+                                    clear_selected_provider_kind: true,
+                                    clear_selected_model_id: true,
+                                    ..Default::default()
+                                },
+                            )
+                            .await?;
+                            println!(
+                                "selected_provider: {}\nselected_model: {}",
+                                control.selected_provider_kind.as_deref().unwrap_or("inherit"),
+                                control.selected_model_id.as_deref().unwrap_or("inherit")
+                            );
+                        } else {
+                            let (selected_provider_kind, selected_model_id) = value
+                                .split_once(':')
+                                .map(|(provider, model)| {
+                                    (Some(provider.to_string()), model.to_string())
+                                })
+                                .unwrap_or((None, value.to_string()));
+                            let control = conversation::update_session_control_for_cli(
+                                &context.base_url,
+                                &context.config,
+                                session_id,
+                                mister_smith_http::server::ConversationSessionControlUpdateRequest {
+                                    selected_provider_kind,
+                                    selected_model_id: Some(selected_model_id),
+                                    ..Default::default()
+                                },
+                            )
+                            .await?;
+                            println!(
+                                "selected_provider: {}\nselected_model: {}",
+                                control.selected_provider_kind.as_deref().unwrap_or("inherit"),
+                                control.selected_model_id.as_deref().unwrap_or("inherit")
+                            );
+                        }
                     } else {
                         let view = conversation::inspect_session_for_cli(
                             &context.base_url,
@@ -906,13 +925,13 @@ async fn run_live_session_loop(
                     } else {
                         conversation::parse_session_id(target)?
                     };
-                    session_id = new_session_id;
                     let view = conversation::inspect_session_for_cli(
                         &context.base_url,
                         &context.config,
-                        session_id,
+                        new_session_id,
                     )
                     .await?;
+                    session_id = new_session_id;
                     println!("{}", conversation::render_session(&view));
                     Ok::<(), Box<dyn Error>>(())
                 }

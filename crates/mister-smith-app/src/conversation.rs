@@ -1524,9 +1524,9 @@ pub(crate) async fn build_startup_home(
     limit: usize,
 ) -> ConversationCliStartupHomeView {
     let runtime_available = runtime_available_http(base_url).await;
-    let (recent_sessions, session_source, mut startup_warnings) =
+    let (recent_sessions, session_source, mut startup_warnings, discovery_success) =
         match list_sessions_http(base_url, limit).await {
-            Ok(rows) => (rows, "runtime_api".to_string(), Vec::new()),
+            Ok(rows) => (rows, "runtime_api".to_string(), Vec::new(), true),
             Err(_) => match list_sessions_direct(limit).await {
                 Ok(rows) => (
                     rows,
@@ -1539,6 +1539,7 @@ pub(crate) async fn build_startup_home(
                                 .to_string(),
                         support_surface: Some("run".to_string()),
                     }],
+                    true,
                 ),
                 Err(_) => (
                     Vec::new(),
@@ -1551,6 +1552,7 @@ pub(crate) async fn build_startup_home(
                                 .to_string(),
                         support_surface: Some("run".to_string()),
                     }],
+                    false,
                 ),
             },
         };
@@ -1564,7 +1566,7 @@ pub(crate) async fn build_startup_home(
         });
     }
 
-    if recent_sessions.is_empty() {
+    if discovery_success && recent_sessions.is_empty() {
         startup_warnings.push(ConversationCliSupportNoticeView {
             notice_kind: "no_recent_sessions".to_string(),
             severity: "info".to_string(),

@@ -337,6 +337,8 @@ async fn session_control_handler_returns_updated_control_projection() {
             config_posture: Some("support".to_string()),
             status_view: Some("detail".to_string()),
             mcp_posture: Some("connected".to_string()),
+            clear_selected_provider_kind: false,
+            clear_selected_model_id: false,
         }),
     )
     .await
