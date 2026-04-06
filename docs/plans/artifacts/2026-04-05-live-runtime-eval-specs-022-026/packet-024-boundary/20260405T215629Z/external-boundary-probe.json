@@ -1,0 +1,18 @@
+{
+  "allowed_execute": {
+    "reload_nonce": 0,
+    "status": "ok",
+    "tool_name": "get_server_runtime_info"
+  },
+  "discover": {
+    "catalog_contains_runtime_info": true,
+    "observed_action_id": "tool:describe_external_capabilities#discover",
+    "surface_discover_action_id": "tool:describe_external_capabilities#discover",
+    "surface_execute_action_id": "tool:describe_external_capabilities#execute",
+    "tool_name": "describe_external_capabilities"
+  },
+  "rejected_execute": {
+    "error": "MCP tool call failed: {\"content\":[{\"type\":\"text\",\"text\":\"{\\\"blocking_issues\\\":[\\\"MCP tool call failed: delegation action 'tool:get_server_runtime_info#discover' does not authorize MCP tool 'get_server_runtime_info' with required action 'tool:get_server_runtime_info#execute'\\\"],\\\"status\\\":\\\"error\\\",\\\"summary\\\":\\\"MCP tool call failed: delegation action 'tool:get_server_runtime_info#discover' does not authorize MCP tool 'get_server_runtime_info' with required action 'tool:get_server_runtime_info#execute'\\\"}\"}],\"structuredContent\":{\"blocking_issues\":[\"MCP tool call failed: delegation action 'tool:get_server_runtime_info#discover' does not authorize MCP tool 'get_server_runtime_info' with required action 'tool:get_server_runtime_info#execute'\"],\"status\":\"error\",\"summary\":\"MCP tool call failed: delegation action 'tool:get_server_runtime_info#discover' does not authorize MCP tool 'get_server_runtime_info' with required action 'tool:get_server_runtime_info#execute'\"},\"isError\":true}",
+    "tool_name": "get_server_runtime_info"
+  }
+}

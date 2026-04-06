@@ -1,0 +1,560 @@
+{
+  "lifecycle_state": "completed",
+  "result": {
+    "coordinator_runtime_proof": {
+      "coordinator_agent_id": "98ff0656-1278-44e0-a804-50112ab859ea",
+      "coordinator_decisions": [
+        {
+          "decided_at": "2026-04-05T18:44:47.721652Z",
+          "decision_id": "decision:52f3d5b1-6fa6-491f-8250-32adf950aa64",
+          "decision_kind": "collapse",
+          "decision_outcome": "accepted",
+          "decision_reason": "smallest-workflow rule kept execution sequential",
+          "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+        }
+      ],
+      "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+      "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+      "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+    },
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [
+            {
+              "action": "check basics",
+              "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "check basics",
+                  "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                  "dependencies": [],
+                  "description": "Decide the time limit, how hungry you are, and what food you already have.",
+                  "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "s1",
+                  "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+                "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+              },
+              "task_id": "39af188f-7ea6-4af7-9bb1-d60ddec82c3b",
+              "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "pick one easy breakfast",
+            "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+            "dependencies": [
+              "39af188f-7ea6-4af7-9bb1-d60ddec82c3b"
+            ],
+            "description": "Choose the simplest fit, like yogurt and fruit, toast with eggs, or oatmeal.",
+            "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "s2",
+            "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+          "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "check basics",
+            "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+            "dependencies": [],
+            "description": "Decide the time limit, how hungry you are, and what food you already have.",
+            "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "s1",
+            "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+          "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "pick one easy breakfast",
+              "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+              "result": {
+                "dependency_results": [
+                  {
+                    "action": "check basics",
+                    "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                    "result": {
+                      "dependency_results": [],
+                      "execution_boundary": "tool_bus",
+                      "model_id": "gpt-5.4",
+                      "provider_kind": "openai_chatgpt",
+                      "status": "completed",
+                      "task": {
+                        "action": "check basics",
+                        "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                        "dependencies": [],
+                        "description": "Decide the time limit, how hungry you are, and what food you already have.",
+                        "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                        "planner_metadata": {
+                          "planner_index": 0
+                        },
+                        "step_id": "s1",
+                        "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+                      },
+                      "tool_name": "workflow.execute_step",
+                      "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+                      "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+                    },
+                    "task_id": "39af188f-7ea6-4af7-9bb1-d60ddec82c3b",
+                    "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+                  }
+                ],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "pick one easy breakfast",
+                  "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                  "dependencies": [
+                    "39af188f-7ea6-4af7-9bb1-d60ddec82c3b"
+                  ],
+                  "description": "Choose the simplest fit, like yogurt and fruit, toast with eggs, or oatmeal.",
+                  "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "s2",
+                  "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+                "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+              },
+              "task_id": "cf379331-bb6b-4953-a484-b53d1ea9f1df",
+              "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "set the quick routine",
+            "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+            "dependencies": [
+              "cf379331-bb6b-4953-a484-b53d1ea9f1df"
+            ],
+            "description": "Write the small plan: ingredients, 5 to 10 minute prep, and any make-ahead step for tomorrow.",
+            "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "s3",
+            "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+          "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+        }
+      ],
+      "coordinator_runtime_proof": {
+        "coordinator_agent_id": "98ff0656-1278-44e0-a804-50112ab859ea",
+        "coordinator_decisions": [
+          {
+            "decided_at": "2026-04-05T18:44:47.721652Z",
+            "decision_id": "decision:52f3d5b1-6fa6-491f-8250-32adf950aa64",
+            "decision_kind": "collapse",
+            "decision_outcome": "accepted",
+            "decision_reason": "smallest-workflow rule kept execution sequential",
+            "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+          }
+        ],
+        "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+        "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+        "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+      },
+      "description": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "check basics",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Decide the time limit, how hungry you are, and what food you already have.",
+            "id": "s1",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "pick one easy breakfast",
+            "branch": "branch-a",
+            "depends_on": [
+              "s1"
+            ],
+            "description": "Choose the simplest fit, like yogurt and fruit, toast with eggs, or oatmeal.",
+            "id": "s2",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "set the quick routine",
+            "branch": "branch-a",
+            "depends_on": [
+              "s2"
+            ],
+            "description": "Write the small plan: ingredients, 5 to 10 minute prep, and any make-ahead step for tomorrow.",
+            "id": "s3",
+            "role": "worker",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "assumptions": [
+            "The breakfast should be fast, easy, and realistic for a weekday morning."
+          ],
+          "non_goals": [
+            "Detailed nutrition analysis",
+            "Multiple parallel meal options unless later requested"
+          ],
+          "reason": "This is a small planning task, so one short linear workflow is enough."
+        },
+        "goal": "Plan a simple weekday breakfast.",
+        "steps": [
+          {
+            "action": "check basics",
+            "description": "Decide the time limit, how hungry you are, and what food you already have.",
+            "id": "s1",
+            "step": 1
+          },
+          {
+            "action": "pick one easy breakfast",
+            "depends_on": [
+              "s1"
+            ],
+            "description": "Choose the simplest fit, like yogurt and fruit, toast with eggs, or oatmeal.",
+            "id": "s2",
+            "step": 2
+          },
+          {
+            "action": "set the quick routine",
+            "depends_on": [
+              "s2"
+            ],
+            "description": "Write the small plan: ingredients, 5 to 10 minute prep, and any make-ahead step for tomorrow.",
+            "id": "s3",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "check basics",
+          "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "check basics",
+              "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+              "dependencies": [],
+              "description": "Decide the time limit, how hungry you are, and what food you already have.",
+              "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "s1",
+              "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+            "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+          },
+          "task_id": "39af188f-7ea6-4af7-9bb1-d60ddec82c3b",
+          "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+        },
+        {
+          "action": "pick one easy breakfast",
+          "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "check basics",
+                "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "check basics",
+                    "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                    "dependencies": [],
+                    "description": "Decide the time limit, how hungry you are, and what food you already have.",
+                    "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "s1",
+                    "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+                  "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+                },
+                "task_id": "39af188f-7ea6-4af7-9bb1-d60ddec82c3b",
+                "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "pick one easy breakfast",
+              "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+              "dependencies": [
+                "39af188f-7ea6-4af7-9bb1-d60ddec82c3b"
+              ],
+              "description": "Choose the simplest fit, like yogurt and fruit, toast with eggs, or oatmeal.",
+              "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "s2",
+              "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+            "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+          },
+          "task_id": "cf379331-bb6b-4953-a484-b53d1ea9f1df",
+          "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+        },
+        {
+          "action": "set the quick routine",
+          "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "pick one easy breakfast",
+                "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                "result": {
+                  "dependency_results": [
+                    {
+                      "action": "check basics",
+                      "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                      "result": {
+                        "dependency_results": [],
+                        "execution_boundary": "tool_bus",
+                        "model_id": "gpt-5.4",
+                        "provider_kind": "openai_chatgpt",
+                        "status": "completed",
+                        "task": {
+                          "action": "check basics",
+                          "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                          "dependencies": [],
+                          "description": "Decide the time limit, how hungry you are, and what food you already have.",
+                          "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                          "planner_metadata": {
+                            "planner_index": 0
+                          },
+                          "step_id": "s1",
+                          "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+                        },
+                        "tool_name": "workflow.execute_step",
+                        "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+                        "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+                      },
+                      "task_id": "39af188f-7ea6-4af7-9bb1-d60ddec82c3b",
+                      "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+                    }
+                  ],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "pick one easy breakfast",
+                    "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+                    "dependencies": [
+                      "39af188f-7ea6-4af7-9bb1-d60ddec82c3b"
+                    ],
+                    "description": "Choose the simplest fit, like yogurt and fruit, toast with eggs, or oatmeal.",
+                    "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "s2",
+                    "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+                  "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+                },
+                "task_id": "cf379331-bb6b-4953-a484-b53d1ea9f1df",
+                "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "set the quick routine",
+              "branch_id": "8f9a1cb0-e8fa-43ae-8b14-2d2eb09661bc",
+              "dependencies": [
+                "cf379331-bb6b-4953-a484-b53d1ea9f1df"
+              ],
+              "description": "Write the small plan: ingredients, 5 to 10 minute prep, and any make-ahead step for tomorrow.",
+              "goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "s3",
+              "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683",
+            "workflow_goal": "Help plan a simple weekday breakfast. Choose the smallest workflow that can finish the task. Only split work into parallel branches if that clearly helps, and only add a synthesis step if multiple branch results really need to be combined. Keep the final answer under 180 words."
+          },
+          "task_id": "d9c4edcb-b1a9-44a1-b997-dcbedc0b7c84",
+          "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+        }
+      ],
+      "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+    },
+    "runtime_truth": {
+      "evidence_class": "placeholder_or_simulated_step_completion",
+      "proof_boundary": {
+        "graph_execution": "workflow graph executed successfully",
+        "grounded_tool_execution": "grounded tool execution: none/minimal",
+        "semantic_completion": "semantic completion not yet proven",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      },
+      "run_trace": {
+        "relationships": [
+          "graph",
+          "tool_boundary"
+        ],
+        "trace_root_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64",
+        "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+      }
+    },
+    "status": "completed",
+    "step_policy": {
+      "difficulty_assessment": {
+        "confidence_label": "moderate_confidence",
+        "difficulty_bucket": "moderate",
+        "grounding_status_ref": "packet-023:placeholder_or_simulated_step_completion",
+        "reason_codes": [
+          "weak_verifier_confidence"
+        ],
+        "step_id": "s3",
+        "verifier_ref": "packet-020:s3",
+        "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+      },
+      "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+      "input_refs": {
+        "latest_step_evaluation": "packet-020:s3",
+        "runtime_truth": "packet-023:placeholder_or_simulated_step_completion"
+      },
+      "policy_decision": {
+        "action_reason": "difficulty=moderate",
+        "chosen_action": "retry",
+        "difficulty_ref": "assessment:s3",
+        "step_id": "s3",
+        "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+      },
+      "proof_boundary_ref": {
+        "owner_packet": "023",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      }
+    },
+    "workflow_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+  },
+  "status": "completed",
+  "task_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+}

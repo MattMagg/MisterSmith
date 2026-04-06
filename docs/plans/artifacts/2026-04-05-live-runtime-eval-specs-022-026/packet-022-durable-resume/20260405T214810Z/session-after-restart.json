@@ -1,0 +1,23 @@
+{
+  "active_workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc",
+  "coordinator_agent_id": "ab14d0e2-d768-49ff-ae00-5498a7a10319",
+  "model_id": "gpt-5.4",
+  "provider_kind": "openai_chatgpt",
+  "session_id": "86273e67-aca6-4953-aa7c-63e2cd2d68e5",
+  "status": "active",
+  "turn_count": 1,
+  "turns": [
+    {
+      "lifecycle_state": "active",
+      "resume_provenance": {
+        "recovered_after_restart": true,
+        "recovered_at": "2026-04-05T21:49:04.198472Z",
+        "recovery_reason": "workflow resumed after runtime restart from durable execution history"
+      },
+      "status": "queued",
+      "turn_index": 1,
+      "user_message": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+      "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+    }
+  ]
+}

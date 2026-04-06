@@ -1,0 +1,107 @@
+{
+  "aggregated_result_count": 3,
+  "artifact_dir": "docs/plans/artifacts/2026-04-05-live-runtime-eval-specs-022-026/packet-022-durable-resume/20260405T215031Z",
+  "autonomy_coordinator_runtime": {
+    "coordinator_agent_id": "cb224420-f805-4618-838b-b81942e2e826",
+    "coordinator_decision_count": 1,
+    "delegated_work_evidence_count": 0,
+    "delegation_count": 0,
+    "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+    "session_id": null,
+    "subagent_state_count": 0,
+    "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+  },
+  "autonomy_step_policy": {
+    "action_reason": "difficulty=moderate",
+    "budget_policy_hint": null,
+    "budget_pressure_level": null,
+    "chosen_action": "retry",
+    "confidence_label": "moderate_confidence",
+    "difficulty_bucket": "moderate",
+    "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+    "proof_owner_packet": "023",
+    "reason_codes": [
+      "weak_verifier_confidence"
+    ],
+    "requires_operator_attention": null,
+    "runtime_truth_ref": "packet-023:placeholder_or_simulated_step_completion",
+    "step_id": "s3",
+    "task_proof": "result is orchestration proof, not substantive task proof",
+    "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+  },
+  "autonomy_supervision": null,
+  "base_url": "http://127.0.0.1:63211",
+  "branch_count": 1,
+  "budget_root": "disabled",
+  "budget_state_after": null,
+  "coordinator_agent_id": "cb224420-f805-4618-838b-b81942e2e826",
+  "database_name": "mistersmith_live_runtime_smoke_20260405_215031",
+  "database_restart_recovery": {
+    "reason": "workflow resumed after runtime restart from durable execution history",
+    "recovered_at": "2026-04-05T21:51:19.214770Z",
+    "resumed_at": "2026-04-05T21:51:19.214770Z"
+  },
+  "graph_state": "Completed",
+  "latest_step_action": "continue",
+  "latest_step_checkpoints": null,
+  "latest_step_tier": "direct",
+  "model_id": "gpt-5.4",
+  "node_count": 3,
+  "parallelism_width": 1,
+  "profile": "baseline",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "resume_provenance": {
+    "recovered_after_restart": true,
+    "recovered_at": "2026-04-05T21:51:19.214770Z",
+    "recovery_reason": "workflow resumed after runtime restart from durable execution history"
+  },
+  "routing_policy": "round_robin",
+  "run_id": "20260405T215031Z",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "scenario": "durable_resume_probe",
+  "session_id": "e0d996b5-7ca1-43fe-a6f7-7fb5dfe9fe6a",
+  "step_result_count": 3,
+  "task_coordinator_runtime": {
+    "coordinator_agent_id": "cb224420-f805-4618-838b-b81942e2e826",
+    "coordinator_decision_count": 1,
+    "delegated_work_evidence_count": 0,
+    "delegation_count": 0,
+    "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+    "session_id": null,
+    "subagent_state_count": 0,
+    "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+  },
+  "task_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+  "task_step_policy": {
+    "action_reason": "difficulty=moderate",
+    "budget_policy_hint": null,
+    "budget_pressure_level": null,
+    "chosen_action": "retry",
+    "confidence_label": "moderate_confidence",
+    "difficulty_bucket": "moderate",
+    "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+    "proof_owner_packet": "023",
+    "reason_codes": [
+      "weak_verifier_confidence"
+    ],
+    "requires_operator_attention": null,
+    "runtime_truth_ref": "packet-023:placeholder_or_simulated_step_completion",
+    "step_id": "s3",
+    "task_proof": "result is orchestration proof, not substantive task proof",
+    "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+  },
+  "task_supervision": null,
+  "topology_kind": "Sequential"
+}

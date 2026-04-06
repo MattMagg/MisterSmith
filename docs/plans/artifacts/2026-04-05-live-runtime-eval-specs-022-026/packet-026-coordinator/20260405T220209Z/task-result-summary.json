@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "disabled",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "routing_policy": "round_robin",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "pick snacks and drinks",
+      "execution_boundary": "tool_bus",
+      "task_id": "0a97fb8e-291c-41a4-a751-9317444cf53b",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "5bf72f88-3b3d-43cd-9ddd-fb163e97357c"
+    },
+    {
+      "action": "combine branch outputs",
+      "execution_boundary": "tool_bus",
+      "task_id": "5d3eece1-ed68-44bb-a1c3-d0fe6af17215",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "5bf72f88-3b3d-43cd-9ddd-fb163e97357c"
+    },
+    {
+      "action": "pick seating and weather backup",
+      "execution_boundary": "tool_bus",
+      "task_id": "fa52ba85-6b8b-4d98-bcc0-8e4532552899",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "63fc8f19-1646-4df5-a133-e019d0087a0e"
+    }
+  ],
+  "task_id": "7c244602-23c7-4321-9fbc-87510e75366b"
+}

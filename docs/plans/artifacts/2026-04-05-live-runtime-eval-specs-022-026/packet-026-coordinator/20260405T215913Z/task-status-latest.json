@@ -1,0 +1,813 @@
+{
+  "lifecycle_state": "completed",
+  "result": {
+    "coordinator_runtime_proof": {
+      "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+      "coordinator_decisions": [
+        {
+          "decided_at": "2026-04-05T21:59:55.280670Z",
+          "decision_id": "decision:5bc929c1-fc53-45be-b71a-b0f747032f3a",
+          "decision_kind": "merge",
+          "decision_outcome": "accepted",
+          "decision_reason": "coordinator merged grounded delegated work into the final result",
+          "input_refs": [
+            "1f46cb55-5817-4922-959a-7b248d0215bb",
+            "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+            "43b5bb64-34bc-440b-868b-6740073a970b"
+          ],
+          "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+        }
+      ],
+      "delegated_work_evidence": [
+        {
+          "artifact_refs": [
+            "task:d3461cf6-af9e-4c5d-971b-aa2a300fe420"
+          ],
+          "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "evidence_kind": "grounded",
+          "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+          "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+          "recorded_at": "2026-04-05T21:59:55.280659Z"
+        },
+        {
+          "artifact_refs": [
+            "task:fee866a1-2413-4599-8ce6-5c842c2178e2"
+          ],
+          "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "evidence_kind": "grounded",
+          "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+          "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+          "recorded_at": "2026-04-05T21:59:55.280664Z"
+        },
+        {
+          "artifact_refs": [
+            "task:1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1"
+          ],
+          "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "evidence_kind": "grounded",
+          "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+          "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+          "recorded_at": "2026-04-05T21:59:55.280668Z"
+        }
+      ],
+      "delegation_records": [
+        {
+          "allowed_follow_up_actions": [
+            "clarify",
+            "resume",
+            "stop",
+            "inspect"
+          ],
+          "child_role": "explorer",
+          "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+          "created_at": "2026-04-05T21:59:55.280657Z",
+          "delegated_job_label": "Merge the food and setup choices into one short, clear recommendation the user can use right away.",
+          "delegated_scope_ref": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "delegation_reason": "selected hybrid topology from dependency analysis",
+          "status": "completed",
+          "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+          "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+        },
+        {
+          "allowed_follow_up_actions": [
+            "clarify",
+            "resume",
+            "stop",
+            "inspect"
+          ],
+          "child_role": "explorer",
+          "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+          "created_at": "2026-04-05T21:59:55.280663Z",
+          "delegated_job_label": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+          "delegated_scope_ref": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "delegation_reason": "selected hybrid topology from dependency analysis",
+          "status": "completed",
+          "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+          "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+        },
+        {
+          "allowed_follow_up_actions": [
+            "clarify",
+            "resume",
+            "stop",
+            "inspect"
+          ],
+          "child_role": "explorer",
+          "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+          "created_at": "2026-04-05T21:59:55.280667Z",
+          "delegated_job_label": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+          "delegated_scope_ref": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "delegation_reason": "selected hybrid topology from dependency analysis",
+          "status": "completed",
+          "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+          "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+        }
+      ],
+      "proof_boundary": "real coordinator-subagent runtime satisfied for the bounded delegated slice",
+      "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+      "subagent_states": [
+        {
+          "current_state": "completed",
+          "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "previous_state": "running",
+          "state_reason": "Merge the food and setup choices into one short, clear recommendation the user can use right away. completed delegated execution",
+          "state_updated_at": "2026-04-05T21:59:55.280658Z",
+          "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+        },
+        {
+          "current_state": "completed",
+          "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "previous_state": "running",
+          "state_reason": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety. completed delegated execution",
+          "state_updated_at": "2026-04-05T21:59:55.280663Z",
+          "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c"
+        },
+        {
+          "current_state": "completed",
+          "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "previous_state": "running",
+          "state_reason": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night. completed delegated execution",
+          "state_updated_at": "2026-04-05T21:59:55.280667Z",
+          "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+        }
+      ],
+      "subordinate_inbox": [
+        {
+          "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "event_id": "1f46cb55-5817-4922-959a-7b248d0215bb:0",
+          "event_kind": "completed",
+          "event_payload_ref": "branch:1f46cb55-5817-4922-959a-7b248d0215bb",
+          "event_sequence": 1,
+          "recorded_at": "2026-04-05T21:59:55.280660Z",
+          "visible_to": "coordinator_and_operator"
+        },
+        {
+          "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "event_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3:1",
+          "event_kind": "completed",
+          "event_payload_ref": "branch:c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "event_sequence": 2,
+          "recorded_at": "2026-04-05T21:59:55.280665Z",
+          "visible_to": "coordinator_and_operator"
+        },
+        {
+          "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "event_id": "43b5bb64-34bc-440b-868b-6740073a970b:2",
+          "event_kind": "completed",
+          "event_payload_ref": "branch:43b5bb64-34bc-440b-868b-6740073a970b",
+          "event_sequence": 3,
+          "recorded_at": "2026-04-05T21:59:55.280669Z",
+          "visible_to": "coordinator_and_operator"
+        }
+      ],
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    },
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Choose snacks and drinks",
+            "branch_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+            "dependencies": [],
+            "description": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+            "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "s1",
+            "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+          "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "Choose snacks and drinks",
+              "branch_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Choose snacks and drinks",
+                  "branch_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+                  "dependencies": [],
+                  "description": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+                  "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "s1",
+                  "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+                "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+              },
+              "task_id": "fee866a1-2413-4599-8ce6-5c842c2178e2",
+              "worker_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c"
+            },
+            {
+              "action": "Choose seating and weather backup",
+              "branch_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Choose seating and weather backup",
+                  "branch_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+                  "dependencies": [],
+                  "description": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+                  "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "s2",
+                  "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+                "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+              },
+              "task_id": "1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1",
+              "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Combine both branch outputs",
+            "branch_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+            "dependencies": [
+              "fee866a1-2413-4599-8ce6-5c842c2178e2",
+              "1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1"
+            ],
+            "description": "Merge the food and setup choices into one short, clear recommendation the user can use right away.",
+            "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "s3",
+            "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+          "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Choose seating and weather backup",
+            "branch_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+            "dependencies": [],
+            "description": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+            "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "s2",
+            "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+          "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+        }
+      ],
+      "coordinator_runtime_proof": {
+        "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+        "coordinator_decisions": [
+          {
+            "decided_at": "2026-04-05T21:59:55.280670Z",
+            "decision_id": "decision:5bc929c1-fc53-45be-b71a-b0f747032f3a",
+            "decision_kind": "merge",
+            "decision_outcome": "accepted",
+            "decision_reason": "coordinator merged grounded delegated work into the final result",
+            "input_refs": [
+              "1f46cb55-5817-4922-959a-7b248d0215bb",
+              "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+              "43b5bb64-34bc-440b-868b-6740073a970b"
+            ],
+            "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+          }
+        ],
+        "delegated_work_evidence": [
+          {
+            "artifact_refs": [
+              "task:d3461cf6-af9e-4c5d-971b-aa2a300fe420"
+            ],
+            "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+            "evidence_kind": "grounded",
+            "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+            "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+            "recorded_at": "2026-04-05T21:59:55.280659Z"
+          },
+          {
+            "artifact_refs": [
+              "task:fee866a1-2413-4599-8ce6-5c842c2178e2"
+            ],
+            "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+            "evidence_kind": "grounded",
+            "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+            "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+            "recorded_at": "2026-04-05T21:59:55.280664Z"
+          },
+          {
+            "artifact_refs": [
+              "task:1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1"
+            ],
+            "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+            "evidence_kind": "grounded",
+            "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+            "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+            "recorded_at": "2026-04-05T21:59:55.280668Z"
+          }
+        ],
+        "delegation_records": [
+          {
+            "allowed_follow_up_actions": [
+              "clarify",
+              "resume",
+              "stop",
+              "inspect"
+            ],
+            "child_role": "explorer",
+            "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+            "created_at": "2026-04-05T21:59:55.280657Z",
+            "delegated_job_label": "Merge the food and setup choices into one short, clear recommendation the user can use right away.",
+            "delegated_scope_ref": "1f46cb55-5817-4922-959a-7b248d0215bb",
+            "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+            "delegation_reason": "selected hybrid topology from dependency analysis",
+            "status": "completed",
+            "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+            "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+          },
+          {
+            "allowed_follow_up_actions": [
+              "clarify",
+              "resume",
+              "stop",
+              "inspect"
+            ],
+            "child_role": "explorer",
+            "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+            "created_at": "2026-04-05T21:59:55.280663Z",
+            "delegated_job_label": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+            "delegated_scope_ref": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+            "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+            "delegation_reason": "selected hybrid topology from dependency analysis",
+            "status": "completed",
+            "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+            "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+          },
+          {
+            "allowed_follow_up_actions": [
+              "clarify",
+              "resume",
+              "stop",
+              "inspect"
+            ],
+            "child_role": "explorer",
+            "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+            "created_at": "2026-04-05T21:59:55.280667Z",
+            "delegated_job_label": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+            "delegated_scope_ref": "43b5bb64-34bc-440b-868b-6740073a970b",
+            "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+            "delegation_reason": "selected hybrid topology from dependency analysis",
+            "status": "completed",
+            "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+            "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+          }
+        ],
+        "proof_boundary": "real coordinator-subagent runtime satisfied for the bounded delegated slice",
+        "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+        "subagent_states": [
+          {
+            "current_state": "completed",
+            "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+            "previous_state": "running",
+            "state_reason": "Merge the food and setup choices into one short, clear recommendation the user can use right away. completed delegated execution",
+            "state_updated_at": "2026-04-05T21:59:55.280658Z",
+            "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+          },
+          {
+            "current_state": "completed",
+            "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+            "previous_state": "running",
+            "state_reason": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety. completed delegated execution",
+            "state_updated_at": "2026-04-05T21:59:55.280663Z",
+            "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c"
+          },
+          {
+            "current_state": "completed",
+            "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+            "previous_state": "running",
+            "state_reason": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night. completed delegated execution",
+            "state_updated_at": "2026-04-05T21:59:55.280667Z",
+            "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+          }
+        ],
+        "subordinate_inbox": [
+          {
+            "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+            "event_id": "1f46cb55-5817-4922-959a-7b248d0215bb:0",
+            "event_kind": "completed",
+            "event_payload_ref": "branch:1f46cb55-5817-4922-959a-7b248d0215bb",
+            "event_sequence": 1,
+            "recorded_at": "2026-04-05T21:59:55.280660Z",
+            "visible_to": "coordinator_and_operator"
+          },
+          {
+            "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+            "event_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3:1",
+            "event_kind": "completed",
+            "event_payload_ref": "branch:c92259a8-2128-4e10-b7c5-2b95f73021e3",
+            "event_sequence": 2,
+            "recorded_at": "2026-04-05T21:59:55.280665Z",
+            "visible_to": "coordinator_and_operator"
+          },
+          {
+            "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+            "event_id": "43b5bb64-34bc-440b-868b-6740073a970b:2",
+            "event_kind": "completed",
+            "event_payload_ref": "branch:43b5bb64-34bc-440b-868b-6740073a970b",
+            "event_sequence": 3,
+            "recorded_at": "2026-04-05T21:59:55.280669Z",
+            "visible_to": "coordinator_and_operator"
+          }
+        ],
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      },
+      "description": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "Choose snacks and drinks",
+            "branch": "food",
+            "depends_on": [],
+            "description": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+            "id": "s1",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "Choose seating and weather backup",
+            "branch": "setup",
+            "depends_on": [],
+            "description": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+            "id": "s2",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "Combine both branch outputs",
+            "branch": "join",
+            "depends_on": [
+              "s1",
+              "s2"
+            ],
+            "description": "Merge the food and setup choices into one short, clear recommendation the user can use right away.",
+            "id": "s3",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "parallel"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Plan a small movie night by handling food and setup in two independent parallel tracks, then combine both results into one concise answer.",
+        "steps": [
+          {
+            "action": "Choose snacks and drinks",
+            "branch": "food",
+            "description": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+            "id": "s1",
+            "step": 1
+          },
+          {
+            "action": "Choose seating and weather backup",
+            "branch": "setup",
+            "description": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+            "id": "s2",
+            "step": 2
+          },
+          {
+            "action": "Combine both branch outputs",
+            "depends_on": [
+              "s1",
+              "s2"
+            ],
+            "description": "Merge the food and setup choices into one short, clear recommendation the user can use right away.",
+            "id": "s3",
+            "role": "coordinator",
+            "step": 3
+          }
+        ],
+        "topology_hint": "parallel_then_merge"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "Choose seating and weather backup",
+          "branch_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Choose seating and weather backup",
+              "branch_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+              "dependencies": [],
+              "description": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+              "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "s2",
+              "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+            "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+          },
+          "task_id": "1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1",
+          "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+        },
+        {
+          "action": "Combine both branch outputs",
+          "branch_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "Choose snacks and drinks",
+                "branch_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "Choose snacks and drinks",
+                    "branch_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+                    "dependencies": [],
+                    "description": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+                    "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "s1",
+                    "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+                  "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+                },
+                "task_id": "fee866a1-2413-4599-8ce6-5c842c2178e2",
+                "worker_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c"
+              },
+              {
+                "action": "Choose seating and weather backup",
+                "branch_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "Choose seating and weather backup",
+                    "branch_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+                    "dependencies": [],
+                    "description": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+                    "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "s2",
+                    "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+                  "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+                },
+                "task_id": "1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1",
+                "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Combine both branch outputs",
+              "branch_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+              "dependencies": [
+                "fee866a1-2413-4599-8ce6-5c842c2178e2",
+                "1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1"
+              ],
+              "description": "Merge the food and setup choices into one short, clear recommendation the user can use right away.",
+              "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "s3",
+              "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+            "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+          },
+          "task_id": "d3461cf6-af9e-4c5d-971b-aa2a300fe420",
+          "worker_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+        },
+        {
+          "action": "Choose snacks and drinks",
+          "branch_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Choose snacks and drinks",
+              "branch_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+              "dependencies": [],
+              "description": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+              "goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "s1",
+              "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+            "workflow_goal": "Split this small event-planning task into two clearly independent parallel tracks: one track picks snacks and drinks for a movie night, and one track picks seating and a weather backup. Then add one final coordinator step to combine both branch outputs into one concise answer. Keep the answer under 220 words."
+          },
+          "task_id": "fee866a1-2413-4599-8ce6-5c842c2178e2",
+          "worker_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c"
+        }
+      ],
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    },
+    "runtime_truth": {
+      "evidence_class": "placeholder_or_simulated_step_completion",
+      "proof_boundary": {
+        "graph_execution": "workflow graph executed successfully",
+        "grounded_tool_execution": "grounded tool execution: none/minimal",
+        "semantic_completion": "semantic completion not yet proven",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      },
+      "run_trace": {
+        "relationships": [
+          "graph",
+          "tool_boundary"
+        ],
+        "trace_root_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      }
+    },
+    "status": "completed",
+    "step_policy": {
+      "difficulty_assessment": {
+        "confidence_label": "moderate_confidence",
+        "difficulty_bucket": "moderate",
+        "grounding_status_ref": "packet-023:placeholder_or_simulated_step_completion",
+        "reason_codes": [
+          "weak_verifier_confidence"
+        ],
+        "step_id": "s3",
+        "verifier_ref": "packet-020:s3",
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      },
+      "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+      "input_refs": {
+        "latest_step_evaluation": "packet-020:s3",
+        "runtime_truth": "packet-023:placeholder_or_simulated_step_completion"
+      },
+      "policy_decision": {
+        "action_reason": "difficulty=moderate",
+        "chosen_action": "retry",
+        "difficulty_ref": "assessment:s3",
+        "step_id": "s3",
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      },
+      "proof_boundary_ref": {
+        "owner_packet": "023",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      }
+    },
+    "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+  },
+  "status": "completed",
+  "task_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+}

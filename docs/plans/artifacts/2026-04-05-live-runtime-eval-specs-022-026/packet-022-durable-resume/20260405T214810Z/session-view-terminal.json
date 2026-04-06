@@ -1,0 +1,461 @@
+{
+  "coordinator_agent_id": "ab14d0e2-d768-49ff-ae00-5498a7a10319",
+  "last_assistant_result": {
+    "assistant_result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [
+            {
+              "action": "Choose indoor activity",
+              "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+              "result": {
+                "dependency_results": [
+                  {
+                    "action": "Choose breakfast",
+                    "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                    "result": {
+                      "dependency_results": [],
+                      "execution_boundary": "tool_bus",
+                      "model_id": "gpt-5.4",
+                      "provider_kind": "openai_chatgpt",
+                      "status": "completed",
+                      "task": {
+                        "action": "Choose breakfast",
+                        "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                        "dependencies": [],
+                        "description": "Pick a simple breakfast stop that starts the day well and fits a short outing.",
+                        "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+                        "planner_metadata": {
+                          "planner_index": 0
+                        },
+                        "step_id": "s1",
+                        "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+                      },
+                      "tool_name": "workflow.execute_step",
+                      "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+                      "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+                    },
+                    "task_id": "09f73fcc-8cd7-4c30-90de-544161430779",
+                    "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa"
+                  }
+                ],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Choose indoor activity",
+                  "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                  "dependencies": [
+                    "09f73fcc-8cd7-4c30-90de-544161430779"
+                  ],
+                  "description": "Pick one indoor activity for the middle of the day that matches the same pace and area.",
+                  "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "s2",
+                  "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+                "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+              },
+              "task_id": "fb8e89e4-08b0-4a82-b2cf-a8bee2b552de",
+              "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Choose evening stop and write the final plan",
+            "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+            "dependencies": [
+              "fb8e89e4-08b0-4a82-b2cf-a8bee2b552de"
+            ],
+            "description": "Add one easy evening stop and write the full three-step outing in very simple English, keeping it under 160 words.",
+            "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "s3",
+            "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+          "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+        },
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Choose breakfast",
+            "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+            "dependencies": [],
+            "description": "Pick a simple breakfast stop that starts the day well and fits a short outing.",
+            "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "s1",
+            "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+          "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "Choose breakfast",
+              "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Choose breakfast",
+                  "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                  "dependencies": [],
+                  "description": "Pick a simple breakfast stop that starts the day well and fits a short outing.",
+                  "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "s1",
+                  "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+                "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+              },
+              "task_id": "09f73fcc-8cd7-4c30-90de-544161430779",
+              "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Choose indoor activity",
+            "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+            "dependencies": [
+              "09f73fcc-8cd7-4c30-90de-544161430779"
+            ],
+            "description": "Pick one indoor activity for the middle of the day that matches the same pace and area.",
+            "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "s2",
+            "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+          "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+        }
+      ],
+      "coordinator_runtime_follow_up": {
+        "coordinator_agent_id": "ab14d0e2-d768-49ff-ae00-5498a7a10319",
+        "decision_ids": [
+          "decision:51b3b05e-3650-4551-bef4-21cf2d992ddc"
+        ],
+        "delegated_child_ids": [],
+        "delegation_ids": [],
+        "evidence_refs": [],
+        "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+        "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+        "session_id": null
+      },
+      "preview": "[{\"dependency_results\":[{\"action\":\"Choose indoor activity\",\"branch_id\":\"f7c3e583-4ec5-4539-87c4-42ab021da1ce\",\"result\":{\"dependency_results\":[{\"action\":\"Choo...",
+      "proof_outcome": "graph_formed_and_completed"
+    },
+    "preview": "[{\"dependency_results\":[{\"action\":\"Choose indoor activity\",\"branch_id\":\"f7c3e583-4ec5-4539-87c4-42ab021da1ce\",\"result\":{\"dependency_results\":[{\"action\":\"Choo...",
+    "provenance": {
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "source_fields": [
+        "metadata.final_result",
+        "metadata.aggregated_result",
+        "metadata.final_result.coordinator_runtime_proof"
+      ]
+    },
+    "runtime_truth": {
+      "evidence_class": "placeholder_or_simulated_step_completion",
+      "proof_boundary": {
+        "graph_execution": "workflow graph executed successfully",
+        "grounded_tool_execution": "grounded tool execution: none/minimal",
+        "semantic_completion": "semantic completion not yet proven",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      },
+      "run_trace": {
+        "relationships": [
+          "graph",
+          "tool_boundary"
+        ],
+        "trace_root_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc",
+        "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+      }
+    },
+    "status": "completed",
+    "turn_index": 1,
+    "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+  },
+  "last_completed_workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc",
+  "model_id": "gpt-5.4",
+  "provider_kind": "openai_chatgpt",
+  "session_id": "86273e67-aca6-4953-aa7c-63e2cd2d68e5",
+  "status": "active",
+  "turn_count": 1,
+  "turns": [
+    {
+      "assistant_result": {
+        "assistant_result": {
+          "aggregated_result": [
+            {
+              "dependency_results": [
+                {
+                  "action": "Choose indoor activity",
+                  "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                  "result": {
+                    "dependency_results": [
+                      {
+                        "action": "Choose breakfast",
+                        "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                        "result": {
+                          "dependency_results": [],
+                          "execution_boundary": "tool_bus",
+                          "model_id": "gpt-5.4",
+                          "provider_kind": "openai_chatgpt",
+                          "status": "completed",
+                          "task": {
+                            "action": "Choose breakfast",
+                            "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                            "dependencies": [],
+                            "description": "Pick a simple breakfast stop that starts the day well and fits a short outing.",
+                            "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+                            "planner_metadata": {
+                              "planner_index": 0
+                            },
+                            "step_id": "s1",
+                            "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+                          },
+                          "tool_name": "workflow.execute_step",
+                          "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+                          "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+                        },
+                        "task_id": "09f73fcc-8cd7-4c30-90de-544161430779",
+                        "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa"
+                      }
+                    ],
+                    "execution_boundary": "tool_bus",
+                    "model_id": "gpt-5.4",
+                    "provider_kind": "openai_chatgpt",
+                    "status": "completed",
+                    "task": {
+                      "action": "Choose indoor activity",
+                      "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                      "dependencies": [
+                        "09f73fcc-8cd7-4c30-90de-544161430779"
+                      ],
+                      "description": "Pick one indoor activity for the middle of the day that matches the same pace and area.",
+                      "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+                      "planner_metadata": {
+                        "planner_index": 1
+                      },
+                      "step_id": "s2",
+                      "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+                    },
+                    "tool_name": "workflow.execute_step",
+                    "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+                    "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+                  },
+                  "task_id": "fb8e89e4-08b0-4a82-b2cf-a8bee2b552de",
+                  "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa"
+                }
+              ],
+              "execution_boundary": "tool_bus",
+              "model_id": "gpt-5.4",
+              "provider_kind": "openai_chatgpt",
+              "status": "completed",
+              "task": {
+                "action": "Choose evening stop and write the final plan",
+                "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                "dependencies": [
+                  "fb8e89e4-08b0-4a82-b2cf-a8bee2b552de"
+                ],
+                "description": "Add one easy evening stop and write the full three-step outing in very simple English, keeping it under 160 words.",
+                "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+                "planner_metadata": {
+                  "planner_index": 2
+                },
+                "step_id": "s3",
+                "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+              },
+              "tool_name": "workflow.execute_step",
+              "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+              "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+            },
+            {
+              "dependency_results": [],
+              "execution_boundary": "tool_bus",
+              "model_id": "gpt-5.4",
+              "provider_kind": "openai_chatgpt",
+              "status": "completed",
+              "task": {
+                "action": "Choose breakfast",
+                "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                "dependencies": [],
+                "description": "Pick a simple breakfast stop that starts the day well and fits a short outing.",
+                "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+                "planner_metadata": {
+                  "planner_index": 0
+                },
+                "step_id": "s1",
+                "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+              },
+              "tool_name": "workflow.execute_step",
+              "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+              "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+            },
+            {
+              "dependency_results": [
+                {
+                  "action": "Choose breakfast",
+                  "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                  "result": {
+                    "dependency_results": [],
+                    "execution_boundary": "tool_bus",
+                    "model_id": "gpt-5.4",
+                    "provider_kind": "openai_chatgpt",
+                    "status": "completed",
+                    "task": {
+                      "action": "Choose breakfast",
+                      "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                      "dependencies": [],
+                      "description": "Pick a simple breakfast stop that starts the day well and fits a short outing.",
+                      "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+                      "planner_metadata": {
+                        "planner_index": 0
+                      },
+                      "step_id": "s1",
+                      "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+                    },
+                    "tool_name": "workflow.execute_step",
+                    "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+                    "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+                  },
+                  "task_id": "09f73fcc-8cd7-4c30-90de-544161430779",
+                  "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa"
+                }
+              ],
+              "execution_boundary": "tool_bus",
+              "model_id": "gpt-5.4",
+              "provider_kind": "openai_chatgpt",
+              "status": "completed",
+              "task": {
+                "action": "Choose indoor activity",
+                "branch_id": "f7c3e583-4ec5-4539-87c4-42ab021da1ce",
+                "dependencies": [
+                  "09f73fcc-8cd7-4c30-90de-544161430779"
+                ],
+                "description": "Pick one indoor activity for the middle of the day that matches the same pace and area.",
+                "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+                "planner_metadata": {
+                  "planner_index": 1
+                },
+                "step_id": "s2",
+                "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+              },
+              "tool_name": "workflow.execute_step",
+              "worker_id": "32932b40-a5ef-4159-965d-ece897faadaa",
+              "workflow_goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words."
+            }
+          ],
+          "coordinator_runtime_follow_up": {
+            "coordinator_agent_id": "ab14d0e2-d768-49ff-ae00-5498a7a10319",
+            "decision_ids": [
+              "decision:51b3b05e-3650-4551-bef4-21cf2d992ddc"
+            ],
+            "delegated_child_ids": [],
+            "delegation_ids": [],
+            "evidence_refs": [],
+            "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+            "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+            "session_id": null
+          },
+          "preview": "[{\"dependency_results\":[{\"action\":\"Choose indoor activity\",\"branch_id\":\"f7c3e583-4ec5-4539-87c4-42ab021da1ce\",\"result\":{\"dependency_results\":[{\"action\":\"Choo...",
+          "proof_outcome": "graph_formed_and_completed"
+        },
+        "preview": "[{\"dependency_results\":[{\"action\":\"Choose indoor activity\",\"branch_id\":\"f7c3e583-4ec5-4539-87c4-42ab021da1ce\",\"result\":{\"dependency_results\":[{\"action\":\"Choo...",
+        "provenance": {
+          "runtime_execution_mode": {
+            "budget_root": "disabled",
+            "execution_boundary": "tool_bus",
+            "executor_lifecycle": "supervised_actor",
+            "model_id": "gpt-5.4",
+            "planner_lifecycle": "supervised_actor",
+            "provider_kind": "openai_chatgpt",
+            "registered_provider_count": 1,
+            "routing_policy": "round_robin",
+            "tool_name": "workflow.execute_step",
+            "workflow_runner": "tokio_task"
+          },
+          "source_fields": [
+            "metadata.final_result",
+            "metadata.aggregated_result",
+            "metadata.final_result.coordinator_runtime_proof"
+          ]
+        },
+        "runtime_truth": {
+          "evidence_class": "placeholder_or_simulated_step_completion",
+          "proof_boundary": {
+            "graph_execution": "workflow graph executed successfully",
+            "grounded_tool_execution": "grounded tool execution: none/minimal",
+            "semantic_completion": "semantic completion not yet proven",
+            "task_proof": "result is orchestration proof, not substantive task proof"
+          },
+          "run_trace": {
+            "relationships": [
+              "graph",
+              "tool_boundary"
+            ],
+            "trace_root_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc",
+            "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+          }
+        },
+        "status": "completed",
+        "turn_index": 1,
+        "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+      },
+      "lifecycle_state": "completed",
+      "resume_provenance": {
+        "recovered_after_restart": true,
+        "recovered_at": "2026-04-05T21:49:04.198472Z",
+        "recovery_reason": "workflow resumed after runtime restart from durable execution history"
+      },
+      "status": "completed",
+      "turn_index": 1,
+      "user_message": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+      "workflow_id": "51b3b05e-3650-4551-bef4-21cf2d992ddc"
+    }
+  ]
+}

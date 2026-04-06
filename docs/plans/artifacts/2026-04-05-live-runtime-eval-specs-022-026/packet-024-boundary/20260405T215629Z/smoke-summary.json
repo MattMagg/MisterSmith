@@ -1,0 +1,9 @@
+{
+  "artifact_dir": "docs/plans/artifacts/2026-04-05-live-runtime-eval-specs-022-026/packet-024-boundary/20260405T215629Z",
+  "discover_action_id": "tool:describe_external_capabilities#discover",
+  "execute_status": "ok",
+  "profile": "baseline",
+  "rejected_error": "MCP tool call failed: {\"content\":[{\"type\":\"text\",\"text\":\"{\\\"blocking_issues\\\":[\\\"MCP tool call failed: delegation action 'tool:get_server_runtime_info#discover' does not authorize MCP tool 'get_server_runtime_info' with required action 'tool:get_server_runtime_info#execute'\\\"],\\\"status\\\":\\\"error\\\",\\\"summary\\\":\\\"MCP tool call failed: delegation action 'tool:get_server_runtime_info#discover' does not authorize MCP tool 'get_server_runtime_info' with required action 'tool:get_server_runtime_info#execute'\\\"}\"}],\"structuredContent\":{\"blocking_issues\":[\"MCP tool call failed: delegation action 'tool:get_server_runtime_info#discover' does not authorize MCP tool 'get_server_runtime_info' with required action 'tool:get_server_runtime_info#execute'\"],\"status\":\"error\",\"summary\":\"MCP tool call failed: delegation action 'tool:get_server_runtime_info#discover' does not authorize MCP tool 'get_server_runtime_info' with required action 'tool:get_server_runtime_info#execute'\"},\"isError\":true}",
+  "run_id": "20260405T215629Z",
+  "scenario": "external_boundary_probe"
+}

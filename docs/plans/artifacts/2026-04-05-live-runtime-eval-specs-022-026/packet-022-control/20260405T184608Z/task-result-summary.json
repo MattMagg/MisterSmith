@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "disabled",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "routing_policy": "round_robin",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "Choose breakfast",
+      "execution_boundary": "tool_bus",
+      "task_id": "217777aa-d985-4f4f-905a-3ad09df0d92a",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "8774ae7a-976b-489b-83a7-1c94201e7e68"
+    },
+    {
+      "action": "Gather basics",
+      "execution_boundary": "tool_bus",
+      "task_id": "4b9bbf2c-c376-4f1e-94f5-2754d77f3f2f",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "8774ae7a-976b-489b-83a7-1c94201e7e68"
+    },
+    {
+      "action": "Make it easy",
+      "execution_boundary": "tool_bus",
+      "task_id": "a3907d3f-1a7b-43e5-aab9-7e924cd5ba1d",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "8774ae7a-976b-489b-83a7-1c94201e7e68"
+    }
+  ],
+  "task_id": "d43cd42e-4732-416c-a858-6946ce990015"
+}

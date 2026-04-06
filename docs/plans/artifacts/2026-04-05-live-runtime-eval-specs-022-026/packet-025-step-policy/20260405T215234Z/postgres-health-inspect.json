@@ -1,0 +1,36 @@
+{
+  "FailingStreak": 0,
+  "Log": [
+    {
+      "End": "2026-04-05T21:52:10.665029471Z",
+      "ExitCode": 0,
+      "Output": "/var/run/postgresql:5432 - accepting connections\n",
+      "Start": "2026-04-05T21:52:10.624746346Z"
+    },
+    {
+      "End": "2026-04-05T21:52:15.719469Z",
+      "ExitCode": 0,
+      "Output": "/var/run/postgresql:5432 - accepting connections\n",
+      "Start": "2026-04-05T21:52:15.669425709Z"
+    },
+    {
+      "End": "2026-04-05T21:52:20.761948878Z",
+      "ExitCode": 0,
+      "Output": "/var/run/postgresql:5432 - accepting connections\n",
+      "Start": "2026-04-05T21:52:20.720701753Z"
+    },
+    {
+      "End": "2026-04-05T21:52:25.805379005Z",
+      "ExitCode": 0,
+      "Output": "/var/run/postgresql:5432 - accepting connections\n",
+      "Start": "2026-04-05T21:52:25.76460663Z"
+    },
+    {
+      "End": "2026-04-05T21:52:30.839705341Z",
+      "ExitCode": 0,
+      "Output": "/var/run/postgresql:5432 - accepting connections\n",
+      "Start": "2026-04-05T21:52:30.805775133Z"
+    }
+  ],
+  "Status": "healthy"
+}

@@ -1,0 +1,425 @@
+{
+  "metadata": {
+    "active_worker_ids": [
+      "30b0d756-c65c-41f7-a42e-46fa2ccd1605"
+    ],
+    "autonomy_status": {
+      "branches": [
+        {
+          "assigned_agents": [
+            "30b0d756-c65c-41f7-a42e-46fa2ccd1605"
+          ],
+          "branch_id": "fb3d6a41-e368-48e2-a8fe-210eed19d37b",
+          "checkpoint_id": null,
+          "graph_id": "f5e7b882-4f29-49ed-982a-682133d5fd41",
+          "recovery_strategy": "Resume",
+          "state": "Running"
+        }
+      ],
+      "checkpoint_lineage": [],
+      "conservative_reasons": [],
+      "coordinator_agent_id": "3d401204-86b5-48c4-a7fa-ac1f7249f477",
+      "coordinator_decisions": [
+        {
+          "decided_at": "2026-04-05T21:46:54.786409Z",
+          "decision_id": "decision:f5e7b882-4f29-49ed-982a-682133d5fd41",
+          "decision_kind": "collapse",
+          "decision_outcome": "accepted",
+          "decision_reason": "smallest-workflow rule kept execution sequential",
+          "workflow_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+        }
+      ],
+      "coordinator_runtime_proof": {
+        "coordinator_agent_id": "3d401204-86b5-48c4-a7fa-ac1f7249f477",
+        "coordinator_decisions": [
+          {
+            "decided_at": "2026-04-05T21:46:54.786409Z",
+            "decision_id": "decision:f5e7b882-4f29-49ed-982a-682133d5fd41",
+            "decision_kind": "collapse",
+            "decision_outcome": "accepted",
+            "decision_reason": "smallest-workflow rule kept execution sequential",
+            "workflow_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+          }
+        ],
+        "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+        "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+        "workflow_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+      },
+      "delegation_alerts": [],
+      "delegation_capabilities": [],
+      "graph": {
+        "active_topology": "Sequential",
+        "branch_count": 1,
+        "graph_id": "f5e7b882-4f29-49ed-982a-682133d5fd41",
+        "node_count": 3,
+        "state": "Running",
+        "workflow_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+      },
+      "guard_decisions": [],
+      "interventions": [],
+      "lifecycle_state": "active",
+      "memory_pressure": [],
+      "profiles": [],
+      "routing_history": [
+        {
+          "branch_id": "fb3d6a41-e368-48e2-a8fe-210eed19d37b",
+          "budget_pressure": 0,
+          "checkpoint_id": null,
+          "dependency_depth": 0,
+          "graph_id": "f5e7b882-4f29-49ed-982a-682133d5fd41",
+          "health_state": "Unknown",
+          "profile_id": null,
+          "rationale": [
+            "budget pressure 0% across routed scope",
+            "dependency depth 0 across ready branch frontier",
+            "checkpoint recovery scope covers 3 nodes",
+            "checkpoint unavailable; routing original branch scope",
+            "profile unavailable; defaulting to unknown health"
+          ],
+          "recovery_strategy": "Resume",
+          "selected_agent": "30b0d756-c65c-41f7-a42e-46fa2ccd1605",
+          "task_ids": [
+            "39cb5d31-71de-4aec-afd6-097f1b98b975"
+          ]
+        }
+      ],
+      "runtime_truth": {
+        "evidence_class": "placeholder_or_simulated_step_completion",
+        "proof_boundary": {
+          "graph_execution": "workflow graph executed successfully",
+          "grounded_tool_execution": "grounded tool execution: none/minimal",
+          "semantic_completion": "semantic completion not yet proven",
+          "task_proof": "result is orchestration proof, not substantive task proof"
+        },
+        "run_trace": {
+          "graph_id": "f5e7b882-4f29-49ed-982a-682133d5fd41",
+          "relationships": [
+            "graph",
+            "branch",
+            "node",
+            "tool_boundary"
+          ],
+          "trace_root_id": "f5e7b882-4f29-49ed-982a-682133d5fd41",
+          "workflow_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+        }
+      },
+      "session_id": "b4d537a2-41ce-44bd-a632-35be0f921e70",
+      "step_routing_history": [
+        {
+          "action": "continue",
+          "change_rationale": [
+            "initial step routing decision for workflow-visible control state"
+          ],
+          "confidence_score": 1.0,
+          "estimated_cost_tokens": 1309,
+          "model_id": "gpt-5.4",
+          "reason": "Selected via RoundRobin",
+          "step_id": "planner.step.1",
+          "step_index": 1,
+          "step_kind": "planner",
+          "tier": "direct"
+        }
+      ],
+      "team_sizing": {
+        "available_workers": 2,
+        "branch_frontier_width": 1,
+        "budget_pressure": 0,
+        "cap_reason": null,
+        "conservative_mode": false,
+        "decided_at": "2026-04-05T21:46:54.782144Z",
+        "decision_phase": "initial",
+        "dependency_depth": 0,
+        "desired_workers": 1,
+        "graph_id": "f5e7b882-4f29-49ed-982a-682133d5fd41",
+        "rationale_lines": [
+          "task shape strict-chain with frontier width 1",
+          "dependency depth 0 keeps coordination cost acceptable",
+          "frontier budget pressure 0",
+          "selected 1 workers from the available pool of 2",
+          "frontier health Unknown influenced active width"
+        ],
+        "selected_workers": 1,
+        "workflow_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+      },
+      "topology": {
+        "coordination_policy": "StrictSequence",
+        "fallback_topology": null,
+        "graph_id": "f5e7b882-4f29-49ed-982a-682133d5fd41",
+        "parallelism_width": 1,
+        "rationale": {
+          "dependency_shape": "strict-chain",
+          "fallback_reason": null,
+          "operational_signals": [
+            "health:healthy",
+            "budget_pressure:normal"
+          ],
+          "selected_for": "selected sequential topology from compatible planner policy hint"
+        },
+        "task_shape": {
+          "has_fanout": false,
+          "has_join": false,
+          "kind": "strict-chain",
+          "max_depth": 2,
+          "max_parallel_width": 1,
+          "root_count": 1,
+          "structural_signals": [
+            "roots:1",
+            "max_parallel_width:1",
+            "max_depth:2",
+            "fanout:false",
+            "join:false"
+          ]
+        },
+        "topology_kind": "Sequential"
+      },
+      "turn_index": 1
+    },
+    "coordinator_agent_id": "3d401204-86b5-48c4-a7fa-ac1f7249f477",
+    "description": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+    "durable_workflow": {
+      "workflow_history": [
+        {
+          "actor_agent_id": null,
+          "branch_id": null,
+          "compaction_id": null,
+          "effect_boundary_id": null,
+          "event_id": "adde0e92-dc3b-4e3d-aa67-4ff3322b6df4",
+          "event_kind": "lifecycle_changed",
+          "lifecycle_state": "active",
+          "node_id": null,
+          "parent_event_id": null,
+          "payload": {
+            "branch_count": 1,
+            "graph_state": "Running",
+            "node_count": 3
+          },
+          "recorded_at": "2026-04-05T21:46:54.777645Z",
+          "replay_position": 1,
+          "source": "runtime_task_service",
+          "workflow_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+        },
+        {
+          "actor_agent_id": null,
+          "branch_id": "fb3d6a41-e368-48e2-a8fe-210eed19d37b",
+          "compaction_id": null,
+          "effect_boundary_id": null,
+          "event_id": "342fb902-bcae-48f7-a367-83289ac3d3c1",
+          "event_kind": "node_state_changed",
+          "lifecycle_state": "active",
+          "node_id": "39cb5d31-71de-4aec-afd6-097f1b98b975",
+          "parent_event_id": null,
+          "payload": {
+            "branch_state": "Running",
+            "graph_state": "Running",
+            "node_state": "Running",
+            "step_key": "step-1"
+          },
+          "recorded_at": "2026-04-05T21:46:54.786266Z",
+          "replay_position": 2,
+          "source": "runtime_task_service",
+          "workflow_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+        }
+      ]
+    },
+    "execution_plan": {
+      "context": {
+        "conversation": {
+          "coordinator_agent_id": "3d401204-86b5-48c4-a7fa-ac1f7249f477",
+          "retained_context": {
+            "last_assistant_result": null,
+            "last_user_message": null,
+            "latest_workflow_id": null,
+            "transcript_summary": []
+          },
+          "session_id": "b4d537a2-41ce-44bd-a632-35be0f921e70",
+          "turn_index": 1
+        },
+        "execution_contract": {
+          "return_json_only": true,
+          "schema": {
+            "goal": "string",
+            "steps": [
+              {
+                "action": "string",
+                "branch": "optional string",
+                "depends_on": "optional array of step ids",
+                "description": "string",
+                "id": "string",
+                "role": "optional string",
+                "step": 1
+              }
+            ],
+            "topology_hint": "optional string"
+          },
+          "workflow_policy": {
+            "default_shape": "sequential",
+            "merge_role": "coordinator",
+            "merge_when": "multiple branch outputs must be combined",
+            "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+            "prefer_smallest_workflow": true,
+            "preserve_requested_output_shape": true
+          }
+        },
+        "external_delegation": null,
+        "model_id": "gpt-5.4",
+        "provider_kind": "openai_chatgpt",
+        "submission_path": "session"
+      },
+      "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+      "runtime_normalized": true,
+      "steps": [
+        {
+          "action": "Choose breakfast stop",
+          "branch": "branch-a",
+          "depends_on": [],
+          "description": "Pick a simple breakfast place or breakfast idea that works as an easy start to the outing.",
+          "id": "step-1",
+          "role": "worker",
+          "step": 1
+        },
+        {
+          "action": "Choose indoor activity",
+          "branch": "branch-a",
+          "depends_on": [
+            "step-1"
+          ],
+          "description": "Select one indoor activity that fits the middle of the day and keeps the outing relaxed and compact.",
+          "id": "step-2",
+          "role": "worker",
+          "step": 2
+        },
+        {
+          "action": "Choose evening stop and write final plan",
+          "branch": "branch-a",
+          "depends_on": [
+            "step-2"
+          ],
+          "description": "Add one easy evening stop, then write the full three-step outing in plain English and keep it under 160 words.",
+          "id": "step-3",
+          "role": "worker",
+          "step": 3
+        }
+      ],
+      "topology_hint": "sequential"
+    },
+    "model_id": "gpt-5.4",
+    "planner_output": {
+      "context": {
+        "constraints": [
+          "Exactly three outing parts",
+          "Include breakfast, one indoor activity, and one evening stop",
+          "Keep the final answer short"
+        ],
+        "style": "simple, plain English"
+      },
+      "goal": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop, with a final answer under 160 words.",
+      "steps": [
+        {
+          "action": "Choose breakfast stop",
+          "description": "Pick a simple breakfast place or breakfast idea that works as an easy start to the outing.",
+          "id": "step-1",
+          "step": 1
+        },
+        {
+          "action": "Choose indoor activity",
+          "description": "Select one indoor activity that fits the middle of the day and keeps the outing relaxed and compact.",
+          "id": "step-2",
+          "step": 2
+        },
+        {
+          "action": "Choose evening stop and write final plan",
+          "description": "Add one easy evening stop, then write the full three-step outing in plain English and keep it under 160 words.",
+          "id": "step-3",
+          "step": 3
+        }
+      ],
+      "topology_hint": "sequential"
+    },
+    "provider_kind": "openai_chatgpt",
+    "requested_agent_type": null,
+    "requested_priority": "high",
+    "retained_context": {
+      "last_assistant_result": null,
+      "last_user_message": null,
+      "latest_workflow_id": null,
+      "transcript_summary": []
+    },
+    "routing_history": [
+      {
+        "branch_id": "fb3d6a41-e368-48e2-a8fe-210eed19d37b",
+        "rationale": [
+          "budget pressure 0% across routed scope",
+          "dependency depth 0 across ready branch frontier",
+          "checkpoint recovery scope covers 3 nodes",
+          "checkpoint unavailable; routing original branch scope",
+          "profile unavailable; defaulting to unknown health"
+        ],
+        "selected_agent": "30b0d756-c65c-41f7-a42e-46fa2ccd1605",
+        "task_ids": [
+          "39cb5d31-71de-4aec-afd6-097f1b98b975"
+        ]
+      }
+    ],
+    "runtime_execution_mode": {
+      "budget_root": "disabled",
+      "execution_boundary": "tool_bus",
+      "executor_lifecycle": "supervised_actor",
+      "model_id": "gpt-5.4",
+      "planner_lifecycle": "supervised_actor",
+      "provider_kind": "openai_chatgpt",
+      "registered_provider_count": 1,
+      "routing_policy": "round_robin",
+      "tool_name": "workflow.execute_step",
+      "workflow_runner": "tokio_task"
+    },
+    "session_id": "b4d537a2-41ce-44bd-a632-35be0f921e70",
+    "status": "running",
+    "step_results": [],
+    "step_routing_history": [
+      {
+        "action": "continue",
+        "change_rationale": [
+          "initial step routing decision for workflow-visible control state"
+        ],
+        "confidence_score": 1.0,
+        "estimated_cost_tokens": 1309,
+        "model_id": "gpt-5.4",
+        "reason": "Selected via RoundRobin",
+        "step_id": "planner.step.1",
+        "step_index": 1,
+        "step_kind": "planner",
+        "tier": "direct"
+      }
+    ],
+    "submission_path": "session",
+    "team_sizing": {
+      "available_workers": 2,
+      "branch_frontier_width": 1,
+      "budget_pressure": 0,
+      "cap_reason": null,
+      "conservative_mode": false,
+      "decided_at": "2026-04-05T21:46:54.782144Z",
+      "decision_phase": "initial",
+      "dependency_depth": 0,
+      "desired_workers": 1,
+      "graph_id": "f5e7b882-4f29-49ed-982a-682133d5fd41",
+      "rationale_lines": [
+        "task shape strict-chain with frontier width 1",
+        "dependency depth 0 keeps coordination cost acceptable",
+        "frontier budget pressure 0",
+        "selected 1 workers from the available pool of 2",
+        "frontier health Unknown influenced active width"
+      ],
+      "selected_workers": 1,
+      "workflow_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+    },
+    "turn_index": 1,
+    "worker_agent_ids": [
+      "30b0d756-c65c-41f7-a42e-46fa2ccd1605",
+      "e0826761-0063-4bfc-891e-a8c6109078a0"
+    ]
+  },
+  "result": null,
+  "status": "running",
+  "task_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+}

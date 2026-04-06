@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "disabled",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "routing_policy": "round_robin",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "Choose breakfast stop",
+      "execution_boundary": "tool_bus",
+      "task_id": "1f3445a4-8f9a-4f7c-9962-f0884cecd4fc",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "94233062-76bc-46ad-b4d6-050dc2aaf699"
+    },
+    {
+      "action": "Choose evening stop and write final plan",
+      "execution_boundary": "tool_bus",
+      "task_id": "55b7b0e9-d7d1-4db3-b53e-8a84a403c637",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "94233062-76bc-46ad-b4d6-050dc2aaf699"
+    },
+    {
+      "action": "Choose indoor activity",
+      "execution_boundary": "tool_bus",
+      "task_id": "9b73c129-121a-4d77-a29f-d07922b68ad0",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "94233062-76bc-46ad-b4d6-050dc2aaf699"
+    }
+  ],
+  "task_id": "f5e7b882-4f29-49ed-982a-682133d5fd41"
+}

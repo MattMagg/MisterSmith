@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "disabled",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "routing_policy": "round_robin",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "check basics",
+      "execution_boundary": "tool_bus",
+      "task_id": "39af188f-7ea6-4af7-9bb1-d60ddec82c3b",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+    },
+    {
+      "action": "pick one easy breakfast",
+      "execution_boundary": "tool_bus",
+      "task_id": "cf379331-bb6b-4953-a484-b53d1ea9f1df",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+    },
+    {
+      "action": "set the quick routine",
+      "execution_boundary": "tool_bus",
+      "task_id": "d9c4edcb-b1a9-44a1-b997-dcbedc0b7c84",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "0355b44c-24e5-49f4-9941-04ebbe5ca683"
+    }
+  ],
+  "task_id": "52f3d5b1-6fa6-491f-8250-32adf950aa64"
+}

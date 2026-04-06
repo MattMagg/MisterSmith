@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "disabled",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "routing_policy": "round_robin",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "Make a short prep list",
+      "execution_boundary": "tool_bus",
+      "task_id": "a03ff5a5-0188-4f8d-adab-16197940a868",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "2c711200-5a67-4d57-9ed3-feca7c28d41e"
+    },
+    {
+      "action": "Check basics",
+      "execution_boundary": "tool_bus",
+      "task_id": "a83ed387-d075-4b75-b1dd-1965dc1815b3",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "2c711200-5a67-4d57-9ed3-feca7c28d41e"
+    },
+    {
+      "action": "Pick one easy meal",
+      "execution_boundary": "tool_bus",
+      "task_id": "e3f90fe7-87a1-42c6-93d7-419a55efac5c",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "2c711200-5a67-4d57-9ed3-feca7c28d41e"
+    }
+  ],
+  "task_id": "ece8c4f8-8fe2-4b88-84d0-42eed4a4d058"
+}

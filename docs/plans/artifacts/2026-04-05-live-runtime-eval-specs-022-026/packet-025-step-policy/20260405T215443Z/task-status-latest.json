@@ -1,0 +1,551 @@
+{
+  "lifecycle_state": "completed",
+  "result": {
+    "coordinator_runtime_proof": {
+      "coordinator_agent_id": "1d4d3c54-abb8-4703-bbab-f711daf2a253",
+      "coordinator_decisions": [
+        {
+          "decided_at": "2026-04-05T21:55:20.545369Z",
+          "decision_id": "decision:bc5420ac-8d4e-402e-af02-535c764b69cd",
+          "decision_kind": "collapse",
+          "decision_outcome": "accepted",
+          "decision_reason": "smallest-workflow rule kept execution sequential",
+          "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+        }
+      ],
+      "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+      "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+      "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+    },
+    "proof_outcome": "graph_formed_and_completed",
+    "result": {
+      "aggregated_result": [
+        {
+          "dependency_results": [],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Pick the menu items",
+            "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+            "dependencies": [],
+            "description": "Choose three simple weekend breakfast items that feel balanced and easy to enjoy.",
+            "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+            "planner_metadata": {
+              "planner_index": 0
+            },
+            "step_id": "s1",
+            "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+          "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "Draft the answer",
+              "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+              "result": {
+                "dependency_results": [
+                  {
+                    "action": "Pick the menu items",
+                    "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                    "result": {
+                      "dependency_results": [],
+                      "execution_boundary": "tool_bus",
+                      "model_id": "gpt-5.4",
+                      "provider_kind": "openai_chatgpt",
+                      "status": "completed",
+                      "task": {
+                        "action": "Pick the menu items",
+                        "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                        "dependencies": [],
+                        "description": "Choose three simple weekend breakfast items that feel balanced and easy to enjoy.",
+                        "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+                        "planner_metadata": {
+                          "planner_index": 0
+                        },
+                        "step_id": "s1",
+                        "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+                      },
+                      "tool_name": "workflow.execute_step",
+                      "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+                      "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+                    },
+                    "task_id": "9e2e01a4-23e1-4b9b-98e8-e20726956fdc",
+                    "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a"
+                  }
+                ],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Draft the answer",
+                  "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                  "dependencies": [
+                    "9e2e01a4-23e1-4b9b-98e8-e20726956fdc"
+                  ],
+                  "description": "Write a short breakfast menu in plain English with exactly three items.",
+                  "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+                  "planner_metadata": {
+                    "planner_index": 1
+                  },
+                  "step_id": "s2",
+                  "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+                "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+              },
+              "task_id": "11efdbf6-9db1-4fb9-af71-c16a1ed9f1a7",
+              "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Check the limit",
+            "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+            "dependencies": [
+              "11efdbf6-9db1-4fb9-af71-c16a1ed9f1a7"
+            ],
+            "description": "Make sure the final menu stays under 140 words and shorten it if needed.",
+            "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+            "planner_metadata": {
+              "planner_index": 2
+            },
+            "step_id": "s3",
+            "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+          "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+        },
+        {
+          "dependency_results": [
+            {
+              "action": "Pick the menu items",
+              "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+              "result": {
+                "dependency_results": [],
+                "execution_boundary": "tool_bus",
+                "model_id": "gpt-5.4",
+                "provider_kind": "openai_chatgpt",
+                "status": "completed",
+                "task": {
+                  "action": "Pick the menu items",
+                  "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                  "dependencies": [],
+                  "description": "Choose three simple weekend breakfast items that feel balanced and easy to enjoy.",
+                  "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+                  "planner_metadata": {
+                    "planner_index": 0
+                  },
+                  "step_id": "s1",
+                  "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+                },
+                "tool_name": "workflow.execute_step",
+                "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+                "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+              },
+              "task_id": "9e2e01a4-23e1-4b9b-98e8-e20726956fdc",
+              "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a"
+            }
+          ],
+          "execution_boundary": "tool_bus",
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "status": "completed",
+          "task": {
+            "action": "Draft the answer",
+            "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+            "dependencies": [
+              "9e2e01a4-23e1-4b9b-98e8-e20726956fdc"
+            ],
+            "description": "Write a short breakfast menu in plain English with exactly three items.",
+            "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+            "planner_metadata": {
+              "planner_index": 1
+            },
+            "step_id": "s2",
+            "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+          },
+          "tool_name": "workflow.execute_step",
+          "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+          "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+        }
+      ],
+      "coordinator_runtime_proof": {
+        "coordinator_agent_id": "1d4d3c54-abb8-4703-bbab-f711daf2a253",
+        "coordinator_decisions": [
+          {
+            "decided_at": "2026-04-05T21:55:20.545369Z",
+            "decision_id": "decision:bc5420ac-8d4e-402e-af02-535c764b69cd",
+            "decision_kind": "collapse",
+            "decision_outcome": "accepted",
+            "decision_reason": "smallest-workflow rule kept execution sequential",
+            "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+          }
+        ],
+        "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+        "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+        "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+      },
+      "description": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+      "execution_plan": {
+        "context": {
+          "conversation": null,
+          "execution_contract": {
+            "return_json_only": true,
+            "schema": {
+              "goal": "string",
+              "steps": [
+                {
+                  "action": "string",
+                  "branch": "optional string",
+                  "depends_on": "optional array of step ids",
+                  "description": "string",
+                  "id": "string",
+                  "role": "optional string",
+                  "step": 1
+                }
+              ],
+              "topology_hint": "optional string"
+            },
+            "workflow_policy": {
+              "default_shape": "sequential",
+              "merge_role": "coordinator",
+              "merge_when": "multiple branch outputs must be combined",
+              "parallelize_when": "the task has clearly independent subproblems or the user explicitly asks for parallel work",
+              "prefer_smallest_workflow": true,
+              "preserve_requested_output_shape": true
+            }
+          },
+          "external_delegation": null,
+          "model_id": "gpt-5.4",
+          "provider_kind": "openai_chatgpt",
+          "submission_path": "http"
+        },
+        "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+        "runtime_normalized": true,
+        "steps": [
+          {
+            "action": "Pick the menu items",
+            "branch": "branch-a",
+            "depends_on": [],
+            "description": "Choose three simple weekend breakfast items that feel balanced and easy to enjoy.",
+            "id": "s1",
+            "role": "worker",
+            "step": 1
+          },
+          {
+            "action": "Draft the answer",
+            "branch": "branch-a",
+            "depends_on": [
+              "s1"
+            ],
+            "description": "Write a short breakfast menu in plain English with exactly three items.",
+            "id": "s2",
+            "role": "worker",
+            "step": 2
+          },
+          {
+            "action": "Check the limit",
+            "branch": "branch-a",
+            "depends_on": [
+              "s2"
+            ],
+            "description": "Make sure the final menu stays under 140 words and shorten it if needed.",
+            "id": "s3",
+            "role": "worker",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "model_id": "gpt-5.4",
+      "planner_output": {
+        "context": {
+          "constraints": [
+            "three-item menu",
+            "under 140 words"
+          ],
+          "style": "simple plain English"
+        },
+        "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+        "steps": [
+          {
+            "action": "Pick the menu items",
+            "description": "Choose three simple weekend breakfast items that feel balanced and easy to enjoy.",
+            "id": "s1",
+            "step": 1
+          },
+          {
+            "action": "Draft the answer",
+            "description": "Write a short breakfast menu in plain English with exactly three items.",
+            "id": "s2",
+            "step": 2
+          },
+          {
+            "action": "Check the limit",
+            "description": "Make sure the final menu stays under 140 words and shorten it if needed.",
+            "id": "s3",
+            "step": 3
+          }
+        ],
+        "topology_hint": "sequential"
+      },
+      "planner_output_note": "planner_output is preserved as raw planner output and may carry stale role metadata; runtime_execution_mode and step_results are the authoritative proof surfaces in this artifact.",
+      "planner_output_trust": "raw_untrusted",
+      "proof_outcome": "graph_formed_and_completed",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [
+        {
+          "action": "Draft the answer",
+          "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "Pick the menu items",
+                "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                "result": {
+                  "dependency_results": [],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "Pick the menu items",
+                    "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                    "dependencies": [],
+                    "description": "Choose three simple weekend breakfast items that feel balanced and easy to enjoy.",
+                    "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+                    "planner_metadata": {
+                      "planner_index": 0
+                    },
+                    "step_id": "s1",
+                    "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+                  "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+                },
+                "task_id": "9e2e01a4-23e1-4b9b-98e8-e20726956fdc",
+                "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Draft the answer",
+              "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+              "dependencies": [
+                "9e2e01a4-23e1-4b9b-98e8-e20726956fdc"
+              ],
+              "description": "Write a short breakfast menu in plain English with exactly three items.",
+              "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+              "planner_metadata": {
+                "planner_index": 1
+              },
+              "step_id": "s2",
+              "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+            "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+          },
+          "task_id": "11efdbf6-9db1-4fb9-af71-c16a1ed9f1a7",
+          "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a"
+        },
+        {
+          "action": "Pick the menu items",
+          "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+          "result": {
+            "dependency_results": [],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Pick the menu items",
+              "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+              "dependencies": [],
+              "description": "Choose three simple weekend breakfast items that feel balanced and easy to enjoy.",
+              "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+              "planner_metadata": {
+                "planner_index": 0
+              },
+              "step_id": "s1",
+              "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+            "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+          },
+          "task_id": "9e2e01a4-23e1-4b9b-98e8-e20726956fdc",
+          "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a"
+        },
+        {
+          "action": "Check the limit",
+          "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+          "result": {
+            "dependency_results": [
+              {
+                "action": "Draft the answer",
+                "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                "result": {
+                  "dependency_results": [
+                    {
+                      "action": "Pick the menu items",
+                      "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                      "result": {
+                        "dependency_results": [],
+                        "execution_boundary": "tool_bus",
+                        "model_id": "gpt-5.4",
+                        "provider_kind": "openai_chatgpt",
+                        "status": "completed",
+                        "task": {
+                          "action": "Pick the menu items",
+                          "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                          "dependencies": [],
+                          "description": "Choose three simple weekend breakfast items that feel balanced and easy to enjoy.",
+                          "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+                          "planner_metadata": {
+                            "planner_index": 0
+                          },
+                          "step_id": "s1",
+                          "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+                        },
+                        "tool_name": "workflow.execute_step",
+                        "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+                        "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+                      },
+                      "task_id": "9e2e01a4-23e1-4b9b-98e8-e20726956fdc",
+                      "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a"
+                    }
+                  ],
+                  "execution_boundary": "tool_bus",
+                  "model_id": "gpt-5.4",
+                  "provider_kind": "openai_chatgpt",
+                  "status": "completed",
+                  "task": {
+                    "action": "Draft the answer",
+                    "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+                    "dependencies": [
+                      "9e2e01a4-23e1-4b9b-98e8-e20726956fdc"
+                    ],
+                    "description": "Write a short breakfast menu in plain English with exactly three items.",
+                    "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+                    "planner_metadata": {
+                      "planner_index": 1
+                    },
+                    "step_id": "s2",
+                    "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+                  },
+                  "tool_name": "workflow.execute_step",
+                  "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+                  "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+                },
+                "task_id": "11efdbf6-9db1-4fb9-af71-c16a1ed9f1a7",
+                "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a"
+              }
+            ],
+            "execution_boundary": "tool_bus",
+            "model_id": "gpt-5.4",
+            "provider_kind": "openai_chatgpt",
+            "status": "completed",
+            "task": {
+              "action": "Check the limit",
+              "branch_id": "53150a27-8ff5-4c3c-820a-00f3eecdd272",
+              "dependencies": [
+                "11efdbf6-9db1-4fb9-af71-c16a1ed9f1a7"
+              ],
+              "description": "Make sure the final menu stays under 140 words and shorten it if needed.",
+              "goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words.",
+              "planner_metadata": {
+                "planner_index": 2
+              },
+              "step_id": "s3",
+              "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+            },
+            "tool_name": "workflow.execute_step",
+            "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a",
+            "workflow_goal": "Suggest a simple three-item weekend breakfast menu and keep the answer under 140 words."
+          },
+          "task_id": "cccd8115-51a2-4733-973a-48434f433b8d",
+          "worker_id": "084f63d5-3de9-4b9c-b988-e5262714626a"
+        }
+      ],
+      "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+    },
+    "runtime_truth": {
+      "evidence_class": "placeholder_or_simulated_step_completion",
+      "proof_boundary": {
+        "graph_execution": "workflow graph executed successfully",
+        "grounded_tool_execution": "grounded tool execution: none/minimal",
+        "semantic_completion": "semantic completion not yet proven",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      },
+      "run_trace": {
+        "relationships": [
+          "graph",
+          "tool_boundary"
+        ],
+        "trace_root_id": "bc5420ac-8d4e-402e-af02-535c764b69cd",
+        "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+      }
+    },
+    "status": "completed",
+    "step_policy": {
+      "difficulty_assessment": {
+        "confidence_label": "moderate_confidence",
+        "difficulty_bucket": "moderate",
+        "grounding_status_ref": "packet-023:placeholder_or_simulated_step_completion",
+        "reason_codes": [
+          "weak_verifier_confidence"
+        ],
+        "step_id": "s3",
+        "verifier_ref": "packet-020:s3",
+        "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+      },
+      "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+      "input_refs": {
+        "latest_step_evaluation": "packet-020:s3",
+        "runtime_truth": "packet-023:placeholder_or_simulated_step_completion"
+      },
+      "policy_decision": {
+        "action_reason": "difficulty=moderate",
+        "chosen_action": "retry",
+        "difficulty_ref": "assessment:s3",
+        "step_id": "s3",
+        "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+      },
+      "proof_boundary_ref": {
+        "owner_packet": "023",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      }
+    },
+    "workflow_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+  },
+  "status": "completed",
+  "task_id": "bc5420ac-8d4e-402e-af02-535c764b69cd"
+}

@@ -1,0 +1,331 @@
+{
+  "branches": [
+    {
+      "assigned_agents": [
+        "15890c0e-a3f9-4adc-9529-3d761296f0a2"
+      ],
+      "branch_id": "4b577729-49f7-4b31-8b23-cf2163a4c013",
+      "checkpoint_id": null,
+      "graph_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+      "recovery_strategy": "Resume",
+      "state": "Completed"
+    }
+  ],
+  "checkpoint_lineage": [],
+  "conservative_reasons": [],
+  "coordinator_agent_id": "cb224420-f805-4618-838b-b81942e2e826",
+  "coordinator_decisions": [
+    {
+      "decided_at": "2026-04-05T21:51:22.490540Z",
+      "decision_id": "decision:42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+      "decision_kind": "collapse",
+      "decision_outcome": "accepted",
+      "decision_reason": "smallest-workflow rule kept execution sequential",
+      "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+    }
+  ],
+  "coordinator_runtime_proof": {
+    "coordinator_agent_id": "cb224420-f805-4618-838b-b81942e2e826",
+    "coordinator_decisions": [
+      {
+        "decided_at": "2026-04-05T21:51:22.490540Z",
+        "decision_id": "decision:42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+        "decision_kind": "collapse",
+        "decision_outcome": "accepted",
+        "decision_reason": "smallest-workflow rule kept execution sequential",
+        "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+      }
+    ],
+    "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+    "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+    "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+  },
+  "delegation_alerts": [],
+  "delegation_capabilities": [],
+  "graph": {
+    "active_topology": "Sequential",
+    "branch_count": 1,
+    "graph_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+    "node_count": 3,
+    "state": "Completed",
+    "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+  },
+  "guard_decisions": [],
+  "interventions": [],
+  "lifecycle_state": "completed",
+  "memory_pressure": [],
+  "profiles": [],
+  "result_preview": {
+    "coordinator_runtime_proof": {
+      "coordinator_agent_id": "cb224420-f805-4618-838b-b81942e2e826",
+      "coordinator_decisions": [
+        {
+          "decided_at": "2026-04-05T21:51:24.125304Z",
+          "decision_id": "decision:42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+          "decision_kind": "collapse",
+          "decision_outcome": "accepted",
+          "decision_reason": "smallest-workflow rule kept execution sequential",
+          "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+        }
+      ],
+      "proof_boundary": "sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+      "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+      "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+    },
+    "payload_location": "task.result",
+    "preview_text": "[{\"dependency_results\":[{\"action\":\"pick_indoor_activity\",\"branch_id\":\"4b577729-49f7-4b31-8b23-cf2163a4c013\",\"result\":{\"dependency_results\":[{\"action\":\"pick_b...",
+    "proof_outcome": "graph_formed_and_completed",
+    "provenance_lines": [
+      "graph formed and completed before final result publication",
+      "provider=openai_chatgpt model=gpt-5.4",
+      "runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step routing_policy=round_robin registered_providers=1 budget_root=disabled",
+      "graph state Completed with topology Sequential (1 branch(es), 3 node(s))",
+      "routing history retained 3 decision(s)",
+      "latest step routing tier=direct action=continue checkpoints=none",
+      "canonical result stored in metadata.final_result",
+      "aggregated payload nested under metadata.aggregated_result",
+      "full payload remains recoverable from task.result",
+      "session assistant_result derives from the canonical result object",
+      "packet 026 proof boundary: sequential collapse remained the honest outcome; packet 026 real coordinator-subagent runtime not satisfied",
+      "packet 026 follow-up stays bounded to IDs and evidence refs: preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+      "projection observed graph state Completed with topology Sequential (1 branch(es), 3 node(s))",
+      "projection retained 1 branch detail record(s)"
+    ],
+    "runtime_truth": {
+      "evidence_class": "placeholder_or_simulated_step_completion",
+      "proof_boundary": {
+        "graph_execution": "workflow graph executed successfully",
+        "grounded_tool_execution": "grounded tool execution: none/minimal",
+        "semantic_completion": "semantic completion not yet proven",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      },
+      "run_trace": {
+        "relationships": [
+          "graph",
+          "tool_boundary"
+        ],
+        "trace_root_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+        "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+      }
+    },
+    "step_policy": {
+      "difficulty_assessment": {
+        "confidence_label": "moderate_confidence",
+        "difficulty_bucket": "moderate",
+        "grounding_status_ref": "packet-023:placeholder_or_simulated_step_completion",
+        "reason_codes": [
+          "weak_verifier_confidence"
+        ],
+        "step_id": "s3",
+        "verifier_ref": "packet-020:s3",
+        "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+      },
+      "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+      "input_refs": {
+        "latest_step_evaluation": "packet-020:s3",
+        "runtime_truth": "packet-023:placeholder_or_simulated_step_completion"
+      },
+      "policy_decision": {
+        "action_reason": "difficulty=moderate",
+        "chosen_action": "retry",
+        "difficulty_ref": "assessment:s3",
+        "step_id": "s3",
+        "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+      },
+      "proof_boundary_ref": {
+        "owner_packet": "023",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      }
+    },
+    "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+  },
+  "resume_provenance": {
+    "recovered_after_restart": true,
+    "recovered_at": "2026-04-05T21:51:19.214770Z",
+    "recovery_reason": "workflow resumed after runtime restart from durable execution history"
+  },
+  "routing_history": [
+    {
+      "branch_id": "4b577729-49f7-4b31-8b23-cf2163a4c013",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 0,
+      "graph_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 0 across ready branch frontier",
+        "checkpoint recovery scope covers 3 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "15890c0e-a3f9-4adc-9529-3d761296f0a2",
+      "task_ids": [
+        "6f18320c-3865-4615-9614-084cb003fc94"
+      ]
+    },
+    {
+      "branch_id": "4b577729-49f7-4b31-8b23-cf2163a4c013",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 1,
+      "graph_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 1 across ready branch frontier",
+        "checkpoint recovery scope covers 3 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "15890c0e-a3f9-4adc-9529-3d761296f0a2",
+      "task_ids": [
+        "537cc73a-ecf1-4bcf-aceb-b1fe6369876f"
+      ]
+    },
+    {
+      "branch_id": "4b577729-49f7-4b31-8b23-cf2163a4c013",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 2,
+      "graph_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 2 across ready branch frontier",
+        "checkpoint recovery scope covers 3 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "15890c0e-a3f9-4adc-9529-3d761296f0a2",
+      "task_ids": [
+        "d380a856-9726-4979-a17f-39bfc71df733"
+      ]
+    }
+  ],
+  "runtime_truth": {
+    "evidence_class": "placeholder_or_simulated_step_completion",
+    "proof_boundary": {
+      "graph_execution": "workflow graph executed successfully",
+      "grounded_tool_execution": "grounded tool execution: none/minimal",
+      "semantic_completion": "semantic completion not yet proven",
+      "task_proof": "result is orchestration proof, not substantive task proof"
+    },
+    "run_trace": {
+      "graph_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+      "relationships": [
+        "graph",
+        "branch",
+        "node",
+        "tool_boundary"
+      ],
+      "trace_root_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+      "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+    }
+  },
+  "session_id": "e0d996b5-7ca1-43fe-a6f7-7fb5dfe9fe6a",
+  "step_policy": {
+    "difficulty_assessment": {
+      "confidence_label": "moderate_confidence",
+      "difficulty_bucket": "moderate",
+      "grounding_status_ref": "packet-023:placeholder_or_simulated_step_completion",
+      "reason_codes": [
+        "weak_verifier_confidence"
+      ],
+      "step_id": "s3",
+      "verifier_ref": "packet-020:s3",
+      "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+    },
+    "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+    "input_refs": {
+      "latest_step_evaluation": "packet-020:s3",
+      "runtime_truth": "packet-023:placeholder_or_simulated_step_completion"
+    },
+    "policy_decision": {
+      "action_reason": "difficulty=moderate",
+      "chosen_action": "retry",
+      "difficulty_ref": "assessment:s3",
+      "step_id": "s3",
+      "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+    },
+    "proof_boundary_ref": {
+      "owner_packet": "023",
+      "task_proof": "result is orchestration proof, not substantive task proof"
+    }
+  },
+  "step_routing_history": [
+    {
+      "action": "continue",
+      "change_rationale": [
+        "initial step routing decision for workflow-visible control state"
+      ],
+      "confidence_score": 1.0,
+      "estimated_cost_tokens": 1309,
+      "model_id": "gpt-5.4",
+      "reason": "Selected via RoundRobin",
+      "step_id": "planner.step.1",
+      "step_index": 1,
+      "step_kind": "planner",
+      "tier": "direct"
+    }
+  ],
+  "team_sizing": {
+    "available_workers": 2,
+    "branch_frontier_width": 1,
+    "budget_pressure": 0,
+    "cap_reason": null,
+    "conservative_mode": false,
+    "decided_at": "2026-04-05T21:51:22.490400Z",
+    "decision_phase": "frontier_rebalance",
+    "dependency_depth": 2,
+    "desired_workers": 1,
+    "graph_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+    "rationale_lines": [
+      "task shape strict-chain with frontier width 1",
+      "dependency depth 2 keeps coordination cost acceptable",
+      "frontier budget pressure 0",
+      "selected 1 workers from the available pool of 2",
+      "frontier health Unknown influenced active width"
+    ],
+    "selected_workers": 1,
+    "workflow_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f"
+  },
+  "topology": {
+    "coordination_policy": "StrictSequence",
+    "fallback_topology": null,
+    "graph_id": "42d23eb6-20fb-4fcc-bf60-214dc82a928f",
+    "parallelism_width": 1,
+    "rationale": {
+      "dependency_shape": "strict-chain",
+      "fallback_reason": null,
+      "operational_signals": [
+        "health:healthy",
+        "budget_pressure:normal"
+      ],
+      "selected_for": "selected sequential topology from compatible planner policy hint"
+    },
+    "task_shape": {
+      "has_fanout": false,
+      "has_join": false,
+      "kind": "strict-chain",
+      "max_depth": 2,
+      "max_parallel_width": 1,
+      "root_count": 1,
+      "structural_signals": [
+        "roots:1",
+        "max_parallel_width:1",
+        "max_depth:2",
+        "fanout:false",
+        "join:false"
+      ]
+    },
+    "topology_kind": "Sequential"
+  },
+  "turn_index": 1
+}

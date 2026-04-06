@@ -1,0 +1,47 @@
+{
+  "aggregated_result_count": 3,
+  "budget_root": "disabled",
+  "model_id": "gpt-5.4",
+  "proof_outcome": "graph_formed_and_completed",
+  "provider_kind": "openai_chatgpt",
+  "registered_provider_count": 1,
+  "routing_policy": "round_robin",
+  "runtime_execution_mode": {
+    "budget_root": "disabled",
+    "execution_boundary": "tool_bus",
+    "executor_lifecycle": "supervised_actor",
+    "model_id": "gpt-5.4",
+    "planner_lifecycle": "supervised_actor",
+    "provider_kind": "openai_chatgpt",
+    "registered_provider_count": 1,
+    "routing_policy": "round_robin",
+    "tool_name": "workflow.execute_step",
+    "workflow_runner": "tokio_task"
+  },
+  "status": "completed",
+  "step_result_count": 3,
+  "step_summaries": [
+    {
+      "action": "Check basics",
+      "execution_boundary": "tool_bus",
+      "task_id": "2df318ca-b791-4072-98ed-ccc8316cd59c",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "02d829f2-9380-4529-9a12-ffbbcf795916"
+    },
+    {
+      "action": "Choose easy options",
+      "execution_boundary": "tool_bus",
+      "task_id": "3546eb98-9894-468a-800c-112c00dcbe76",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "02d829f2-9380-4529-9a12-ffbbcf795916"
+    },
+    {
+      "action": "Make the weekday plan",
+      "execution_boundary": "tool_bus",
+      "task_id": "5ff27716-86e3-41a2-a008-179809e10d93",
+      "tool_name": "workflow.execute_step",
+      "worker_id": "02d829f2-9380-4529-9a12-ffbbcf795916"
+    }
+  ],
+  "task_id": "6f9d57b1-80b3-432f-88b1-0868ad9a2a85"
+}

@@ -1,0 +1,772 @@
+{
+  "branches": [
+    {
+      "assigned_agents": [
+        "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+      ],
+      "branch_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+      "checkpoint_id": null,
+      "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+      "recovery_strategy": "Resume",
+      "state": "Completed"
+    },
+    {
+      "assigned_agents": [
+        "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+      ],
+      "branch_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+      "checkpoint_id": null,
+      "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+      "recovery_strategy": "Resume",
+      "state": "Completed"
+    },
+    {
+      "assigned_agents": [
+        "3c604262-b9b6-438c-9fa1-dcef2e027e2c"
+      ],
+      "branch_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+      "checkpoint_id": null,
+      "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+      "recovery_strategy": "Resume",
+      "state": "Completed"
+    }
+  ],
+  "checkpoint_lineage": [],
+  "conservative_reasons": [],
+  "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+  "coordinator_decisions": [
+    {
+      "decided_at": "2026-04-05T21:59:53.625282Z",
+      "decision_id": "decision:5bc929c1-fc53-45be-b71a-b0f747032f3a",
+      "decision_kind": "merge",
+      "decision_outcome": "deferred",
+      "decision_reason": "coordinator is still evaluating delegated child output",
+      "input_refs": [
+        "1f46cb55-5817-4922-959a-7b248d0215bb",
+        "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+        "43b5bb64-34bc-440b-868b-6740073a970b"
+      ],
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    }
+  ],
+  "coordinator_runtime_proof": {
+    "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+    "coordinator_decisions": [
+      {
+        "decided_at": "2026-04-05T21:59:53.625282Z",
+        "decision_id": "decision:5bc929c1-fc53-45be-b71a-b0f747032f3a",
+        "decision_kind": "merge",
+        "decision_outcome": "deferred",
+        "decision_reason": "coordinator is still evaluating delegated child output",
+        "input_refs": [
+          "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "43b5bb64-34bc-440b-868b-6740073a970b"
+        ],
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      }
+    ],
+    "delegated_work_evidence": [
+      {
+        "artifact_refs": [
+          "task:d3461cf6-af9e-4c5d-971b-aa2a300fe420"
+        ],
+        "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+        "evidence_kind": "placeholder-only",
+        "evidence_summary": "no delegated nodes completed yet (1 node(s) still placeholder-only)",
+        "proof_boundary_note": "delegated work has not moved beyond placeholder-only completion yet",
+        "recorded_at": "2026-04-05T21:59:53.625255Z"
+      },
+      {
+        "artifact_refs": [
+          "task:fee866a1-2413-4599-8ce6-5c842c2178e2"
+        ],
+        "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+        "evidence_kind": "grounded",
+        "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+        "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+        "recorded_at": "2026-04-05T21:59:53.625266Z"
+      },
+      {
+        "artifact_refs": [
+          "task:1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1"
+        ],
+        "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+        "evidence_kind": "grounded",
+        "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+        "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+        "recorded_at": "2026-04-05T21:59:53.625276Z"
+      }
+    ],
+    "delegation_records": [
+      {
+        "allowed_follow_up_actions": [
+          "clarify",
+          "resume",
+          "stop",
+          "inspect"
+        ],
+        "child_role": "explorer",
+        "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+        "created_at": "2026-04-05T21:59:53.625247Z",
+        "delegated_job_label": "Merge the food and setup choices into one short, clear recommendation the user can use right away.",
+        "delegated_scope_ref": "1f46cb55-5817-4922-959a-7b248d0215bb",
+        "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+        "delegation_reason": "selected hybrid topology from dependency analysis",
+        "status": "running",
+        "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      },
+      {
+        "allowed_follow_up_actions": [
+          "clarify",
+          "resume",
+          "stop",
+          "inspect"
+        ],
+        "child_role": "explorer",
+        "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+        "created_at": "2026-04-05T21:59:53.625263Z",
+        "delegated_job_label": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+        "delegated_scope_ref": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+        "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+        "delegation_reason": "selected hybrid topology from dependency analysis",
+        "status": "completed",
+        "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      },
+      {
+        "allowed_follow_up_actions": [
+          "clarify",
+          "resume",
+          "stop",
+          "inspect"
+        ],
+        "child_role": "explorer",
+        "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+        "created_at": "2026-04-05T21:59:53.625274Z",
+        "delegated_job_label": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+        "delegated_scope_ref": "43b5bb64-34bc-440b-868b-6740073a970b",
+        "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+        "delegation_reason": "selected hybrid topology from dependency analysis",
+        "status": "completed",
+        "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      }
+    ],
+    "proof_boundary": "delegated work remained placeholder-only or partial; packet 026 real coordinator-subagent runtime not yet satisfied",
+    "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+    "subagent_states": [
+      {
+        "current_state": "running",
+        "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+        "previous_state": "delegated",
+        "state_reason": "Merge the food and setup choices into one short, clear recommendation the user can use right away. is actively running under delegated ownership",
+        "state_updated_at": "2026-04-05T21:59:53.625248Z",
+        "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+      },
+      {
+        "current_state": "completed",
+        "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+        "previous_state": "running",
+        "state_reason": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety. completed delegated execution",
+        "state_updated_at": "2026-04-05T21:59:53.625263Z",
+        "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c"
+      },
+      {
+        "current_state": "completed",
+        "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+        "previous_state": "running",
+        "state_reason": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night. completed delegated execution",
+        "state_updated_at": "2026-04-05T21:59:53.625274Z",
+        "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+      }
+    ],
+    "subordinate_inbox": [
+      {
+        "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+        "event_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3:1",
+        "event_kind": "completed",
+        "event_payload_ref": "branch:c92259a8-2128-4e10-b7c5-2b95f73021e3",
+        "event_sequence": 2,
+        "recorded_at": "2026-04-05T21:59:53.625268Z",
+        "visible_to": "coordinator_and_operator"
+      },
+      {
+        "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+        "event_id": "43b5bb64-34bc-440b-868b-6740073a970b:2",
+        "event_kind": "completed",
+        "event_payload_ref": "branch:43b5bb64-34bc-440b-868b-6740073a970b",
+        "event_sequence": 3,
+        "recorded_at": "2026-04-05T21:59:53.625278Z",
+        "visible_to": "coordinator_and_operator"
+      }
+    ],
+    "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+  },
+  "delegated_work_evidence": [
+    {
+      "artifact_refs": [
+        "task:d3461cf6-af9e-4c5d-971b-aa2a300fe420"
+      ],
+      "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+      "evidence_kind": "placeholder-only",
+      "evidence_summary": "no delegated nodes completed yet (1 node(s) still placeholder-only)",
+      "proof_boundary_note": "delegated work has not moved beyond placeholder-only completion yet",
+      "recorded_at": "2026-04-05T21:59:53.625255Z"
+    },
+    {
+      "artifact_refs": [
+        "task:fee866a1-2413-4599-8ce6-5c842c2178e2"
+      ],
+      "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+      "evidence_kind": "grounded",
+      "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+      "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+      "recorded_at": "2026-04-05T21:59:53.625266Z"
+    },
+    {
+      "artifact_refs": [
+        "task:1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1"
+      ],
+      "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+      "evidence_kind": "grounded",
+      "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+      "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+      "recorded_at": "2026-04-05T21:59:53.625276Z"
+    }
+  ],
+  "delegation_alerts": [],
+  "delegation_capabilities": [],
+  "delegation_records": [
+    {
+      "allowed_follow_up_actions": [
+        "clarify",
+        "resume",
+        "stop",
+        "inspect"
+      ],
+      "child_role": "explorer",
+      "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+      "created_at": "2026-04-05T21:59:53.625247Z",
+      "delegated_job_label": "Merge the food and setup choices into one short, clear recommendation the user can use right away.",
+      "delegated_scope_ref": "1f46cb55-5817-4922-959a-7b248d0215bb",
+      "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+      "delegation_reason": "selected hybrid topology from dependency analysis",
+      "status": "running",
+      "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    },
+    {
+      "allowed_follow_up_actions": [
+        "clarify",
+        "resume",
+        "stop",
+        "inspect"
+      ],
+      "child_role": "explorer",
+      "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+      "created_at": "2026-04-05T21:59:53.625263Z",
+      "delegated_job_label": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+      "delegated_scope_ref": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+      "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+      "delegation_reason": "selected hybrid topology from dependency analysis",
+      "status": "completed",
+      "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    },
+    {
+      "allowed_follow_up_actions": [
+        "clarify",
+        "resume",
+        "stop",
+        "inspect"
+      ],
+      "child_role": "explorer",
+      "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+      "created_at": "2026-04-05T21:59:53.625274Z",
+      "delegated_job_label": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+      "delegated_scope_ref": "43b5bb64-34bc-440b-868b-6740073a970b",
+      "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+      "delegation_reason": "selected hybrid topology from dependency analysis",
+      "status": "completed",
+      "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    }
+  ],
+  "graph": {
+    "active_topology": "Hybrid",
+    "branch_count": 3,
+    "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+    "node_count": 3,
+    "state": "Completed",
+    "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+  },
+  "guard_decisions": [],
+  "interventions": [],
+  "lifecycle_state": "completed",
+  "memory_pressure": [],
+  "profiles": [],
+  "result_preview": {
+    "coordinator_runtime_proof": {
+      "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+      "coordinator_decisions": [
+        {
+          "decided_at": "2026-04-05T21:59:55.280670Z",
+          "decision_id": "decision:5bc929c1-fc53-45be-b71a-b0f747032f3a",
+          "decision_kind": "merge",
+          "decision_outcome": "accepted",
+          "decision_reason": "coordinator merged grounded delegated work into the final result",
+          "input_refs": [
+            "1f46cb55-5817-4922-959a-7b248d0215bb",
+            "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+            "43b5bb64-34bc-440b-868b-6740073a970b"
+          ],
+          "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+        }
+      ],
+      "delegated_work_evidence": [
+        {
+          "artifact_refs": [
+            "task:d3461cf6-af9e-4c5d-971b-aa2a300fe420"
+          ],
+          "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "evidence_kind": "grounded",
+          "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+          "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+          "recorded_at": "2026-04-05T21:59:55.280659Z"
+        },
+        {
+          "artifact_refs": [
+            "task:fee866a1-2413-4599-8ce6-5c842c2178e2"
+          ],
+          "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "evidence_kind": "grounded",
+          "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+          "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+          "recorded_at": "2026-04-05T21:59:55.280664Z"
+        },
+        {
+          "artifact_refs": [
+            "task:1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1"
+          ],
+          "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "evidence_kind": "grounded",
+          "evidence_summary": "1 of 1 delegated node(s) completed with bounded workflow evidence",
+          "proof_boundary_note": "delegated work produced bounded workflow evidence for this slice",
+          "recorded_at": "2026-04-05T21:59:55.280668Z"
+        }
+      ],
+      "delegation_records": [
+        {
+          "allowed_follow_up_actions": [
+            "clarify",
+            "resume",
+            "stop",
+            "inspect"
+          ],
+          "child_role": "explorer",
+          "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+          "created_at": "2026-04-05T21:59:55.280657Z",
+          "delegated_job_label": "Merge the food and setup choices into one short, clear recommendation the user can use right away.",
+          "delegated_scope_ref": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "delegation_reason": "selected hybrid topology from dependency analysis",
+          "status": "completed",
+          "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+          "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+        },
+        {
+          "allowed_follow_up_actions": [
+            "clarify",
+            "resume",
+            "stop",
+            "inspect"
+          ],
+          "child_role": "explorer",
+          "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+          "created_at": "2026-04-05T21:59:55.280663Z",
+          "delegated_job_label": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety.",
+          "delegated_scope_ref": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "delegation_reason": "selected hybrid topology from dependency analysis",
+          "status": "completed",
+          "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+          "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+        },
+        {
+          "allowed_follow_up_actions": [
+            "clarify",
+            "resume",
+            "stop",
+            "inspect"
+          ],
+          "child_role": "explorer",
+          "coordinator_agent_id": "f1535c16-3e77-4e9c-9ca5-a7cf6fa31c1a",
+          "created_at": "2026-04-05T21:59:55.280667Z",
+          "delegated_job_label": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night.",
+          "delegated_scope_ref": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "delegation_reason": "selected hybrid topology from dependency analysis",
+          "status": "completed",
+          "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+          "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+        }
+      ],
+      "proof_boundary": "real coordinator-subagent runtime satisfied for the bounded delegated slice",
+      "session_follow_up_note": "preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+      "subagent_states": [
+        {
+          "current_state": "completed",
+          "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "previous_state": "running",
+          "state_reason": "Merge the food and setup choices into one short, clear recommendation the user can use right away. completed delegated execution",
+          "state_updated_at": "2026-04-05T21:59:55.280658Z",
+          "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+        },
+        {
+          "current_state": "completed",
+          "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "previous_state": "running",
+          "state_reason": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety. completed delegated execution",
+          "state_updated_at": "2026-04-05T21:59:55.280663Z",
+          "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c"
+        },
+        {
+          "current_state": "completed",
+          "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "previous_state": "running",
+          "state_reason": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night. completed delegated execution",
+          "state_updated_at": "2026-04-05T21:59:55.280667Z",
+          "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+        }
+      ],
+      "subordinate_inbox": [
+        {
+          "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+          "event_id": "1f46cb55-5817-4922-959a-7b248d0215bb:0",
+          "event_kind": "completed",
+          "event_payload_ref": "branch:1f46cb55-5817-4922-959a-7b248d0215bb",
+          "event_sequence": 1,
+          "recorded_at": "2026-04-05T21:59:55.280660Z",
+          "visible_to": "coordinator_and_operator"
+        },
+        {
+          "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "event_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3:1",
+          "event_kind": "completed",
+          "event_payload_ref": "branch:c92259a8-2128-4e10-b7c5-2b95f73021e3",
+          "event_sequence": 2,
+          "recorded_at": "2026-04-05T21:59:55.280665Z",
+          "visible_to": "coordinator_and_operator"
+        },
+        {
+          "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+          "event_id": "43b5bb64-34bc-440b-868b-6740073a970b:2",
+          "event_kind": "completed",
+          "event_payload_ref": "branch:43b5bb64-34bc-440b-868b-6740073a970b",
+          "event_sequence": 3,
+          "recorded_at": "2026-04-05T21:59:55.280669Z",
+          "visible_to": "coordinator_and_operator"
+        }
+      ],
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    },
+    "payload_location": "task.result",
+    "preview_text": "[{\"dependency_results\":[],\"execution_boundary\":\"tool_bus\",\"model_id\":\"gpt-5.4\",\"provider_kind\":\"openai_chatgpt\",\"status\":\"completed\",\"task\":{\"action\":\"Choose...",
+    "proof_outcome": "graph_formed_and_completed",
+    "provenance_lines": [
+      "graph formed and completed before final result publication",
+      "provider=openai_chatgpt model=gpt-5.4",
+      "runtime execution mode boundary=tool_bus runner=tokio_task planner=supervised_actor executor=supervised_actor tool=workflow.execute_step routing_policy=round_robin registered_providers=1 budget_root=disabled",
+      "graph state Completed with topology Hybrid (3 branch(es), 3 node(s))",
+      "routing history retained 3 decision(s)",
+      "latest step routing tier=direct action=continue checkpoints=none",
+      "canonical result stored in metadata.final_result",
+      "aggregated payload nested under metadata.aggregated_result",
+      "full payload remains recoverable from task.result",
+      "session assistant_result derives from the canonical result object",
+      "packet 026 proof boundary: real coordinator-subagent runtime satisfied for the bounded delegated slice",
+      "packet 026 follow-up stays bounded to IDs and evidence refs: preserve session_id, coordinator_agent_id, delegated child identity, and evidence refs only; do not assume transcript replay",
+      "projection observed graph state Completed with topology Hybrid (3 branch(es), 3 node(s))",
+      "projection retained 3 branch detail record(s)"
+    ],
+    "runtime_truth": {
+      "evidence_class": "placeholder_or_simulated_step_completion",
+      "proof_boundary": {
+        "graph_execution": "workflow graph executed successfully",
+        "grounded_tool_execution": "grounded tool execution: none/minimal",
+        "semantic_completion": "semantic completion not yet proven",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      },
+      "run_trace": {
+        "relationships": [
+          "graph",
+          "tool_boundary"
+        ],
+        "trace_root_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      }
+    },
+    "step_policy": {
+      "difficulty_assessment": {
+        "confidence_label": "moderate_confidence",
+        "difficulty_bucket": "moderate",
+        "grounding_status_ref": "packet-023:placeholder_or_simulated_step_completion",
+        "reason_codes": [
+          "weak_verifier_confidence"
+        ],
+        "step_id": "s3",
+        "verifier_ref": "packet-020:s3",
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      },
+      "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+      "input_refs": {
+        "latest_step_evaluation": "packet-020:s3",
+        "runtime_truth": "packet-023:placeholder_or_simulated_step_completion"
+      },
+      "policy_decision": {
+        "action_reason": "difficulty=moderate",
+        "chosen_action": "retry",
+        "difficulty_ref": "assessment:s3",
+        "step_id": "s3",
+        "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+      },
+      "proof_boundary_ref": {
+        "owner_packet": "023",
+        "task_proof": "result is orchestration proof, not substantive task proof"
+      }
+    },
+    "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+  },
+  "routing_history": [
+    {
+      "branch_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 0,
+      "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 0 across ready branch frontier",
+        "checkpoint recovery scope covers 1 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+      "task_ids": [
+        "1d56a428-7a63-47e8-b1a4-c0d7fd80e1e1"
+      ]
+    },
+    {
+      "branch_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 0,
+      "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 0 across ready branch frontier",
+        "checkpoint recovery scope covers 1 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "3c604262-b9b6-438c-9fa1-dcef2e027e2c",
+      "task_ids": [
+        "fee866a1-2413-4599-8ce6-5c842c2178e2"
+      ]
+    },
+    {
+      "branch_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+      "budget_pressure": 0,
+      "checkpoint_id": null,
+      "dependency_depth": 1,
+      "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+      "health_state": "Unknown",
+      "profile_id": null,
+      "rationale": [
+        "budget pressure 0% across routed scope",
+        "dependency depth 1 across ready branch frontier",
+        "checkpoint recovery scope covers 1 nodes",
+        "checkpoint unavailable; routing original branch scope",
+        "profile unavailable; defaulting to unknown health"
+      ],
+      "recovery_strategy": "Resume",
+      "selected_agent": "108dc02a-ab2f-4f69-befc-0c40b53bcf82",
+      "task_ids": [
+        "d3461cf6-af9e-4c5d-971b-aa2a300fe420"
+      ]
+    }
+  ],
+  "runtime_truth": {
+    "evidence_class": "placeholder_or_simulated_step_completion",
+    "proof_boundary": {
+      "graph_execution": "workflow graph executed successfully",
+      "grounded_tool_execution": "grounded tool execution: none/minimal",
+      "semantic_completion": "semantic completion not yet proven",
+      "task_proof": "result is orchestration proof, not substantive task proof"
+    },
+    "run_trace": {
+      "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+      "relationships": [
+        "graph",
+        "branch",
+        "node",
+        "tool_boundary",
+        "fan_out",
+        "join"
+      ],
+      "trace_root_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    }
+  },
+  "step_policy": {
+    "difficulty_assessment": {
+      "confidence_label": "moderate_confidence",
+      "difficulty_bucket": "moderate",
+      "grounding_status_ref": "packet-023:placeholder_or_simulated_step_completion",
+      "reason_codes": [
+        "weak_verifier_confidence"
+      ],
+      "step_id": "s3",
+      "verifier_ref": "packet-020:s3",
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    },
+    "display_note": "placeholder orchestration proof only; local correction preferred before escalation",
+    "input_refs": {
+      "latest_step_evaluation": "packet-020:s3",
+      "runtime_truth": "packet-023:placeholder_or_simulated_step_completion"
+    },
+    "policy_decision": {
+      "action_reason": "difficulty=moderate",
+      "chosen_action": "retry",
+      "difficulty_ref": "assessment:s3",
+      "step_id": "s3",
+      "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+    },
+    "proof_boundary_ref": {
+      "owner_packet": "023",
+      "task_proof": "result is orchestration proof, not substantive task proof"
+    }
+  },
+  "step_routing_history": [
+    {
+      "action": "continue",
+      "change_rationale": [
+        "initial step routing decision for workflow-visible control state"
+      ],
+      "confidence_score": 1.0,
+      "estimated_cost_tokens": 1287,
+      "model_id": "gpt-5.4",
+      "reason": "Selected via RoundRobin",
+      "step_id": "planner.step.1",
+      "step_index": 1,
+      "step_kind": "planner",
+      "tier": "direct"
+    }
+  ],
+  "subagent_states": [
+    {
+      "current_state": "running",
+      "delegation_id": "1f46cb55-5817-4922-959a-7b248d0215bb",
+      "previous_state": "delegated",
+      "state_reason": "Merge the food and setup choices into one short, clear recommendation the user can use right away. is actively running under delegated ownership",
+      "state_updated_at": "2026-04-05T21:59:53.625248Z",
+      "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+    },
+    {
+      "current_state": "completed",
+      "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+      "previous_state": "running",
+      "state_reason": "Pick a simple, balanced set of movie-night snacks and drinks, with a few crowd-friendly options and light variety. completed delegated execution",
+      "state_updated_at": "2026-04-05T21:59:53.625263Z",
+      "subagent_id": "3c604262-b9b6-438c-9fa1-dcef2e027e2c"
+    },
+    {
+      "current_state": "completed",
+      "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+      "previous_state": "running",
+      "state_reason": "Pick a comfortable seating setup and define a clear backup plan in case weather affects the movie night. completed delegated execution",
+      "state_updated_at": "2026-04-05T21:59:53.625274Z",
+      "subagent_id": "108dc02a-ab2f-4f69-befc-0c40b53bcf82"
+    }
+  ],
+  "subordinate_inbox": [
+    {
+      "delegation_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3",
+      "event_id": "c92259a8-2128-4e10-b7c5-2b95f73021e3:1",
+      "event_kind": "completed",
+      "event_payload_ref": "branch:c92259a8-2128-4e10-b7c5-2b95f73021e3",
+      "event_sequence": 2,
+      "recorded_at": "2026-04-05T21:59:53.625268Z",
+      "visible_to": "coordinator_and_operator"
+    },
+    {
+      "delegation_id": "43b5bb64-34bc-440b-868b-6740073a970b",
+      "event_id": "43b5bb64-34bc-440b-868b-6740073a970b:2",
+      "event_kind": "completed",
+      "event_payload_ref": "branch:43b5bb64-34bc-440b-868b-6740073a970b",
+      "event_sequence": 3,
+      "recorded_at": "2026-04-05T21:59:53.625278Z",
+      "visible_to": "coordinator_and_operator"
+    }
+  ],
+  "team_sizing": {
+    "available_workers": 2,
+    "branch_frontier_width": 1,
+    "budget_pressure": 0,
+    "cap_reason": null,
+    "conservative_mode": false,
+    "decided_at": "2026-04-05T21:59:53.624864Z",
+    "decision_phase": "frontier_rebalance",
+    "dependency_depth": 1,
+    "desired_workers": 1,
+    "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+    "rationale_lines": [
+      "task shape fanout-join with frontier width 1",
+      "dependency depth 1 keeps coordination cost acceptable",
+      "frontier budget pressure 0",
+      "selected 1 workers from the available pool of 2",
+      "frontier health Unknown influenced active width"
+    ],
+    "selected_workers": 1,
+    "workflow_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a"
+  },
+  "topology": {
+    "coordination_policy": "Mixed",
+    "fallback_topology": "Sequential",
+    "graph_id": "5bc929c1-fc53-45be-b71a-b0f747032f3a",
+    "parallelism_width": 2,
+    "rationale": {
+      "dependency_shape": "fanout-join",
+      "fallback_reason": "fallback to sequential preserves dependency order under degraded signals",
+      "operational_signals": [
+        "health:healthy",
+        "budget_pressure:normal"
+      ],
+      "selected_for": "selected hybrid topology from dependency analysis"
+    },
+    "task_shape": {
+      "has_fanout": false,
+      "has_join": true,
+      "kind": "fanout-join",
+      "max_depth": 1,
+      "max_parallel_width": 2,
+      "root_count": 2,
+      "structural_signals": [
+        "roots:2",
+        "max_parallel_width:2",
+        "max_depth:1",
+        "fanout:false",
+        "join:true"
+      ]
+    },
+    "topology_kind": "Hybrid"
+  }
+}

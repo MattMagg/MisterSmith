@@ -1,0 +1,89 @@
+{
+  "coordinator_agent_id": "5a8f4662-1abd-4ad5-b5f3-4909c1defbb7",
+  "last_assistant_result": {
+    "assistant_result": {
+      "aggregated_result": {
+        "error": "workflow interrupted by runtime restart before session sync",
+        "recovered_after_restart": true
+      },
+      "preview": "workflow interrupted by runtime restart before session sync",
+      "proof_outcome": "failed_before_graph",
+      "recovered_after_restart": true
+    },
+    "preview": "workflow interrupted by runtime restart before session sync",
+    "provenance": {
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "source_fields": [
+        "metadata.final_result",
+        "metadata.aggregated_result"
+      ]
+    },
+    "status": "failed",
+    "turn_index": 1,
+    "workflow_id": "17e46b26-db78-4cbb-89dd-6c9950600447"
+  },
+  "last_completed_workflow_id": "17e46b26-db78-4cbb-89dd-6c9950600447",
+  "model_id": "gpt-5.4",
+  "provider_kind": "openai_chatgpt",
+  "session_id": "57d54f8b-6063-4998-b13a-a2736786df0e",
+  "status": "active",
+  "turn_count": 1,
+  "turns": [
+    {
+      "assistant_result": {
+        "assistant_result": {
+          "aggregated_result": {
+            "error": "workflow interrupted by runtime restart before session sync",
+            "recovered_after_restart": true
+          },
+          "preview": "workflow interrupted by runtime restart before session sync",
+          "proof_outcome": "failed_before_graph",
+          "recovered_after_restart": true
+        },
+        "preview": "workflow interrupted by runtime restart before session sync",
+        "provenance": {
+          "runtime_execution_mode": {
+            "budget_root": "disabled",
+            "execution_boundary": "tool_bus",
+            "executor_lifecycle": "supervised_actor",
+            "model_id": "gpt-5.4",
+            "planner_lifecycle": "supervised_actor",
+            "provider_kind": "openai_chatgpt",
+            "registered_provider_count": 1,
+            "routing_policy": "round_robin",
+            "tool_name": "workflow.execute_step",
+            "workflow_runner": "tokio_task"
+          },
+          "source_fields": [
+            "metadata.final_result",
+            "metadata.aggregated_result"
+          ]
+        },
+        "status": "failed",
+        "turn_index": 1,
+        "workflow_id": "17e46b26-db78-4cbb-89dd-6c9950600447"
+      },
+      "lifecycle_state": "failed",
+      "resume_provenance": {
+        "recovered_after_restart": true,
+        "recovered_at": "2026-04-05T21:38:43.670823Z",
+        "recovery_reason": "workflow interrupted by runtime restart before session sync"
+      },
+      "status": "failed",
+      "turn_index": 1,
+      "user_message": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+      "workflow_id": "17e46b26-db78-4cbb-89dd-6c9950600447"
+    }
+  ]
+}

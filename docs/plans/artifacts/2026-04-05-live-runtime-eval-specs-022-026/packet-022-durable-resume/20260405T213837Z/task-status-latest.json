@@ -1,0 +1,36 @@
+{
+  "lifecycle_state": "failed",
+  "result": {
+    "proof_outcome": "failed_before_graph",
+    "result": {
+      "aggregated_result": {
+        "error": "workflow interrupted by runtime restart before session sync",
+        "recovered_after_restart": true
+      },
+      "description": "Plan a short one-day outing with three small steps: breakfast, one indoor activity, and one evening stop. Keep the final answer under 160 words.",
+      "execution_plan": null,
+      "model_id": "gpt-5.4",
+      "planner_output": null,
+      "proof_outcome": "failed_before_graph",
+      "provider_kind": "openai_chatgpt",
+      "runtime_execution_mode": {
+        "budget_root": "disabled",
+        "execution_boundary": "tool_bus",
+        "executor_lifecycle": "supervised_actor",
+        "model_id": "gpt-5.4",
+        "planner_lifecycle": "supervised_actor",
+        "provider_kind": "openai_chatgpt",
+        "registered_provider_count": 1,
+        "routing_policy": "round_robin",
+        "tool_name": "workflow.execute_step",
+        "workflow_runner": "tokio_task"
+      },
+      "step_results": [],
+      "workflow_id": "17e46b26-db78-4cbb-89dd-6c9950600447"
+    },
+    "status": "failed",
+    "workflow_id": "17e46b26-db78-4cbb-89dd-6c9950600447"
+  },
+  "status": "failed",
+  "task_id": "17e46b26-db78-4cbb-89dd-6c9950600447"
+}
