@@ -259,6 +259,8 @@ pub struct ConversationSupportNoticeView {
 /// Durable control state exposed to the CLI session shell.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConversationSessionControlView {
+    /// Session identifier.
+    pub session_id: SessionId,
     /// Preferred provider kind recorded for later turns, when set.
     pub selected_provider_kind: Option<String>,
     /// Preferred model recorded for later turns, when set.
@@ -274,7 +276,7 @@ pub struct ConversationSessionControlView {
 }
 
 /// Partial control-state update accepted by the session surface.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct ConversationSessionControlUpdateRequest {
     /// Preferred provider kind recorded for later turns, when set.
     pub selected_provider_kind: Option<String>,

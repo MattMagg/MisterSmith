@@ -35,7 +35,7 @@ commands listed under validation.
 
 ## Deterministic Validation
 
-The following commands were run successfully in `/Users/macmain/MisterSmith`:
+The following commands were run successfully in the repository root:
 
 - `cargo test -p mister-smith-app`
 - `cargo test -p mister-smith-http`

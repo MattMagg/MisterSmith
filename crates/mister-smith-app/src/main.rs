@@ -701,7 +701,10 @@ async fn run_live_session_loop(
                     let sessions = match conversation::list_sessions_http(&context.base_url, 20).await
                     {
                         Ok(rows) => rows,
-                        Err(_) => conversation::list_sessions_direct(20).await?,
+                        Err(e) => {
+                            tracing::debug!("list_sessions_http failed, falling back to direct: {}", e);
+                            conversation::list_sessions_direct(20).await?
+                        }
                     };
                     println!("{}", conversation::render_session_list(&sessions));
                     Ok::<(), Box<dyn Error>>(())

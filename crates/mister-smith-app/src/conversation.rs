@@ -398,29 +398,7 @@ impl ConversationSessionService for ConversationRuntimeService {
         }
 
         let mut control_state = session_control_state_from_context(&session.retained_context, &session);
-
-        if let Some(selected_provider_kind) = normalized_optional_string(request.selected_provider_kind.as_deref()) {
-            control_state.selected_provider_kind = Some(selected_provider_kind);
-        }
-        if let Some(selected_model_id) = normalized_optional_string(request.selected_model_id.as_deref()) {
-            control_state.selected_model_id = Some(selected_model_id);
-        }
-        if let Some(permission_mode) = normalized_optional_string(request.permission_mode.as_deref()) {
-            validate_permission_mode(&permission_mode)?;
-            control_state.permission_mode = permission_mode;
-        }
-        if let Some(config_posture) = normalized_optional_string(request.config_posture.as_deref()) {
-            validate_config_posture(&config_posture)?;
-            control_state.config_posture = config_posture;
-        }
-        if let Some(status_view) = normalized_optional_string(request.status_view.as_deref()) {
-            validate_status_view(&status_view)?;
-            control_state.status_view = status_view;
-        }
-        if let Some(mcp_posture) = normalized_optional_string(request.mcp_posture.as_deref()) {
-            validate_mcp_posture(&mcp_posture)?;
-            control_state.mcp_posture = mcp_posture;
-        }
+        validate_and_apply_control_updates(&mut control_state, &request)?;
 
         session.retained_context = upsert_session_control_state(&session.retained_context, &control_state);
         session.updated_at = Utc::now();
@@ -698,6 +676,7 @@ fn session_control_state_from_context(
     let stored = retained_context.get("session_control_state");
 
     ConversationSessionControlView {
+        session_id: session.session_id,
         selected_provider_kind: normalized_optional_string(
             stored
                 .and_then(|value| value.get("selected_provider_kind"))
@@ -836,6 +815,35 @@ fn validate_mcp_posture(value: &str) -> Result<(), ConversationServiceError> {
     Err(ConversationServiceError::BadRequest(format!(
         "invalid mcp posture '{value}'; expected connected, support_only, or detached"
     )))
+}
+
+fn validate_and_apply_control_updates(
+    control_state: &mut ConversationSessionControlView,
+    request: &ConversationSessionControlUpdateRequest,
+) -> Result<(), ConversationServiceError> {
+    if let Some(value) = normalized_optional_string(request.selected_provider_kind.as_deref()) {
+        control_state.selected_provider_kind = Some(value);
+    }
+    if let Some(value) = normalized_optional_string(request.selected_model_id.as_deref()) {
+        control_state.selected_model_id = Some(value);
+    }
+    if let Some(value) = normalized_optional_string(request.permission_mode.as_deref()) {
+        validate_permission_mode(&value)?;
+        control_state.permission_mode = value;
+    }
+    if let Some(value) = normalized_optional_string(request.config_posture.as_deref()) {
+        validate_config_posture(&value)?;
+        control_state.config_posture = value;
+    }
+    if let Some(value) = normalized_optional_string(request.status_view.as_deref()) {
+        validate_status_view(&value)?;
+        control_state.status_view = value;
+    }
+    if let Some(value) = normalized_optional_string(request.mcp_posture.as_deref()) {
+        validate_mcp_posture(&value)?;
+        control_state.mcp_posture = value;
+    }
+    Ok(())
 }
 
 fn build_session_summary_view(session: &SessionRecord) -> ConversationSessionSummaryView {
@@ -1173,14 +1181,7 @@ pub(crate) async fn update_session_control_http(
     );
     let response = client
         .post(url)
-        .json(&json!({
-            "selected_provider_kind": request.selected_provider_kind,
-            "selected_model_id": request.selected_model_id,
-            "permission_mode": request.permission_mode,
-            "config_posture": request.config_posture,
-            "status_view": request.status_view,
-            "mcp_posture": request.mcp_posture,
-        }))
+        .json(&request)
         .send()
         .await
         .map_err(ConversationClientError::Http)?;
@@ -1427,39 +1428,19 @@ pub(crate) async fn update_session_control_direct(
             ))
         })?;
 
-    let mut control_state = session_control_state_from_context(&session.retained_context, &session);
-    if let Some(value) = normalized_optional_string(request.selected_provider_kind.as_deref()) {
-        control_state.selected_provider_kind = Some(value);
-    }
-    if let Some(value) = normalized_optional_string(request.selected_model_id.as_deref()) {
-        control_state.selected_model_id = Some(value);
-    }
-    if let Some(value) = normalized_optional_string(request.permission_mode.as_deref()) {
-        validate_permission_mode(&value).map_err(|error| {
-            ConversationClientError::StorageUnavailable(error.to_string())
-        })?;
-        control_state.permission_mode = value;
-    }
-    if let Some(value) = normalized_optional_string(request.config_posture.as_deref()) {
-        validate_config_posture(&value).map_err(|error| {
-            ConversationClientError::StorageUnavailable(error.to_string())
-        })?;
-        control_state.config_posture = value;
-    }
-    if let Some(value) = normalized_optional_string(request.status_view.as_deref()) {
-        validate_status_view(&value).map_err(|error| {
-            ConversationClientError::StorageUnavailable(error.to_string())
-        })?;
-        control_state.status_view = value;
-    }
-    if let Some(value) = normalized_optional_string(request.mcp_posture.as_deref()) {
-        validate_mcp_posture(&value).map_err(|error| {
-            ConversationClientError::StorageUnavailable(error.to_string())
-        })?;
-        control_state.mcp_posture = value;
+    if matches!(parse_session_status(&session.status), SessionStatus::Ended) {
+        return Err(ConversationClientError::StorageUnavailable(format!(
+            "session {session_id} has ended"
+        )));
     }
 
+    let mut control_state = session_control_state_from_context(&session.retained_context, &session);
+    validate_and_apply_control_updates(&mut control_state, &request).map_err(|error| {
+        ConversationClientError::StorageUnavailable(error.to_string())
+    })?;
+
     session.retained_context = upsert_session_control_state(&session.retained_context, &ConversationSessionControlView {
+        session_id: control_state.session_id,
         selected_provider_kind: control_state.selected_provider_kind.clone(),
         selected_model_id: control_state.selected_model_id.clone(),
         permission_mode: control_state.permission_mode.clone(),
@@ -1504,7 +1485,8 @@ pub(crate) async fn inspect_session_for_cli(
 ) -> Result<ConversationCliSessionView, ConversationClientError> {
     match inspect_session_http(base_url, session_id).await {
         Ok(view) => Ok(view),
-        Err(_) => {
+        Err(err) => {
+            tracing::warn!("inspect_session_for_cli: HTTP inspect failed: {}", err);
             let mut view = inspect_session_direct(session_id).await?;
             view.support_notices.insert(
                 0,
@@ -1530,7 +1512,10 @@ pub(crate) async fn update_session_control_for_cli(
 ) -> Result<ConversationCliSessionControlState, ConversationClientError> {
     match update_session_control_http(base_url, session_id, request.clone()).await {
         Ok(view) => Ok(view),
-        Err(_) => update_session_control_direct(session_id, request).await,
+        Err(e) => {
+            tracing::error!("update_session_control_for_cli: HTTP update failed: {}", e);
+            update_session_control_direct(session_id, request).await
+        }
     }
 }
 

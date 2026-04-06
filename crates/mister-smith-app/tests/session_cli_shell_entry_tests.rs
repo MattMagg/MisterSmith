@@ -1,43 +1,9 @@
+mod common;
+
 use axum::{routing::{get, post}, Json, Router};
 use serde_json::json;
-use std::path::PathBuf;
 use std::process::Stdio;
-use std::process::Command as StdCommand;
-use std::sync::OnceLock;
-use tokio::net::TcpListener;
 use tokio::process::Command;
-
-async fn spawn_mock_server(app: Router) -> (String, tokio::task::JoinHandle<()>) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let handle = tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
-    (format!("http://{}", address), handle)
-}
-
-fn binary_path() -> PathBuf {
-    static BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
-
-    BINARY_PATH
-        .get_or_init(|| {
-            let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .and_then(|path| path.parent())
-                .expect("workspace root should exist")
-                .to_path_buf();
-            let status = StdCommand::new("cargo")
-                .current_dir(&repo_root)
-                .args(["build", "-p", "mister-smith-app", "--bin", "mister-smith"])
-                .status()
-                .expect("cargo build should run");
-            assert!(status.success(), "cargo build should succeed");
-            std::env::var_os("CARGO_BIN_EXE_mister-smith")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| repo_root.join("target/debug/mister-smith"))
-        })
-        .clone()
-}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn no_arg_entry_renders_recent_first_home() {
@@ -68,9 +34,9 @@ async fn no_arg_entry_renders_recent_first_home() {
                 ]))
             }),
         );
-    let (base_url, handle) = spawn_mock_server(app).await;
+    let (base_url, handle) = common::spawn_mock_server(app).await;
 
-    let output = Command::new(binary_path())
+    let output = Command::new(common::binary_path())
         .arg("--base-url")
         .arg(&base_url)
         .stdin(Stdio::null())
@@ -102,9 +68,9 @@ async fn direct_prompt_entry_starts_a_new_session() {
             }))
         }),
     );
-    let (base_url, handle) = spawn_mock_server(app).await;
+    let (base_url, handle) = common::spawn_mock_server(app).await;
 
-    let output = Command::new(binary_path())
+    let output = Command::new(common::binary_path())
         .arg("--base-url")
         .arg(&base_url)
         .arg("start")

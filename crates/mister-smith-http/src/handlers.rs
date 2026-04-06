@@ -1565,6 +1565,7 @@ mod tests {
                     },
                 ],
                 control_state: ConversationSessionControlView {
+                    session_id,
                     selected_provider_kind: Some("openai_chatgpt".to_string()),
                     selected_model_id: Some("gpt-5.4".to_string()),
                     permission_mode: "review".to_string(),
@@ -1651,6 +1652,7 @@ mod tests {
                 last_assistant_result: None,
                 turns: vec![],
                 control_state: ConversationSessionControlView {
+                    session_id,
                     selected_provider_kind: None,
                     selected_model_id: None,
                     permission_mode: "default".to_string(),

@@ -100,27 +100,30 @@ impl ConversationSessionService for FixedConversationService {
 
     async fn update_session_control_state(
         &self,
-        _session_id: SessionId,
+        session_id: SessionId,
         request: ConversationSessionControlUpdateRequest,
     ) -> Result<ConversationSessionControlView, ConversationServiceError> {
+        fn normalize(value: Option<String>) -> Option<String> {
+            value
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        }
+
         Ok(ConversationSessionControlView {
-            selected_provider_kind: request
-                .selected_provider_kind
+            session_id,
+            selected_provider_kind: normalize(request.selected_provider_kind)
                 .or_else(|| self.view.control_state.selected_provider_kind.clone()),
-            selected_model_id: request
-                .selected_model_id
+            selected_model_id: normalize(request.selected_model_id)
                 .or_else(|| self.view.control_state.selected_model_id.clone()),
-            permission_mode: request
-                .permission_mode
+            permission_mode: normalize(request.permission_mode)
                 .unwrap_or_else(|| self.view.control_state.permission_mode.clone()),
-            config_posture: request
-                .config_posture
+            config_posture: normalize(request.config_posture)
                 .unwrap_or_else(|| self.view.control_state.config_posture.clone()),
-            status_view: request
-                .status_view
+            status_view: normalize(request.status_view)
                 .unwrap_or_else(|| self.view.control_state.status_view.clone()),
-            mcp_posture: request
-                .mcp_posture
+            mcp_posture: normalize(request.mcp_posture)
                 .unwrap_or_else(|| self.view.control_state.mcp_posture.clone()),
         })
     }
@@ -204,6 +207,7 @@ async fn session_handler_includes_turn_lifecycle_projection() {
                 }),
             }],
             control_state: ConversationSessionControlView {
+                session_id,
                 selected_provider_kind: None,
                 selected_model_id: None,
                 permission_mode: "default".to_string(),
@@ -254,6 +258,7 @@ async fn session_control_handler_returns_updated_control_projection() {
             last_assistant_result: None,
             turns: vec![],
             control_state: ConversationSessionControlView {
+                session_id,
                 selected_provider_kind: None,
                 selected_model_id: None,
                 permission_mode: "default".to_string(),
