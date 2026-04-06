@@ -1,6 +1,6 @@
 mod common;
 
-use axum::{routing::get, Json, Router};
+use axum::{http::StatusCode, routing::get, Json, Router};
 use serde_json::json;
 use std::process::Stdio;
 use tokio::process::Command;
@@ -124,6 +124,42 @@ async fn sessions_list_renders_recent_rows() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn sessions_list_surfaces_runtime_status_failures_without_direct_store_fallback() {
+    let app = Router::new()
+        .route(
+            "/api/v1/health",
+            get(|| async { Json(json!({ "status": "healthy", "components": [] })) }),
+        )
+        .route(
+            "/api/v1/sessions",
+            get(|| async {
+                (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({ "error": "session list denied" })),
+                )
+            }),
+        );
+    let (base_url, handle) = common::spawn_mock_server(app).await;
+
+    let output = Command::new(common::binary_path())
+        .arg("--base-url")
+        .arg(&base_url)
+        .arg("sessions")
+        .arg("list")
+        .stdin(Stdio::null())
+        .output()
+        .await
+        .expect("binary should run");
+
+    handle.abort();
+
+    assert!(output.status.success(), "{:?}", output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Recent session discovery failed: runtime returned 401"));
+    assert!(!stdout.contains("No retained sessions were found yet."));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn sessions_open_renders_the_selected_session() {
     let app = Router::new().route(
         "/api/v1/sessions/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -232,4 +268,34 @@ async fn resume_by_session_id_renders_the_selected_session() {
     assert!(stdout.contains("session: resume specific retained session"));
     assert!(stdout.contains("loop_state: ready"));
     assert!(stdout.contains("session_id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn resume_last_surfaces_runtime_status_failures() {
+    let app = Router::new().route(
+        "/api/v1/sessions",
+        get(|| async {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "session list denied" })),
+            )
+        }),
+    );
+    let (base_url, handle) = common::spawn_mock_server(app).await;
+
+    let output = Command::new(common::binary_path())
+        .arg("--base-url")
+        .arg(&base_url)
+        .arg("resume")
+        .arg("--last")
+        .stdin(Stdio::null())
+        .output()
+        .await
+        .expect("binary should run");
+
+    handle.abort();
+
+    assert!(!output.status.success(), "{:?}", output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("ERROR: runtime returned 401: session list denied"));
 }

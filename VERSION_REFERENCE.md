@@ -1,8 +1,14 @@
 # Version Reference
 
 Generated: 2026-03-03
+Repo-truth refresh: 2026-04-06
 
 This document maps every crate referenced in `spec/core-architecture/dependency-specifications.md` to its current stable version, identifies version gaps, and flags breaking changes that affect the framework specifications.
+
+The `Current Stable` column and migration notes below remain the external-research snapshot captured on
+2026-03-03. The repo-truth sections near the end of this file were refreshed from current manifests
+and lockfiles on 2026-04-06 so the current workspace baseline is explicit and does not get confused
+with proposal-only upgrade guidance.
 
 ## Crate Versions
 
@@ -175,9 +181,10 @@ This document maps every crate referenced in `spec/core-architecture/dependency-
 - `Display` formatting changes for some edge cases
 - thiserror 2.0 supports `no_std` environments
 
-**Decision required**: The spec explicitly notes `thiserror = "1.0.69" # (not 2.0)` in the cross-domain validation matrix. This was a deliberate choice. However, thiserror 1.0 is still available and maintained — the spec can stay on 1.0.x if desired, or adopt 2.0 for the `no_std` support and cleaner API. async-nats 0.46.0 still uses `thiserror = "1.0"` in its own dependencies, so 1.0.x remains viable.
-
-**Recommendation**: Keep `thiserror = "1.0.69"` (or latest 1.0.x patch) for now. Migrate to 2.0 only when all workspace dependencies have moved. No urgency.
+**Repo-truth refresh (2026-04-06)**: The Mister Smith workspace has already adopted
+`thiserror 2.0.18` in `[workspace.dependencies]`, and workspace crates consume `thiserror 2.0.18`
+directly. The older `1.0.69` line now remains only as historical context and as a transitive
+dependency of some external crates. Treat `2.0.18` as current repo truth.
 
 ### 4. jsonwebtoken 9.3.0 --> 10.3.0 (HIGH)
 
@@ -218,9 +225,13 @@ This document maps every crate referenced in `spec/core-architecture/dependency-
 - `native-tls` now implies ALPN automatically
 
 **Migration actions**:
-1. Update `reqwest` from `0.12.9` to `0.13.2`
+1. If the repo decides to land the upgrade, update `reqwest` from `0.12.x` to `0.13.2`
 2. Add `query` and `form` features explicitly: `reqwest = { version = "0.13", features = ["json", "stream", "gzip", "query"] }`
 3. Review TLS configuration in HTTP client specs
+
+**Repo-truth refresh (2026-04-06)**: The current workspace still uses `reqwest = "0.12"` in
+`Cargo.toml`, and workspace crates currently resolve `reqwest 0.12.28`. Treat `0.13.2` as a
+proposal candidate, not current repo truth.
 
 ### 7. OpenTelemetry Stack: 0.26.0 --> 0.31.0 (HIGH)
 
@@ -271,7 +282,7 @@ The spec's MSRV of **1.75** is incompatible with the current async-nats:
 | Priority | Crates | Effort | Risk |
 |----------|--------|--------|------|
 | **CRITICAL** | async-nats (0.37 -> 0.46) | High | High — touches transport, messaging, JetStream across many spec files |
-| **HIGH** | tonic+prost (0.11+0.12 -> 0.14+0.14), jsonwebtoken (9 -> 10), redis (0.27 -> 1.0), opentelemetry stack (0.26 -> 0.31), thiserror (decision: stay 1.x or go 2.x) | Medium each | Medium — localized to specific domains |
+| **HIGH** | tonic+prost (0.11+0.12 -> 0.14+0.14), jsonwebtoken (9 -> 10), redis (0.27 -> 1.0), opentelemetry stack (0.26 -> 0.31) | Medium each | Medium — localized to specific domains |
 | **MEDIUM** | reqwest (0.12 -> 0.13), metrics stack (0.23 -> 0.24) | Low | Low — mostly feature flag and import changes |
 | **LOW** | tokio (1.45 -> 1.49), axum (0.8.0 -> 0.8.8), ring (0.17.8 -> 0.17.14), serde/serde_json, tracing, tower, futures | Minimal | Minimal — patch-level updates, SemVer compatible |
 
@@ -287,9 +298,11 @@ These crates are either at or very near their spec versions with no breaking cha
 
 ---
 
-## Version Matrix for Implementation
+## Current Workspace Baseline
 
-Recommended versions for `[workspace.dependencies]` at implementation time:
+This section reflects current repo truth from the checked-in manifests and lockfiles on 2026-04-06.
+It is the section to use when you need the actual Mister Smith dependency baseline, not the older
+stable-version research snapshot above.
 
 ```toml
 [workspace.dependencies]
@@ -299,48 +312,65 @@ futures = "0.3.32"
 async-trait = "0.1.83"
 
 # Transport
-async-nats = { version = "0.46.0", features = ["jetstream", "kv", "object-store", "service", "nkeys", "ring"] }
-tonic = "0.14.5"
-prost = "0.14.3"
+async-nats = { version = "0.46.0", features = ["jetstream", "kv", "service"] }
+tonic = "0.14"
+tonic-health = "0.14"
+tonic-build = "0.14"
+prost = "0.14"
+prost-types = "0.14"
+prost-build = "0.14"
 axum = "0.8.8"
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+toml = "1.1"
 
 # Error Handling
-thiserror = "1.0.69"  # Or 2.0.18 — decision pending
-anyhow = "1.0.102"
+thiserror = "2.0.18"
 
 # Observability
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 metrics = "0.24.3"
 metrics-exporter-prometheus = "0.18.1"
 opentelemetry = "0.31.0"
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31.1", features = ["tonic"] }
 tracing-opentelemetry = "0.32.1"
 
 # Security
 ring = "=0.17.14"
 jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
 rustls = "0.23.37"
+tokio-rustls = "0.26.4"
+rcgen = { version = "0.14.7", features = ["pem"] }
 
 # Database
-sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "any"] }
-redis = { version = "1.0.4", features = ["tokio-comp", "connection-manager"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls", "uuid", "json", "chrono", "migrate"] }
 
 # HTTP Client
-reqwest = { version = "0.13.2", features = ["json", "stream", "gzip", "query"] }
-
-# Build
-prost-build = "0.14.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 
 # Tower
-tower = "0.5.3"
-tower-http = { version = "0.6.8", features = ["trace"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
 ```
 
 ```toml
 [package]
 rust-version = "1.88"
+```
+
+Current lockfile resolution highlights:
+
+- `tokio` currently resolves to `1.50.0`
+- workspace crates directly consume `thiserror 2.0.18`
+- workspace crates currently use `reqwest 0.12.28`
+
+Crate-specific manifest baseline not represented in `[workspace.dependencies]`:
+
+```toml
+# crates/mister-smith-mcp/Cargo.toml
+rmcp = { version = "1.3.0", default-features = false, features = ["client", "server", "transport-child-process", "transport-io", "transport-streamable-http-client-reqwest"] }
 ```

@@ -62,8 +62,8 @@ The newest landed packet authorities are:
 - `specs/025-step-level-intelligence-v2/`
 - `specs/026-first-real-coordinator-subagent-runtime/`
 
-Draft or pre-spec forward work exists under `specs/027-*`, `specs/028-*`, and `specs/029-*`, but
-those later packets are not yet the default runtime story.
+Draft, frozen-planning, or pre-spec forward work exists under `specs/027-*` through
+`specs/031-*`, but those later packets are not yet the default runtime story.
 
 ## Community Health
 

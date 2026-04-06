@@ -1701,14 +1701,14 @@ mod tests {
 
         // Assert new response fields
         assert_eq!(value["loop_state"], "turn_pending");
-        assert!(value["current_turn_state"].is_null());
+        assert!(value.get("current_turn_state").is_none());
         assert_eq!(
             value["next_action_hint"],
             "stay in this session while the accepted turn starts"
         );
-        // blocks_live_turn is false, so it should be omitted from the JSON (not present)
-        assert!(value["support_notices"][0]["blocks_live_turn"].is_null()
-            || value["support_notices"][0]["blocks_live_turn"] == false);
+        assert!(value["support_notices"][0]
+            .get("blocks_live_turn")
+            .is_none());
         assert_eq!(
             value["support_notices"][0]["allowed_next_action"],
             "keep working in this session or adjust the support posture"
@@ -1765,7 +1765,7 @@ mod tests {
         }));
 
         let Json(sessions) = list_sessions(
-            State(state),
+            State(state.clone()),
             Query(SessionListQuery {
                 status: None,
                 limit: None,
@@ -1782,14 +1782,18 @@ mod tests {
         let Json(inspect_response) = get_session(State(state), Path(session_id.to_string()))
             .await
             .expect("session inspect should succeed");
-        let inspect_value = serde_json::to_value(inspect_response).expect("inspect response should serialize");
+        let inspect_value =
+            serde_json::to_value(inspect_response).expect("inspect response should serialize");
 
         assert_eq!(inspect_value["loop_state"], "ready");
-        assert!(inspect_value["current_turn_state"].is_null());
+        assert!(inspect_value.get("current_turn_state").is_none());
         assert_eq!(
             inspect_value["next_action_hint"],
             "send a follow-up turn or adjust the session controls from this loop"
         );
-        assert_eq!(inspect_value["support_notices"].as_array().unwrap().len(), 0);
+        assert_eq!(
+            inspect_value["support_notices"].as_array().unwrap().len(),
+            0
+        );
     }
 }

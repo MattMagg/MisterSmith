@@ -26,8 +26,9 @@ stable repo-wide state summary and document router.
 - `specs/026-first-real-coordinator-subagent-runtime/`: latest landed coordinator-runtime packet on
   `main`
 - `specs/027-capability-discovery-and-interoperability/`,
-  `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/`: later
-  draft or pre-spec packet material; no later packet is currently promoted as the next
+  `specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
+  `specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/`: later draft,
+  frozen-planning, or pre-spec packet material; no later packet is currently promoted as the next
   implementation-ready slice
 - `specs/022-durable-workflow-core/`: packet-022 implementation authority
 - `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md`: latest bounded live-proof note and
@@ -78,7 +79,9 @@ runtime.
 - Later packet material that is not yet promoted as the next implementation-ready slice:
   `specs/027-capability-discovery-and-interoperability/`,
   `specs/028-selective-strong-coordination/`,
-  `specs/029-session-first-user-shell/`
+  `specs/029-session-first-user-shell/`,
+  `specs/030-session-first-cli-shell/`,
+  `specs/031-chat-first-cli-loop/`
 - Historical budget-aware live-proof note:
   `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - Historical packet-016 closure evidence:
@@ -209,17 +212,17 @@ Changes to these files cascade across the architecture:
 | Category | Technology | Version | Notes |
 |----------|-----------|---------|-------|
 | Language | Rust (MSRV) | 1.88.0 | Driven by async-nats 0.46.0 requirement |
-| Runtime | Tokio | 1.49.0 | Full feature set (rt-multi-thread, io, net, time, sync, fs, process, signal) |
+| Runtime | Tokio | 1.49.x workspace baseline | `Cargo.toml` pins `1.49.0`; current lockfile resolves `1.50.0` |
 | Messaging | async-nats (JetStream, KV, service) | 0.46.0 | jetstream, kv, object-store, service features |
 | HTTP | Axum | 0.8.8 | |
 | gRPC | Tonic + Prost | 0.14.x | |
-| MCP | rmcp (client, server, streamable-HTTP) | 1.1.0 | |
+| MCP | rmcp (client, server, streamable-HTTP) | 1.3.0 | `crates/mister-smith-mcp/Cargo.toml` |
 | Database | sqlx (PostgreSQL, runtime-tokio-rustls) | 0.8.6 | |
 | Security | jsonwebtoken, rustls | 10.x, 0.23 | JWT, TLS 1.3, mTLS |
 | Observability | opentelemetry + tracing + metrics-exporter-prometheus | 0.31.0, 0.1.44, 0.18.1 | |
 | CLI | clap | 4.x | |
 | Serialization | serde, serde_json, rmp-serde | 1.x | |
-| Errors | thiserror | 1.x | Staying on 1.x per deliberate decision |
+| Errors | thiserror | 2.x | Workspace baseline is `2.0.18`; some transitive dependencies still bring `1.0.69` |
 | Storage | PostgreSQL 15+ (relational), JetStream KV (distributed ephemeral) | — | |
 | Orchestration | Kubernetes | — | Deploy artifacts in `deploy/` |
 

@@ -734,10 +734,6 @@ pub(crate) fn enrich_accepted_task_ingress_continuity(
             "revocation_state was {:?} in persisted ingress metadata",
             revocation_state
         ));
-    } else if revocation_state_raw.is_some() {
-        rationale.push(
-            "revocation_state not present or invalid in persisted ingress metadata".to_string(),
-        );
     } else {
         rationale.push(
             "revocation_state not present or invalid in persisted ingress metadata".to_string(),

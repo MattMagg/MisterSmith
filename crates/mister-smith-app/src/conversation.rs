@@ -516,18 +516,16 @@ async fn build_session_view(
     } else {
         ConversationTurnStateSource::LiveRuntime
     };
-    let mut current_turn_state = current_turn_state_for_loop(
-        &session,
-        &turn_summaries,
-        state_source,
-    );
+    let mut current_turn_state =
+        current_turn_state_for_loop(&session, &turn_summaries, state_source);
     let loop_state = loop_state_for_session(&session, current_turn_state.as_ref());
     let next_action_hint = next_action_for_loop_state(loop_state).to_string();
 
     // Override next_action_hint when the session/loop has ended
     if loop_state == ConversationLoopState::Ended {
         if let Some(ref mut turn_state) = current_turn_state {
-            turn_state.next_action_hint = next_action_for_loop_state(ConversationLoopState::Ended).to_string();
+            turn_state.next_action_hint =
+                next_action_for_loop_state(ConversationLoopState::Ended).to_string();
         }
     }
 
@@ -774,6 +772,7 @@ fn session_support_notices(
     last_assistant_result: Option<&SessionRetainedResultView>,
 ) -> Vec<ConversationSupportNoticeView> {
     let mut notices = Vec::new();
+    let session_ended = matches!(parse_session_status(&session.status), SessionStatus::Ended);
 
     if session.active_workflow_id.is_some() {
         notices.push(ConversationSupportNoticeView {
@@ -789,7 +788,7 @@ fn session_support_notices(
         });
     }
 
-    if matches!(parse_session_status(&session.status), SessionStatus::Ended) {
+    if session_ended {
         notices.push(ConversationSupportNoticeView {
             notice_kind: "ended".to_string(),
             severity: "warning".to_string(),
@@ -804,17 +803,32 @@ fn session_support_notices(
     }
 
     if last_assistant_result.is_some() {
+        let (summary, support_surface, blocks_live_turn, allowed_next_action) = if session_ended {
+            (
+                "This loop shows bounded retained previews with explicit proof limits from an ended session. It is not a fresh live-proof claim."
+                    .to_string(),
+                Some("resume".to_string()),
+                true,
+                "read the retained result, or start a new session or resume a different retained session"
+                    .to_string(),
+            )
+        } else {
+            (
+                "This loop shows bounded retained previews with explicit proof limits. It is not a fresh live-proof claim."
+                    .to_string(),
+                Some("status".to_string()),
+                false,
+                "read the retained result or send a follow-up turn when the loop is ready"
+                    .to_string(),
+            )
+        };
         notices.push(ConversationSupportNoticeView {
             notice_kind: "proof_limited".to_string(),
             severity: "info".to_string(),
-            summary:
-                "This loop shows bounded retained previews with explicit proof limits. It is not a fresh live-proof claim."
-                    .to_string(),
-            support_surface: Some("status".to_string()),
-            blocks_live_turn: false,
-            allowed_next_action:
-                "read the retained result or send a follow-up turn when the loop is ready"
-                    .to_string(),
+            summary,
+            support_surface,
+            blocks_live_turn,
+            allowed_next_action,
         });
     }
 
@@ -823,14 +837,30 @@ fn session_support_notices(
         || control_state.permission_mode != DEFAULT_PERMISSION_MODE
         || control_state.mcp_posture != DEFAULT_MCP_POSTURE
     {
+        let (summary, support_surface, blocks_live_turn, allowed_next_action) = if session_ended {
+            (
+                "Stored shell control preferences are shown for this ended session, but it cannot accept new live turns or control edits."
+                    .to_string(),
+                Some("resume".to_string()),
+                true,
+                "start a new session or resume a different retained session".to_string(),
+            )
+        } else {
+            (
+                "Shell control changes are stored with this session, but runtime execution still follows the active runtime path."
+                    .to_string(),
+                Some("config".to_string()),
+                false,
+                "keep working in this session or adjust the support posture".to_string(),
+            )
+        };
         notices.push(ConversationSupportNoticeView {
             notice_kind: "session_shell_preferences".to_string(),
             severity: "warning".to_string(),
-            summary: "Shell control changes are stored with this session, but runtime execution still follows the active runtime path.".to_string(),
-            support_surface: Some("config".to_string()),
-            blocks_live_turn: false,
-            allowed_next_action:
-                "keep working in this session or adjust the support posture".to_string(),
+            summary,
+            support_surface,
+            blocks_live_turn,
+            allowed_next_action,
         });
     }
 
@@ -1317,6 +1347,15 @@ impl fmt::Display for ConversationClientError {
 
 impl Error for ConversationClientError {}
 
+pub(crate) fn should_fallback_to_direct_session_store(error: &ConversationClientError) -> bool {
+    match error {
+        ConversationClientError::Http(error) => error.is_connect() || error.is_timeout(),
+        ConversationClientError::InvalidSessionId(_)
+        | ConversationClientError::StorageUnavailable(_)
+        | ConversationClientError::HttpStatus(_, _) => false,
+    }
+}
+
 pub(crate) fn parse_session_id(raw: &str) -> Result<SessionId, ConversationClientError> {
     Uuid::parse_str(raw)
         .map(SessionId::from_uuid)
@@ -1701,18 +1740,20 @@ pub(crate) async fn update_session_control_direct(
 pub(crate) async fn resolve_last_session_id(
     base_url: &str,
     _config: &FrameworkConfig,
-) -> Option<SessionId> {
-    if let Ok(rows) = list_sessions_http(base_url, 1).await {
-        return rows
+) -> Result<Option<SessionId>, ConversationClientError> {
+    match list_sessions_http(base_url, 1).await {
+        Ok(rows) => Ok(rows
             .first()
-            .and_then(|row| parse_session_id(&row.session_id).ok());
+            .and_then(|row| parse_session_id(&row.session_id).ok())),
+        Err(error) if should_fallback_to_direct_session_store(&error) => {
+            Ok(list_sessions_direct(1)
+                .await
+                .ok()
+                .and_then(|rows| rows.first().cloned())
+                .and_then(|row| parse_session_id(&row.session_id).ok()))
+        }
+        Err(error) => Err(error),
     }
-
-    list_sessions_direct(1)
-        .await
-        .ok()
-        .and_then(|rows| rows.first().cloned())
-        .and_then(|row| parse_session_id(&row.session_id).ok())
 }
 
 pub(crate) async fn inspect_session_for_cli(
@@ -1722,7 +1763,7 @@ pub(crate) async fn inspect_session_for_cli(
 ) -> Result<ConversationCliSessionView, ConversationClientError> {
     match inspect_session_http(base_url, session_id).await {
         Ok(view) => Ok(view),
-        Err(err) => {
+        Err(err) if should_fallback_to_direct_session_store(&err) => {
             tracing::warn!("inspect_session_for_cli: HTTP inspect failed: {}", err);
             let mut view = inspect_session_direct(session_id).await?;
 
@@ -1731,7 +1772,7 @@ pub(crate) async fn inspect_session_for_cli(
                 ConversationClientError::Http(_) => true,
                 ConversationClientError::HttpStatus(status, _) => {
                     // 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout
-                    matches!(status.as_u16(), 502 | 503 | 504)
+                    matches!(status.as_u16(), 502..=504)
                 }
                 _ => false,
             };
@@ -1768,6 +1809,7 @@ pub(crate) async fn inspect_session_for_cli(
             }
             Ok(view)
         }
+        Err(err) => Err(err),
     }
 }
 
@@ -1856,10 +1898,11 @@ pub(crate) async fn update_session_control_for_cli(
 ) -> Result<ConversationCliSessionControlState, ConversationClientError> {
     match update_session_control_http(base_url, session_id, request.clone()).await {
         Ok(view) => Ok(view),
-        Err(e) => {
+        Err(e) if should_fallback_to_direct_session_store(&e) => {
             tracing::error!("update_session_control_for_cli: HTTP update failed: {}", e);
             update_session_control_direct(session_id, request).await
         }
+        Err(e) => Err(e),
     }
 }
 
@@ -1873,7 +1916,7 @@ pub(crate) async fn build_startup_home(
     let (recent_sessions, session_source, mut startup_warnings, discovery_success) =
         match list_sessions_http(base_url, limit).await {
             Ok(rows) => (rows, "runtime_api".to_string(), Vec::new(), true),
-            Err(_) => match list_sessions_direct(limit).await {
+            Err(error) if should_fallback_to_direct_session_store(&error) => match list_sessions_direct(limit).await {
                 Ok(rows) => (
                     rows,
                     "durable_store".to_string(),
@@ -1907,6 +1950,21 @@ pub(crate) async fn build_startup_home(
                     false,
                 ),
             },
+            Err(error) => (
+                Vec::new(),
+                "runtime_api_error".to_string(),
+                vec![ConversationCliSupportNoticeView {
+                    notice_kind: "session_discovery_failed".to_string(),
+                    severity: "warning".to_string(),
+                    summary: format!("Recent session discovery failed: {error}"),
+                    support_surface: Some("run".to_string()),
+                    blocks_live_turn: false,
+                    allowed_next_action:
+                        "inspect the runtime status or retry recent session discovery"
+                            .to_string(),
+                }],
+                false,
+            ),
         };
 
     if !runtime_available && startup_warnings.is_empty() {
@@ -2285,6 +2343,16 @@ mod tests {
 
         assert_eq!(transcript.len(), 1);
         assert_eq!(second["latest_workflow_id"], workflow_id.to_string());
+    }
+
+    #[test]
+    fn fallback_predicate_rejects_http_status_errors() {
+        let error = ConversationClientError::HttpStatus(
+            StatusCode::UNAUTHORIZED,
+            "permission denied".to_string(),
+        );
+
+        assert!(!should_fallback_to_direct_session_store(&error));
     }
 
     #[test]

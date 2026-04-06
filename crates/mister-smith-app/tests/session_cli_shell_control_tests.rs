@@ -11,7 +11,11 @@ mod execution;
 #[path = "../src/observability.rs"]
 mod observability;
 
-use axum::{routing::post, Json, Router};
+use axum::{
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
 use mister_smith_core::DurableWorkflowLifecycleState;
 use serde_json::json;
 use tokio::net::TcpListener;
@@ -67,6 +71,114 @@ async fn session_control_updates_round_trip_through_http_helper() {
     assert_eq!(control.permission_mode, "review");
     assert_eq!(control.status_view, "detail");
     assert_eq!(control.mcp_posture, "connected");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn inspect_session_for_cli_surfaces_http_status_errors() {
+    let app = Router::new().route(
+        "/api/v1/sessions/11111111-1111-1111-1111-111111111111",
+        get(|| async {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "missing session" })),
+            )
+        }),
+    );
+    let (base_url, handle) = spawn_mock_server(app).await;
+    let session_id = conversation::parse_session_id("11111111-1111-1111-1111-111111111111")
+        .expect("session id should parse");
+
+    let error = conversation::inspect_session_for_cli(
+        &base_url,
+        &mister_smith_config::FrameworkConfig::default(),
+        session_id,
+    )
+    .await
+    .expect_err("status failure should not fall back to direct store");
+
+    handle.abort();
+
+    assert!(matches!(
+        error,
+        conversation::ConversationClientError::HttpStatus(StatusCode::NOT_FOUND, _)
+    ));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn update_session_control_for_cli_surfaces_http_status_errors() {
+    let app = Router::new().route(
+        "/api/v1/sessions/11111111-1111-1111-1111-111111111111/controls",
+        post(|| async {
+            (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "controls are forbidden" })),
+            )
+        }),
+    );
+    let (base_url, handle) = spawn_mock_server(app).await;
+    let session_id = conversation::parse_session_id("11111111-1111-1111-1111-111111111111")
+        .expect("session id should parse");
+
+    let error = conversation::update_session_control_for_cli(
+        &base_url,
+        &mister_smith_config::FrameworkConfig::default(),
+        session_id,
+        mister_smith_http::server::ConversationSessionControlUpdateRequest {
+            status_view: Some("detail".to_string()),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect_err("status failure should not fall back to direct store");
+
+    handle.abort();
+
+    assert!(matches!(
+        error,
+        conversation::ConversationClientError::HttpStatus(StatusCode::FORBIDDEN, _)
+    ));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn build_startup_home_surfaces_session_discovery_status_errors() {
+    let app = Router::new()
+        .route(
+            "/api/v1/health",
+            get(|| async { Json(json!({ "status": "healthy", "components": [] })) }),
+        )
+        .route(
+            "/api/v1/sessions",
+            get(|| async {
+                (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({ "error": "session list denied" })),
+                )
+            }),
+        );
+    let (base_url, handle) = spawn_mock_server(app).await;
+
+    let home = conversation::build_startup_home(
+        &base_url,
+        &mister_smith_config::FrameworkConfig::default(),
+        "config loaded from defaults".to_string(),
+        8,
+    )
+    .await;
+
+    handle.abort();
+
+    assert!(home.runtime_available);
+    assert_eq!(home.session_source, "runtime_api_error");
+    assert!(home.recent_sessions.is_empty());
+    assert!(home
+        .startup_warnings
+        .iter()
+        .any(|notice| notice.notice_kind == "session_discovery_failed"
+            && notice.summary.contains("runtime returned 401")));
+    assert!(!home
+        .startup_warnings
+        .iter()
+        .any(|notice| notice.notice_kind == "no_recent_sessions"));
 }
 
 #[test]
