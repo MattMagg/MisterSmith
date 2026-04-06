@@ -221,7 +221,10 @@ fn env_overlay_transport_accepts_legacy_nats_alias() {
 
     apply_env_overlay(&mut config, "TEST_PREFIX4B").unwrap();
 
-    assert_eq!(config.transport.nats_url, Some("nats://alias:4222".to_string()));
+    assert_eq!(
+        config.transport.nats_url,
+        Some("nats://alias:4222".to_string())
+    );
 }
 
 #[test]

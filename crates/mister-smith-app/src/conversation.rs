@@ -14,12 +14,13 @@ use mister_smith_core::{
     TaskId,
 };
 use mister_smith_http::server::{
-    ConversationContinueRequest, ConversationCreateRequest, ConversationEndView,
-    ConversationResumeProvenanceView, ConversationServiceError,
-    ConversationSessionControlUpdateRequest, ConversationSessionControlView,
-    ConversationSessionService, ConversationSessionSummaryView, ConversationSessionView,
-    ConversationSupportNoticeView, ConversationTurnAccepted, ConversationTurnContext,
-    ConversationTurnSummaryView, SessionListRequest, TaskSubmissionRequest,
+    ConversationContinueRequest, ConversationCreateRequest, ConversationCurrentTurnStateView,
+    ConversationEndView, ConversationLoopState, ConversationResumeProvenanceView,
+    ConversationServiceError, ConversationSessionControlUpdateRequest,
+    ConversationSessionControlView, ConversationSessionService, ConversationSessionSummaryView,
+    ConversationSessionView, ConversationSupportNoticeView, ConversationTurnAccepted,
+    ConversationTurnContext, ConversationTurnStateSource, ConversationTurnSummaryView,
+    SessionListRequest, TaskSubmissionRequest,
 };
 use mister_smith_persistence::postgres::pool::PostgresConnection;
 use mister_smith_persistence::postgres::queries::{self, TaskRecord};
@@ -451,7 +452,6 @@ async fn build_session_view(
     pool: &PgPool,
 ) -> Result<ConversationSessionView, ConversationServiceError> {
     let control_state = session_control_state_from_context(&session.retained_context, &session);
-    let support_notices = session_support_notices(&session, &control_state);
     let task_ids = turns
         .iter()
         .map(|turn| turn.workflow_id)
@@ -509,10 +509,31 @@ async fn build_session_view(
         });
     }
 
+    let support_notices =
+        session_support_notices(&session, &control_state, last_assistant_result.as_ref());
+    let state_source = if session.active_workflow_id.is_none() {
+        ConversationTurnStateSource::RetainedSession
+    } else {
+        ConversationTurnStateSource::LiveRuntime
+    };
+    let mut current_turn_state =
+        current_turn_state_for_loop(&session, &turn_summaries, state_source);
+    let loop_state = loop_state_for_session(&session, current_turn_state.as_ref());
+    let next_action_hint = next_action_for_loop_state(loop_state).to_string();
+
+    // Override next_action_hint when the session/loop has ended
+    if loop_state == ConversationLoopState::Ended {
+        if let Some(ref mut turn_state) = current_turn_state {
+            turn_state.next_action_hint =
+                next_action_for_loop_state(ConversationLoopState::Ended).to_string();
+        }
+    }
+
     Ok(ConversationSessionView {
         title: session_title(&session.retained_context, &session),
         session_id: SessionId::from_uuid(session.session_id),
         status: parse_session_status(&session.status),
+        loop_state,
         coordinator_agent_id: AgentId::from_uuid(session.coordinator_agent_id),
         provider_kind: session.provider_kind,
         model_id: session.model_id,
@@ -520,9 +541,11 @@ async fn build_session_view(
         last_completed_workflow_id: session.last_completed_workflow_id.map(TaskId::from_uuid),
         turn_count: session.turn_count.max(0) as u32,
         last_assistant_result,
+        current_turn_state,
         turns: turn_summaries,
         control_state,
         support_notices,
+        next_action_hint,
         ended_at: session.ended_at,
     })
 }
@@ -746,17 +769,66 @@ fn upsert_session_control_state(
 fn session_support_notices(
     session: &SessionRecord,
     control_state: &ConversationSessionControlView,
+    last_assistant_result: Option<&SessionRetainedResultView>,
 ) -> Vec<ConversationSupportNoticeView> {
     let mut notices = Vec::new();
+    let session_ended = matches!(parse_session_status(&session.status), SessionStatus::Ended);
 
     if session.active_workflow_id.is_some() {
         notices.push(ConversationSupportNoticeView {
-            notice_kind: "session_busy".to_string(),
+            notice_kind: "busy".to_string(),
             severity: "info".to_string(),
             summary:
-                "This session already has a live workflow. New turns will wait until it finishes."
+                "Another live turn is already active in this session. Stay here to watch it or wait before sending the next follow-up."
                     .to_string(),
             support_surface: Some("status".to_string()),
+            blocks_live_turn: true,
+            allowed_next_action: "wait for the current turn to finish or inspect the current state"
+                .to_string(),
+        });
+    }
+
+    if session_ended {
+        notices.push(ConversationSupportNoticeView {
+            notice_kind: "ended".to_string(),
+            severity: "warning".to_string(),
+            summary:
+                "This session is ended. Retained context is still visible, but it cannot accept another live turn."
+                    .to_string(),
+            support_surface: Some("resume".to_string()),
+            blocks_live_turn: true,
+            allowed_next_action:
+                "start a new session or resume a different retained session".to_string(),
+        });
+    }
+
+    if last_assistant_result.is_some() {
+        let (summary, support_surface, blocks_live_turn, allowed_next_action) = if session_ended {
+            (
+                "This loop shows bounded retained previews with explicit proof limits from an ended session. It is not a fresh live-proof claim."
+                    .to_string(),
+                Some("resume".to_string()),
+                true,
+                "read the retained result, or start a new session or resume a different retained session"
+                    .to_string(),
+            )
+        } else {
+            (
+                "This loop shows bounded retained previews with explicit proof limits. It is not a fresh live-proof claim."
+                    .to_string(),
+                Some("status".to_string()),
+                false,
+                "read the retained result or send a follow-up turn when the loop is ready"
+                    .to_string(),
+            )
+        };
+        notices.push(ConversationSupportNoticeView {
+            notice_kind: "proof_limited".to_string(),
+            severity: "info".to_string(),
+            summary,
+            support_surface,
+            blocks_live_turn,
+            allowed_next_action,
         });
     }
 
@@ -765,15 +837,160 @@ fn session_support_notices(
         || control_state.permission_mode != DEFAULT_PERMISSION_MODE
         || control_state.mcp_posture != DEFAULT_MCP_POSTURE
     {
+        let (summary, support_surface, blocks_live_turn, allowed_next_action) = if session_ended {
+            (
+                "Stored shell control preferences are shown for this ended session, but it cannot accept new live turns or control edits."
+                    .to_string(),
+                Some("resume".to_string()),
+                true,
+                "start a new session or resume a different retained session".to_string(),
+            )
+        } else {
+            (
+                "Shell control changes are stored with this session, but runtime execution still follows the active runtime path."
+                    .to_string(),
+                Some("config".to_string()),
+                false,
+                "keep working in this session or adjust the support posture".to_string(),
+            )
+        };
         notices.push(ConversationSupportNoticeView {
             notice_kind: "session_shell_preferences".to_string(),
             severity: "warning".to_string(),
-            summary: "Shell control changes are stored with this session, but runtime execution still follows the active runtime path.".to_string(),
-            support_surface: Some("config".to_string()),
+            summary,
+            support_surface,
+            blocks_live_turn,
+            allowed_next_action,
         });
     }
 
     notices
+}
+
+fn normalized_turn_status(status: &str) -> &str {
+    match status.trim().to_ascii_lowercase().as_str() {
+        "queued" | "pending" => "accepted",
+        "running" | "active" => "running",
+        "completed" => "completed",
+        "failed" | "cancelled" | "terminated" => "failed",
+        _ => "running",
+    }
+}
+
+fn retained_result_preview(result: &SessionRetainedResultView) -> Option<String> {
+    result.preview.clone().or_else(|| {
+        result
+            .assistant_result
+            .get("preview")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    })
+}
+
+fn retained_result_proof_boundary(result: &SessionRetainedResultView) -> Option<String> {
+    result
+        .runtime_truth
+        .as_ref()
+        .map(|runtime_truth| runtime_truth.proof_boundary.task_proof.clone())
+        .or_else(|| {
+            result
+                .assistant_result
+                .get("runtime_truth")
+                .and_then(|runtime_truth| runtime_truth.get("proof_boundary"))
+                .and_then(|proof_boundary| proof_boundary.get("task_proof"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+}
+
+fn next_action_for_turn_status(turn_status: &str) -> &'static str {
+    match turn_status {
+        "accepted" => "stay in this session while the accepted turn starts",
+        "running" => "stay in this session while live work continues",
+        "completed" => "send a follow-up turn or adjust the session controls",
+        "failed" => "send a clarifying follow-up or start a new session",
+        "blocked" => "address the blocking notice, then retry from this session",
+        _ => "stay in this session and inspect the current state",
+    }
+}
+
+fn current_turn_state_for_loop(
+    session: &SessionRecord,
+    turns: &[ConversationTurnSummaryView],
+    state_source: ConversationTurnStateSource,
+) -> Option<ConversationCurrentTurnStateView> {
+    let focused_turn = if let Some(active_workflow_id) = session.active_workflow_id {
+        turns
+            .iter()
+            .find(|turn| turn.workflow_id == TaskId::from_uuid(active_workflow_id))
+    } else {
+        turns.last()
+    }?;
+
+    let turn_status = normalized_turn_status(&focused_turn.status).to_string();
+
+    let (result_preview, proof_boundary_note) = focused_turn
+        .assistant_result
+        .as_ref()
+        .map(|result| {
+            (
+                retained_result_preview(result),
+                retained_result_proof_boundary(result),
+            )
+        })
+        .unwrap_or((None, None));
+
+    Some(ConversationCurrentTurnStateView {
+        workflow_id: focused_turn.workflow_id,
+        turn_index: focused_turn.turn_index,
+        turn_status: turn_status.clone(),
+        lifecycle_state: focused_turn.lifecycle_state,
+        result_preview,
+        proof_boundary_note,
+        state_source,
+        next_action_hint: next_action_for_turn_status(&turn_status).to_string(),
+    })
+}
+
+fn loop_state_for_session(
+    session: &SessionRecord,
+    current_turn_state: Option<&ConversationCurrentTurnStateView>,
+) -> ConversationLoopState {
+    if matches!(parse_session_status(&session.status), SessionStatus::Ended) {
+        return ConversationLoopState::Ended;
+    }
+
+    if session.active_workflow_id.is_some() {
+        return match current_turn_state.map(|turn| turn.turn_status.as_str()) {
+            Some("accepted") => ConversationLoopState::TurnPending,
+            _ => ConversationLoopState::TurnRunning,
+        };
+    }
+
+    ConversationLoopState::Ready
+}
+
+fn next_action_for_loop_state(loop_state: ConversationLoopState) -> &'static str {
+    match loop_state {
+        ConversationLoopState::Ready => {
+            "send a follow-up turn or adjust the session controls from this loop"
+        }
+        ConversationLoopState::TurnPending => {
+            "wait for the accepted turn to start or inspect the current session state"
+        }
+        ConversationLoopState::TurnRunning => {
+            "stay in this session while the active turn runs, then follow up here"
+        }
+        ConversationLoopState::Blocked => {
+            "address the blocking notice, then retry from the same session"
+        }
+        ConversationLoopState::Degraded => {
+            "resume later or use the support surfaces until the runtime becomes available again"
+        }
+        ConversationLoopState::Ended => {
+            "start a new session or resume a different retained session"
+        }
+    }
 }
 
 fn validate_permission_mode(value: &str) -> Result<(), ConversationServiceError> {
@@ -961,6 +1178,8 @@ pub(crate) struct ConversationCliSessionView {
     pub title: String,
     pub session_id: String,
     pub status: String,
+    #[serde(default = "default_cli_loop_state")]
+    pub loop_state: String,
     pub coordinator_agent_id: String,
     pub provider_kind: String,
     pub model_id: String,
@@ -970,12 +1189,38 @@ pub(crate) struct ConversationCliSessionView {
     #[serde(default)]
     pub last_assistant_result: Option<SessionRetainedResultView>,
     #[serde(default)]
+    pub current_turn_state: Option<ConversationCliCurrentTurnStateView>,
+    #[serde(default)]
     pub turns: Vec<ConversationCliTurnSummary>,
     #[serde(default)]
     pub control_state: ConversationCliSessionControlState,
     #[serde(default)]
     pub support_notices: Vec<ConversationCliSupportNoticeView>,
+    #[serde(default = "default_cli_next_action")]
+    pub next_action_hint: String,
     pub ended_at: Option<String>,
+}
+
+fn default_cli_loop_state() -> String {
+    ConversationLoopState::Ready.as_str().to_string()
+}
+
+fn default_cli_next_action() -> String {
+    next_action_for_loop_state(ConversationLoopState::Ready).to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ConversationCliCurrentTurnStateView {
+    pub workflow_id: String,
+    pub turn_index: u32,
+    pub turn_status: String,
+    pub lifecycle_state: DurableWorkflowLifecycleState,
+    #[serde(default)]
+    pub result_preview: Option<String>,
+    #[serde(default)]
+    pub proof_boundary_note: Option<String>,
+    pub state_source: String,
+    pub next_action_hint: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1006,7 +1251,12 @@ pub(crate) struct ConversationCliSupportNoticeView {
     pub notice_kind: String,
     pub severity: String,
     pub summary: String,
+    #[serde(default)]
     pub support_surface: Option<String>,
+    #[serde(default)]
+    pub blocks_live_turn: bool,
+    #[serde(default)]
+    pub allowed_next_action: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1294,6 +1544,8 @@ fn cli_notice_from_view(view: ConversationSupportNoticeView) -> ConversationCliS
         severity: view.severity,
         summary: view.summary,
         support_surface: view.support_surface,
+        blocks_live_turn: view.blocks_live_turn,
+        allowed_next_action: view.allowed_next_action,
     }
 }
 
@@ -1323,6 +1575,7 @@ fn cli_session_from_view(view: ConversationSessionView) -> ConversationCliSessio
         title: view.title,
         session_id: view.session_id.to_string(),
         status: session_status_text(view.status).to_string(),
+        loop_state: view.loop_state.as_str().to_string(),
         coordinator_agent_id: view.coordinator_agent_id.to_string(),
         provider_kind: view.provider_kind,
         model_id: view.model_id,
@@ -1332,6 +1585,18 @@ fn cli_session_from_view(view: ConversationSessionView) -> ConversationCliSessio
             .map(|value| value.to_string()),
         turn_count: view.turn_count,
         last_assistant_result: view.last_assistant_result,
+        current_turn_state: view.current_turn_state.map(|turn| {
+            ConversationCliCurrentTurnStateView {
+                workflow_id: turn.workflow_id.to_string(),
+                turn_index: turn.turn_index,
+                turn_status: turn.turn_status,
+                lifecycle_state: turn.lifecycle_state,
+                result_preview: turn.result_preview,
+                proof_boundary_note: turn.proof_boundary_note,
+                state_source: turn.state_source.as_str().to_string(),
+                next_action_hint: turn.next_action_hint,
+            }
+        }),
         turns: view
             .turns
             .into_iter()
@@ -1362,6 +1627,7 @@ fn cli_session_from_view(view: ConversationSessionView) -> ConversationCliSessio
             .into_iter()
             .map(cli_notice_from_view)
             .collect(),
+        next_action_hint: view.next_action_hint,
         ended_at: view.ended_at.map(|value| value.to_rfc3339()),
     }
 }
@@ -1500,20 +1766,127 @@ pub(crate) async fn inspect_session_for_cli(
         Err(err) if should_fallback_to_direct_session_store(&err) => {
             tracing::warn!("inspect_session_for_cli: HTTP inspect failed: {}", err);
             let mut view = inspect_session_direct(session_id).await?;
-            view.support_notices.insert(
-                0,
-                ConversationCliSupportNoticeView {
-                    notice_kind: "runtime_unavailable".to_string(),
-                    severity: "warning".to_string(),
-                    summary:
-                        "Runtime is unavailable. This session is shown from durable storage only."
-                            .to_string(),
-                    support_surface: Some("run".to_string()),
-                },
-            );
+
+            // Only mark as degraded for transport/connection errors
+            let should_mark_degraded = match &err {
+                ConversationClientError::Http(_) => true,
+                ConversationClientError::HttpStatus(status, _) => {
+                    // 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout
+                    matches!(status.as_u16(), 502..=504)
+                }
+                _ => false,
+            };
+
+            if should_mark_degraded {
+                mark_view_as_durable_storage(&mut view);
+                view.support_notices.insert(
+                    0,
+                    ConversationCliSupportNoticeView {
+                        notice_kind: "degraded".to_string(),
+                        severity: "warning".to_string(),
+                        summary:
+                            "Runtime is unavailable. This session is shown from durable storage only, so live work cannot continue yet."
+                                .to_string(),
+                        support_surface: Some("run".to_string()),
+                        blocks_live_turn: true,
+                        allowed_next_action:
+                            next_action_for_loop_state(ConversationLoopState::Degraded).to_string(),
+                    },
+                );
+            } else {
+                // For other errors, add a neutral notice without marking as degraded
+                view.support_notices.insert(
+                    0,
+                    ConversationCliSupportNoticeView {
+                        notice_kind: "inspect_error".to_string(),
+                        severity: "info".to_string(),
+                        summary: format!("Session inspection encountered an issue: {}", err),
+                        support_surface: None,
+                        blocks_live_turn: false,
+                        allowed_next_action: view.next_action_hint.clone(),
+                    },
+                );
+            }
             Ok(view)
         }
         Err(err) => Err(err),
+    }
+}
+
+fn mark_view_as_durable_storage(view: &mut ConversationCliSessionView) {
+    view.loop_state = ConversationLoopState::Degraded.as_str().to_string();
+    view.next_action_hint = next_action_for_loop_state(ConversationLoopState::Degraded).to_string();
+    if let Some(current_turn_state) = view.current_turn_state.as_mut() {
+        current_turn_state.state_source = ConversationTurnStateSource::DurableStorage
+            .as_str()
+            .to_string();
+        current_turn_state.next_action_hint =
+            next_action_for_loop_state(ConversationLoopState::Degraded).to_string();
+    }
+}
+
+pub(crate) fn apply_blocked_follow_up_notice(
+    view: &mut ConversationCliSessionView,
+    error_summary: &str,
+) {
+    let normalized = error_summary.trim().to_ascii_lowercase();
+    let (notice_kind, allowed_next_action) = if normalized.contains("busy") {
+        (
+            "busy",
+            "wait for the current turn to finish or inspect the current state",
+        )
+    } else if normalized.contains("ended") {
+        (
+            "ended",
+            "start a new session or resume a different retained session",
+        )
+    } else if normalized.contains("runtime returned 503")
+        || normalized.contains("unavailable")
+        || normalized.contains("connection refused")
+    {
+        (
+            "degraded",
+            "resume later or use the support surfaces until the runtime becomes available again",
+        )
+    } else {
+        (
+            "blocked",
+            "address the blocking condition, then retry from this session",
+        )
+    };
+
+    view.loop_state = ConversationLoopState::Blocked.as_str().to_string();
+    view.next_action_hint = allowed_next_action.to_string();
+    view.support_notices.insert(
+        0,
+        ConversationCliSupportNoticeView {
+            notice_kind: notice_kind.to_string(),
+            severity: "warning".to_string(),
+            summary: format!("The latest follow-up did not start: {error_summary}"),
+            support_surface: Some("status".to_string()),
+            blocks_live_turn: true,
+            allowed_next_action: allowed_next_action.to_string(),
+        },
+    );
+    if let Some(current_turn_state) = view.current_turn_state.as_mut() {
+        current_turn_state.next_action_hint = allowed_next_action.to_string();
+    }
+}
+
+pub(crate) fn is_session_state_error(error: &ConversationClientError) -> bool {
+    match error {
+        ConversationClientError::HttpStatus(status, body) => {
+            if status.as_u16() == 409 {
+                // Conflict errors are session-state related (busy/ended)
+                return true;
+            }
+            let normalized = body.trim().to_ascii_lowercase();
+            normalized.contains("busy") || normalized.contains("ended")
+        }
+        _ => {
+            let error_text = error.to_string().to_ascii_lowercase();
+            error_text.contains("busy") || error_text.contains("ended")
+        }
     }
 }
 
@@ -1554,6 +1927,9 @@ pub(crate) async fn build_startup_home(
                             "Runtime is unavailable. Recent sessions are shown from durable storage only."
                                 .to_string(),
                         support_surface: Some("run".to_string()),
+                        blocks_live_turn: true,
+                        allowed_next_action:
+                            "start the runtime before sending or continuing live work".to_string(),
                     }],
                     true,
                 ),
@@ -1567,6 +1943,9 @@ pub(crate) async fn build_startup_home(
                             "Runtime is unavailable and the retained session store could not be read."
                                 .to_string(),
                         support_surface: Some("run".to_string()),
+                        blocks_live_turn: true,
+                        allowed_next_action:
+                            "restore runtime or storage access before continuing".to_string(),
                     }],
                     false,
                 ),
@@ -1579,6 +1958,10 @@ pub(crate) async fn build_startup_home(
                     severity: "warning".to_string(),
                     summary: format!("Recent session discovery failed: {error}"),
                     support_surface: Some("run".to_string()),
+                    blocks_live_turn: false,
+                    allowed_next_action:
+                        "inspect the runtime status or retry recent session discovery"
+                            .to_string(),
                 }],
                 false,
             ),
@@ -1590,6 +1973,9 @@ pub(crate) async fn build_startup_home(
             severity: "warning".to_string(),
             summary: "Runtime is unavailable. Start and continue actions will stay blocked until it recovers.".to_string(),
             support_surface: Some("run".to_string()),
+            blocks_live_turn: true,
+            allowed_next_action:
+                "start the runtime before sending or continuing live work".to_string(),
         });
     }
 
@@ -1600,6 +1986,8 @@ pub(crate) async fn build_startup_home(
             summary: "No retained sessions were found yet. Start a new session to begin."
                 .to_string(),
             support_surface: None,
+            blocks_live_turn: false,
+            allowed_next_action: "start a new session from this shell".to_string(),
         });
     }
 
@@ -1658,39 +2046,37 @@ pub(crate) fn render_session(view: &ConversationCliSessionView) -> String {
                 .map(render_resume_provenance)
                 .unwrap_or_else(|| "none".to_string());
             format!(
-                "  {} {} {} lifecycle={} resume={} result={} {}",
+                "  - turn {} [{}] workflow={} lifecycle={}\n    you: {}\n    assistant: {}\n    resume: {}",
                 turn.turn_index,
-                turn.workflow_id,
                 turn.status,
+                turn.workflow_id,
                 turn.lifecycle_state.as_str(),
-                resume_provenance,
+                turn.user_message,
                 assistant_result,
-                turn.user_message
+                resume_provenance
             )
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let last_assistant_result = view
-        .last_assistant_result
-        .as_ref()
-        .map(render_retained_result)
-        .unwrap_or_else(|| "none".to_string());
+    let current_turn_state = render_current_turn_state(view.current_turn_state.as_ref());
     let support_notices = render_support_notices(&view.support_notices);
     let control_state =
         render_control_state(&view.control_state, &view.provider_kind, &view.model_id);
 
     format!(
-        "title: {}\nsession_id: {}\nstatus: {}\ncoordinator_agent_id: {}\nprovider_kind: {}\nmodel_id: {}\nactive_workflow_id: {}\nlast_completed_workflow_id: {}\nlast_assistant_result: {}\nturn_count: {}\ncontrols:\n{}\nsupport_notices:\n{}\nended_at: {}\nturns:\n{}",
+        "session: {}\nsession_id: {}\nstatus: {}\nloop_state: {}\nnext_action: {}\ncoordinator_agent_id: {}\nprovider_kind: {}\nmodel_id: {}\nactive_workflow_id: {}\nlast_completed_workflow_id: {}\nturn_count: {}\ncurrent_turn:\n{}\ncontrols:\n{}\nsupport_notices:\n{}\nended_at: {}\nconversation:\n{}",
         view.title,
         view.session_id,
         view.status,
+        view.loop_state,
+        view.next_action_hint,
         view.coordinator_agent_id,
         view.provider_kind,
         view.model_id,
         view.active_workflow_id.as_deref().unwrap_or("none"),
         view.last_completed_workflow_id.as_deref().unwrap_or("none"),
-        last_assistant_result,
         view.turn_count,
+        current_turn_state,
         control_state,
         support_notices,
         view.ended_at.as_deref().unwrap_or("none"),
@@ -1758,18 +2144,49 @@ pub(crate) fn render_support_notices(notices: &[ConversationCliSupportNoticeView
         .iter()
         .map(|notice| {
             format!(
-                "  - [{}] {}{}",
+                "  - [{}] {}{}{}{}",
                 notice.severity,
                 notice.summary,
                 notice
                     .support_surface
                     .as_ref()
                     .map(|surface| format!(" (support: {surface})"))
-                    .unwrap_or_default()
+                    .unwrap_or_default(),
+                if notice.blocks_live_turn {
+                    " (blocks live turn)"
+                } else {
+                    ""
+                },
+                if notice.allowed_next_action.is_empty() {
+                    String::new()
+                } else {
+                    format!(" next: {}", notice.allowed_next_action)
+                }
             )
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn render_current_turn_state(view: Option<&ConversationCliCurrentTurnStateView>) -> String {
+    let Some(view) = view else {
+        return "  none".to_string();
+    };
+
+    let proof_boundary = view.proof_boundary_note.as_deref().unwrap_or("none");
+    let preview = view.result_preview.as_deref().unwrap_or("none");
+
+    format!(
+        "  turn_index: {}\n  workflow_id: {}\n  turn_status: {}\n  lifecycle_state: {}\n  state_source: {}\n  result_preview: {}\n  proof_boundary: {}\n  next_action: {}",
+        view.turn_index,
+        view.workflow_id,
+        view.turn_status,
+        view.lifecycle_state.as_str(),
+        view.state_source,
+        preview,
+        proof_boundary,
+        view.next_action_hint
+    )
 }
 
 fn render_control_state(
@@ -2300,6 +2717,7 @@ mod tests {
             title: "resume interrupted workflow".to_string(),
             session_id: "11111111-1111-1111-1111-111111111111".to_string(),
             status: "active".to_string(),
+            loop_state: "ready".to_string(),
             coordinator_agent_id: "33333333-3333-3333-3333-333333333333".to_string(),
             provider_kind: "openai_chatgpt".to_string(),
             model_id: "gpt-5.4".to_string(),
@@ -2347,6 +2765,19 @@ mod tests {
                         "metadata.aggregated_result".to_string(),
                     ],
                 },
+            }),
+            current_turn_state: Some(ConversationCliCurrentTurnStateView {
+                workflow_id: "55555555-5555-5555-5555-555555555555".to_string(),
+                turn_index: 2,
+                turn_status: "completed".to_string(),
+                lifecycle_state: DurableWorkflowLifecycleState::Completed,
+                result_preview: Some("bounded answer preview".to_string()),
+                proof_boundary_note: Some(
+                    "result is orchestration proof, not substantive task proof".to_string(),
+                ),
+                state_source: "retained_session".to_string(),
+                next_action_hint: "send a follow-up turn or adjust the session controls"
+                    .to_string(),
             }),
             turns: vec![
                 ConversationCliTurnSummary {
@@ -2479,21 +2910,29 @@ mod tests {
                 severity: "warning".to_string(),
                 summary: "Shell control changes are stored with this session, but runtime execution still follows the active runtime path.".to_string(),
                 support_surface: Some("config".to_string()),
+                blocks_live_turn: false,
+                allowed_next_action:
+                    "keep working in this session or adjust the support posture".to_string(),
             }],
+            next_action_hint: "send a follow-up turn or adjust the session controls".to_string(),
             ended_at: None,
         };
 
         let rendered = render_session(&view);
 
-        assert!(rendered.contains("resume=recovered_after_restart=true"));
+        assert!(rendered.contains("loop_state: ready"));
+        assert!(rendered.contains("turn_status: completed"));
+        assert!(rendered
+            .contains("proof_boundary: result is orchestration proof, not substantive task proof"));
+        assert!(rendered.contains("resume: recovered_after_restart=true"));
         assert!(
             rendered.contains("reason=workflow interrupted by runtime restart before session sync")
         );
-        assert!(rendered.contains("resume=resumed_after_restart=true resumed_from_turn=1"));
+        assert!(rendered.contains("resume: resumed_after_restart=true resumed_from_turn=1"));
         assert!(rendered.contains("resumed_from_workflow=44444444-4444-4444-4444-444444444444"));
-        assert!(rendered
-            .contains("last_assistant_result: workflow=55555555-5555-5555-5555-555555555555"));
-        assert!(rendered.contains("result=workflow=55555555-5555-5555-5555-555555555555 status=completed proof=collapsed_to_sequential preview=bounded answer preview runtime_truth=placeholder_or_simulated_step_completion:result is orchestration proof, not substantive task proof"));
+        assert!(rendered.contains(
+            "assistant: workflow=55555555-5555-5555-5555-555555555555 status=completed proof=collapsed_to_sequential preview=bounded answer preview runtime_truth=placeholder_or_simulated_step_completion:result is orchestration proof, not substantive task proof"
+        ));
         assert!(rendered.contains("sources=metadata.final_result|metadata.aggregated_result"));
     }
 }

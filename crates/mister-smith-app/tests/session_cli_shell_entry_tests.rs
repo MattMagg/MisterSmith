@@ -1,6 +1,9 @@
 mod common;
 
-use axum::{routing::{get, post}, Json, Router};
+use axum::{
+    routing::{get, post},
+    Json, Router,
+};
 use serde_json::json;
 use std::process::Stdio;
 use tokio::process::Command;

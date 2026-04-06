@@ -477,14 +477,13 @@ async fn execute_resume_command(
     cli: &Cli,
 ) -> Result<(), Box<dyn Error>> {
     let context = load_cli_context(cli)?;
-    let resolved_session_id = if last || session_id.is_none() {
-        conversation::resolve_last_session_id(&context.base_url, &context.config)
-            .await?
-            .ok_or_else(|| "no retained session is available to resume".to_string())?
-    } else {
-        conversation::parse_session_id(
-            session_id.expect("session id should exist when --last is not set"),
-        )?
+    let resolved_session_id = match (last, session_id) {
+        (true, _) | (_, None) => {
+            conversation::resolve_last_session_id(&context.base_url, &context.config)
+                .await?
+                .ok_or_else(|| "no retained session is available to resume".to_string())?
+        }
+        (false, Some(session_id)) => conversation::parse_session_id(session_id)?,
     };
 
     open_session_and_maybe_attach(&context, resolved_session_id, None).await
@@ -625,11 +624,16 @@ async fn start_session_and_maybe_attach(
     message: &str,
 ) -> Result<(), Box<dyn Error>> {
     let accepted = conversation::start_session_http(&context.base_url, message, None).await?;
-    println!("{}", conversation::render_turn_accepted(&accepted));
+    let session_id = conversation::parse_session_id(&accepted.session_id)?;
 
     if io::stdin().is_terminal() {
-        let session_id = conversation::parse_session_id(&accepted.session_id)?;
+        if let Err(error) = print_session_loop(context, session_id).await {
+            println!("{}", conversation::render_turn_accepted(&accepted));
+            return Err(error);
+        }
         run_live_session_loop(context, session_id).await?;
+    } else {
+        println!("{}", conversation::render_turn_accepted(&accepted));
     }
 
     Ok(())
@@ -640,23 +644,69 @@ async fn open_session_and_maybe_attach(
     session_id: mister_smith_core::SessionId,
     prompt: Option<&str>,
 ) -> Result<(), Box<dyn Error>> {
-    if let Some(message) = prompt {
-        let accepted =
-            conversation::continue_session_http(&context.base_url, session_id, message, None)
-                .await?;
-        println!("{}", conversation::render_turn_accepted(&accepted));
-    }
+    let accepted = if let Some(message) = prompt {
+        if io::stdin().is_terminal() {
+            Some(
+                conversation::continue_session_http(&context.base_url, session_id, message, None)
+                    .await?,
+            )
+        } else {
+            let accepted =
+                conversation::continue_session_http(&context.base_url, session_id, message, None)
+                    .await?;
+            println!("{}", conversation::render_turn_accepted(&accepted));
+            return Ok(());
+        }
+    } else {
+        None
+    };
 
-    let view =
-        conversation::inspect_session_for_cli(&context.base_url, &context.config, session_id)
-            .await?;
-    println!("{}", conversation::render_session(&view));
+    if let Err(error) = print_session_loop(context, session_id).await {
+        if let Some(accepted) = accepted {
+            println!("{}", conversation::render_turn_accepted(&accepted));
+        }
+        return Err(error);
+    }
 
     if io::stdin().is_terminal() {
         run_live_session_loop(context, session_id).await?;
     }
 
     Ok(())
+}
+
+async fn print_session_loop(
+    context: &LoadedCliContext,
+    session_id: mister_smith_core::SessionId,
+) -> Result<(), Box<dyn Error>> {
+    let view =
+        conversation::inspect_session_for_cli(&context.base_url, &context.config, session_id)
+            .await?;
+    println!("{}", conversation::render_session(&view));
+    Ok(())
+}
+
+async fn print_blocked_session_loop(
+    context: &LoadedCliContext,
+    session_id: mister_smith_core::SessionId,
+    error_summary: &str,
+) -> Result<(), Box<dyn Error>> {
+    let mut view =
+        conversation::inspect_session_for_cli(&context.base_url, &context.config, session_id)
+            .await?;
+    conversation::apply_blocked_follow_up_notice(&mut view, error_summary);
+    println!("{}", conversation::render_session(&view));
+    Ok(())
+}
+
+fn render_config_support(context: &LoadedCliContext) -> String {
+    format!(
+        "config_action: {}\nbase_url: {}\nprovider: {}\nmodel: {}",
+        context.config_action,
+        context.base_url,
+        context.config.llm.provider_kind.as_str(),
+        context.config.llm.model_id
+    )
 }
 
 async fn run_live_session_loop(
@@ -676,20 +726,23 @@ async fn run_live_session_loop(
                 .await
             {
                 Ok(accepted) => {
-                    println!("{}", conversation::render_turn_accepted(&accepted));
-                    match conversation::inspect_session_for_cli(
-                        &context.base_url,
-                        &context.config,
-                        session_id,
-                    )
-                    .await
-                    {
-                        Ok(view) => println!("{}", conversation::render_session(&view)),
-                        Err(error) => print_shell_error(&error),
+                    session_id = conversation::parse_session_id(&accepted.session_id)?;
+                    if let Err(error) = print_session_loop(context, session_id).await {
+                        println!("{}", conversation::render_turn_accepted(&accepted));
+                        print_shell_error(error.as_ref());
                     }
                 }
                 Err(error) => {
-                    println!("send_failed: {error}");
+                    if conversation::is_session_state_error(&error) {
+                        if let Err(render_error) =
+                            print_blocked_session_loop(context, session_id, &error.to_string())
+                                .await
+                        {
+                            print_shell_error(render_error.as_ref());
+                        }
+                    } else {
+                        println!("send_failed: {error}");
+                    }
                 }
             }
             continue;
@@ -734,7 +787,7 @@ async fn run_live_session_loop(
             "/status" => {
                 let result = async {
                     if let Some(mode) = arg {
-                        let control = conversation::update_session_control_for_cli(
+                        conversation::update_session_control_for_cli(
                             &context.base_url,
                             &context.config,
                             session_id,
@@ -744,21 +797,8 @@ async fn run_live_session_loop(
                             },
                         )
                         .await?;
-                        println!(
-                            "status_view: {}\nselected_model: {}\npermission_mode: {}\nmcp_posture: {}",
-                            control.status_view,
-                            control.selected_model_id.as_deref().unwrap_or("inherit"),
-                            control.permission_mode,
-                            control.mcp_posture
-                        );
                     }
-                    let view = conversation::inspect_session_for_cli(
-                        &context.base_url,
-                        &context.config,
-                        session_id,
-                    )
-                    .await?;
-                    println!("{}", conversation::render_session(&view));
+                    print_session_loop(context, session_id).await?;
                     Ok::<(), Box<dyn Error>>(())
                 }
                 .await;
@@ -769,7 +809,7 @@ async fn run_live_session_loop(
             "/config" => {
                 let result = async {
                     if let Some(posture) = arg {
-                        let control = conversation::update_session_control_for_cli(
+                        conversation::update_session_control_for_cli(
                             &context.base_url,
                             &context.config,
                             session_id,
@@ -779,15 +819,9 @@ async fn run_live_session_loop(
                             },
                         )
                         .await?;
-                        println!("config_posture: {}", control.config_posture);
                     }
-                    println!(
-                        "config_action: {}\nbase_url: {}\nprovider: {}\nmodel: {}",
-                        context.config_action,
-                        context.base_url,
-                        context.config.llm.provider_kind.as_str(),
-                        context.config.llm.model_id
-                    );
+                    println!("{}", render_config_support(context));
+                    print_session_loop(context, session_id).await?;
                     Ok::<(), Box<dyn Error>>(())
                 }
                 .await;
@@ -798,7 +832,7 @@ async fn run_live_session_loop(
             "/permissions" => {
                 let result = async {
                     if let Some(mode) = arg {
-                        let control = conversation::update_session_control_for_cli(
+                        conversation::update_session_control_for_cli(
                             &context.base_url,
                             &context.config,
                             session_id,
@@ -808,16 +842,8 @@ async fn run_live_session_loop(
                             },
                         )
                         .await?;
-                        println!("permission_mode: {}", control.permission_mode);
-                    } else {
-                        let view = conversation::inspect_session_for_cli(
-                            &context.base_url,
-                            &context.config,
-                            session_id,
-                        )
-                        .await?;
-                        println!("permission_mode: {}", view.control_state.permission_mode);
                     }
+                    print_session_loop(context, session_id).await?;
                     Ok::<(), Box<dyn Error>>(())
                 }
                 .await;
@@ -828,7 +854,7 @@ async fn run_live_session_loop(
             "/mcp" => {
                 let result = async {
                     if let Some(posture) = arg {
-                        let control = conversation::update_session_control_for_cli(
+                        conversation::update_session_control_for_cli(
                             &context.base_url,
                             &context.config,
                             session_id,
@@ -838,16 +864,8 @@ async fn run_live_session_loop(
                             },
                         )
                         .await?;
-                        println!("mcp_posture: {}", control.mcp_posture);
-                    } else {
-                        let view = conversation::inspect_session_for_cli(
-                            &context.base_url,
-                            &context.config,
-                            session_id,
-                        )
-                        .await?;
-                        println!("mcp_posture: {}", view.control_state.mcp_posture);
                     }
+                    print_session_loop(context, session_id).await?;
                     Ok::<(), Box<dyn Error>>(())
                 }
                 .await;
@@ -859,7 +877,7 @@ async fn run_live_session_loop(
                 let result = async {
                     if let Some(value) = arg {
                         if value == "inherit" {
-                            let control = conversation::update_session_control_for_cli(
+                            conversation::update_session_control_for_cli(
                                 &context.base_url,
                                 &context.config,
                                 session_id,
@@ -870,11 +888,6 @@ async fn run_live_session_loop(
                                 },
                             )
                             .await?;
-                            println!(
-                                "selected_provider: {}\nselected_model: {}",
-                                control.selected_provider_kind.as_deref().unwrap_or("inherit"),
-                                control.selected_model_id.as_deref().unwrap_or("inherit")
-                            );
                         } else {
                             let (selected_provider_kind, selected_model_id) = value
                                 .split_once(':')
@@ -882,7 +895,7 @@ async fn run_live_session_loop(
                                     (Some(provider.to_string()), model.to_string())
                                 })
                                 .unwrap_or((None, value.to_string()));
-                            let control = conversation::update_session_control_for_cli(
+                            conversation::update_session_control_for_cli(
                                 &context.base_url,
                                 &context.config,
                                 session_id,
@@ -893,33 +906,9 @@ async fn run_live_session_loop(
                                 },
                             )
                             .await?;
-                            println!(
-                                "selected_provider: {}\nselected_model: {}",
-                                control.selected_provider_kind.as_deref().unwrap_or("inherit"),
-                                control.selected_model_id.as_deref().unwrap_or("inherit")
-                            );
                         }
-                    } else {
-                        let view = conversation::inspect_session_for_cli(
-                            &context.base_url,
-                            &context.config,
-                            session_id,
-                        )
-                        .await?;
-                        println!(
-                            "runtime_provider: {}\nruntime_model: {}\nselected_provider: {}\nselected_model: {}",
-                            view.provider_kind,
-                            view.model_id,
-                            view.control_state
-                                .selected_provider_kind
-                                .as_deref()
-                                .unwrap_or("inherit"),
-                            view.control_state
-                                .selected_model_id
-                                .as_deref()
-                                .unwrap_or("inherit")
-                        );
                     }
+                    print_session_loop(context, session_id).await?;
                     Ok::<(), Box<dyn Error>>(())
                 }
                 .await;
@@ -966,14 +955,10 @@ async fn run_live_session_loop(
                     let accepted =
                         conversation::start_session_http(&context.base_url, message, None).await?;
                     session_id = conversation::parse_session_id(&accepted.session_id)?;
-                    println!("{}", conversation::render_turn_accepted(&accepted));
-                    let view = conversation::inspect_session_for_cli(
-                        &context.base_url,
-                        &context.config,
-                        session_id,
-                    )
-                    .await?;
-                    println!("{}", conversation::render_session(&view));
+                    if let Err(error) = print_session_loop(context, session_id).await {
+                        println!("{}", conversation::render_turn_accepted(&accepted));
+                        return Err(error);
+                    }
                     Ok::<(), Box<dyn Error>>(())
                 }
                 .await;

@@ -243,6 +243,84 @@ pub struct ConversationResumeProvenanceView {
     pub resumed_from_turn_index: Option<u32>,
 }
 
+/// User-visible loop posture for the active CLI session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationLoopState {
+    /// The session is ready for another follow-up turn.
+    Ready,
+    /// A turn was accepted and is waiting to move into live execution.
+    TurnPending,
+    /// A turn is currently executing live work.
+    TurnRunning,
+    /// The session is currently blocked from accepting a new live turn.
+    Blocked,
+    /// Retained context is available, but the live runtime is unavailable.
+    Degraded,
+    /// The session is logically closed.
+    Ended,
+}
+
+impl ConversationLoopState {
+    /// Return the stable packet-owned label for this loop posture.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::TurnPending => "turn_pending",
+            Self::TurnRunning => "turn_running",
+            Self::Blocked => "blocked",
+            Self::Degraded => "degraded",
+            Self::Ended => "ended",
+        }
+    }
+}
+
+/// Provenance for the currently focused turn state in the CLI loop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationTurnStateSource {
+    /// The current state is backed by live runtime projections.
+    LiveRuntime,
+    /// The current state is backed by retained session projections.
+    RetainedSession,
+    /// The current state is backed by durable storage while runtime access is degraded.
+    DurableStorage,
+}
+
+impl ConversationTurnStateSource {
+    /// Return the stable packet-owned label for this state source.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LiveRuntime => "live_runtime",
+            Self::RetainedSession => "retained_session",
+            Self::DurableStorage => "durable_storage",
+        }
+    }
+}
+
+/// Focused current-turn state projected into the CLI loop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConversationCurrentTurnStateView {
+    /// Root workflow in focus for the current turn state.
+    pub workflow_id: TaskId,
+    /// 1-based accepted turn order.
+    pub turn_index: u32,
+    /// User-visible current turn state.
+    pub turn_status: String,
+    /// Durable lifecycle meaning projected for operator-facing views.
+    pub lifecycle_state: DurableWorkflowLifecycleState,
+    /// Compact preview of the most recent result when available.
+    pub result_preview: Option<String>,
+    /// Explicit proof-boundary wording when available.
+    pub proof_boundary_note: Option<String>,
+    /// Whether this state is backed by live runtime or retained projections.
+    pub state_source: ConversationTurnStateSource,
+    /// Next honest action from the same session loop.
+    pub next_action_hint: String,
+}
+
 /// One support warning or degraded-state note shown by the CLI shell.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConversationSupportNoticeView {
@@ -254,6 +332,10 @@ pub struct ConversationSupportNoticeView {
     pub summary: String,
     /// Related support surface, when one exists.
     pub support_surface: Option<String>,
+    /// Whether the notice currently blocks another live turn.
+    pub blocks_live_turn: bool,
+    /// Next honest action while the notice remains active.
+    pub allowed_next_action: String,
 }
 
 /// Durable control state exposed to the CLI session shell.
@@ -305,6 +387,8 @@ pub struct ConversationSessionView {
     pub session_id: SessionId,
     /// Session lifecycle state.
     pub status: SessionStatus,
+    /// Current loop posture for the session.
+    pub loop_state: ConversationLoopState,
     /// Stable coordinator identity.
     pub coordinator_agent_id: AgentId,
     /// Provider currently attributed to the session.
@@ -319,12 +403,16 @@ pub struct ConversationSessionView {
     pub turn_count: u32,
     /// Most recent retained session-facing result projection.
     pub last_assistant_result: Option<SessionRetainedResultView>,
+    /// Focused current-turn projection for the live session loop.
+    pub current_turn_state: Option<ConversationCurrentTurnStateView>,
     /// Ordered turn summaries.
     pub turns: Vec<ConversationTurnSummaryView>,
     /// Durable control state currently attached to the session shell.
     pub control_state: ConversationSessionControlView,
     /// Inline warnings and degraded-state notes for the session shell.
     pub support_notices: Vec<ConversationSupportNoticeView>,
+    /// Next honest action from the same session identity.
+    pub next_action_hint: String,
     /// Logical close time when ended.
     pub ended_at: Option<DateTime<Utc>>,
 }

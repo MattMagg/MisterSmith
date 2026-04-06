@@ -239,6 +239,7 @@ async fn session_handler_includes_turn_lifecycle_projection() {
             title: "stop now".to_string(),
             session_id,
             status: SessionStatus::Active,
+            loop_state: mister_smith_http::server::ConversationLoopState::TurnRunning,
             coordinator_agent_id: AgentId::new(),
             provider_kind: "openai_chatgpt".to_string(),
             model_id: "gpt-5.4".to_string(),
@@ -246,6 +247,7 @@ async fn session_handler_includes_turn_lifecycle_projection() {
             last_completed_workflow_id: None,
             turn_count: 1,
             last_assistant_result: None,
+            current_turn_state: None,
             turns: vec![ConversationTurnSummaryView {
                 turn_index: 1,
                 workflow_id,
@@ -272,11 +274,16 @@ async fn session_handler_includes_turn_lifecycle_projection() {
                 mcp_posture: "support_only".to_string(),
             },
             support_notices: vec![ConversationSupportNoticeView {
-                notice_kind: "session_busy".to_string(),
+                notice_kind: "busy".to_string(),
                 severity: "info".to_string(),
-                summary: "This session already has a live workflow. New turns will wait until it finishes.".to_string(),
+                summary: "Another live turn is already active in this session. Stay here to watch it or wait before sending the next follow-up.".to_string(),
                 support_surface: Some("status".to_string()),
+                blocks_live_turn: true,
+                allowed_next_action:
+                    "wait for the current turn to finish or inspect the current state".to_string(),
             }],
+            next_action_hint:
+                "stay in this session while the active turn runs, then follow up here".to_string(),
             ended_at: None,
         },
     }));
@@ -305,6 +312,7 @@ async fn session_control_handler_returns_updated_control_projection() {
             title: "resume packet review".to_string(),
             session_id,
             status: SessionStatus::Active,
+            loop_state: mister_smith_http::server::ConversationLoopState::Ready,
             coordinator_agent_id: AgentId::new(),
             provider_kind: "openai_chatgpt".to_string(),
             model_id: "gpt-5.4".to_string(),
@@ -312,6 +320,7 @@ async fn session_control_handler_returns_updated_control_projection() {
             last_completed_workflow_id: None,
             turn_count: 1,
             last_assistant_result: None,
+            current_turn_state: None,
             turns: vec![],
             control_state: ConversationSessionControlView {
                 session_id,
@@ -323,6 +332,8 @@ async fn session_control_handler_returns_updated_control_projection() {
                 mcp_posture: "support_only".to_string(),
             },
             support_notices: vec![],
+            next_action_hint: "send a follow-up turn or adjust the session controls from this loop"
+                .to_string(),
             ended_at: None,
         },
     }));
