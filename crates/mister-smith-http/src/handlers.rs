@@ -1700,13 +1700,15 @@ mod tests {
         );
 
         // Assert new response fields
-        assert_eq!(value["loop_state"], "TurnPending");
+        assert_eq!(value["loop_state"], "turn_pending");
         assert!(value["current_turn_state"].is_null());
         assert_eq!(
             value["next_action_hint"],
-            "wait for the accepted turn to start or inspect the current session state"
+            "stay in this session while the accepted turn starts"
         );
-        assert_eq!(value["support_notices"][0]["blocks_live_turn"], false);
+        // blocks_live_turn is false, so it should be omitted from the JSON (not present)
+        assert!(value["support_notices"][0]["blocks_live_turn"].is_null()
+            || value["support_notices"][0]["blocks_live_turn"] == false);
         assert_eq!(
             value["support_notices"][0]["allowed_next_action"],
             "keep working in this session or adjust the support posture"
@@ -1782,7 +1784,7 @@ mod tests {
             .expect("session inspect should succeed");
         let inspect_value = serde_json::to_value(inspect_response).expect("inspect response should serialize");
 
-        assert_eq!(inspect_value["loop_state"], "Ready");
+        assert_eq!(inspect_value["loop_state"], "ready");
         assert!(inspect_value["current_turn_state"].is_null());
         assert_eq!(
             inspect_value["next_action_hint"],

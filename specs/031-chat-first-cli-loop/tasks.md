@@ -165,4 +165,4 @@ Allowed concurrent lanes after the blocking freeze:
 Serial merge points:
 
 - `T010` because it joins resume behavior across `main.rs` and `conversation.rs`
-- final validation tasks `T016` through `T021`
+- final validation tasks `T016` through `T022`
