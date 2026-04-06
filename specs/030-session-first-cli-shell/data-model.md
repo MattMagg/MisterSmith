@@ -51,6 +51,7 @@
 
 - **Purpose**: The in-session state a user can steer from the live CLI shell.
 - **Key fields**:
+  - `session_id`
   - model selection
   - permission mode
   - config posture
@@ -89,6 +90,10 @@
 
 - the CLI uses one canonical retained-session model already present in the repo
 - quick resume and broader recent-session browsing resolve against the same session identities
+- startup home and broader recent-session browsing use the same recent-first ordering rules
 - live-session controls operate on one shared session control state
+- in-session control changes do not mint a second `session_id` or a second retained transcript
+- session-shell control preferences stay durable and inspectable even when the current runtime path
+  is unchanged in this packet
 - startup warnings may limit actions honestly, but they must not hide recent sessions or start-new
 - GUI parity and cross-surface continuity remain outside this packet

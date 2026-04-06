@@ -38,6 +38,10 @@ pub fn protected_api_router() -> Router<AppState> {
             post(handlers::continue_session),
         )
         .route(
+            "/api/v1/sessions/{session_id}/controls",
+            post(handlers::update_session_controls),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/end",
             post(handlers::end_session),
         )

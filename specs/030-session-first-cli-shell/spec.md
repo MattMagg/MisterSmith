@@ -2,7 +2,7 @@
 
 **Feature Branch**: `030-session-first-cli-shell`
 **Created**: 2026-04-05
-**Status**: Draft
+**Status**: Frozen
 **Input**: `docs/plans/2026-04-05-session-first-user-shell-pre-speckit-primer.md`,
 `docs/plans/2026-04-05-mister-smith-operational-cli-proposal.md`, `docs/current-state.md`, the
 current CLI seams in `crates/mister-smith-app/src/main.rs` and
@@ -56,10 +56,15 @@ This is not:
   `autonomy` may remain in technical seams, but they are not first-level CLI navigation.
 - The CLI exposes live controls through slash commands or another clearly in-session command flow
   rather than sending users back to runtime-first maintenance commands.
+- `status` and `config` take effect in the CLI shell immediately for the open session.
+- `model`, `permissions`, and `MCP` changes are retained with the session shell in this packet so
+  users can inspect and resume the same control posture honestly, even when runtime execution
+  still follows the active runtime path.
 - Shared session truth builds on the durable session seams already landed on current `main`; this
   feature does not introduce a second session store or a second retained history model.
-- Runtime, doctor, auth, proof, config, and MCP administration remain available, but they are
-  support surfaces beside the main CLI session flow rather than the default path.
+- Runtime, doctor, auth, proof, config, and MCP administration remain support surfaces beside the
+  main CLI session flow rather than the default path. This packet does not redesign their command
+  tables.
 
 ## User Scenarios & Testing
 
@@ -153,7 +158,9 @@ confirm the same session identity, retained history, and control state remain in
 - **FR-007**: The CLI MUST preserve the same stable session identity and the same retained
   transcript or summary history when a user resumes or reopens prior work.
 - **FR-008**: The product MUST allow core live-session steering in place for model, permissions,
-  config, status, and MCP without forcing the user into a separate admin-first workflow.
+  config, status, and MCP without forcing the user into a separate admin-first workflow. In this
+  packet, `status` and `config` act immediately in the CLI shell, while `model`, `permissions`,
+  and `MCP` persist as session-shell preferences and remain visible with honest warnings.
 - **FR-009**: The core in-session controls in this slice MUST be available through the CLI shell
   itself, including slash commands or another clearly in-session command flow for the same control
   set.
@@ -162,7 +169,8 @@ confirm the same session identity, retained history, and control state remain in
 - **FR-011**: The recent-session and resume flows MUST work even when support surfaces report
   degraded state, unless the user is attempting an action that truly cannot proceed.
 - **FR-012**: The product MUST keep runtime, doctor, auth, proof, config, and MCP administration
-  as support surfaces beside the main session flow rather than the main default CLI path.
+  as support surfaces beside the main session flow rather than the main default CLI path, without
+  requiring packet 030 to redesign those support command tables.
 - **FR-013**: The product MUST use simple user-facing CLI language centered on session, resume,
   config, model, runtime, and MCP rather than leading with internal backend terms.
 - **FR-014**: The feature MUST NOT widen into GUI parity, cross-surface continuity, repo-workflow

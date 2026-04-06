@@ -35,14 +35,14 @@ Capture the current repo truth this packet must preserve.
 
 **CRITICAL**: no `[P]` lane may begin until this checkpoint is complete.
 
-- [ ] T001 Freeze packet scope in `specs/030-session-first-cli-shell/spec.md` and
+- [x] T001 Freeze packet scope in `specs/030-session-first-cli-shell/spec.md` and
       `specs/030-session-first-cli-shell/plan.md`
-- [ ] T002 Record data model and CLI session invariants in
+- [x] T002 Record data model and CLI session invariants in
       `specs/030-session-first-cli-shell/data-model.md`
-- [ ] T003 Freeze CLI shell entry and CLI session behavior in
+- [x] T003 Freeze CLI shell entry and CLI session behavior in
       `specs/030-session-first-cli-shell/contracts/cli-session-shell-contract.md` and
       `specs/030-session-first-cli-shell/contracts/cli-session-state-contract.md`
-- [ ] T004 Confirm explicit deferrals, proof boundaries, and validation guidance in
+- [x] T004 Confirm explicit deferrals, proof boundaries, and validation guidance in
       `specs/030-session-first-cli-shell/research.md` and
       `specs/030-session-first-cli-shell/quickstart.md`
 
@@ -61,17 +61,17 @@ with recent sessions, start-new, resume-last, warnings, and config.
 
 ### Tests For User Story 1
 
-- [ ] T005 [P] [US1] Add or extend default-entry and startup-home CLI coverage in
+- [x] T005 [P] [US1] Add or extend default-entry and startup-home CLI coverage in
       `crates/mister-smith-app/tests/session_cli_shell_entry_tests.rs`
 
 ### Implementation For User Story 1
 
-- [ ] T006 [P] [US1] Rework the default `mister-smith` entry behavior in
+- [x] T006 [P] [US1] Rework the default `mister-smith` entry behavior in
       `crates/mister-smith-app/src/main.rs`
-- [ ] T007 [P] [US1] Add startup-home session snapshot helpers in
+- [x] T007 [P] [US1] Add startup-home session snapshot helpers in
       `crates/mister-smith-app/src/conversation.rs` and
       `crates/mister-smith-http/src/server.rs`
-- [ ] T008 [US1] Add CLI startup-home rendering and warning presentation in
+- [x] T008 [US1] Add CLI startup-home rendering and warning presentation in
       `crates/mister-smith-app/src/main.rs`
 
 **Checkpoint**: the default CLI entry is recent-first and no longer teaches runtime-first
@@ -89,16 +89,16 @@ specific retained session, and see the same session summary data across the CLI 
 
 ### Tests For User Story 2
 
-- [ ] T009 [P] [US2] Add CLI resume-flow coverage in
+- [x] T009 [P] [US2] Add CLI resume-flow coverage in
       `crates/mister-smith-app/tests/session_cli_shell_resume_tests.rs`
 
 ### Implementation For User Story 2
 
-- [ ] T010 [P] [US2] Add resume-last, resume-by-id, and recent-session browse support in
+- [x] T010 [P] [US2] Add resume-last, resume-by-id, and recent-session browse support in
       `crates/mister-smith-app/src/main.rs` and `crates/mister-smith-app/src/conversation.rs`
-- [ ] T011 [P] [US2] Extend recent-session and session-detail payloads for the CLI shell in
+- [x] T011 [P] [US2] Extend recent-session and session-detail payloads for the CLI shell in
       `crates/mister-smith-http/src/server.rs`
-- [ ] T012 [US2] Add CLI session-picker and browse output behavior in
+- [x] T012 [US2] Add CLI session-picker and browse output behavior in
       `crates/mister-smith-app/src/main.rs`
 
 **Checkpoint**: resume-last, resume-by-id, and recent-session browsing are distinct but consistent
@@ -116,17 +116,17 @@ and the same session identity and retained history remain intact.
 
 ### Tests For User Story 3
 
-- [ ] T013 [P] [US3] Add live-session control coverage in
+- [x] T013 [P] [US3] Add live-session control coverage in
       `crates/mister-smith-app/tests/session_cli_shell_control_tests.rs`
 
 ### Implementation For User Story 3
 
-- [ ] T014 [P] [US3] Add or extend in-session control handling for model, permissions, config,
+- [x] T014 [P] [US3] Add or extend in-session control handling for model, permissions, config,
       status, and MCP in `crates/mister-smith-app/src/main.rs` and
       `crates/mister-smith-app/src/conversation.rs`
-- [ ] T015 [P] [US3] Extend session-control and degraded-state payloads used by the CLI shell in
+- [x] T015 [P] [US3] Extend session-control and degraded-state payloads used by the CLI shell in
       `crates/mister-smith-http/src/server.rs`
-- [ ] T016 [US3] Add CLI command help and live-session status output for the core control set in
+- [x] T016 [US3] Add CLI command help and live-session status output for the core control set in
       `crates/mister-smith-app/src/main.rs`
 
 **Checkpoint**: users can steer live sessions in place and stay inside the CLI shell.
@@ -135,17 +135,17 @@ and the same session identity and retained history remain intact.
 
 ## Final Validation And Evidence
 
-- [ ] T017 Run `cargo test -p mister-smith-app`
-- [ ] T018 Run `cargo test -p mister-smith-http`
-- [ ] T019 Run `cargo build --workspace`
-- [ ] T020 Run
+- [x] T017 Run `cargo test -p mister-smith-app`
+- [x] T018 Run `cargo test -p mister-smith-http`
+- [x] T019 Run `cargo build --workspace`
+- [x] T020 Run
       `SPECIFY_FEATURE=030-session-first-cli-shell ./.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
-- [ ] T021 Run
+- [x] T021 Run
       `npx markdownlint-cli2 "specs/030-session-first-cli-shell/**/*.md" --config .markdownlint.json`
-- [ ] T022 Run `git diff --check`
-- [ ] T023 Refresh a durable packet proof note under `docs/plans/` and any state-bearing docs
+- [x] T022 Run `git diff --check`
+- [x] T023 Refresh a durable packet proof note under `docs/plans/` and any state-bearing docs
       only when the implementation actually lands
-- [ ] T024 Run `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`
+- [x] T024 Run `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`
 
 ## Parallel Directive
 

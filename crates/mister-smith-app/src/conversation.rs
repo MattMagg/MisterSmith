@@ -1,6 +1,7 @@
 //! Durable multi-turn conversation service and CLI helpers.
 
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
@@ -14,11 +15,12 @@ use mister_smith_core::{
 };
 use mister_smith_http::server::{
     ConversationContinueRequest, ConversationCreateRequest, ConversationEndView,
-    ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionService,
-    ConversationSessionSummaryView, ConversationSessionView, ConversationTurnAccepted,
-    ConversationTurnContext, ConversationTurnSummaryView, SessionListRequest,
-    TaskSubmissionRequest,
+    ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionControlUpdateRequest,
+    ConversationSessionControlView, ConversationSessionService, ConversationSessionSummaryView,
+    ConversationSessionView, ConversationSupportNoticeView, ConversationTurnAccepted,
+    ConversationTurnContext, ConversationTurnSummaryView, SessionListRequest, TaskSubmissionRequest,
 };
+use mister_smith_persistence::postgres::pool::PostgresConnection;
 use mister_smith_persistence::postgres::queries::{self, TaskRecord};
 use mister_smith_persistence::{SessionRecord, SessionRepository, SessionTurnRecord};
 use reqwest::{Client, StatusCode};
@@ -385,6 +387,29 @@ impl ConversationSessionService for ConversationRuntimeService {
         })
     }
 
+    async fn update_session_control_state(
+        &self,
+        session_id: SessionId,
+        request: ConversationSessionControlUpdateRequest,
+    ) -> Result<ConversationSessionControlView, ConversationServiceError> {
+        let (mut session, _) = self.sync_session(session_id).await?;
+        if matches!(parse_session_status(&session.status), SessionStatus::Ended) {
+            return Err(ConversationServiceError::SessionEnded { session_id });
+        }
+
+        let mut control_state = session_control_state_from_context(&session.retained_context, &session);
+        validate_and_apply_control_updates(&mut control_state, &request)?;
+
+        session.retained_context = upsert_session_control_state(&session.retained_context, &control_state);
+        session.updated_at = Utc::now();
+        self.session_repository
+            .update_session(&session)
+            .await
+            .map_err(persistence_error)?;
+
+        Ok(control_state)
+    }
+
     async fn list_sessions(
         &self,
         request: SessionListRequest,
@@ -422,6 +447,8 @@ async fn build_session_view(
     turns: Vec<SessionTurnRecord>,
     pool: &PgPool,
 ) -> Result<ConversationSessionView, ConversationServiceError> {
+    let control_state = session_control_state_from_context(&session.retained_context, &session);
+    let support_notices = session_support_notices(&session, &control_state);
     let task_ids = turns
         .iter()
         .map(|turn| turn.workflow_id)
@@ -480,6 +507,7 @@ async fn build_session_view(
     }
 
     Ok(ConversationSessionView {
+        title: session_title(&session.retained_context, &session),
         session_id: SessionId::from_uuid(session.session_id),
         status: parse_session_status(&session.status),
         coordinator_agent_id: AgentId::from_uuid(session.coordinator_agent_id),
@@ -490,6 +518,8 @@ async fn build_session_view(
         turn_count: session.turn_count.max(0) as u32,
         last_assistant_result,
         turns: turn_summaries,
+        control_state,
+        support_notices,
         ended_at: session.ended_at,
     })
 }
@@ -536,6 +566,11 @@ fn parse_session_status(raw: &str) -> SessionStatus {
         _ => SessionStatus::Active,
     }
 }
+
+const DEFAULT_PERMISSION_MODE: &str = "default";
+const DEFAULT_CONFIG_POSTURE: &str = "inline";
+const DEFAULT_STATUS_VIEW: &str = "summary";
+const DEFAULT_MCP_POSTURE: &str = "support_only";
 
 fn empty_retained_context() -> Value {
     json!({
@@ -596,8 +631,222 @@ fn last_preview_from_context(retained_context: &Value) -> Option<String> {
     })
 }
 
+fn last_user_message_from_context(retained_context: &Value) -> Option<String> {
+    retained_context
+        .get("last_user_message")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn compact_title(value: &str) -> String {
+    let title = value.trim().replace('\n', " ");
+    let mut chars = title.chars();
+    let compact: String = chars.by_ref().take(72).collect();
+    if chars.next().is_some() {
+        format!("{compact}...")
+    } else {
+        compact
+    }
+}
+
+fn session_title(retained_context: &Value, session: &SessionRecord) -> String {
+    if let Some(user_message) = last_user_message_from_context(retained_context) {
+        return compact_title(&user_message);
+    }
+    if let Some(preview) = last_preview_from_context(retained_context) {
+        return compact_title(&preview);
+    }
+
+    format!("session {}", &session.session_id.to_string()[..8])
+}
+
+fn normalized_optional_string(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn session_control_state_from_context(
+    retained_context: &Value,
+    session: &SessionRecord,
+) -> ConversationSessionControlView {
+    let stored = retained_context.get("session_control_state");
+
+    ConversationSessionControlView {
+        session_id: session.session_id,
+        selected_provider_kind: normalized_optional_string(
+            stored
+                .and_then(|value| value.get("selected_provider_kind"))
+                .and_then(Value::as_str),
+        ),
+        selected_model_id: normalized_optional_string(
+            stored
+                .and_then(|value| value.get("selected_model_id"))
+                .and_then(Value::as_str),
+        ),
+        permission_mode: normalized_optional_string(
+            stored
+                .and_then(|value| value.get("permission_mode"))
+                .and_then(Value::as_str),
+        )
+        .unwrap_or_else(|| DEFAULT_PERMISSION_MODE.to_string()),
+        config_posture: normalized_optional_string(
+            stored
+                .and_then(|value| value.get("config_posture"))
+                .and_then(Value::as_str),
+        )
+        .unwrap_or_else(|| DEFAULT_CONFIG_POSTURE.to_string()),
+        status_view: normalized_optional_string(
+            stored
+                .and_then(|value| value.get("status_view"))
+                .and_then(Value::as_str),
+        )
+        .unwrap_or_else(|| DEFAULT_STATUS_VIEW.to_string()),
+        mcp_posture: normalized_optional_string(
+            stored
+                .and_then(|value| value.get("mcp_posture"))
+                .and_then(Value::as_str),
+        )
+        .unwrap_or_else(|| DEFAULT_MCP_POSTURE.to_string()),
+    }
+}
+
+fn upsert_session_control_state(
+    retained_context: &Value,
+    control_state: &ConversationSessionControlView,
+) -> Value {
+    let mut updated = retained_context.clone();
+    if updated.is_null() || !updated.is_object() {
+        updated = empty_retained_context();
+    }
+
+    if let Some(object) = updated.as_object_mut() {
+        object.insert(
+            "session_control_state".to_string(),
+            json!({
+                "selected_provider_kind": control_state.selected_provider_kind,
+                "selected_model_id": control_state.selected_model_id,
+                "permission_mode": control_state.permission_mode,
+                "config_posture": control_state.config_posture,
+                "status_view": control_state.status_view,
+                "mcp_posture": control_state.mcp_posture,
+            }),
+        );
+    }
+
+    updated
+}
+
+fn session_support_notices(
+    session: &SessionRecord,
+    control_state: &ConversationSessionControlView,
+) -> Vec<ConversationSupportNoticeView> {
+    let mut notices = Vec::new();
+
+    if session.active_workflow_id.is_some() {
+        notices.push(ConversationSupportNoticeView {
+            notice_kind: "session_busy".to_string(),
+            severity: "info".to_string(),
+            summary: "This session already has a live workflow. New turns will wait until it finishes.".to_string(),
+            support_surface: Some("status".to_string()),
+        });
+    }
+
+    if control_state.selected_model_id.is_some()
+        || control_state.selected_provider_kind.is_some()
+        || control_state.permission_mode != DEFAULT_PERMISSION_MODE
+        || control_state.mcp_posture != DEFAULT_MCP_POSTURE
+    {
+        notices.push(ConversationSupportNoticeView {
+            notice_kind: "session_shell_preferences".to_string(),
+            severity: "warning".to_string(),
+            summary: "Shell control changes are stored with this session, but runtime execution still follows the active runtime path.".to_string(),
+            support_surface: Some("config".to_string()),
+        });
+    }
+
+    notices
+}
+
+fn validate_permission_mode(value: &str) -> Result<(), ConversationServiceError> {
+    if matches!(value, "default" | "review" | "full") {
+        return Ok(());
+    }
+
+    Err(ConversationServiceError::BadRequest(format!(
+        "invalid permission mode '{value}'; expected default, review, or full"
+    )))
+}
+
+fn validate_config_posture(value: &str) -> Result<(), ConversationServiceError> {
+    if matches!(value, "inline" | "support") {
+        return Ok(());
+    }
+
+    Err(ConversationServiceError::BadRequest(format!(
+        "invalid config posture '{value}'; expected inline or support"
+    )))
+}
+
+fn validate_status_view(value: &str) -> Result<(), ConversationServiceError> {
+    if matches!(value, "summary" | "detail") {
+        return Ok(());
+    }
+
+    Err(ConversationServiceError::BadRequest(format!(
+        "invalid status view '{value}'; expected summary or detail"
+    )))
+}
+
+fn validate_mcp_posture(value: &str) -> Result<(), ConversationServiceError> {
+    if matches!(value, "connected" | "support_only" | "detached") {
+        return Ok(());
+    }
+
+    Err(ConversationServiceError::BadRequest(format!(
+        "invalid mcp posture '{value}'; expected connected, support_only, or detached"
+    )))
+}
+
+fn validate_and_apply_control_updates(
+    control_state: &mut ConversationSessionControlView,
+    request: &ConversationSessionControlUpdateRequest,
+) -> Result<(), ConversationServiceError> {
+    if request.clear_selected_provider_kind {
+        control_state.selected_provider_kind = None;
+    } else if let Some(value) = normalized_optional_string(request.selected_provider_kind.as_deref()) {
+        control_state.selected_provider_kind = Some(value);
+    }
+    if request.clear_selected_model_id {
+        control_state.selected_model_id = None;
+    } else if let Some(value) = normalized_optional_string(request.selected_model_id.as_deref()) {
+        control_state.selected_model_id = Some(value);
+    }
+    if let Some(value) = normalized_optional_string(request.permission_mode.as_deref()) {
+        validate_permission_mode(&value)?;
+        control_state.permission_mode = value;
+    }
+    if let Some(value) = normalized_optional_string(request.config_posture.as_deref()) {
+        validate_config_posture(&value)?;
+        control_state.config_posture = value;
+    }
+    if let Some(value) = normalized_optional_string(request.status_view.as_deref()) {
+        validate_status_view(&value)?;
+        control_state.status_view = value;
+    }
+    if let Some(value) = normalized_optional_string(request.mcp_posture.as_deref()) {
+        validate_mcp_posture(&value)?;
+        control_state.mcp_posture = value;
+    }
+    Ok(())
+}
+
 fn build_session_summary_view(session: &SessionRecord) -> ConversationSessionSummaryView {
     ConversationSessionSummaryView {
+        title: session_title(&session.retained_context, session),
         session_id: SessionId::from_uuid(session.session_id),
         status: parse_session_status(&session.status),
         coordinator_agent_id: AgentId::from_uuid(session.coordinator_agent_id),
@@ -702,6 +951,7 @@ pub(crate) struct ConversationCliTurnAccepted {
 /// Client-facing inspect view.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ConversationCliSessionView {
+    pub title: String,
     pub session_id: String,
     pub status: String,
     pub coordinator_agent_id: String,
@@ -714,7 +964,70 @@ pub(crate) struct ConversationCliSessionView {
     pub last_assistant_result: Option<SessionRetainedResultView>,
     #[serde(default)]
     pub turns: Vec<ConversationCliTurnSummary>,
+    #[serde(default)]
+    pub control_state: ConversationCliSessionControlState,
+    #[serde(default)]
+    pub support_notices: Vec<ConversationCliSupportNoticeView>,
     pub ended_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ConversationCliSessionControlState {
+    pub selected_provider_kind: Option<String>,
+    pub selected_model_id: Option<String>,
+    pub permission_mode: String,
+    pub config_posture: String,
+    pub status_view: String,
+    pub mcp_posture: String,
+}
+
+impl Default for ConversationCliSessionControlState {
+    fn default() -> Self {
+        Self {
+            selected_provider_kind: None,
+            selected_model_id: None,
+            permission_mode: DEFAULT_PERMISSION_MODE.to_string(),
+            config_posture: DEFAULT_CONFIG_POSTURE.to_string(),
+            status_view: DEFAULT_STATUS_VIEW.to_string(),
+            mcp_posture: DEFAULT_MCP_POSTURE.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ConversationCliSupportNoticeView {
+    pub notice_kind: String,
+    pub severity: String,
+    pub summary: String,
+    pub support_surface: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ConversationCliSessionSummaryView {
+    pub title: String,
+    pub session_id: String,
+    pub status: String,
+    pub coordinator_agent_id: String,
+    pub provider_kind: String,
+    pub model_id: String,
+    pub active_workflow_id: Option<String>,
+    pub last_completed_workflow_id: Option<String>,
+    pub turn_count: u32,
+    pub updated_at: String,
+    pub ended_at: Option<String>,
+    pub last_preview: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ConversationCliStartupHomeView {
+    pub recent_sessions: Vec<ConversationCliSessionSummaryView>,
+    pub resume_last_session_id: Option<String>,
+    pub startup_warnings: Vec<ConversationCliSupportNoticeView>,
+    pub provider_kind: String,
+    pub model_id: String,
+    pub config_action: String,
+    pub session_source: String,
+    pub runtime_available: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -755,6 +1068,7 @@ pub(crate) struct ConversationCliEndView {
 #[derive(Debug)]
 pub(crate) enum ConversationClientError {
     InvalidSessionId(String),
+    StorageUnavailable(String),
     Http(reqwest::Error),
     HttpStatus(StatusCode, String),
 }
@@ -765,6 +1079,7 @@ impl fmt::Display for ConversationClientError {
             ConversationClientError::InvalidSessionId(raw) => {
                 write!(f, "invalid session id '{raw}'")
             }
+            ConversationClientError::StorageUnavailable(message) => write!(f, "{message}"),
             ConversationClientError::Http(error) => write!(f, "{error}"),
             ConversationClientError::HttpStatus(status, body) => {
                 write!(f, "runtime returned {}: {}", status.as_u16(), body)
@@ -786,6 +1101,11 @@ pub(crate) fn default_base_url(config: &FrameworkConfig) -> String {
     format!("http://127.0.0.1:{port}")
 }
 
+#[derive(Debug, Deserialize)]
+struct ConversationHealthResponse {
+    status: String,
+}
+
 pub(crate) async fn start_session_http(
     base_url: &str,
     message: &str,
@@ -799,6 +1119,23 @@ pub(crate) async fn start_session_http(
             "message": message,
             "priority": priority,
         }))
+        .send()
+        .await
+        .map_err(ConversationClientError::Http)?;
+    decode_json_response(response).await
+}
+
+pub(crate) async fn list_sessions_http(
+    base_url: &str,
+    limit: usize,
+) -> Result<Vec<ConversationCliSessionSummaryView>, ConversationClientError> {
+    let client = Client::new();
+    let url = format!(
+        "{}/api/v1/sessions?limit={limit}",
+        base_url.trim_end_matches('/')
+    );
+    let response = client
+        .get(url)
         .send()
         .await
         .map_err(ConversationClientError::Http)?;
@@ -823,6 +1160,26 @@ pub(crate) async fn continue_session_http(
             "message": message,
             "priority": priority,
         }))
+        .send()
+        .await
+        .map_err(ConversationClientError::Http)?;
+    decode_json_response(response).await
+}
+
+pub(crate) async fn update_session_control_http(
+    base_url: &str,
+    session_id: SessionId,
+    request: ConversationSessionControlUpdateRequest,
+) -> Result<ConversationCliSessionControlState, ConversationClientError> {
+    let client = Client::new();
+    let url = format!(
+        "{}/api/v1/sessions/{}/controls",
+        base_url.trim_end_matches('/'),
+        session_id
+    );
+    let response = client
+        .post(url)
+        .json(&request)
         .send()
         .await
         .map_err(ConversationClientError::Http)?;
@@ -863,6 +1220,371 @@ pub(crate) async fn end_session_http(
         .await
         .map_err(ConversationClientError::Http)?;
     decode_json_response(response).await
+}
+
+async fn runtime_available_http(base_url: &str) -> bool {
+    let client = Client::new();
+    let url = format!("{}/api/v1/health", base_url.trim_end_matches('/'));
+    match client.get(url).send().await {
+        Ok(response) if response.status().is_success() => response
+            .json::<ConversationHealthResponse>()
+            .await
+            .map(|body| body.status.eq_ignore_ascii_case("healthy"))
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+fn session_store_url() -> Result<String, ConversationClientError> {
+    env::var("DATABASE_URL")
+        .map_err(|_| {
+            ConversationClientError::StorageUnavailable(
+                "DATABASE_URL is not set, so the CLI cannot read retained sessions directly."
+                    .to_string(),
+            )
+        })
+        .and_then(|value| {
+            if value.trim().is_empty() {
+                Err(ConversationClientError::StorageUnavailable(
+                    "DATABASE_URL is empty, so the CLI cannot read retained sessions directly."
+                        .to_string(),
+                ))
+            } else {
+                Ok(value)
+            }
+        })
+}
+
+async fn connect_session_store() -> Result<PostgresConnection, ConversationClientError> {
+    let url = session_store_url()?;
+    PostgresConnection::connect(&url)
+        .await
+        .map_err(|error| {
+            ConversationClientError::StorageUnavailable(format!(
+                "failed to connect to the retained session store: {error}"
+            ))
+        })
+}
+
+fn cli_control_state_from_view(
+    view: ConversationSessionControlView,
+) -> ConversationCliSessionControlState {
+    ConversationCliSessionControlState {
+        selected_provider_kind: view.selected_provider_kind,
+        selected_model_id: view.selected_model_id,
+        permission_mode: view.permission_mode,
+        config_posture: view.config_posture,
+        status_view: view.status_view,
+        mcp_posture: view.mcp_posture,
+    }
+}
+
+fn cli_notice_from_view(view: ConversationSupportNoticeView) -> ConversationCliSupportNoticeView {
+    ConversationCliSupportNoticeView {
+        notice_kind: view.notice_kind,
+        severity: view.severity,
+        summary: view.summary,
+        support_surface: view.support_surface,
+    }
+}
+
+fn cli_summary_from_view(
+    view: ConversationSessionSummaryView,
+) -> ConversationCliSessionSummaryView {
+    ConversationCliSessionSummaryView {
+        title: view.title,
+        session_id: view.session_id.to_string(),
+        status: session_status_text(view.status).to_string(),
+        coordinator_agent_id: view.coordinator_agent_id.to_string(),
+        provider_kind: view.provider_kind,
+        model_id: view.model_id,
+        active_workflow_id: view.active_workflow_id.map(|value| value.to_string()),
+        last_completed_workflow_id: view.last_completed_workflow_id.map(|value| value.to_string()),
+        turn_count: view.turn_count,
+        updated_at: view.updated_at.to_rfc3339(),
+        ended_at: view.ended_at.map(|value| value.to_rfc3339()),
+        last_preview: view.last_preview,
+    }
+}
+
+fn cli_session_from_view(view: ConversationSessionView) -> ConversationCliSessionView {
+    ConversationCliSessionView {
+        title: view.title,
+        session_id: view.session_id.to_string(),
+        status: session_status_text(view.status).to_string(),
+        coordinator_agent_id: view.coordinator_agent_id.to_string(),
+        provider_kind: view.provider_kind,
+        model_id: view.model_id,
+        active_workflow_id: view.active_workflow_id.map(|value| value.to_string()),
+        last_completed_workflow_id: view.last_completed_workflow_id.map(|value| value.to_string()),
+        turn_count: view.turn_count,
+        last_assistant_result: view.last_assistant_result,
+        turns: view
+            .turns
+            .into_iter()
+            .map(|turn| ConversationCliTurnSummary {
+                turn_index: turn.turn_index,
+                workflow_id: turn.workflow_id.to_string(),
+                status: turn.status,
+                lifecycle_state: turn.lifecycle_state,
+                user_message: turn.user_message,
+                assistant_result: turn.assistant_result,
+                resume_provenance: turn.resume_provenance.map(|provenance| {
+                    ConversationCliResumeProvenanceView {
+                        recovered_after_restart: provenance.recovered_after_restart,
+                        resumed_after_restart: provenance.resumed_after_restart,
+                        recovered_at: provenance.recovered_at.map(|value| value.to_rfc3339()),
+                        recovery_reason: provenance.recovery_reason,
+                        resumed_from_workflow_id: provenance
+                            .resumed_from_workflow_id
+                            .map(|value| value.to_string()),
+                        resumed_from_turn_index: provenance.resumed_from_turn_index,
+                    }
+                }),
+            })
+            .collect(),
+        control_state: cli_control_state_from_view(view.control_state),
+        support_notices: view
+            .support_notices
+            .into_iter()
+            .map(cli_notice_from_view)
+            .collect(),
+        ended_at: view.ended_at.map(|value| value.to_rfc3339()),
+    }
+}
+
+pub(crate) async fn list_sessions_direct(
+    limit: usize,
+) -> Result<Vec<ConversationCliSessionSummaryView>, ConversationClientError> {
+    let connection = connect_session_store().await?;
+    let repository = SessionRepository::new(connection.pool().clone());
+    let rows = repository
+        .list_sessions(None, i64::try_from(limit).unwrap_or(i64::MAX), 0)
+        .await
+        .map_err(|error| {
+            ConversationClientError::StorageUnavailable(format!(
+                "failed to read retained sessions directly: {error}"
+            ))
+        })?;
+
+    Ok(rows.into_iter().map(|row| cli_summary_from_view(build_session_summary_view(&row))).collect())
+}
+
+pub(crate) async fn inspect_session_direct(
+    session_id: SessionId,
+) -> Result<ConversationCliSessionView, ConversationClientError> {
+    let connection = connect_session_store().await?;
+    let repository = SessionRepository::new(connection.pool().clone());
+    let session = repository
+        .find_session(session_id)
+        .await
+        .map_err(|error| {
+            ConversationClientError::StorageUnavailable(format!(
+                "failed to load retained session {session_id}: {error}"
+            ))
+        })?
+        .ok_or_else(|| {
+            ConversationClientError::StorageUnavailable(format!(
+                "retained session {session_id} was not found in the direct session store"
+            ))
+        })?;
+    let turns = repository
+        .list_turns(session_id)
+        .await
+        .map_err(|error| {
+            ConversationClientError::StorageUnavailable(format!(
+                "failed to load retained turns for session {session_id}: {error}"
+            ))
+        })?;
+    let view = build_session_view(session, turns, connection.pool())
+        .await
+        .map_err(|error| {
+            ConversationClientError::StorageUnavailable(format!(
+                "failed to build the retained session view for {session_id}: {error}"
+            ))
+        })?;
+    Ok(cli_session_from_view(view))
+}
+
+pub(crate) async fn update_session_control_direct(
+    session_id: SessionId,
+    request: ConversationSessionControlUpdateRequest,
+) -> Result<ConversationCliSessionControlState, ConversationClientError> {
+    let connection = connect_session_store().await?;
+    let repository = SessionRepository::new(connection.pool().clone());
+    let mut session = repository
+        .find_session(session_id)
+        .await
+        .map_err(|error| {
+            ConversationClientError::StorageUnavailable(format!(
+                "failed to load retained session {session_id}: {error}"
+            ))
+        })?
+        .ok_or_else(|| {
+            ConversationClientError::StorageUnavailable(format!(
+                "retained session {session_id} was not found in the direct session store"
+            ))
+        })?;
+
+    if matches!(parse_session_status(&session.status), SessionStatus::Ended) {
+        return Err(ConversationClientError::StorageUnavailable(format!(
+            "session {session_id} has ended"
+        )));
+    }
+
+    let mut control_state = session_control_state_from_context(&session.retained_context, &session);
+    validate_and_apply_control_updates(&mut control_state, &request).map_err(|error| {
+        ConversationClientError::StorageUnavailable(error.to_string())
+    })?;
+
+    session.retained_context = upsert_session_control_state(&session.retained_context, &ConversationSessionControlView {
+        session_id: control_state.session_id,
+        selected_provider_kind: control_state.selected_provider_kind.clone(),
+        selected_model_id: control_state.selected_model_id.clone(),
+        permission_mode: control_state.permission_mode.clone(),
+        config_posture: control_state.config_posture.clone(),
+        status_view: control_state.status_view.clone(),
+        mcp_posture: control_state.mcp_posture.clone(),
+    });
+    session.updated_at = Utc::now();
+    repository
+        .update_session(&session)
+        .await
+        .map_err(|error| {
+            ConversationClientError::StorageUnavailable(format!(
+                "failed to store session shell controls for {session_id}: {error}"
+            ))
+        })?;
+
+    Ok(cli_control_state_from_view(control_state))
+}
+
+pub(crate) async fn resolve_last_session_id(
+    base_url: &str,
+    _config: &FrameworkConfig,
+) -> Option<SessionId> {
+    if let Ok(rows) = list_sessions_http(base_url, 1).await {
+        return rows
+            .first()
+            .and_then(|row| parse_session_id(&row.session_id).ok());
+    }
+
+    list_sessions_direct(1)
+        .await
+        .ok()
+        .and_then(|rows| rows.first().cloned())
+        .and_then(|row| parse_session_id(&row.session_id).ok())
+}
+
+pub(crate) async fn inspect_session_for_cli(
+    base_url: &str,
+    _config: &FrameworkConfig,
+    session_id: SessionId,
+) -> Result<ConversationCliSessionView, ConversationClientError> {
+    match inspect_session_http(base_url, session_id).await {
+        Ok(view) => Ok(view),
+        Err(err) => {
+            tracing::warn!("inspect_session_for_cli: HTTP inspect failed: {}", err);
+            let mut view = inspect_session_direct(session_id).await?;
+            view.support_notices.insert(
+                0,
+                ConversationCliSupportNoticeView {
+                    notice_kind: "runtime_unavailable".to_string(),
+                    severity: "warning".to_string(),
+                    summary:
+                        "Runtime is unavailable. This session is shown from durable storage only."
+                            .to_string(),
+                    support_surface: Some("run".to_string()),
+                },
+            );
+            Ok(view)
+        }
+    }
+}
+
+pub(crate) async fn update_session_control_for_cli(
+    base_url: &str,
+    _config: &FrameworkConfig,
+    session_id: SessionId,
+    request: ConversationSessionControlUpdateRequest,
+) -> Result<ConversationCliSessionControlState, ConversationClientError> {
+    match update_session_control_http(base_url, session_id, request.clone()).await {
+        Ok(view) => Ok(view),
+        Err(e) => {
+            tracing::error!("update_session_control_for_cli: HTTP update failed: {}", e);
+            update_session_control_direct(session_id, request).await
+        }
+    }
+}
+
+pub(crate) async fn build_startup_home(
+    base_url: &str,
+    config: &FrameworkConfig,
+    config_action: String,
+    limit: usize,
+) -> ConversationCliStartupHomeView {
+    let runtime_available = runtime_available_http(base_url).await;
+    let (recent_sessions, session_source, mut startup_warnings, discovery_success) =
+        match list_sessions_http(base_url, limit).await {
+            Ok(rows) => (rows, "runtime_api".to_string(), Vec::new(), true),
+            Err(_) => match list_sessions_direct(limit).await {
+                Ok(rows) => (
+                    rows,
+                    "durable_store".to_string(),
+                    vec![ConversationCliSupportNoticeView {
+                        notice_kind: "runtime_unavailable".to_string(),
+                        severity: "warning".to_string(),
+                        summary:
+                            "Runtime is unavailable. Recent sessions are shown from durable storage only."
+                                .to_string(),
+                        support_surface: Some("run".to_string()),
+                    }],
+                    true,
+                ),
+                Err(_) => (
+                    Vec::new(),
+                    "unavailable".to_string(),
+                    vec![ConversationCliSupportNoticeView {
+                        notice_kind: "runtime_unavailable".to_string(),
+                        severity: "warning".to_string(),
+                        summary:
+                            "Runtime is unavailable and the retained session store could not be read."
+                                .to_string(),
+                        support_surface: Some("run".to_string()),
+                    }],
+                    false,
+                ),
+            },
+        };
+
+    if !runtime_available && startup_warnings.is_empty() {
+        startup_warnings.push(ConversationCliSupportNoticeView {
+            notice_kind: "runtime_unavailable".to_string(),
+            severity: "warning".to_string(),
+            summary: "Runtime is unavailable. Start and continue actions will stay blocked until it recovers.".to_string(),
+            support_surface: Some("run".to_string()),
+        });
+    }
+
+    if discovery_success && recent_sessions.is_empty() {
+        startup_warnings.push(ConversationCliSupportNoticeView {
+            notice_kind: "no_recent_sessions".to_string(),
+            severity: "info".to_string(),
+            summary: "No retained sessions were found yet. Start a new session to begin.".to_string(),
+            support_surface: None,
+        });
+    }
+
+    ConversationCliStartupHomeView {
+        resume_last_session_id: recent_sessions.first().map(|row| row.session_id.clone()),
+        recent_sessions,
+        startup_warnings,
+        provider_kind: config.llm.provider_kind.as_str().to_string(),
+        model_id: config.llm.model_id.clone(),
+        config_action,
+        session_source,
+        runtime_available,
+    }
 }
 
 async fn decode_json_response<T>(response: reqwest::Response) -> Result<T, ConversationClientError>
@@ -925,9 +1647,12 @@ pub(crate) fn render_session(view: &ConversationCliSessionView) -> String {
         .as_ref()
         .map(render_retained_result)
         .unwrap_or_else(|| "none".to_string());
+    let support_notices = render_support_notices(&view.support_notices);
+    let control_state = render_control_state(&view.control_state, &view.provider_kind, &view.model_id);
 
     format!(
-        "session_id: {}\nstatus: {}\ncoordinator_agent_id: {}\nprovider_kind: {}\nmodel_id: {}\nactive_workflow_id: {}\nlast_completed_workflow_id: {}\nlast_assistant_result: {}\nturn_count: {}\nended_at: {}\nturns:\n{}",
+        "title: {}\nsession_id: {}\nstatus: {}\ncoordinator_agent_id: {}\nprovider_kind: {}\nmodel_id: {}\nactive_workflow_id: {}\nlast_completed_workflow_id: {}\nlast_assistant_result: {}\nturn_count: {}\ncontrols:\n{}\nsupport_notices:\n{}\nended_at: {}\nturns:\n{}",
+        view.title,
         view.session_id,
         view.status,
         view.coordinator_agent_id,
@@ -937,6 +1662,8 @@ pub(crate) fn render_session(view: &ConversationCliSessionView) -> String {
         view.last_completed_workflow_id.as_deref().unwrap_or("none"),
         last_assistant_result,
         view.turn_count,
+        control_state,
+        support_notices,
         view.ended_at.as_deref().unwrap_or("none"),
         if turns.is_empty() {
             "none".to_string()
@@ -950,6 +1677,96 @@ pub(crate) fn render_end_view(view: &ConversationCliEndView) -> String {
     format!(
         "session_id: {}\nstatus: {}\nended_at: {}",
         view.session_id, view.status, view.ended_at
+    )
+}
+
+pub(crate) fn render_session_list(sessions: &[ConversationCliSessionSummaryView]) -> String {
+    if sessions.is_empty() {
+        return "recent_sessions:\nnone".to_string();
+    }
+
+    let rows = sessions
+        .iter()
+        .enumerate()
+        .map(|(index, session)| {
+            format!(
+                "  {}. {} [{}] status={} model={} updated={} preview={}",
+                index + 1,
+                session.title,
+                session.session_id,
+                session.status,
+                session.model_id,
+                session.updated_at,
+                session
+                    .last_preview
+                    .as_deref()
+                    .unwrap_or("none")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("recent_sessions:\n{rows}")
+}
+
+pub(crate) fn render_startup_home(view: &ConversationCliStartupHomeView) -> String {
+    format!(
+        "Mister Smith CLI shell\nprovider: {}\nmodel: {}\nruntime_available: {}\nsession_source: {}\nresume_last: {}\nconfig: {}\nstartup_warnings:\n{}\n{}\nactions:\n  new <message>\n  resume last\n  open <session_id>\n  sessions\n  config\n  help\n  quit",
+        view.provider_kind,
+        view.model_id,
+        if view.runtime_available { "yes" } else { "no" },
+        view.session_source,
+        view.resume_last_session_id.as_deref().unwrap_or("none"),
+        view.config_action,
+        render_support_notices(&view.startup_warnings),
+        render_session_list(&view.recent_sessions),
+    )
+}
+
+pub(crate) fn render_support_notices(notices: &[ConversationCliSupportNoticeView]) -> String {
+    if notices.is_empty() {
+        return "none".to_string();
+    }
+
+    notices
+        .iter()
+        .map(|notice| {
+            format!(
+                "  - [{}] {}{}",
+                notice.severity,
+                notice.summary,
+                notice
+                    .support_surface
+                    .as_ref()
+                    .map(|surface| format!(" (support: {surface})"))
+                    .unwrap_or_default()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_control_state(
+    control_state: &ConversationCliSessionControlState,
+    provider_kind: &str,
+    model_id: &str,
+) -> String {
+    format!(
+        "  runtime_provider: {}\n  runtime_model: {}\n  selected_provider: {}\n  selected_model: {}\n  permission_mode: {}\n  config_posture: {}\n  status_view: {}\n  mcp_posture: {}",
+        provider_kind,
+        model_id,
+        control_state
+            .selected_provider_kind
+            .as_deref()
+            .unwrap_or("inherit"),
+        control_state
+            .selected_model_id
+            .as_deref()
+            .unwrap_or("inherit"),
+        control_state.permission_mode,
+        control_state.config_posture,
+        control_state.status_view,
+        control_state.mcp_posture
     )
 }
 
@@ -1444,6 +2261,7 @@ mod tests {
     #[test]
     fn render_session_surfaces_restart_resume_provenance() {
         let view = ConversationCliSessionView {
+            title: "resume interrupted workflow".to_string(),
             session_id: "11111111-1111-1111-1111-111111111111".to_string(),
             status: "active".to_string(),
             coordinator_agent_id: "33333333-3333-3333-3333-333333333333".to_string(),
@@ -1612,6 +2430,20 @@ mod tests {
                     }),
                 },
             ],
+            control_state: ConversationCliSessionControlState {
+                selected_provider_kind: Some("openai_chatgpt".to_string()),
+                selected_model_id: Some("gpt-5.4".to_string()),
+                permission_mode: "review".to_string(),
+                config_posture: "inline".to_string(),
+                status_view: "summary".to_string(),
+                mcp_posture: "connected".to_string(),
+            },
+            support_notices: vec![ConversationCliSupportNoticeView {
+                notice_kind: "session_shell_preferences".to_string(),
+                severity: "warning".to_string(),
+                summary: "Shell control changes are stored with this session, but runtime execution still follows the active runtime path.".to_string(),
+                support_surface: Some("config".to_string()),
+            }],
             ended_at: None,
         };
 
