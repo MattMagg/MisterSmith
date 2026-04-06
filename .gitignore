@@ -34,3 +34,6 @@ agenterra/
 .ralph/*
 !.ralph/README.md
 .worktrees/
+# Python cache
+__pycache__/
+*.pyc
