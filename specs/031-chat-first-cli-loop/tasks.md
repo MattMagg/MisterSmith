@@ -34,12 +34,12 @@ Capture the current repo truth this packet must preserve.
 
 **CRITICAL**: no `[P]` lane may begin until this checkpoint is complete.
 
-- [ ] T001 [US1] Freeze packet scope in `specs/031-chat-first-cli-loop/spec.md` and
+- [x] T001 [US1] Freeze packet scope in `specs/031-chat-first-cli-loop/spec.md` and
       `specs/031-chat-first-cli-loop/plan.md`
-- [ ] T002 [US1] Record packet-owned loop entities and invariants in
+- [x] T002 [US1] Record packet-owned loop entities and invariants in
       `specs/031-chat-first-cli-loop/data-model.md` and
       `specs/031-chat-first-cli-loop/contracts/cli-session-loop-contract.md`
-- [ ] T003 [US1] Confirm deferrals, proof boundaries, and validation posture in
+- [x] T003 [US1] Confirm deferrals, proof boundaries, and validation posture in
       `specs/031-chat-first-cli-loop/quickstart.md` and
       `specs/031-chat-first-cli-loop/analyze.md`
 

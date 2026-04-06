@@ -10,60 +10,60 @@ context and requirements.
 
 ## Requirement Completeness
 
-- [ ] CHK001 Are inline turn-state requirements defined for accepted, running, completed, failed,
+- [x] CHK001 Are inline turn-state requirements defined for accepted, running, completed, failed,
   and blocked turns? [Completeness, Spec §User Story 1]
-- [ ] CHK002 Are resumed-session requirements defined so the user re-enters a live loop rather
+- [x] CHK002 Are resumed-session requirements defined so the user re-enters a live loop rather
   than a static archive view? [Completeness, Spec §User Story 2]
-- [ ] CHK003 Are in-session steering requirements specified for model, permissions, config,
+- [x] CHK003 Are in-session steering requirements specified for model, permissions, config,
   status, and MCP posture? [Completeness, Spec §User Story 3]
-- [ ] CHK004 Does the spec define what happens when the runtime is unavailable but retained
+- [x] CHK004 Does the spec define what happens when the runtime is unavailable but retained
   session context is still readable? [Coverage, Spec §User Story 2]
 
 ## Requirement Clarity
 
-- [ ] CHK005 Is "live conversation loop" described with clear observable behaviors rather than a
+- [x] CHK005 Is "live conversation loop" described with clear observable behaviors rather than a
   general product adjective? [Clarity, Spec §Current Truth & Scope]
-- [ ] CHK006 Is the difference between inline turn-state feedback and detached inspection behavior
+- [x] CHK006 Is the difference between inline turn-state feedback and detached inspection behavior
   explicit enough to guide implementation and review? [Clarity, Spec §User Story 1]
-- [ ] CHK007 Are degraded, busy, and ended-session states distinguished clearly enough that they
+- [x] CHK007 Are degraded, busy, and ended-session states distinguished clearly enough that they
   cannot be implemented as the same notice flow? [Clarity, Spec §User Story 3]
-- [ ] CHK008 Are truth-boundary expectations stated in user-facing terms instead of internal-only
+- [x] CHK008 Are truth-boundary expectations stated in user-facing terms instead of internal-only
   workflow language? [Clarity, Spec §Requirements]
 
 ## Requirement Consistency
 
-- [ ] CHK009 Do the current-scope statements, assumptions, and functional requirements all keep
+- [x] CHK009 Do the current-scope statements, assumptions, and functional requirements all keep
   the packet CLI-only without accidentally reintroducing GUI parity? [Consistency]
-- [ ] CHK010 Do resume requirements align with the retained-session invariants and avoid implying
+- [x] CHK010 Do resume requirements align with the retained-session invariants and avoid implying
   a new session model? [Consistency, Spec §Assumptions & Defaults]
-- [ ] CHK011 Are support-surface requirements consistent with the packet goal of keeping runtime
+- [x] CHK011 Are support-surface requirements consistent with the packet goal of keeping runtime
   and admin machinery secondary to the loop? [Consistency, Spec §Requirements]
 
 ## Acceptance Criteria Quality
 
-- [ ] CHK012 Can each user story be independently validated without relying on unstated tooling or
+- [x] CHK012 Can each user story be independently validated without relying on unstated tooling or
   hidden observer knowledge? [Acceptance Criteria]
-- [ ] CHK013 Are the success criteria measurable enough to tell whether the CLI feels
+- [x] CHK013 Are the success criteria measurable enough to tell whether the CLI feels
   conversation-first rather than inspect-first? [Measurability, Spec §Success Criteria]
-- [ ] CHK014 Do the success criteria avoid implementation-specific mechanisms such as polling,
+- [x] CHK014 Do the success criteria avoid implementation-specific mechanisms such as polling,
   streaming protocol names, or internal transport details? [Clarity, Spec §Success Criteria]
 
 ## Scenario Coverage
 
-- [ ] CHK015 Are primary flows defined for new sessions, resumed sessions, and multi-turn
+- [x] CHK015 Are primary flows defined for new sessions, resumed sessions, and multi-turn
   follow-up inside one active loop? [Coverage]
-- [ ] CHK016 Are blocked, failed, and retained-only scenarios covered as explicit user-visible
+- [x] CHK016 Are blocked, failed, and retained-only scenarios covered as explicit user-visible
   states rather than implicit backend outcomes? [Coverage, Edge Case]
-- [ ] CHK017 Does the spec define how stored control posture remains visible on resume and during
+- [x] CHK017 Does the spec define how stored control posture remains visible on resume and during
   degraded runtime conditions? [Coverage, Spec §User Story 2]
 
 ## Scope Boundaries And Assumptions
 
-- [ ] CHK018 Are GUI parity, repo workflow tooling, and broad runtime redesign all explicitly
+- [x] CHK018 Are GUI parity, repo workflow tooling, and broad runtime redesign all explicitly
   deferred in more than one section so scope cannot drift accidentally? [Scope Boundary]
-- [ ] CHK019 Are assumptions about the existing durable session model and current packet `030`
+- [x] CHK019 Are assumptions about the existing durable session model and current packet `030`
   baseline documented clearly enough to prevent duplicate design work? [Assumption]
-- [ ] CHK020 Are proof-boundary limits and live-proof deferrals documented clearly enough to avoid
+- [x] CHK020 Are proof-boundary limits and live-proof deferrals documented clearly enough to avoid
   overstated readiness claims? [Non-Functional, Spec §Requirements]
 
 ## Notes
@@ -71,3 +71,5 @@ context and requirements.
 - Check items off as completed: `[x]`
 - Add comments or findings inline
 - Use this checklist to test the packet requirements, not the implementation
+- Validated on 2026-04-06 after the packet freeze clarified observable loop behavior, state
+  distinctions, retained-control visibility, and proof-boundary wording.

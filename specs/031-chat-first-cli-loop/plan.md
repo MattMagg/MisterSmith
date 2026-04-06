@@ -111,6 +111,22 @@ Validation:
   and deferrals
 - packet checklists pass without unresolved clarification markers
 
+## Implementation-Readiness Gate
+
+Packet `031` is implementation-ready only when all of the following are true:
+
+- `spec.md` defines observable live-loop behavior in user-facing terms rather than product-shape
+  slogans
+- `data-model.md` and `contracts/cli-session-loop-contract.md` distinguish accepted, running,
+  completed, failed, blocked, busy, degraded, ended, and proof-limited states clearly enough to
+  drive implementation and review
+- `quickstart.md`, `analyze.md`, and `tasks.md` agree that this step closes the packet freeze only
+  and does not claim code completion or a fresh live-proof rerun
+- both packet checklists pass
+
+Repo-wide strategic promotion is outside this packet-freeze step. This plan only makes the packet
+internally ready for bounded implementation.
+
 ### Milestone 2: Make the live loop readable in place
 
 Validation:

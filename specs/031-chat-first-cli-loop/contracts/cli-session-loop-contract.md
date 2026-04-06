@@ -18,6 +18,19 @@ session:
 - in-session commands such as `/new`, `/resume`, `/model`, `/permissions`, `/status`, `/config`,
   and `/mcp`
 
+## First loop render contract
+
+The first visible state for a new or resumed session must keep the user inside one session loop.
+That initial render must include all of the following together:
+
+1. session identity and bounded conversation context
+2. current control posture for model, permissions, config, status, and MCP
+3. any active truth notice that changes what the user can do next
+4. the next allowed action from the same session identity
+
+Detached inspection output may still exist, but it is secondary support context rather than the
+main active-session view.
+
 ## Required loop outputs
 
 An active CLI session loop must expose all of these together:
@@ -53,6 +66,25 @@ An active CLI session loop must expose all of these together:
 | `degraded` | Retained session context is readable but the runtime is not currently available | resume later, inspect retained context, adjust support posture |
 | `ended` | The session is logically closed | inspect retained context, start or resume a different session |
 
+## Inline turn-state contract
+
+| Turn State | Visible meaning | Loop requirement |
+| ---------- | --------------- | ---------------- |
+| `accepted` | The session accepted the turn and kept it in the current conversation. | Show the new turn inline immediately and identify it as the turn now in focus. |
+| `running` | Live work is happening now. | Keep the loop open, keep prior context visible, and avoid requiring a detached inspect-only path. |
+| `completed` | The turn finished and produced a bounded result. | Show the outcome inline and leave the loop ready for follow-up. |
+| `failed` | The turn stopped unsuccessfully. | Keep the failure inline, preserve context, and expose the next honest action. |
+| `blocked` | The turn cannot continue under the current session or runtime posture. | Keep the blocking reason inline and explain what the user can do next from the same loop. |
+
+## Truth-notice contract
+
+| Notice Kind | Visible meaning | Required distinction |
+| ----------- | --------------- | -------------------- |
+| `busy` | A live turn is already active. | Do not imply a second turn was accepted. |
+| `degraded` | Retained context is readable, but live runtime work is unavailable. | Keep retained context visible while saying live work cannot continue yet. |
+| `ended` | The session is closed. | Preserve retained context, but route the user toward another session. |
+| `proof_limited` | The loop is showing bounded or retained state, not a new live-proof claim. | Keep proof wording explicit in user language whenever previews are shown. |
+
 ## Truth rules
 
 - retained-only views must say so explicitly
@@ -61,6 +93,9 @@ An active CLI session loop must expose all of these together:
 - busy-session behavior must not imply that a second live turn was accepted if it was not
 - steering commands must preserve session identity and continuity instead of kicking the user out
   to a primary admin workflow
+- the first render after resume must keep stored control posture and retained context visible
+- detached inspection or status-heavy commands remain optional support surfaces, not required loop
+  comprehension paths
 
 ## Deferred by this packet
 

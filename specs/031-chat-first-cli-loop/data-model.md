@@ -30,6 +30,7 @@
 - `proof_boundary_note`: explicit summary of what the current turn result does and does not prove
 - `state_source`: whether the state is derived from the live runtime path or retained durable
   state
+- `next_action_hint`: the next honest action the user can take from the same session loop
 
 ### `TranscriptEntry`
 
@@ -52,11 +53,13 @@
 
 ### `LoopTruthNotice`
 
-- `notice_kind`: stable machine-readable notice type
+- `notice_kind`: stable machine-readable notice type such as `busy`, `degraded`, `ended`, or
+  `proof_limited`
 - `severity`: relative severity for CLI display
 - `summary`: user-facing truth statement
 - `support_surface`: related support command or surface, when one exists
 - `blocks_live_turn`: whether the current notice prevents the next live turn from proceeding
+- `allowed_next_action`: the next honest user action while the notice is active
 
 ## State transitions
 
@@ -73,6 +76,8 @@
 
 - live runtime state may move to retained-only state, but the loop must preserve context and mark
   `state_source` honestly
+- busy, degraded, ended, and proof-limited states are distinct and must not collapse into one
+  generic notice
 - busy and ended states remain exclusive with accepting a new live turn
 - proof-boundary notes may change per turn, but they must remain visible whenever a result preview
   is shown
@@ -82,8 +87,12 @@
 - packet `031` must not create a second session identity or a second retained history model
 - exactly one session remains in focus inside the live loop at a time
 - resumed sessions preserve stored `LoopControlState` instead of resetting to a generic default
+- the first render for a resumed or retained-only session keeps stored controls visible before the
+  next live turn is attempted
 - retained-only or degraded views must never be presented as if they were current live runtime
   state
+- detached inspection output is optional support context, not a dependency for understanding the
+  current loop state
 - `LoopTruthNotice` must stay inline and visible without replacing the transcript and next input
 - the current turn may be pending, running, blocked, completed, or failed, but the loop must
   preserve continuity across all of those states

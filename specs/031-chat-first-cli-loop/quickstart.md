@@ -13,6 +13,9 @@ npx markdownlint-cli2 \
 git diff --check
 ```
 
+Implementation should not start until both packet checklists have zero incomplete items and the
+blocking freeze tasks `T001` through `T003` are complete.
+
 ## Current authority inputs
 
 Before implementation starts, re-read these sources in this order:
@@ -37,6 +40,9 @@ cargo test -p mister-smith-http
 cargo build --workspace
 git diff --check
 ```
+
+This quickstart distinguishes packet-freeze readiness from implementation closure. Passing the
+packet readiness gate does not claim that any product code or live-proof rerun has happened yet.
 
 ## Proof expectation
 

@@ -2,7 +2,7 @@
 
 **Feature Branch**: `031-chat-first-cli-loop`
 **Created**: 2026-04-06
-**Status**: Draft
+**Status**: Frozen
 **Input**: `docs/current-state.md`, `docs/direction.md`,
 `docs/plans/2026-04-05-session-first-user-shell-pre-speckit-primer.md`,
 `docs/plans/2026-04-05-mister-smith-operational-cli-proposal.md`,
@@ -62,6 +62,43 @@ This is not:
 - Runtime, proof, auth, config, and support commands remain reachable, but they stay secondary to
   the live conversation loop.
 
+## Observable Loop Contract
+
+The packet is implementation-ready only if the CLI behavior is observable in user terms rather than
+described as a vague "chat-first" aspiration.
+
+- The first render for a new or resumed session shows one bounded live-session surface: retained
+  transcript context or a bounded summary, the current control posture, any current truth notices,
+  and the next allowed action from the same session identity.
+- Sending a follow-up turn does not bounce the user into a detached inspection workflow. The same
+  session loop acknowledges the turn inline, keeps prior context visible, and updates the current
+  turn state in place until the turn finishes, fails, or is blocked.
+- Detached inspection or status-heavy commands may still exist as secondary support surfaces, but
+  the user must not need them just to understand what the active session is doing right now.
+- When live execution is unavailable, the loop still renders retained context and stored controls
+  inline, but it uses plain user-facing wording that says live work cannot continue yet.
+
+## User-Visible State Distinctions
+
+### Inline Turn States
+
+| State | User-visible meaning | Required inline behavior |
+| ----- | -------------------- | ------------------------ |
+| `accepted` | The loop accepted the new turn and kept it inside the current session. | Show the turn in context immediately and identify it as the active turn in progress. |
+| `running` | Live work is currently happening for the accepted turn. | Keep the same session open, show that work is underway, and avoid requiring a detached inspect path. |
+| `completed` | The turn finished and produced a bounded result or summary. | Show the outcome inline, preserve the transcript, and keep the loop ready for follow-up. |
+| `failed` | The turn ended unsuccessfully but the session context still exists. | Show the failure inline with honest next-step guidance and preserve follow-up continuity. |
+| `blocked` | The turn could not continue under the current session or runtime posture. | Explain the blocking condition inline and keep the next allowed action visible from the same loop. |
+
+### Session Truth Notices
+
+| Notice | Meaning | Required distinction |
+| ------ | ------- | -------------------- |
+| `busy` | Another live turn is already active for the session. | Do not imply a second turn was accepted; explain that the user is waiting on current work. |
+| `degraded` | Retained session context is readable, but live runtime work is not currently available. | Keep transcript and controls visible while saying live work cannot continue yet. |
+| `ended` | The session is logically closed and cannot accept another live turn. | Keep retained context visible, but direct the user toward starting or resuming a different session. |
+| `proof_limited` | The loop can show bounded state, not a new live-proof claim. | Keep proof boundaries explicit in user language whenever previews or retained state are shown. |
+
 ## User Scenarios & Testing
 
 Use independently testable stories. For Mister Smith packets, prefer a small number of bounded
@@ -72,8 +109,9 @@ stories over a long backlog of loosely related asks.
 A user starts or resumes a CLI session and can keep talking naturally inside one live coding-agent
 conversation instead of feeling like each prompt is being submitted into a detached workflow view.
 
-**Independent Test**: Open or resume a CLI session, send multiple follow-up turns, and confirm the
-user remains inside the same active conversation loop while turn state changes are surfaced inline.
+**Independent Test**: Start a new session or resume an existing one, send multiple follow-up
+turns, and confirm the user remains inside the same active conversation loop while turn state
+changes are surfaced inline without using a detached inspect-only command.
 
 **Acceptance Scenarios**:
 
@@ -86,6 +124,9 @@ user remains inside the same active conversation loop while turn state changes a
 3. **Given** a turn fails or stops early, **When** the shell reports the outcome, **Then** the
    failure appears inline with honest next-step guidance while preserving the same conversation
    context for follow-up.
+4. **Given** a user starts a brand-new session, **When** they send the first follow-up turn,
+   **Then** the CLI enters the same live conversation loop shape used for resumed work instead of
+   falling back to a submit-and-inspect path.
 
 ### User Story 2 - Resume Retained Work Back Into The Loop (Priority: P1)
 
@@ -102,7 +143,7 @@ session, and confirm each one reopens as a usable live conversation with preserv
    for follow-up.
 2. **Given** a resumed session already has stored control posture or support notices, **When** the
    session opens, **Then** that context remains visible inline without breaking conversation
-   continuity.
+   continuity, and the stored controls remain readable before the user sends another live turn.
 3. **Given** the runtime is unavailable during resume, **When** the session opens from durable
    storage, **Then** the shell still shows retained context and honest limitation wording instead
    of hiding history or pretending the session is currently live.
@@ -122,8 +163,8 @@ session identity, retained context, and support truth remain visible inside the 
    view, or MCP posture, **Then** the change is reflected inside the same live conversation loop
    without forcing the user into a separate primary workflow.
 2. **Given** the session is busy, degraded, or blocked, **When** the user tries another action,
-   **Then** the shell explains the current session state inline and preserves the conversation and
-   control context.
+   **Then** the shell explains whether the state is busy, degraded, blocked, or ended with
+   distinct inline guidance and preserves the conversation and control context.
 3. **Given** runtime-truth or proof-boundary limits apply, **When** the shell presents session
    state, **Then** it keeps those limits visible in user language without overstating live proof or
    hiding the supporting surfaces.
@@ -139,6 +180,8 @@ session identity, retained context, and support truth remain visible inside the 
   actions
 - support-state degradation must not create a second session identity or hide retained control
   posture
+- busy, degraded, ended, and proof-limited states must remain distinct instead of collapsing into
+  one generic fallback notice
 - deterministic versus live-proof boundaries must stay explicit whenever the session view reflects
   retained or degraded state
 
@@ -169,6 +212,19 @@ session identity, retained context, and support truth remain visible inside the 
   session.
 - **FR-010**: The feature MUST use user-facing language centered on session continuity, status,
   steering, and next action rather than internal workflow-control jargon.
+- **FR-011**: The first render of a new or resumed live session MUST show retained conversation
+  context, current control posture, any active truth notice, and the next allowed action from the
+  same session identity.
+- **FR-012**: The CLI MUST define inline turn-state behavior for `accepted`, `running`,
+  `completed`, `failed`, and `blocked` turns in user-visible terms, and each state MUST be
+  understandable from inside the loop itself.
+- **FR-013**: `busy`, `degraded`, `ended`, and `proof-limited` conditions MUST remain distinct
+  user-visible session states with different inline guidance rather than one generic notice flow.
+- **FR-014**: Detached inspection views or status-heavy commands MAY remain available, but the user
+  MUST NOT depend on them to understand the active session's current turn state or next action.
+- **FR-015**: When a retained session is reopened while live runtime work is unavailable, the loop
+  MUST still show retained transcript context and stored control posture before any new live action
+  is attempted.
 
 ### Key Entities
 
@@ -186,15 +242,19 @@ session identity, retained context, and support truth remain visible inside the 
 ## Success Criteria
 
 - **SC-001**: A user can send at least two successive follow-up turns in one CLI session without
-  leaving the active conversation loop or depending on a separate inspection command to keep
-  context.
+  leaving the active conversation loop and without using a detached inspect-only command between
+  those turns to understand current progress.
 - **SC-002**: A returning user can reopen the most recent session or a selected retained session
-  and regain usable conversation context in no more than 1 action after choosing that session.
+  and regain usable conversation context, retained controls, and the next allowed action in no
+  more than 1 action after choosing that session.
 - **SC-003**: When a turn is accepted, active, completed, failed, or blocked, the user can
-  understand the current state from the live session view without raw log archaeology.
+  understand the current state from the live session view itself without raw log archaeology or a
+  separate inspect-only flow.
 - **SC-004**: A user can adjust model, permissions, config, status, and MCP posture from inside an
   active session while preserving the same session identity and retained context.
 - **SC-005**: Runtime-unavailable or proof-limited states remain visible and honest while retained
   history stays accessible.
-- **SC-006**: The resulting spec remains clearly bounded to the CLI session loop and does not
+- **SC-006**: Busy, degraded, ended, and proof-limited states are distinguishable from one another
+  by their inline wording and next-step guidance.
+- **SC-007**: The resulting spec remains clearly bounded to the CLI session loop and does not
   introduce GUI parity, repo workflow, or broad runtime redesign as part of the slice.
