@@ -199,6 +199,9 @@ For markdown linting:
 
 ## Active Technologies
 
+- Rust 1.88.0 for the app and runtime seams + `mister-smith-app`, `mister-smith-http`, existing session persistence (030-session-first-cli-shell)
+- existing durable session records, retained turn history, and current session summary (030-session-first-cli-shell)
+
 - Rust 1.88.0 plus the existing TypeScript desktop surface in `apps/operator-console/`
   (029-session-first-user-shell)
 - Existing retained-session seams in `mister-smith-app`, `mister-smith-http`, and
@@ -206,5 +209,6 @@ For markdown linting:
 
 ## Recent Changes
 
+- 030-session-first-cli-shell: Added packet planning artifacts for the session-first CLI shell
 - 029-session-first-user-shell: Added packet planning artifacts for the session-first shared
   CLI and GUI shell
