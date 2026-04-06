@@ -72,7 +72,7 @@ external workflow services such as Linear or Symphony.
 ## Current Repo-Wide State
 
 - `main` is the durable development branch and is currently synced at
-  `4840c523ee24f80e78174b485adb6fbdc1a878c3`.
+  `2f140a2080a08a9a76a619e329883d9af7fd10ce`.
 - The workspace contains 20 crates: 18 library crates, 1 binary crate, and 1 integration-test
   crate.
 - Phases 1 through 10 are landed in the repo as implemented substrate and validation artifacts.
