@@ -1,4 +1,0 @@
-## 2024-03-15 - [CRITICAL] Fix rate limiting IP spoofing vulnerability
-**Vulnerability:** The HTTP authentication middleware (`axum_mw.rs`) used the `X-Forwarded-For` header to determine the client's IP address for rate limiting. This header is easily spoofed by an attacker, allowing them to bypass rate limiting completely by injecting arbitrary IPs in every request.
-**Learning:** Security middleware should never trust client-provided headers for critical security controls like rate limiting unless the application is deployed behind a trusted reverse proxy that explicitly sanitizes and guarantees the header's integrity. Here, the raw fallback logic was inherently vulnerable.
-**Prevention:** Use the actual transport layer peer IP. In Axum, this is reliably extracted via the `axum::extract::ConnectInfo<std::net::SocketAddr>` extension, which provides the true TCP connection origin.
