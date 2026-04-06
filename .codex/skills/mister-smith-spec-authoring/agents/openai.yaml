@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mister Smith Spec Authoring"
+  short_description: "Author repo-specific frontier packet specs"
+  default_prompt: "Use $mister-smith-spec-authoring to create or extend a new Mister Smith frontier packet spec."
