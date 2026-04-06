@@ -13,8 +13,11 @@ implementation phases. Phase 10 is now implemented and validated in the repo, an
 frontier-autonomy artifact set now also includes landed packet
 [`023`](specs/023-runtime-truth-and-run-trace/spec.md),
 [`024`](specs/024-agent-boundary-security-hardening/spec.md),
-[`025`](specs/025-step-level-intelligence-v2/spec.md), and next implementation-ready packet
-[`026`](specs/026-first-real-coordinator-subagent-runtime/spec.md), plus
+[`025`](specs/025-step-level-intelligence-v2/spec.md), and
+[`026`](specs/026-first-real-coordinator-subagent-runtime/spec.md), while later packet material
+under [`027`](specs/027-capability-discovery-and-interoperability/spec.md),
+[`028`](specs/028-selective-strong-coordination/spec.md), and
+[`029`](specs/029-session-first-user-shell/spec.md) remains draft or pre-spec planning, plus
 [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
 [`WORKFLOW.md`](WORKFLOW.md), [`docs/linear/LINEAR.md`](docs/linear/LINEAR.md), and the dated
 plans under [`docs/plans/`](docs/plans/). Use

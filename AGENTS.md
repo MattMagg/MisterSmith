@@ -4,7 +4,7 @@
 
 This repository is a Rust workspace implementing the Mister Smith orchestration operating system.
 It contains 20 crates across 10 implemented phases, with the operating-system substrate now
-validated through Phase 10 plus the landed frontier packets through `024`.
+validated through Phase 10 plus the landed frontier packets through `026`.
 
 - `crates/`: Rust workspace — 18 library crates + 1 binary + 1 integration test crate
 - `spec/`: Canonical architecture specifications (the system contract)
@@ -25,15 +25,20 @@ sections of `docs/linear/LINEAR.md` as the current Smith control-plane contract.
 `WORKFLOW.md` as legacy Symphony background unless a task explicitly targets that historical
 automation layer.
 Treat `docs/current-state.md`, `scripts/live_runtime_proof_smoke.py`, and
-`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` as the current bounded
-runtime-proof baseline. Use `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as
-historical broader live-run context.
+`docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md` as the current bounded live-proof
+router and latest bounded smoke-harness note. Use
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for historical budget-aware proof
+provenance and `docs/plans/2026-03-15-first-live-multi-agent-runtime-proof.md` as broader
+historical live-run context.
 Treat `docs/current-state.md` as the current forward-direction router. Use
 `specs/023-runtime-truth-and-run-trace/` and
 `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
 `specs/025-step-level-intelligence-v2/` as the latest landed step-policy packet authority,
-`specs/026-first-real-coordinator-subagent-runtime/` as the next implementation-ready packet,
-`specs/022-durable-workflow-core/` for packet-022 ownership, and
+`specs/026-first-real-coordinator-subagent-runtime/` as the latest landed coordinator-runtime
+packet authority, `specs/027-capability-discovery-and-interoperability/`,
+`specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` as later
+draft or pre-spec packet material, `specs/022-durable-workflow-core/` for packet-022 ownership,
+and
 `docs/plans/2026-03-27-runtime-planning-simplification.md` plus
 `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for the current live-proof and
 repair-provenance context.
@@ -88,7 +93,10 @@ runtime.
   `specs/023-runtime-truth-and-run-trace/` and
   `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
   `specs/025-step-level-intelligence-v2/` as the latest landed step-policy packet authority,
-  `specs/026-first-real-coordinator-subagent-runtime/` as the next implementation-ready packet,
+  `specs/026-first-real-coordinator-subagent-runtime/` as the latest landed coordinator-runtime
+  packet authority, and `specs/027-capability-discovery-and-interoperability/`,
+  `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` as later
+  draft or pre-spec packet material that must be deliberately promoted before direct execution,
   `docs/plans/2026-03-16-smith-first-development-system.md` as historical control-plane background,
   and `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md` as the current direct
   execution control-plane note.

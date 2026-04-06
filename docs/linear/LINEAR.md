@@ -30,9 +30,15 @@ remain useful for reporting and status updates, but the current repo-wide router
 `docs/current-state.md`. The latest landed packet authorities are
 `specs/023-runtime-truth-and-run-trace/`,
 `specs/024-agent-boundary-security-hardening/`, and
-`specs/025-step-level-intelligence-v2/`. The next implementation-ready packet is
-`specs/026-first-real-coordinator-subagent-runtime/`, and the last explicit bounded live-proof
-note remains `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`.
+`specs/025-step-level-intelligence-v2/`, and
+`specs/026-first-real-coordinator-subagent-runtime/`. No later packet is currently promoted as the
+next implementation-ready slice. Later packet material under
+`specs/027-capability-discovery-and-interoperability/`,
+`specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` remains
+draft or pre-spec. The latest bounded live-proof note is
+`docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md`, while
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` remains historical budget-aware
+proof context.
 
 ### Current Strategy
 
@@ -40,20 +46,20 @@ note remains `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`.
   backlog history rather than current runnable direction.
 - the packet-016 family (`MS-96` parent, `MS-97` through `MS-100` child slices) is complete on
   `main`; treat it as closed backlog history rather than current runnable direction
-- packets `019` through `025` are complete on `main`; treat them as landed frontier history unless
+- packets `019` through `026` are complete on `main`; treat them as landed frontier history unless
   current repo truth shows a defect
-- packet `026` is the next implementation-ready packet for direct execution when that slice is
-  deliberately selected
-- packets `027` and `028` remain later scaffolds and should stay in backlog until they are
-  deliberately selected
+- no later packet is currently promoted as the next implementation-ready slice for direct
+  execution
+- packets `027` and `028` remain later scaffolds, and packet `029` remains draft pre-spec
+  planning; they should stay in backlog until one is deliberately selected
 - the historical `Smith MCP Development` project is archived and should not be reopened as a
   separate forward program
 - the next active planning move is not an automatic refill; start from `docs/current-state.md`
   plus `docs/direction.md`, `specs/023-runtime-truth-and-run-trace/`,
   `specs/024-agent-boundary-security-hardening/`,
   `specs/025-step-level-intelligence-v2/`, and
-  `specs/026-first-real-coordinator-subagent-runtime/`, confirm current repo truth, and only then
-  create one fresh bounded packet slice
+  `specs/026-first-real-coordinator-subagent-runtime/`, confirm current repo truth, inspect the
+  later packet material only if needed, and only then create one fresh bounded packet slice
 - `MisterSmith Validated Backlog` should hold only genuinely open frontier work in `Backlog` after
   fresh repo-grounded validation and explicit packet framing
 - Do not move these issues into `Todo` just to keep automation busy. Select only the next bounded
@@ -64,7 +70,8 @@ note remains `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`.
   `specs/023-runtime-truth-and-run-trace/`, `specs/024-agent-boundary-security-hardening/`,
   `specs/025-step-level-intelligence-v2/`,
   `specs/026-first-real-coordinator-subagent-runtime/`, and
-  `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`; packet-021 and packet-016
+  `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md`;
+  `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`, packet-021, and packet-016
   notes remain useful historical support references
 
 ### Projects

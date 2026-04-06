@@ -23,13 +23,21 @@ stable repo-wide state summary and document router.
 - `specs/023-runtime-truth-and-run-trace/`: latest landed runtime packet on `main`
 - `specs/024-agent-boundary-security-hardening/`: latest landed security packet on `main`
 - `specs/025-step-level-intelligence-v2/`: latest landed step-policy packet on `main`
-- `specs/026-first-real-coordinator-subagent-runtime/`: next implementation-ready packet
+- `specs/026-first-real-coordinator-subagent-runtime/`: latest landed coordinator-runtime packet on
+  `main`
+- `specs/027-capability-discovery-and-interoperability/`,
+  `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/`: later
+  draft or pre-spec packet material; no later packet is currently promoted as the next
+  implementation-ready slice
 - `specs/022-durable-workflow-core/`: packet-022 implementation authority
-- `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`: bounded packet-019 proof and
-  closure note
+- `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md`: latest bounded live-proof note and
+  artifact index for the current smoke-harness lane
+- `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`: historical budget-aware proof
+  note
 - `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`: current direct-execution
   control-plane note
-- `WORKFLOW.md` and `docs/linear/LINEAR.md`: development workflow contract
+- `docs/linear/LINEAR.md`: current Linear operating model for repo workflow
+- `WORKFLOW.md`: legacy Symphony workflow background
 - `ROADMAP.md`: architectural build map
 
 ## Implementation Status
@@ -57,14 +65,21 @@ runtime.
   `docs/plans/2026-03-16-smith-first-development-system.md`
 - Current Smith workflow-family implementation note:
   `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`
-- Runtime contract: `WORKFLOW.md`
+- Legacy workflow background: `WORKFLOW.md`
 - Linear operating model: `docs/linear/LINEAR.md`
 - Current overall direction and repo-wide router: `docs/direction.md`, `docs/current-state.md`
 - Latest landed packet authorities:
   `specs/023-runtime-truth-and-run-trace/`,
   `specs/024-agent-boundary-security-hardening/`,
   `specs/025-step-level-intelligence-v2/`,
-  `specs/026-first-real-coordinator-subagent-runtime/`,
+  `specs/026-first-real-coordinator-subagent-runtime/`
+- Latest bounded live-proof note and artifact index:
+  `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md`
+- Later packet material that is not yet promoted as the next implementation-ready slice:
+  `specs/027-capability-discovery-and-interoperability/`,
+  `specs/028-selective-strong-coordination/`,
+  `specs/029-session-first-user-shell/`
+- Historical budget-aware live-proof note:
   `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - Historical packet-016 closure evidence:
   `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md`

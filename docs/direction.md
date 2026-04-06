@@ -1,6 +1,6 @@
 # Mister Smith Direction
 
-Date: April 3, 2026
+Date: April 5, 2026
 Status: Authoritative
 
 ## Purpose and Authority
@@ -39,7 +39,7 @@ repo.
 
 ## Current Position
 
-Already landed and proven:
+Already landed or established foundations:
 
 - the Rust workspace substrate through Phase 10
 - supervised planner and executor lifecycles on the default runtime path
@@ -52,6 +52,7 @@ Already landed and proven:
 - landed packet-023 runtime-truth and run-trace projections on `main`
 - landed packet-024 agent-boundary security hardening on `main`
 - landed packet-025 step-policy summaries on `main`
+- landed packet-026 coordinator-runtime delegation and proof projections on `main`
 
 Exists but is still opt-in, partial, or not the default runtime path:
 
@@ -96,11 +97,12 @@ generalize.
 
 ### Now
 
-- **First real coordinator and subagent runtime.** This matters because the runtime has already
-  proven bounded orchestration and now needs a stronger real multi-branch coordinator surface with
-  visible delegation, child state, grounded delegated work, and honest proof boundaries. This
-  belongs now because packet `026` is the next implementation-ready packet on top of landed packet
-  `022` through `025` foundations.
+- **Coordinator-runtime follow-through and proof hardening.** This matters because the runtime has
+  already moved past the first bounded coordinator-runtime landing and now needs follow-through
+  that keeps delegation, child-state, and proof surfaces honest as the broader runtime hardens.
+  This belongs now because packet `026` is already landed on top of packet `022` through `025`
+  foundations, so the next work should extend and stabilize that surface rather than re-stage it
+  as future work.
 - **Streaming and routing hardening.** This matters because the runtime path already has bounded
   routing, budget, verifier, and provenance foundations that should become more robust and more
   honestly default over time. This belongs now because the system should finish and harden what is
@@ -110,9 +112,9 @@ generalize.
   because Mister Smith should prove its advantages while the substrate is still becoming the stable
   baseline.
 - **Predictive supervision hardening and live proof.** This matters because the packet-021 through
-  packet-024 surfaces are landed on the supported runtime path but still lack a fresher whole-path
-  live rerun. This belongs now because the honest gap is proof and hardening, not another
-  greenfield supervision packet.
+  packet-026 surfaces are landed on the supported runtime path but still benefit from fresher
+  whole-path live rerun. This belongs now because the honest gap is proof and hardening, not
+  another greenfield supervision packet.
 
 ### Next
 
