@@ -17,8 +17,10 @@ frontier-autonomy artifact set now also includes landed packet
 [`026`](specs/026-first-real-coordinator-subagent-runtime/spec.md), while later packet material
 under [`027`](specs/027-capability-discovery-and-interoperability/spec.md),
 [`028`](specs/028-selective-strong-coordination/spec.md), and
-[`029`](specs/029-session-first-user-shell/spec.md) remains draft or pre-spec planning, plus
-[`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
+[`029`](specs/029-session-first-user-shell/spec.md),
+[`030`](specs/030-session-first-cli-shell/spec.md), and
+[`031`](specs/031-chat-first-cli-loop/spec.md) remain draft, frozen planning, or pre-spec work,
+plus [`specs/012-phase10-frontier-autonomy/`](specs/012-phase10-frontier-autonomy/spec.md),
 [`WORKFLOW.md`](WORKFLOW.md), and the dated plans under [`docs/plans/`](docs/plans/). Use
 [`docs/direction.md`](docs/direction.md) for overall system direction,
 [`docs/current-state.md`](docs/current-state.md) for current repo truth and what is live on the

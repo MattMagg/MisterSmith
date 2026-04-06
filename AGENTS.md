@@ -37,12 +37,12 @@ Treat `docs/current-state.md` as the current forward-direction router. Use
 `specs/025-step-level-intelligence-v2/` as the latest landed step-policy packet authority,
 `specs/026-first-real-coordinator-subagent-runtime/` as the latest landed coordinator-runtime
 packet authority, `specs/027-capability-discovery-and-interoperability/`,
-`specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` as later
-draft or pre-spec packet material, `specs/022-durable-workflow-core/` for packet-022 ownership,
-and
-`docs/plans/2026-03-27-runtime-planning-simplification.md` plus
-`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` for the current live-proof and
-repair-provenance context.
+`specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
+`specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/` as later draft,
+frozen-planning, or pre-spec packet material, `specs/022-durable-workflow-core/` for packet-022
+ownership, and `docs/plans/2026-03-27-runtime-planning-simplification.md` plus
+`docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` as historical repair-planning
+and packet-019 proof provenance context.
 
 ## Product Boundary
 
@@ -96,8 +96,10 @@ runtime.
   `specs/025-step-level-intelligence-v2/` as the latest landed step-policy packet authority,
   `specs/026-first-real-coordinator-subagent-runtime/` as the latest landed coordinator-runtime
   packet authority, and `specs/027-capability-discovery-and-interoperability/`,
-  `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` as later
-  draft or pre-spec packet material that must be deliberately promoted before direct execution,
+  `specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
+  `specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/` as later draft,
+  frozen-planning, or pre-spec packet material that must be deliberately promoted before direct
+  execution,
   `docs/plans/2026-03-16-smith-first-development-system.md` as historical control-plane background,
   and `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md` as the current direct
   execution control-plane note.
@@ -213,6 +215,7 @@ For markdown linting:
 
 ## Recent Changes
 
+- 031-chat-first-cli-loop: Added packet planning artifacts for the chat-first CLI loop
 - 030-session-first-cli-shell: Added packet planning artifacts for the session-first CLI shell
 - 029-session-first-user-shell: Added packet planning artifacts for the session-first shared
   CLI and GUI shell

@@ -1,6 +1,6 @@
 # Mister Smith Current State
 
-Date: April 5, 2026
+Date: April 6, 2026
 Status: Current
 
 ## Purpose
@@ -27,7 +27,7 @@ Use this file when you need one honest answer to:
 | Latest landed security packet | `specs/024-agent-boundary-security-hardening/` | Latest landed least-privilege agent-boundary packet on `main` |
 | Latest landed step-policy packet | `specs/025-step-level-intelligence-v2/` | Latest landed step-policy packet on `main` |
 | Latest landed coordinator-runtime packet | `specs/026-first-real-coordinator-subagent-runtime/` | Latest landed coordinator-runtime packet on `main` |
-| Later frontier packet material | `specs/027-*`, `specs/028-*`, `specs/029-*` | Later packet material exists, but no later packet is currently promoted |
+| Later frontier packet material | `specs/027-*` through `specs/031-*` | Later packet material exists, but no later packet is currently promoted |
 | Packet 022 implementation authority | `specs/022-durable-workflow-core/` | Latest durable-workflow implementation authority on current `main` |
 | Current bounded live-proof note | `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md` | Latest bounded smoke-harness note and artifact lane |
 | Packet 021 closure evidence | `docs/plans/2026-03-29-packet-021-supervision-evidence-proof-boundary.md` | Deterministic packet-021 proof-boundary and supervision-evidence note |
@@ -72,13 +72,15 @@ external workflow services such as Linear or Symphony.
 ## Current Repo-Wide State
 
 - `main` is the durable development branch and is currently synced at
-  `3f400df42a938551b50196bcd555e3234e9119e7`.
+  `4840c523ee24f80e78174b485adb6fbdc1a878c3`.
 - The workspace contains 20 crates: 18 library crates, 1 binary crate, and 1 integration-test
   crate.
 - Phases 1 through 10 are landed in the repo as implemented substrate and validation artifacts.
 - GitHub Actions are intentionally disabled in this repository; current review posture is local
   validation plus CodeRabbit and operator review.
 - The current live operator surfaces are:
+  - the recent-first session shell through `mister-smith`, plus `mister-smith resume` and
+    `mister-smith sessions`
   - one-shot workflow execution through `mister-smith run` and `POST /api/v1/tasks`
   - autonomy inspection through `mister-smith autonomy list` and `mister-smith autonomy status`
   - bounded same-agent session handling through `POST /api/v1/sessions` and related session routes
@@ -120,8 +122,9 @@ external workflow services such as Linear or Symphony.
 - packet `026` is landed on `main`: coordinator-owned delegation, child-state projection,
   delegated-work evidence, coordinator decisions, and bounded session follow-up refs are part of
   current repo truth with deterministic validation
-- packets `027` and `028` remain draft scaffolds, and packet `029` remains draft pre-spec
-  planning; no later packet is currently promoted as the next implementation-ready slice
+- packets `027` and `028` remain draft scaffolds, packet `029` remains draft pre-spec planning,
+  and packets `030` and `031` remain frozen planning artifacts; no later packet is currently
+  promoted as the next implementation-ready slice
 - the watched Symphony queue can be empty without implying a product problem; that queue is part
   of the development workflow, not the OS runtime
 
@@ -152,6 +155,8 @@ Read the current state in three layers:
 - real workflow submission and terminal completion tracking
 - autonomy inspection surfaces keyed by `workflow_id`
 - bounded same-agent sessions with stable `session_id` and `coordinator_agent_id`
+- recent-first CLI startup, resume, and retained-session browsing flows through the shipped
+  session-first shell
 - supervised planner and executor lifecycles on the default runtime path
 - ToolBus-backed workflow step execution on the default runtime path
 - bounded runtime provider/model selection through framework config for `openai_chatgpt`,
@@ -193,9 +198,12 @@ them end to end:
   enforcement that is live-proven for one bounded profile but is still opt-in rather than the
   no-profile default
 - additive external-agent interoperability surfaces and capability discovery adapters
-- later packet material for interoperability, stronger coordination, and session-first shell work
-  under `specs/027-capability-discovery-and-interoperability/`,
-  `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/`
+- later packet material for interoperability, stronger coordination, session-first shell work,
+  and chat-first CLI loop planning under
+  `specs/027-capability-discovery-and-interoperability/`,
+  `specs/028-selective-strong-coordination/`,
+  `specs/029-session-first-user-shell/`,
+  `specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/`
 
 Current default runtime limitations to keep in mind:
 
@@ -226,8 +234,9 @@ Packets `019`, `020`, `021`, `022`, `023`, `024`, `025`, and `026` are all lande
 
 No later frontier packet is currently promoted as the next implementation-ready slice. The later
 packet material under `specs/027-capability-discovery-and-interoperability/`,
-`specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` remains
-draft or pre-spec and should be deliberately promoted before direct execution.
+`specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
+`specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/` remains draft,
+frozen-planning, or pre-spec material and should be deliberately promoted before direct execution.
 
 ## Practical Reading Order
 
@@ -241,8 +250,9 @@ If you need to understand the repo quickly:
    `specs/025-step-level-intelligence-v2/`, and
    `specs/026-first-real-coordinator-subagent-runtime/`
 5. read the later packet material under `specs/027-capability-discovery-and-interoperability/`,
-   `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` only
-   when selecting the next frontier slice
+   `specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
+   `specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/` only when
+   selecting the next frontier slice
 6. read `WORKFLOW.md` and any local-only `docs/linear/` notes only if you are working on the development
    control plane
 7. read `ROADMAP.md`, `spec/`, and the rest of `specs/` when you need architectural or
@@ -259,8 +269,9 @@ If you need to understand the repo quickly:
 - Use `specs/026-first-real-coordinator-subagent-runtime/` for the landed packet-026
   coordinator-runtime contract.
 - Use `specs/027-capability-discovery-and-interoperability/`,
-  `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` as later
-  draft or pre-spec packet material rather than current implementation-ready truth.
+  `specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
+  `specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/` as later draft,
+  frozen-planning, or pre-spec packet material rather than current implementation-ready truth.
 - Use `specs/022-durable-workflow-core/` for packet-022 durable workflow ownership.
 - Use `scripts/live_runtime_proof_smoke.py` and
   `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md` for the current bounded live-proof

@@ -1,11 +1,11 @@
 # Mister Smith Recent Context
 
-Date: April 5, 2026
+Date: April 6, 2026
 Status: Current
 
 ## Current State
 
-- `main` is the only durable development branch and is currently synced at `3f400df`.
+- `main` is the only durable development branch and is currently synced at `4840c52`.
 - packet `015` is fully landed on `main` through `MS-94`, and its parent epic `MS-78` is closed
 - packet `016` is fully landed on `main` through `MS-97` through `MS-100`, and its parent epic
   `MS-96` is closed
@@ -35,6 +35,8 @@ Status: Current
 - packet `026` is landed on `main`: coordinator-owned delegation, child-state projection,
   delegated-work evidence, coordinator decisions, and bounded session follow-up refs are part of
   current repo truth with deterministic validation
+- the recent-first session shell is live on `main`: `mister-smith` opens the CLI shell, and
+  `resume` plus `sessions` flows operate against retained session truth
 - the latest bounded live-proof note and artifact lane live under
   `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md`; the older
   `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` note remains historical
@@ -42,6 +44,7 @@ Status: Current
 - no later packet is currently promoted as the next implementation-ready slice
 - packets `027` and `028` remain later scaffolds
 - packet `029` remains draft pre-spec planning
+- packets `030` and `031` are frozen planning artifacts for later CLI-first work
 - the bounded same-agent session slice is live on `main`
 - GitHub Actions are intentionally disabled in this repository; local validation plus CodeRabbit
   and operator review are the current review posture
@@ -69,6 +72,8 @@ Status: Current
 - packet `024` agent-boundary security hardening across ToolBus, MCP, quarantine, and
   auth-callout fallback behavior
 - packet `025` deterministic step-policy summaries across task, autonomy, and operator surfaces
+- packet `026` coordinator-runtime delegation, child-state, and follow-up projection surfaces
+- packet `030` and packet `031` planning artifacts for later CLI-first slices
 
 ## Current Direction
 
@@ -83,8 +88,9 @@ packet story have moved forward:
 - `specs/026-first-real-coordinator-subagent-runtime/` is the latest landed coordinator-runtime
   packet authority
 - `specs/027-capability-discovery-and-interoperability/`,
-  `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` remain
-  draft or pre-spec packet material; no later packet is currently promoted as the next
+  `specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
+  `specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/` remain draft,
+  frozen-planning, or pre-spec packet material; no later packet is currently promoted as the next
   implementation-ready slice
 - `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md` is the latest bounded live-proof
   note and artifact index for the current smoke-harness lane
@@ -116,8 +122,8 @@ Closed frontier packet and recovery issues now include:
 - keep future bounded work in `MisterSmith Validated Backlog`
 - do not move later packet material into `Todo` until one honest runnable slice is deliberately
   selected
-- keep packets `027` and `028`, plus packet `029` pre-spec planning, out of active execution until
-  they are deliberately promoted
+- keep packets `027` and `028`, packet `029` pre-spec planning, and packets `030` and `031`
+  frozen planning artifacts out of active execution until they are deliberately promoted
 
 ## Resume Checklist
 
@@ -130,8 +136,9 @@ Closed frontier packet and recovery issues now include:
   `specs/026-first-real-coordinator-subagent-runtime/` as the first read when current landed
   coordinator-runtime truth matters
 - inspect `specs/027-capability-discovery-and-interoperability/`,
-  `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` only when
-  choosing the next frontier slice
+  `specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
+  `specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/` only when choosing
+  the next frontier slice
 - use `specs/023-runtime-truth-and-run-trace/` and
   `specs/024-agent-boundary-security-hardening/` and
   `specs/025-step-level-intelligence-v2/` when landed implementation truth matters
