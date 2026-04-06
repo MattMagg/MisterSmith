@@ -444,6 +444,12 @@ pub struct UpdateSessionControlRequest {
     /// MCP posture selected in the shell, when set.
     #[serde(default)]
     pub mcp_posture: Option<String>,
+    /// Clear selected_provider_kind override to revert to inherit.
+    #[serde(default)]
+    pub clear_selected_provider_kind: bool,
+    /// Clear selected_model_id override to revert to inherit.
+    #[serde(default)]
+    pub clear_selected_model_id: bool,
 }
 
 /// End-session response.
@@ -860,6 +866,8 @@ pub async fn update_session_controls(
                 config_posture: request.config_posture,
                 status_view: request.status_view,
                 mcp_posture: request.mcp_posture,
+                clear_selected_provider_kind: request.clear_selected_provider_kind,
+                clear_selected_model_id: request.clear_selected_model_id,
             },
         )
         .await

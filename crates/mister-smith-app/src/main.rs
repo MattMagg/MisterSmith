@@ -449,6 +449,7 @@ async fn execute_default_entry(cli: &Cli) -> Result<(), Box<dyn Error>> {
         &context.base_url,
         &context.config,
         context.config_action.clone(),
+        8,
     )
     .await;
     println!("{}", conversation::render_startup_home(&home));
@@ -493,17 +494,15 @@ async fn execute_sessions_command(
     let context = load_cli_context(cli)?;
     match command {
         SessionsCommand::List { limit } => {
+            let requested_limit = limit.unwrap_or(8);
             let home = conversation::build_startup_home(
                 &context.base_url,
                 &context.config,
                 context.config_action.clone(),
+                requested_limit,
             )
             .await;
-            let sessions = if let Some(limit) = limit {
-                home.recent_sessions.into_iter().take(*limit).collect::<Vec<_>>()
-            } else {
-                home.recent_sessions
-            };
+            let sessions = home.recent_sessions;
             println!(
                 "warnings:\n{}\n{}",
                 conversation::render_support_notices(&home.startup_warnings),
@@ -552,6 +551,7 @@ async fn run_home_loop(context: &LoadedCliContext) -> Result<(), Box<dyn Error>>
                 &context.base_url,
                 &context.config,
                 context.config_action.clone(),
+                8,
             )
             .await;
             println!(

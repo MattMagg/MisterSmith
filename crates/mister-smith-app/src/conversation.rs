@@ -710,13 +710,7 @@ fn session_control_state_from_context(
                 .and_then(|value| value.get("mcp_posture"))
                 .and_then(Value::as_str),
         )
-        .unwrap_or_else(|| {
-            if session.active_workflow_id.is_some() {
-                "connected".to_string()
-            } else {
-                DEFAULT_MCP_POSTURE.to_string()
-            }
-        }),
+        .unwrap_or_else(|| DEFAULT_MCP_POSTURE.to_string()),
     }
 }
 
@@ -821,10 +815,14 @@ fn validate_and_apply_control_updates(
     control_state: &mut ConversationSessionControlView,
     request: &ConversationSessionControlUpdateRequest,
 ) -> Result<(), ConversationServiceError> {
-    if let Some(value) = normalized_optional_string(request.selected_provider_kind.as_deref()) {
+    if request.clear_selected_provider_kind {
+        control_state.selected_provider_kind = None;
+    } else if let Some(value) = normalized_optional_string(request.selected_provider_kind.as_deref()) {
         control_state.selected_provider_kind = Some(value);
     }
-    if let Some(value) = normalized_optional_string(request.selected_model_id.as_deref()) {
+    if request.clear_selected_model_id {
+        control_state.selected_model_id = None;
+    } else if let Some(value) = normalized_optional_string(request.selected_model_id.as_deref()) {
         control_state.selected_model_id = Some(value);
     }
     if let Some(value) = normalized_optional_string(request.permission_mode.as_deref()) {
@@ -1523,12 +1521,13 @@ pub(crate) async fn build_startup_home(
     base_url: &str,
     config: &FrameworkConfig,
     config_action: String,
+    limit: usize,
 ) -> ConversationCliStartupHomeView {
     let runtime_available = runtime_available_http(base_url).await;
     let (recent_sessions, session_source, mut startup_warnings) =
-        match list_sessions_http(base_url, 8).await {
+        match list_sessions_http(base_url, limit).await {
             Ok(rows) => (rows, "runtime_api".to_string(), Vec::new()),
-            Err(_) => match list_sessions_direct(8).await {
+            Err(_) => match list_sessions_direct(limit).await {
                 Ok(rows) => (
                     rows,
                     "durable_store".to_string(),

@@ -111,20 +111,76 @@ impl ConversationSessionService for FixedConversationService {
                 .map(str::to_string)
         }
 
+        fn validate_permission_mode(value: &str) -> Result<(), ConversationServiceError> {
+            if matches!(value, "default" | "review" | "full") {
+                return Ok(());
+            }
+            Err(ConversationServiceError::BadRequest(format!(
+                "invalid permission mode '{value}'; expected default, review, or full"
+            )))
+        }
+
+        fn validate_config_posture(value: &str) -> Result<(), ConversationServiceError> {
+            if matches!(value, "inline" | "support") {
+                return Ok(());
+            }
+            Err(ConversationServiceError::BadRequest(format!(
+                "invalid config posture '{value}'; expected inline or support"
+            )))
+        }
+
+        fn validate_status_view(value: &str) -> Result<(), ConversationServiceError> {
+            if matches!(value, "summary" | "detail") {
+                return Ok(());
+            }
+            Err(ConversationServiceError::BadRequest(format!(
+                "invalid status view '{value}'; expected summary or detail"
+            )))
+        }
+
+        fn validate_mcp_posture(value: &str) -> Result<(), ConversationServiceError> {
+            if matches!(value, "connected" | "support_only" | "detached") {
+                return Ok(());
+            }
+            Err(ConversationServiceError::BadRequest(format!(
+                "invalid mcp posture '{value}'; expected connected, support_only, or detached"
+            )))
+        }
+
+        let permission_mode = normalize(request.permission_mode)
+            .unwrap_or_else(|| self.view.control_state.permission_mode.clone());
+        validate_permission_mode(&permission_mode)?;
+
+        let config_posture = normalize(request.config_posture)
+            .unwrap_or_else(|| self.view.control_state.config_posture.clone());
+        validate_config_posture(&config_posture)?;
+
+        let status_view = normalize(request.status_view)
+            .unwrap_or_else(|| self.view.control_state.status_view.clone());
+        validate_status_view(&status_view)?;
+
+        let mcp_posture = normalize(request.mcp_posture)
+            .unwrap_or_else(|| self.view.control_state.mcp_posture.clone());
+        validate_mcp_posture(&mcp_posture)?;
+
         Ok(ConversationSessionControlView {
             session_id,
-            selected_provider_kind: normalize(request.selected_provider_kind)
-                .or_else(|| self.view.control_state.selected_provider_kind.clone()),
-            selected_model_id: normalize(request.selected_model_id)
-                .or_else(|| self.view.control_state.selected_model_id.clone()),
-            permission_mode: normalize(request.permission_mode)
-                .unwrap_or_else(|| self.view.control_state.permission_mode.clone()),
-            config_posture: normalize(request.config_posture)
-                .unwrap_or_else(|| self.view.control_state.config_posture.clone()),
-            status_view: normalize(request.status_view)
-                .unwrap_or_else(|| self.view.control_state.status_view.clone()),
-            mcp_posture: normalize(request.mcp_posture)
-                .unwrap_or_else(|| self.view.control_state.mcp_posture.clone()),
+            selected_provider_kind: if request.clear_selected_provider_kind {
+                None
+            } else {
+                normalize(request.selected_provider_kind)
+                    .or_else(|| self.view.control_state.selected_provider_kind.clone())
+            },
+            selected_model_id: if request.clear_selected_model_id {
+                None
+            } else {
+                normalize(request.selected_model_id)
+                    .or_else(|| self.view.control_state.selected_model_id.clone())
+            },
+            permission_mode,
+            config_posture,
+            status_view,
+            mcp_posture,
         })
     }
 

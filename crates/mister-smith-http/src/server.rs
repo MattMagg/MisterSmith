@@ -290,6 +290,10 @@ pub struct ConversationSessionControlUpdateRequest {
     pub status_view: Option<String>,
     /// MCP posture selected in the shell, when set.
     pub mcp_posture: Option<String>,
+    /// Clear selected_provider_kind override to revert to inherit.
+    pub clear_selected_provider_kind: bool,
+    /// Clear selected_model_id override to revert to inherit.
+    pub clear_selected_model_id: bool,
 }
 
 /// Operator-facing inspect view for a conversation session.

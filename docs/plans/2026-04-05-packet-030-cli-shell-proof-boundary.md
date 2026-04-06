@@ -23,7 +23,11 @@ commands listed under validation.
 
 - `mister-smith` with no args now renders a recent-first startup home instead of defaulting to the
   runtime-first path
-- `mister-smith <prompt>` starts a new session directly
+- `mister-smith <prompt>` starts a new session directly when the first non-global token is not a
+  top-level subcommand (e.g., `run`, `resume`, `sessions`, `conversation`, `autonomy`, `auth`) or
+  option flag; the parser's `split_prompt_words()` determines when direct-prompt mode activates;
+  use `--` to force direct-prompt mode (e.g., `mister-smith -- run my workflow` treats "run" as
+  part of the prompt instead of the subcommand)
 - `mister-smith resume --last` and `mister-smith resume <session_id>` reopen retained sessions
 - `mister-smith sessions list` and `mister-smith sessions open <session_id>` expose recent-session
   browse and reopen flows
