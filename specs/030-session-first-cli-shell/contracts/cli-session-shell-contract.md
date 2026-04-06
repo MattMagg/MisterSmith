@@ -20,8 +20,9 @@ The CLI must prioritize these user-facing entries:
 
 ```text
 mister-smith [prompt]
-mister-smith resume [session_id|--last] [prompt]
-mister-smith sessions list|open
+mister-smith resume [session_id|--last]
+mister-smith sessions list
+mister-smith sessions open <session_id>
 ```
 
 Behavior:
@@ -61,27 +62,23 @@ The core in-session controls for this packet are:
 Behavior:
 
 - the CLI exposes these through slash commands or another clearly in-session command flow
-- control changes happen in the live session instead of redirecting the user to an admin-first
-  workflow
+- control changes stay attached to the live `session_id` instead of redirecting the user to an
+  admin-first workflow
+- `status` and `config` update the live CLI shell immediately
+- `model`, `permissions`, and `MCP` persist as session-shell preferences in this packet and stay
+  visible in the shell even when runtime execution continues to use the active runtime path
 
 ## Support surface contract
 
-These support surfaces remain available:
-
-```text
-mister-smith runtime ...
-mister-smith doctor
-mister-smith auth ...
-mister-smith proof ...
-mister-smith config ...
-mister-smith mcp ...
-```
+Runtime, auth, autonomy, doctor, proof, config, and MCP support surfaces remain part of the
+product outside the main session-first flow.
 
 Behavior:
 
 - they remain part of the product
 - they must not become the default CLI entry
 - they must not replace the startup home as the first thing users see
+- this packet does not need to add or redesign their command tables
 - their warnings remain visible in the shell when relevant
 
 ## User-facing language contract

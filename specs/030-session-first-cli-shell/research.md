@@ -50,3 +50,24 @@
 - **Alternatives considered**:
   - pull support surfaces into the startup home as equal first-class paths
   - exclude support surfaces from the product story entirely
+
+## Explicit deferrals
+
+- GUI parity and cross-surface continuity remain outside this packet
+- `apps/operator-console/` remains outside this packet
+- repo-workflow tooling, Linear, Symphony, Ralph, and SpecKit glue remain outside this packet
+- broad runtime redesign, new persistence ownership, and admin-console repositioning remain outside
+  this packet
+
+## Validation and proof boundary guidance
+
+- deterministic CLI-shell validation is the required proof line for this packet
+- broader live runtime proof remains a separate claim boundary unless it is explicitly run later
+- packet-close validation should include:
+  - `cargo test -p mister-smith-app`
+  - `cargo test -p mister-smith-http`
+  - `cargo build --workspace`
+  - `SPECIFY_FEATURE=030-session-first-cli-shell ./.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
+  - `npx markdownlint-cli2 "specs/030-session-first-cli-shell/**/*.md" --config .markdownlint.json`
+  - `git diff --check`
+  - `scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync`

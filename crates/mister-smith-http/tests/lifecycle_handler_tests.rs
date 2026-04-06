@@ -7,16 +7,18 @@ use mister_smith_core::{
     SessionId, SessionStatus, TaskId,
 };
 use mister_smith_http::handlers::{
-    apply_task_lifecycle, get_session, SessionInspectResponse, SessionTurnSummaryResponse,
-    TaskLifecycleRequest,
+    apply_task_lifecycle, get_session, update_session_controls, SessionControlResponse,
+    SessionInspectResponse, SessionTurnSummaryResponse, TaskLifecycleRequest,
+    UpdateSessionControlRequest,
 };
 use mister_smith_http::server::{
     AppState, ConversationContinueRequest, ConversationCreateRequest, ConversationEndView,
-    ConversationResumeProvenanceView, ConversationServiceError, ConversationSessionService,
-    ConversationSessionSummaryView, ConversationSessionView, ConversationTurnAccepted,
-    ConversationTurnSummaryView, SessionListRequest, TaskExecutionService, TaskLifecycleView,
-    TaskListRequest, TaskStatusView, TaskSubmissionRequest, TaskSubmissionResponse,
-    TaskSummaryView,
+    ConversationResumeProvenanceView, ConversationServiceError,
+    ConversationSessionControlUpdateRequest, ConversationSessionControlView,
+    ConversationSessionService, ConversationSessionSummaryView, ConversationSessionView,
+    ConversationSupportNoticeView, ConversationTurnAccepted, ConversationTurnSummaryView,
+    SessionListRequest, TaskExecutionService, TaskLifecycleView, TaskListRequest, TaskStatusView,
+    TaskSubmissionRequest, TaskSubmissionResponse, TaskSummaryView,
 };
 
 #[derive(Clone)]
@@ -96,6 +98,33 @@ impl ConversationSessionService for FixedConversationService {
         ))
     }
 
+    async fn update_session_control_state(
+        &self,
+        _session_id: SessionId,
+        request: ConversationSessionControlUpdateRequest,
+    ) -> Result<ConversationSessionControlView, ConversationServiceError> {
+        Ok(ConversationSessionControlView {
+            selected_provider_kind: request
+                .selected_provider_kind
+                .or_else(|| self.view.control_state.selected_provider_kind.clone()),
+            selected_model_id: request
+                .selected_model_id
+                .or_else(|| self.view.control_state.selected_model_id.clone()),
+            permission_mode: request
+                .permission_mode
+                .unwrap_or_else(|| self.view.control_state.permission_mode.clone()),
+            config_posture: request
+                .config_posture
+                .unwrap_or_else(|| self.view.control_state.config_posture.clone()),
+            status_view: request
+                .status_view
+                .unwrap_or_else(|| self.view.control_state.status_view.clone()),
+            mcp_posture: request
+                .mcp_posture
+                .unwrap_or_else(|| self.view.control_state.mcp_posture.clone()),
+        })
+    }
+
     async fn list_sessions(
         &self,
         _request: SessionListRequest,
@@ -148,6 +177,7 @@ async fn session_handler_includes_turn_lifecycle_projection() {
     let workflow_id = TaskId::new();
     let state = AppState::new().with_conversation_service(Arc::new(FixedConversationService {
         view: ConversationSessionView {
+            title: "stop now".to_string(),
             session_id,
             status: SessionStatus::Active,
             coordinator_agent_id: AgentId::new(),
@@ -173,6 +203,20 @@ async fn session_handler_includes_turn_lifecycle_projection() {
                     resumed_from_turn_index: None,
                 }),
             }],
+            control_state: ConversationSessionControlView {
+                selected_provider_kind: None,
+                selected_model_id: None,
+                permission_mode: "default".to_string(),
+                config_posture: "inline".to_string(),
+                status_view: "summary".to_string(),
+                mcp_posture: "support_only".to_string(),
+            },
+            support_notices: vec![ConversationSupportNoticeView {
+                notice_kind: "session_busy".to_string(),
+                severity: "info".to_string(),
+                summary: "This session already has a live workflow. New turns will wait until it finishes.".to_string(),
+                support_surface: Some("status".to_string()),
+            }],
             ended_at: None,
         },
     }));
@@ -191,4 +235,59 @@ async fn session_handler_includes_turn_lifecycle_projection() {
         turn.lifecycle_state,
         DurableWorkflowLifecycleState::Terminated
     );
+}
+
+#[tokio::test]
+async fn session_control_handler_returns_updated_control_projection() {
+    let session_id = SessionId::new();
+    let state = AppState::new().with_conversation_service(Arc::new(FixedConversationService {
+        view: ConversationSessionView {
+            title: "resume packet review".to_string(),
+            session_id,
+            status: SessionStatus::Active,
+            coordinator_agent_id: AgentId::new(),
+            provider_kind: "openai_chatgpt".to_string(),
+            model_id: "gpt-5.4".to_string(),
+            active_workflow_id: None,
+            last_completed_workflow_id: None,
+            turn_count: 1,
+            last_assistant_result: None,
+            turns: vec![],
+            control_state: ConversationSessionControlView {
+                selected_provider_kind: None,
+                selected_model_id: None,
+                permission_mode: "default".to_string(),
+                config_posture: "inline".to_string(),
+                status_view: "summary".to_string(),
+                mcp_posture: "support_only".to_string(),
+            },
+            support_notices: vec![],
+            ended_at: None,
+        },
+    }));
+
+    let Json(response): Json<SessionControlResponse> = update_session_controls(
+        State(state),
+        Path(session_id.to_string()),
+        Json(UpdateSessionControlRequest {
+            selected_provider_kind: Some("openai_chatgpt".to_string()),
+            selected_model_id: Some("gpt-5.4-mini".to_string()),
+            permission_mode: Some("review".to_string()),
+            config_posture: Some("support".to_string()),
+            status_view: Some("detail".to_string()),
+            mcp_posture: Some("connected".to_string()),
+        }),
+    )
+    .await
+    .expect("session control handler should succeed");
+
+    assert_eq!(
+        response.selected_provider_kind.as_deref(),
+        Some("openai_chatgpt")
+    );
+    assert_eq!(response.selected_model_id.as_deref(), Some("gpt-5.4-mini"));
+    assert_eq!(response.permission_mode, "review");
+    assert_eq!(response.config_posture, "support");
+    assert_eq!(response.status_view, "detail");
+    assert_eq!(response.mcp_posture, "connected");
 }

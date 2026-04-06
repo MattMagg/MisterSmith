@@ -84,9 +84,13 @@ The core in-session controls operate on one `SessionControlState`.
 
 Expected behavior:
 
+- the control state remains attached to the currently open `session_id`
 - control changes in the CLI act on the same live session the user is already in
 - model, permissions, config, status, and MCP posture stay part of the live CLI session rather
   than a separate primary workflow
+- `status` and `config` apply to the CLI shell immediately for the open session
+- `model`, `permissions`, and `MCP` changes persist as session-shell preferences in this packet,
+  even when the current runtime continues to follow its active runtime path
 - degraded support state may limit an action honestly, but it does not erase the session identity
   or retained history
 

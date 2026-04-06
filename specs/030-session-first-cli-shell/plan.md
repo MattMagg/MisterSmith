@@ -61,8 +61,7 @@ specs/030-session-first-cli-shell/
 ├── contracts/
 │   ├── cli-session-shell-contract.md
 │   └── cli-session-state-contract.md
-├── tasks.md
-└── analyze.md
+└── tasks.md
 
 crates/mister-smith-app/
 ├── src/main.rs

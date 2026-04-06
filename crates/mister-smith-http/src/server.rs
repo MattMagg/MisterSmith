@@ -243,9 +243,58 @@ pub struct ConversationResumeProvenanceView {
     pub resumed_from_turn_index: Option<u32>,
 }
 
+/// One support warning or degraded-state note shown by the CLI shell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConversationSupportNoticeView {
+    /// Stable machine-readable notice kind.
+    pub notice_kind: String,
+    /// Relative severity shown in the shell.
+    pub severity: String,
+    /// User-facing summary rendered inline.
+    pub summary: String,
+    /// Related support surface, when one exists.
+    pub support_surface: Option<String>,
+}
+
+/// Durable control state exposed to the CLI session shell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConversationSessionControlView {
+    /// Preferred provider kind recorded for later turns, when set.
+    pub selected_provider_kind: Option<String>,
+    /// Preferred model recorded for later turns, when set.
+    pub selected_model_id: Option<String>,
+    /// Current permission posture selected in the shell.
+    pub permission_mode: String,
+    /// Config posture shown by the shell.
+    pub config_posture: String,
+    /// Session status rendering mode selected in the shell.
+    pub status_view: String,
+    /// MCP posture selected in the shell.
+    pub mcp_posture: String,
+}
+
+/// Partial control-state update accepted by the session surface.
+#[derive(Debug, Clone, Default)]
+pub struct ConversationSessionControlUpdateRequest {
+    /// Preferred provider kind recorded for later turns, when set.
+    pub selected_provider_kind: Option<String>,
+    /// Preferred model recorded for later turns, when set.
+    pub selected_model_id: Option<String>,
+    /// Permission posture selected in the shell, when set.
+    pub permission_mode: Option<String>,
+    /// Config posture selected in the shell, when set.
+    pub config_posture: Option<String>,
+    /// Session status rendering mode selected in the shell, when set.
+    pub status_view: Option<String>,
+    /// MCP posture selected in the shell, when set.
+    pub mcp_posture: Option<String>,
+}
+
 /// Operator-facing inspect view for a conversation session.
 #[derive(Debug, Clone)]
 pub struct ConversationSessionView {
+    /// Compact user-facing title for the retained session.
+    pub title: String,
     /// Stable session identifier.
     pub session_id: SessionId,
     /// Session lifecycle state.
@@ -266,6 +315,10 @@ pub struct ConversationSessionView {
     pub last_assistant_result: Option<SessionRetainedResultView>,
     /// Ordered turn summaries.
     pub turns: Vec<ConversationTurnSummaryView>,
+    /// Durable control state currently attached to the session shell.
+    pub control_state: ConversationSessionControlView,
+    /// Inline warnings and degraded-state notes for the session shell.
+    pub support_notices: Vec<ConversationSupportNoticeView>,
     /// Logical close time when ended.
     pub ended_at: Option<DateTime<Utc>>,
 }
@@ -284,6 +337,8 @@ pub struct SessionListRequest {
 /// Summary row for one retained session in an operator collection.
 #[derive(Debug, Clone)]
 pub struct ConversationSessionSummaryView {
+    /// Compact user-facing title for the retained session.
+    pub title: String,
     /// Stable session identifier.
     pub session_id: SessionId,
     /// Session lifecycle state.
@@ -376,6 +431,13 @@ pub trait ConversationSessionService: Send + Sync {
         &self,
         session_id: SessionId,
     ) -> Result<ConversationEndView, ConversationServiceError>;
+
+    /// Update durable CLI shell control state for one session.
+    async fn update_session_control_state(
+        &self,
+        session_id: SessionId,
+        request: ConversationSessionControlUpdateRequest,
+    ) -> Result<ConversationSessionControlView, ConversationServiceError>;
 
     /// List durable sessions for operator collection views.
     async fn list_sessions(

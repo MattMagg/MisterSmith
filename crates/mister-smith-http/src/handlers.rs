@@ -17,8 +17,9 @@ use uuid::Uuid;
 
 use crate::errors::HttpError;
 use crate::server::{
-    AppState, ConversationContinueRequest, ConversationCreateRequest, ConversationServiceError,
-    SessionListRequest, TaskListRequest, TaskSubmissionRequest,
+    AppState, ConversationContinueRequest, ConversationCreateRequest,
+    ConversationSessionControlUpdateRequest, ConversationServiceError, SessionListRequest,
+    TaskListRequest, TaskSubmissionRequest,
 };
 
 fn is_false(value: &bool) -> bool {
@@ -308,6 +309,8 @@ pub struct SessionResumeProvenanceResponse {
 /// Session inspect response.
 #[derive(Debug, Serialize)]
 pub struct SessionInspectResponse {
+    /// Compact user-facing title for the retained session.
+    pub title: String,
     /// Stable session identifier.
     pub session_id: SessionId,
     /// Session lifecycle state.
@@ -331,6 +334,10 @@ pub struct SessionInspectResponse {
     pub last_assistant_result: Option<mister_smith_core::SessionRetainedResultView>,
     /// Ordered turn summaries.
     pub turns: Vec<SessionTurnSummaryResponse>,
+    /// Durable control state currently attached to the session shell.
+    pub control_state: SessionControlResponse,
+    /// Inline warnings and degraded-state notes for the session shell.
+    pub support_notices: Vec<SupportNoticeResponse>,
     /// Logical close time when ended.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -353,6 +360,8 @@ pub struct SessionListQuery {
 /// Session summary for collection responses.
 #[derive(Debug, Serialize)]
 pub struct SessionSummaryResponse {
+    /// Compact user-facing title for the retained session.
+    pub title: String,
     /// Stable session identifier.
     pub session_id: SessionId,
     /// Session lifecycle state.
@@ -379,6 +388,62 @@ pub struct SessionSummaryResponse {
     /// Compact preview of the most recent retained assistant result.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_preview: Option<String>,
+}
+
+/// One support warning or degraded-state note shown by the CLI shell.
+#[derive(Debug, Serialize)]
+pub struct SupportNoticeResponse {
+    /// Stable machine-readable notice kind.
+    pub notice_kind: String,
+    /// Relative severity shown in the shell.
+    pub severity: String,
+    /// User-facing summary rendered inline.
+    pub summary: String,
+    /// Related support surface, when one exists.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub support_surface: Option<String>,
+}
+
+/// Durable control state exposed to the CLI session shell.
+#[derive(Debug, Serialize)]
+pub struct SessionControlResponse {
+    /// Preferred provider kind recorded for later turns, when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_provider_kind: Option<String>,
+    /// Preferred model recorded for later turns, when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_model_id: Option<String>,
+    /// Current permission posture selected in the shell.
+    pub permission_mode: String,
+    /// Config posture shown by the shell.
+    pub config_posture: String,
+    /// Session status rendering mode selected in the shell.
+    pub status_view: String,
+    /// MCP posture selected in the shell.
+    pub mcp_posture: String,
+}
+
+/// Session control update request.
+#[derive(Debug, Deserialize)]
+pub struct UpdateSessionControlRequest {
+    /// Preferred provider kind recorded for later turns, when set.
+    #[serde(default)]
+    pub selected_provider_kind: Option<String>,
+    /// Preferred model recorded for later turns, when set.
+    #[serde(default)]
+    pub selected_model_id: Option<String>,
+    /// Permission posture selected in the shell, when set.
+    #[serde(default)]
+    pub permission_mode: Option<String>,
+    /// Config posture selected in the shell, when set.
+    #[serde(default)]
+    pub config_posture: Option<String>,
+    /// Session status rendering mode selected in the shell, when set.
+    #[serde(default)]
+    pub status_view: Option<String>,
+    /// MCP posture selected in the shell, when set.
+    #[serde(default)]
+    pub mcp_posture: Option<String>,
 }
 
 /// End-session response.
@@ -682,6 +747,7 @@ pub async fn get_session(
         .ok_or_else(|| HttpError::NotFound(format!("session {session_id} not found")))?;
 
     Ok(Json(SessionInspectResponse {
+        title: view.title,
         session_id: view.session_id,
         status: view.status,
         coordinator_agent_id: view.coordinator_agent_id,
@@ -713,6 +779,24 @@ pub async fn get_session(
                 }),
             })
             .collect(),
+        control_state: SessionControlResponse {
+            selected_provider_kind: view.control_state.selected_provider_kind,
+            selected_model_id: view.control_state.selected_model_id,
+            permission_mode: view.control_state.permission_mode,
+            config_posture: view.control_state.config_posture,
+            status_view: view.control_state.status_view,
+            mcp_posture: view.control_state.mcp_posture,
+        },
+        support_notices: view
+            .support_notices
+            .into_iter()
+            .map(|notice| SupportNoticeResponse {
+                notice_kind: notice.notice_kind,
+                severity: notice.severity,
+                summary: notice.summary,
+                support_surface: notice.support_surface,
+            })
+            .collect(),
         ended_at: view.ended_at,
     }))
 }
@@ -738,6 +822,7 @@ pub async fn list_sessions(
     Ok(Json(
         rows.into_iter()
             .map(|row| SessionSummaryResponse {
+                title: row.title,
                 session_id: row.session_id,
                 status: row.status,
                 coordinator_agent_id: row.coordinator_agent_id,
@@ -752,6 +837,42 @@ pub async fn list_sessions(
             })
             .collect(),
     ))
+}
+
+/// `POST /api/v1/sessions/{session_id}/controls` — Update one session shell control state.
+pub async fn update_session_controls(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<UpdateSessionControlRequest>,
+) -> Result<Json<SessionControlResponse>, HttpError> {
+    let session_id = parse_session_path(&session_id)?;
+    let conversation_service = state.conversation_service.as_ref().ok_or_else(|| {
+        HttpError::InternalError("runtime conversation service unavailable".to_string())
+    })?;
+
+    let view = conversation_service
+        .update_session_control_state(
+            session_id,
+            ConversationSessionControlUpdateRequest {
+                selected_provider_kind: request.selected_provider_kind,
+                selected_model_id: request.selected_model_id,
+                permission_mode: request.permission_mode,
+                config_posture: request.config_posture,
+                status_view: request.status_view,
+                mcp_posture: request.mcp_posture,
+            },
+        )
+        .await
+        .map_err(map_conversation_error)?;
+
+    Ok(Json(SessionControlResponse {
+        selected_provider_kind: view.selected_provider_kind,
+        selected_model_id: view.selected_model_id,
+        permission_mode: view.permission_mode,
+        config_posture: view.config_posture,
+        status_view: view.status_view,
+        mcp_posture: view.mcp_posture,
+    }))
 }
 
 /// `POST /api/v1/sessions/{session_id}/end` — Logically end one idle session.
@@ -907,9 +1028,11 @@ mod tests {
     use crate::server::{
         AgentInspectionDetailView, AgentInspectionService, AgentInspectionSummaryView, AppState,
         ConversationContinueRequest, ConversationEndView, ConversationResumeProvenanceView,
-        ConversationServiceError, ConversationSessionService, ConversationSessionSummaryView,
-        ConversationSessionView, ConversationTurnAccepted, ConversationTurnSummaryView,
-        NatsHealthCheck, SessionListRequest, TaskExecutionService, TaskListRequest, TaskStatusView,
+        ConversationServiceError, ConversationSessionControlUpdateRequest,
+        ConversationSessionControlView, ConversationSessionService,
+        ConversationSessionSummaryView, ConversationSessionView, ConversationSupportNoticeView,
+        ConversationTurnAccepted, ConversationTurnSummaryView, NatsHealthCheck,
+        SessionListRequest, TaskExecutionService, TaskListRequest, TaskStatusView,
         TaskSubmissionResponse, TaskSummaryView,
     };
     use mister_smith_core::{
@@ -962,6 +1085,14 @@ mod tests {
             Err(ConversationServiceError::Internal(
                 "end_session not used in handler test".to_string(),
             ))
+        }
+
+        async fn update_session_control_state(
+            &self,
+            _session_id: SessionId,
+            _request: ConversationSessionControlUpdateRequest,
+        ) -> Result<ConversationSessionControlView, ConversationServiceError> {
+            Ok(self.view.control_state.clone())
         }
 
         async fn list_sessions(
@@ -1371,6 +1502,7 @@ mod tests {
             preview: Some(
                 "workflow interrupted by runtime restart before session sync".to_string(),
             ),
+            runtime_truth: None,
             provenance: mister_smith_core::ResultProvenanceSummary {
                 runtime_execution_mode: serde_json::json!({
                     "execution_boundary": "tool_bus"
@@ -1385,6 +1517,7 @@ mod tests {
         };
         let state = test_state().with_conversation_service(Arc::new(FixedConversationService {
             view: ConversationSessionView {
+                title: "resume interrupted workflow".to_string(),
                 session_id,
                 status: mister_smith_core::SessionStatus::Active,
                 coordinator_agent_id: AgentId::new(),
@@ -1431,9 +1564,24 @@ mod tests {
                         }),
                     },
                 ],
+                control_state: ConversationSessionControlView {
+                    selected_provider_kind: Some("openai_chatgpt".to_string()),
+                    selected_model_id: Some("gpt-5.4".to_string()),
+                    permission_mode: "review".to_string(),
+                    config_posture: "inline".to_string(),
+                    status_view: "summary".to_string(),
+                    mcp_posture: "connected".to_string(),
+                },
+                support_notices: vec![ConversationSupportNoticeView {
+                    notice_kind: "session_shell_preferences".to_string(),
+                    severity: "warning".to_string(),
+                    summary: "Shell control changes are stored with this session, but runtime execution still follows the active runtime path.".to_string(),
+                    support_surface: Some("config".to_string()),
+                }],
                 ended_at: None,
             },
             summaries: vec![ConversationSessionSummaryView {
+                title: "resume interrupted workflow".to_string(),
                 session_id,
                 status: mister_smith_core::SessionStatus::Active,
                 coordinator_agent_id: AgentId::new(),
@@ -1491,6 +1639,7 @@ mod tests {
         let session_id = SessionId::new();
         let state = test_state().with_conversation_service(Arc::new(FixedConversationService {
             view: ConversationSessionView {
+                title: "first retained session".to_string(),
                 session_id,
                 status: mister_smith_core::SessionStatus::Active,
                 coordinator_agent_id: AgentId::new(),
@@ -1501,9 +1650,19 @@ mod tests {
                 turn_count: 1,
                 last_assistant_result: None,
                 turns: vec![],
+                control_state: ConversationSessionControlView {
+                    selected_provider_kind: None,
+                    selected_model_id: None,
+                    permission_mode: "default".to_string(),
+                    config_posture: "inline".to_string(),
+                    status_view: "summary".to_string(),
+                    mcp_posture: "support_only".to_string(),
+                },
+                support_notices: vec![],
                 ended_at: None,
             },
             summaries: vec![ConversationSessionSummaryView {
+                title: "first retained session".to_string(),
                 session_id,
                 status: mister_smith_core::SessionStatus::Active,
                 coordinator_agent_id: AgentId::new(),

@@ -30,7 +30,10 @@ When implementation begins, the narrowest meaningful validation target for this 
 cargo test -p mister-smith-app
 cargo test -p mister-smith-http
 cargo build --workspace
+SPECIFY_FEATURE=030-session-first-cli-shell ./.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks
+npx markdownlint-cli2 "specs/030-session-first-cli-shell/**/*.md" --config .markdownlint.json
 git diff --check
+scripts/verify_worktree_closure.sh --fetch --require-upstream --require-sync
 ```
 
 ## Proof Boundary
