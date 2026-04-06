@@ -1792,8 +1792,18 @@ impl RuntimeTaskService {
         event_tx: broadcast::Sender<WsEvent>,
     ) -> Result<Arc<Self>, String> {
         let boot_started_at = Utc::now();
-        let database_url = env::var("DATABASE_URL")
-            .map_err(|_| "DATABASE_URL must be set for runtime task execution".to_string())?;
+        let database_url = env::var("MISTER_SMITH_DATABASE_URL")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                env::var("DATABASE_URL")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+            })
+            .ok_or_else(|| {
+                "MISTER_SMITH_DATABASE_URL or DATABASE_URL must be set for runtime task execution"
+                    .to_string()
+            })?;
         let postgres = PostgresConnection::connect(&database_url)
             .await
             .map_err(|error| format!("PostgreSQL connection failed: {error}"))?;

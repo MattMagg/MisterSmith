@@ -1236,23 +1236,18 @@ async fn runtime_available_http(base_url: &str) -> bool {
 }
 
 fn session_store_url() -> Result<String, ConversationClientError> {
-    env::var("DATABASE_URL")
-        .map_err(|_| {
-            ConversationClientError::StorageUnavailable(
-                "DATABASE_URL is not set, so the CLI cannot read retained sessions directly."
-                    .to_string(),
-            )
-        })
-        .and_then(|value| {
-            if value.trim().is_empty() {
-                Err(ConversationClientError::StorageUnavailable(
-                    "DATABASE_URL is empty, so the CLI cannot read retained sessions directly."
-                        .to_string(),
-                ))
-            } else {
-                Ok(value)
+    for name in ["MISTER_SMITH_DATABASE_URL", "DATABASE_URL"] {
+        if let Ok(value) = env::var(name) {
+            if !value.trim().is_empty() {
+                return Ok(value);
             }
-        })
+        }
+    }
+
+    Err(ConversationClientError::StorageUnavailable(
+        "MISTER_SMITH_DATABASE_URL or DATABASE_URL must be set, so the CLI can read retained sessions directly."
+            .to_string(),
+    ))
 }
 
 async fn connect_session_store() -> Result<PostgresConnection, ConversationClientError> {

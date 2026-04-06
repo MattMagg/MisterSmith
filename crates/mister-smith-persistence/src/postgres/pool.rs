@@ -65,10 +65,12 @@ impl Resource for PostgresConnection {
     async fn acquire(config: Self::Config) -> Result<Self, Self::Error> {
         let url = config
             .url
-            .or_else(|| std::env::var("DATABASE_URL").ok())
+            .filter(|value| !value.trim().is_empty())
+            .or_else(database_url_from_env)
             .ok_or_else(|| {
                 PersistenceError::ConnectionFailed(
-                    "no database URL: set PostgresConfig.url or DATABASE_URL env var".to_string(),
+                    "no database URL: set PostgresConfig.url, MISTER_SMITH_DATABASE_URL, or DATABASE_URL env var"
+                        .to_string(),
                 )
             })?;
 
@@ -109,4 +111,15 @@ impl Resource for PostgresConnection {
     fn resource_id(&self) -> ResourceId {
         self.id
     }
+}
+
+fn database_url_from_env() -> Option<String> {
+    std::env::var("MISTER_SMITH_DATABASE_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            std::env::var("DATABASE_URL")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
 }

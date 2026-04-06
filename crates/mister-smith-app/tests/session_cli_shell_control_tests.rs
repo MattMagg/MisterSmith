@@ -54,6 +54,8 @@ async fn session_control_updates_round_trip_through_http_helper() {
             config_posture: Some("inline".to_string()),
             status_view: Some("detail".to_string()),
             mcp_posture: Some("connected".to_string()),
+            clear_selected_provider_kind: false,
+            clear_selected_model_id: false,
         },
     )
     .await

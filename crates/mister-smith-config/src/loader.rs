@@ -57,6 +57,8 @@ pub fn apply_env_overlay(
     // Transport fields
     if let Ok(val) = std::env::var(format!("{prefix}_TRANSPORT__NATS_URL")) {
         config.transport.nats_url = Some(val);
+    } else if let Ok(val) = std::env::var(format!("{prefix}_NATS_URL")) {
+        config.transport.nats_url = Some(val);
     }
     if let Ok(val) = std::env::var(format!("{prefix}_TRANSPORT__HTTP_PORT")) {
         if let Ok(n) = val.parse() {

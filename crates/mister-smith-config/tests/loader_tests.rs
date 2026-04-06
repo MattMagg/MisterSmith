@@ -215,6 +215,16 @@ fn env_overlay_transport() {
 }
 
 #[test]
+fn env_overlay_transport_accepts_legacy_nats_alias() {
+    let mut config = FrameworkConfig::default();
+    let _env = EnvGuard::new(&[("TEST_PREFIX4B_NATS_URL", Some("nats://alias:4222"))]);
+
+    apply_env_overlay(&mut config, "TEST_PREFIX4B").unwrap();
+
+    assert_eq!(config.transport.nats_url, Some("nats://alias:4222".to_string()));
+}
+
+#[test]
 fn env_overlay_security() {
     let mut config = FrameworkConfig::default();
     let _env = EnvGuard::new(&[
