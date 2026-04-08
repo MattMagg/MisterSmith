@@ -4,7 +4,8 @@
 
 This repository is a Rust workspace implementing the Mister Smith orchestration operating system.
 It contains 20 crates across 10 implemented phases, with the operating-system substrate now
-validated through Phase 10 plus the landed frontier packets through `026`.
+validated through Phase 10 plus the landed frontier packets `022` through `026`, `030`, and
+`031`.
 
 - `crates/`: Rust workspace — 18 library crates + 1 binary + 1 integration test crate
 - `spec/`: Canonical architecture specifications (the system contract)
@@ -36,10 +37,11 @@ Treat `docs/current-state.md` as the current forward-direction router. Use
 `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
 `specs/025-step-level-intelligence-v2/` as the latest landed step-policy packet authority,
 `specs/026-first-real-coordinator-subagent-runtime/` as the latest landed coordinator-runtime
-packet authority, `specs/027-capability-discovery-and-interoperability/`,
-`specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
-`specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/` as later draft,
-frozen-planning, or pre-spec packet material, `specs/022-durable-workflow-core/` for packet-022
+packet authority, `specs/030-session-first-cli-shell/` as the landed session-first CLI shell
+packet authority, `specs/031-chat-first-cli-loop/` as the landed chat-first CLI loop packet
+authority, `specs/027-capability-discovery-and-interoperability/`,
+`specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/` as
+remaining draft or pre-spec packet material, `specs/022-durable-workflow-core/` for packet-022
 ownership, and `docs/plans/2026-03-27-runtime-planning-simplification.md` plus
 `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` as historical repair-planning
 and packet-019 proof provenance context.
@@ -95,11 +97,11 @@ runtime.
   `specs/024-agent-boundary-security-hardening/` as the latest landed packet authorities,
   `specs/025-step-level-intelligence-v2/` as the latest landed step-policy packet authority,
   `specs/026-first-real-coordinator-subagent-runtime/` as the latest landed coordinator-runtime
-  packet authority, and `specs/027-capability-discovery-and-interoperability/`,
-  `specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
-  `specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/` as later draft,
-  frozen-planning, or pre-spec packet material that must be deliberately promoted before direct
-  execution,
+  packet authority, `specs/030-session-first-cli-shell/` as the landed session-first CLI shell
+  packet authority, `specs/031-chat-first-cli-loop/` as the landed chat-first CLI loop packet
+  authority, and `specs/027-capability-discovery-and-interoperability/`,
+  `specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/` as remaining
+  draft or pre-spec packet material that must be deliberately promoted before direct execution,
   `docs/plans/2026-03-16-smith-first-development-system.md` as historical control-plane background,
   and `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md` as the current direct
   execution control-plane note.
@@ -215,7 +217,7 @@ For markdown linting:
 
 ## Recent Changes
 
-- 031-chat-first-cli-loop: Added packet planning artifacts for the chat-first CLI loop
-- 030-session-first-cli-shell: Added packet planning artifacts for the session-first CLI shell
+- 031-chat-first-cli-loop: Landed the chat-first CLI loop on `main`
+- 030-session-first-cli-shell: Landed the session-first CLI shell on `main`
 - 029-session-first-user-shell: Added packet planning artifacts for the session-first shared
   CLI and GUI shell

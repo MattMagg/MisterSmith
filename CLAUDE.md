@@ -25,10 +25,11 @@ stable repo-wide state summary and document router.
 - `specs/025-step-level-intelligence-v2/`: latest landed step-policy packet on `main`
 - `specs/026-first-real-coordinator-subagent-runtime/`: latest landed coordinator-runtime packet on
   `main`
+- `specs/030-session-first-cli-shell/`: landed session-first CLI shell packet on `main`
+- `specs/031-chat-first-cli-loop/`: landed chat-first CLI loop packet on `main`
 - `specs/027-capability-discovery-and-interoperability/`,
-  `specs/028-selective-strong-coordination/`, `specs/029-session-first-user-shell/`,
-  `specs/030-session-first-cli-shell/`, and `specs/031-chat-first-cli-loop/`: later draft,
-  frozen-planning, or pre-spec packet material; no later packet is currently promoted as the next
+  `specs/028-selective-strong-coordination/`, and `specs/029-session-first-user-shell/`:
+  remaining draft or pre-spec packet material; no later packet is currently promoted as the next
   implementation-ready slice
 - `specs/022-durable-workflow-core/`: packet-022 implementation authority
 - `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md`: latest bounded live-proof note and
@@ -73,15 +74,15 @@ runtime.
   `specs/023-runtime-truth-and-run-trace/`,
   `specs/024-agent-boundary-security-hardening/`,
   `specs/025-step-level-intelligence-v2/`,
-  `specs/026-first-real-coordinator-subagent-runtime/`
+  `specs/026-first-real-coordinator-subagent-runtime/`,
+  `specs/030-session-first-cli-shell/`,
+  `specs/031-chat-first-cli-loop/`
 - Latest bounded live-proof note and artifact index:
   `docs/plans/2026-04-05-live-runtime-eval-specs-022-026.md`
 - Later packet material that is not yet promoted as the next implementation-ready slice:
   `specs/027-capability-discovery-and-interoperability/`,
   `specs/028-selective-strong-coordination/`,
-  `specs/029-session-first-user-shell/`,
-  `specs/030-session-first-cli-shell/`,
-  `specs/031-chat-first-cli-loop/`
+  `specs/029-session-first-user-shell/`
 - Historical budget-aware live-proof note:
   `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md`
 - Historical packet-016 closure evidence:

@@ -26,9 +26,9 @@ workflow around Linear, Symphony, or other external tools.
 
 ## Current Highlights
 
-- **Session-first CLI shell.** Running `mister-smith` with no subcommand opens the retained-session
-  shell, and the binary also supports `resume`, `sessions`, `conversation`, `autonomy`, and
-  provider auth helpers.
+- **Chat-first CLI shell.** Running `mister-smith` with no subcommand opens the retained-session
+  shell, and active sessions stay inside one chat-first loop with `resume`, `sessions`,
+  `conversation`, `autonomy`, and provider auth helpers alongside it.
 - **Durable same-agent conversations.** Sessions retain `session_id`, coordinator continuity, turn
   history, and follow-up control surfaces across CLI and HTTP.
 - **Operator control plane.** Runtime submission, task inspection, autonomy inspection, and live
@@ -38,9 +38,10 @@ workflow around Linear, Symphony, or other external tools.
   landed runtime path.
 - **MCP in the product boundary.** The repo ships `mister-smith-mcp` as a real workspace crate for
   tool exposure, compatibility, and external capability mediation.
-- **Recent landed runtime packets.** Packets `022` through `026` are landed on `main`, covering
-  durable workflow ownership, runtime-truth and run-trace projection, agent-boundary hardening,
-  deterministic step policy projection, and first bounded coordinator-runtime delegation.
+- **Recent landed packet surfaces.** Packets `022` through `026` are landed on `main` for durable
+  workflow ownership, runtime-truth and run-trace projection, agent-boundary hardening,
+  deterministic step policy projection, and first bounded coordinator-runtime delegation. Packets
+  `030` and `031` are also landed on `main` for the session-first and chat-first CLI shell path.
 
 ## What Is Live On `main`
 
@@ -61,9 +62,12 @@ The newest landed packet authorities are:
 - `specs/024-agent-boundary-security-hardening/`
 - `specs/025-step-level-intelligence-v2/`
 - `specs/026-first-real-coordinator-subagent-runtime/`
+- `specs/030-session-first-cli-shell/`
+- `specs/031-chat-first-cli-loop/`
 
-Draft, frozen-planning, or pre-spec forward work exists under `specs/027-*` through
-`specs/031-*`, but those later packets are not yet the default runtime story.
+Remaining unpromoted packet material currently sits under `specs/027-*` through `specs/029-*`.
+Those packet artifacts are still draft or pre-spec and are not yet part of the default runtime
+story.
 
 ## Community Health
 

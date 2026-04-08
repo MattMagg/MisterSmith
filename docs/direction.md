@@ -1,6 +1,6 @@
 # Mister Smith Direction
 
-Date: April 5, 2026
+Date: April 8, 2026
 Status: Authoritative
 
 ## Purpose and Authority
@@ -53,6 +53,8 @@ Already landed or established foundations:
 - landed packet-024 agent-boundary security hardening on `main`
 - landed packet-025 step-policy summaries on `main`
 - landed packet-026 coordinator-runtime delegation and proof projections on `main`
+- landed packet-030 session-first CLI shell on `main`
+- landed packet-031 chat-first CLI loop on `main`
 
 Exists but is still opt-in, partial, or not the default runtime path:
 
