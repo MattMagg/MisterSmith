@@ -1,6 +1,6 @@
 # Mister Smith Current State
 
-Date: April 8, 2026
+Date: April 9, 2026
 Status: Current
 
 ## Purpose
@@ -36,7 +36,7 @@ Use this file when you need one honest answer to:
 | Packet 019 closure evidence | `docs/plans/2026-03-26-packet-019-budget-aware-runtime-proof.md` | Historical bounded live-proof and proof-boundary note for packet `019` |
 | Packet 016 closure evidence | `docs/plans/2026-03-20-packet-016-external-agent-boundary-continuity-evaluation.md` | Durable proof and final validation artifact for the completed packet-016 epic |
 | Packet 015 closure evidence | `docs/plans/2026-03-20-packet-015-live-runtime-evaluation.md` | Historical live-proof and validation artifact for the completed packet-015 epic |
-| Development workflow and direct Codex control plane | `AGENTS.md`, `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md`, `.codex/commands/implement.md` | Active Smith-first development contract with explicit request-class routing and internal gate-aware execution prep |
+| Smith-first dev control plane | `AGENTS.md` and `docs/plans/2026-04-05-smith-mcp-direct-execution-overhaul.md` | Active Smith-first contract for request routing and gate-aware execution prep |
 | Historical workflow automation background | `WORKFLOW.md` plus local-only `docs/linear/` notes when present | Legacy Linear and Symphony operating context; not the active Smith MCP route |
 | Architectural build map | `ROADMAP.md` | Phase dependency map and build order |
 | Broad repo orientation | `README.md` | High-level repo surface and operator entry points |
@@ -74,7 +74,7 @@ external workflow services such as Linear or Symphony.
 ## Current Repo-Wide State
 
 - `main` is the durable development branch and is currently synced at
-  `de338ee68ec8a1dd55209f130eab423560d52412`.
+  `aae62e5f932a99b96efce5686e8c1d9c0a4635a1`.
 - The workspace contains 20 crates: 18 library crates, 1 binary crate, and 1 integration-test
   crate.
 - Phases 1 through 10 are landed in the repo as implemented substrate and validation artifacts.
